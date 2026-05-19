@@ -1,0 +1,54 @@
+// ConfigService distributes rule/output config to host and project scopes.
+// Manager is stateless: every call authenticates and returns a fresh bundle.
+syntax = "proto3";
+
+package cicd_sensor.manager.v1;
+
+import "cicd_sensor/manager/v1/types.proto";
+
+// ConfigService is the rule/output config distribution plane.
+//
+// Auth (v1):
+//   - host scope:    Authorization: Bearer sk_cs_<secret>
+//   - project scope: Authorization: Bearer sk_cs_<secret>
+//     The project CLI reads CICD_SENSOR_MANAGER_TOKEN from env and forwards it
+//     via the local socket body. The agent then sets the bearer header when
+//     calling the manager.
+service ConfigService {
+  // FetchConfig authenticates the caller and returns the config bundle
+  // visible to that caller. The manager does not generate ResolvedRules;
+  // the agent merges the returned sets/modifiers with local rule inputs.
+  rpc FetchConfig(FetchConfigRequest) returns (FetchConfigResponse);
+}
+
+// RequestedOutputs indicates which logs the caller will upload,
+// so the manager can tailor output policy for those types.
+message RequestedOutputs {
+  bool job_result_log = 1;
+  bool job_detection_log = 2;
+  bool job_runtime_telemetry_log = 3;
+}
+
+// FetchConfigRequest is the FetchConfig input. Auth is carried in headers,
+// not in the body.
+message FetchConfigRequest {
+  // RunnerKind is the agent-process-wide runner kind ("machine" for VM /
+  // physical server, "kubernetes" for a Pod) that helps the manager route
+  // the request.
+  string runner_kind = 1;
+  JobIdentity job_identity = 2;
+  RequestedOutputs requested_outputs = 3;
+}
+
+// ServedConfig is the non-rule config portion returned to the agent.
+message ServedConfig {
+  string config_revision = 1;
+  int32 default_max_alerts_per_rule = 2;
+  OutputSettings output_settings = 3;
+}
+
+// FetchConfigResponse is the FetchConfig output.
+message FetchConfigResponse {
+  ServedConfig config = 1;
+  repeated RuleSource rule_sources = 2;
+}

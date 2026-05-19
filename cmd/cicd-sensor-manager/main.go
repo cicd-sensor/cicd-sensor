@@ -1,0 +1,218 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/manager"
+	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
+	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+)
+
+var version = "dev"
+
+const managerUsage = "usage: cicd-sensor-manager [flags]"
+
+type managerStartupOptions struct {
+	ConfigFile string
+	Tokens     []string
+}
+
+type tokenFileFlags []string
+
+func (f *tokenFileFlags) String() string {
+	return strings.Join(*f, ",")
+}
+
+func (f *tokenFileFlags) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+func main() {
+	var configFileFlag string
+	var rulesPath string
+	var tokenFilePaths tokenFileFlags
+	flag.Usage = func() {
+		fmt.Fprintln(flag.CommandLine.Output(), managerUsage)
+		fmt.Fprintln(flag.CommandLine.Output())
+		fmt.Fprintln(flag.CommandLine.Output(), "Required:")
+		fmt.Fprintln(flag.CommandLine.Output(), "  --config PATH")
+		fmt.Fprintln(flag.CommandLine.Output(), "        Manager startup config YAML.")
+		fmt.Fprintln(flag.CommandLine.Output(), "  CICD_SENSOR_MANAGER_TOKEN{,_2} or --manager-token-file PATH")
+		fmt.Fprintln(flag.CommandLine.Output(), "        Manager bearer token secret. Provide up to 2 tokens for rotation overlap.")
+		fmt.Fprintln(flag.CommandLine.Output())
+		fmt.Fprintln(flag.CommandLine.Output(), "Optional:")
+		fmt.Fprintln(flag.CommandLine.Output(), "  --rules PATH")
+		fmt.Fprintln(flag.CommandLine.Output(), "        Customer rules YAML file. When omitted, only baseline rules are served unless disabled in config.")
+	}
+	flag.StringVar(&configFileFlag, "config", "", "Path to the manager startup config file.")
+	flag.StringVar(&rulesPath, "rules", "", "Path to the customer rules YAML file (optional).")
+	flag.Var(&tokenFilePaths, "manager-token-file", "Path to a file containing a bearer token. May be specified up to twice.")
+	flag.Parse()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	logger := newManagerJSONLogger()
+	slog.SetDefault(logger)
+
+	tokens, err := resolveManagerTokenSecrets(tokenFilePaths, logger)
+	if err != nil {
+		slog.ErrorContext(ctx, "manager_failed", "error", err)
+		os.Exit(1)
+	}
+	opts := managerStartupOptions{
+		ConfigFile: configFileFlag,
+		Tokens:     tokens,
+	}
+	if err := validateManagerStartupOptions(opts); err != nil {
+		slog.ErrorContext(ctx, "manager_failed", "error", err)
+		os.Exit(1)
+	}
+	startupConfig, err := manager.LoadStartupConfig(opts.ConfigFile)
+	if err != nil {
+		slog.ErrorContext(ctx, "manager_failed", "error", err)
+		os.Exit(1)
+	}
+
+	bindAddress := startupConfig.BindAddress()
+
+	if rulesPath == "" {
+		slog.InfoContext(ctx, "manager_rules_disabled", "reason", "no --rules flag")
+	}
+
+	baselineEnabled := !startupConfig.DisableBaseline
+
+	router, err := manager.BuildOutputs(ctx, logger, startupConfig.Sinks, startupConfig.Output)
+	if err != nil {
+		slog.ErrorContext(ctx, "manager_failed", "error", err)
+		os.Exit(1)
+	}
+	var outputSettings *managerv1.OutputSettings
+	if router != nil {
+		outputSettings = router.OutputSettings()
+	}
+	servedConfig := buildServedConfig(startupConfig, baselineEnabled, outputSettings)
+
+	slog.InfoContext(ctx, "manager_started",
+		"version", version,
+		"addr", bindAddress,
+		"config_file", opts.ConfigFile,
+		"rules_file", rulesPath,
+		"baseline_enabled", baselineEnabled,
+		"transport", "plain-http",
+		"transport_note", "TLS must be terminated by upstream load balancer or similar",
+	)
+
+	s := manager.NewServer(logger, bindAddress, opts.Tokens, servedConfig, rulesPath, &startupConfig, router)
+	if err := s.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		slog.ErrorContext(ctx, "manager_failed", "error", err)
+		os.Exit(1)
+	}
+	slog.InfoContext(ctx, "manager_stopped")
+}
+
+func validateManagerStartupOptions(opts managerStartupOptions) error {
+	if len(opts.Tokens) == 0 {
+		return errors.New("manager token is required: set CICD_SENSOR_MANAGER_TOKEN or --manager-token-file")
+	}
+	if opts.ConfigFile == "" {
+		return errors.New("--config is required")
+	}
+	return nil
+}
+
+func resolveManagerTokenSecrets(tokenFiles []string, logger *slog.Logger) ([]string, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if len(tokenFiles) > 2 {
+		return nil, errors.New("--manager-token-file may be specified at most twice")
+	}
+
+	var tokens []string
+	if len(tokenFiles) > 0 {
+		if os.Getenv("CICD_SENSOR_MANAGER_TOKEN") != "" || os.Getenv("CICD_SENSOR_MANAGER_TOKEN_2") != "" {
+			logger.Warn("manager_token_both_sources_specified",
+				"preferred", "manager-token-file",
+				"ignored", "CICD_SENSOR_MANAGER_TOKEN env values",
+			)
+		}
+		for _, path := range tokenFiles {
+			token, err := readManagerTokenFile(path)
+			if err != nil {
+				return nil, err
+			}
+			tokens = append(tokens, token)
+		}
+	} else {
+		if token := os.Getenv("CICD_SENSOR_MANAGER_TOKEN"); token != "" {
+			tokens = append(tokens, token)
+		}
+		if token := os.Getenv("CICD_SENSOR_MANAGER_TOKEN_2"); token != "" {
+			tokens = append(tokens, token)
+		}
+	}
+
+	for _, token := range tokens {
+		if !managerauth.IsValidToken(token) {
+			return nil, errors.New(managerauth.ValidTokenDescription())
+		}
+	}
+	return tokens, nil
+}
+
+func readManagerTokenFile(path string) (string, error) {
+	dir, name := filepath.Split(path)
+	if dir == "" {
+		dir = "."
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return "", fmt.Errorf("open manager token root %q: %w", dir, err)
+	}
+	defer root.Close()
+
+	file, err := root.Open(name)
+	if err != nil {
+		return "", fmt.Errorf("open manager token file %q: %w", path, err)
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("read manager token file %q: %w", path, err)
+	}
+	return strings.TrimRight(string(data), "\n"), nil
+}
+
+func buildServedConfig(startup manager.StartupConfig, baselineEnabled bool, outputSettings *managerv1.OutputSettings) *manager.ServedConfig {
+	return &manager.ServedConfig{
+		ConfigRevision:          startup.Revision,
+		BaselineEnabled:         baselineEnabled,
+		DefaultMaxAlertsPerRule: startup.Defaults.DefaultMaxAlertsPerRule,
+		OutputSettings:          outputSettings,
+	}
+}
+
+func newManagerJSONLogger() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if len(groups) == 0 && a.Key == slog.TimeKey {
+				a.Value = slog.StringValue(a.Value.Time().UTC().Format(time.RFC3339Nano))
+			}
+			return a
+		},
+	})).With("component", "cicd-sensor-manager")
+}

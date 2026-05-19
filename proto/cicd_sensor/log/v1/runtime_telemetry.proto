@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package cicd_sensor.log.v1;
+
+import "cicd_sensor/log/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+message JobRuntimeTelemetryLogEntry {
+  google.protobuf.Timestamp timestamp = 1 [json_name = "timestamp"];
+  // UUIDv7 for this runtime telemetry log row.
+  string log_id = 2 [json_name = "log_id"];
+  JobLogContext job = 3 [json_name = "job"];
+  string scope = 4 [json_name = "scope"];
+  string config_revision = 5 [json_name = "config_revision"];
+  EventRecord event = 7 [json_name = "event"];
+}

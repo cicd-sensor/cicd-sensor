@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Build output
+/bin/
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -26,7 +29,18 @@ go.work.sum
 
 # env file
 .env
+.gocache/
+.gomodcache/
+.tmp/
+/tmp/
+
+# Local review prompts and feedback notes
+/feedback.md
+/prompt.md
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# Mac
+.DS_Store

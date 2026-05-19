@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package cicd_sensor.log.v1;
+
+message JobLogContext {
+  string provider = 1 [json_name = "provider"];
+  string provider_host = 2 [json_name = "provider_host"];
+  string project_path = 3 [json_name = "project_path"];
+  string runner_kind = 4 [json_name = "runner_kind"];
+  string job_link = 5 [json_name = "job_link"];
+  string commit_sha = 6 [json_name = "commit_sha"];
+  string ref_name = 7 [json_name = "ref_name"];
+  string trigger = 8 [json_name = "trigger"];
+  string workflow_name = 9 [json_name = "workflow_name"];
+  string actor = 10 [json_name = "actor"];
+
+  // GitHub only.
+  string github_run_id = 20 [json_name = "github_run_id"];
+  string github_job = 21 [json_name = "github_job"];
+  string github_run_attempt = 22 [json_name = "github_run_attempt"];
+  string github_runner_tracking_id = 23 [json_name = "github_runner_tracking_id"];
+  string github_workflow_ref = 24 [json_name = "github_workflow_ref"];
+  string github_workflow_sha = 25 [json_name = "github_workflow_sha"];
+
+  // GitLab only.
+  string gitlab_job_id = 30 [json_name = "gitlab_job_id"];
+}
+
+message EventRecord {
+  // UUIDv7 shared by telemetry and detection rows derived from this event.
+  string id = 1 [json_name = "id"];
+  string kind = 2 [json_name = "kind"];
+  repeated string tags = 3 [json_name = "tags"];
+  ProcessSummary process = 4 [json_name = "process"];
+
+  ProcessExecPayload process_exec = 10 [json_name = "process_exec"];
+  NetworkConnectPayload network_connect = 11 [json_name = "network_connect"];
+  UnixSocketConnectPayload unix_socket_connect = 12 [json_name = "unix_socket_connect"];
+  FileOpenPayload file_open = 13 [json_name = "file_open"];
+  FileRemovePayload file_remove = 14 [json_name = "file_remove"];
+  FileMovePayload file_move = 15 [json_name = "file_move"];
+  FileLinkPayload file_link = 16 [json_name = "file_link"];
+  DomainPayload domain = 18 [json_name = "domain"];
+}
+
+message ProcessSummary {
+  int32 pid = 1 [json_name = "pid"];
+  string exec_path = 2 [json_name = "exec_path"];
+  repeated string argv = 3 [json_name = "argv"];
+  repeated AncestorProcess ancestors = 4 [json_name = "ancestors"];
+}
+
+message AncestorProcess {
+  string exec_path = 1 [json_name = "exec_path"];
+  repeated string argv = 2 [json_name = "argv"];
+}
+
+message ProcessExecPayload {
+  bool is_memfd = 1 [json_name = "is_memfd"];
+}
+
+message NetworkConnectPayload {
+  string remote_ip = 1 [json_name = "remote_ip"];
+  uint32 remote_port = 2 [json_name = "remote_port"];
+  string protocol = 3 [json_name = "protocol"];
+  string family = 4 [json_name = "family"];
+}
+
+message UnixSocketConnectPayload {
+  string path = 1 [json_name = "path"];
+  string socket_type = 2 [json_name = "socket_type"];
+  bool is_abstract = 3 [json_name = "is_abstract"];
+}
+
+message FileOpenPayload {
+  string path = 1 [json_name = "path"];
+  bool is_write = 2 [json_name = "is_write"];
+  bool is_read = 3 [json_name = "is_read"];
+  uint64 flags = 4 [json_name = "flags"];
+}
+
+message FileRemovePayload {
+  string path = 1 [json_name = "path"];
+  bool is_folder = 2 [json_name = "is_folder"];
+}
+
+message FileMovePayload {
+  string from_path = 1 [json_name = "from_path"];
+  string to_path = 2 [json_name = "to_path"];
+}
+
+message FileLinkPayload {
+  string created_path = 1 [json_name = "created_path"];
+  string existing_path = 2 [json_name = "existing_path"];
+  bool is_hardlink = 3 [json_name = "is_hardlink"];
+  bool is_symlink = 4 [json_name = "is_symlink"];
+}
+
+message DomainPayload {
+  string name = 1 [json_name = "name"];
+  string source = 2 [json_name = "source"];
+}

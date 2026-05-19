@@ -1,0 +1,7 @@
+rule_sets:
+  - ruleset_id: set-invalid-cel
+    rules:
+      - rule_id: bad_cel
+        event_kind: network_connect
+        condition: remote_ip == (
+        action: detect

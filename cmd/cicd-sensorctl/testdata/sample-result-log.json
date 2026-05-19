@@ -1,0 +1,108 @@
+{
+  "job_identity": {
+    "provider": "github",
+    "provider_host": "github.com",
+    "project_path": "acme/example",
+    "run_id": "123",
+    "job": "build",
+    "run_attempt": "1",
+    "runner_name": "runner-1"
+  },
+  "metadata": {
+    "provider": "github",
+    "provider_host": "github.com",
+    "environment": "hosted",
+    "project_path": "acme/example"
+  },
+  "started_at": "2026-04-30T12:00:00Z",
+  "generated_at": "2026-04-30T12:05:00Z",
+  "finalize_reason": "shutdown",
+  "rules_summary": {
+    "rule_count": 3,
+    "warnings_count": 0
+  },
+  "result_summary": {
+    "result": "detected",
+    "hits_count": 4,
+    "external_endpoints": 2
+  },
+  "network": [
+    "1.1.1.1",
+    "8.8.8.8",
+    "127.0.0.1"
+  ],
+  "domains": [
+    "example.com",
+    "registry.npmjs.org"
+  ],
+  "hits": [
+    {
+      "timestamp": "2026-04-30T12:03:01Z",
+      "ruleset_id": "set",
+      "rule_id": "curl-egress",
+      "rule_name": "curl egress",
+      "action": "detect",
+      "event_kind": "network_connect",
+      "process": {
+        "identity": {"pid": 42, "start_boottime": 1000},
+        "exec_path": "/usr/bin/curl",
+        "argv": ["curl", "-X", "POST", "https://1.1.1.1"],
+        "ancestors": [
+          {"exec_path": "/bin/bash"},
+          {"exec_path": "/sbin/init"}
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-04-30T12:03:02Z",
+      "ruleset_id": "set",
+      "rule_id": "curl-egress",
+      "rule_name": "curl egress",
+      "action": "detect",
+      "event_kind": "network_connect",
+      "process": {
+        "identity": {"pid": 43},
+        "exec_path": "/usr/bin/curl",
+        "argv": ["curl", "https://8.8.8.8"],
+        "ancestors": [{"exec_path": "/bin/bash"}]
+      },
+      "alert_truncation": "rule reached its max_alerts cap; further hits in this Job are counted but detailed alert records are omitted",
+      "alert_cap": 2,
+      "alert_dropped": 5
+    },
+    {
+      "timestamp": "2026-04-30T12:04:11Z",
+      "ruleset_id": "host-set",
+      "rule_id": "exec-shell",
+      "rule_name": "shell spawn",
+      "action": "terminate",
+      "event_kind": "process_exec",
+      "process": {
+        "identity": {"pid": 99},
+        "exec_path": "/bin/sh",
+        "argv": ["sh", "-c", "whoami"],
+        "ancestors": [
+          {"exec_path": "/bin/bash"},
+          {"exec_path": "/sbin/init"}
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-04-30T12:04:42Z",
+      "ruleset_id": "host-set",
+      "rule_id": "sensitive-file",
+      "rule_name": "secret read",
+      "action": "detect",
+      "event_kind": "file_open",
+      "process": {
+        "identity": {"pid": 105},
+        "exec_path": "/usr/bin/cat",
+        "argv": ["cat", "/etc/shadow"],
+        "ancestors": [
+          {"exec_path": "/bin/bash"},
+          {"exec_path": "/sbin/init"}
+        ]
+      }
+    }
+  ]
+}

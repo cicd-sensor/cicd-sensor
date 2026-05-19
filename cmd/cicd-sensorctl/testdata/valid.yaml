@@ -1,0 +1,7 @@
+rule_sets:
+  - ruleset_id: set-valid
+    rules:
+      - rule_id: detect_http
+        event_kind: network_connect
+        condition: remote_ip == "example.com"
+        action: detect

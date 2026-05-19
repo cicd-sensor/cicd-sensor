@@ -1,0 +1,59 @@
+// CollectorService ingests compressed log batches from agents.
+// The manager treats payload bytes as opaque and fans them out to configured
+// destinations without buffering or parsing records.
+syntax = "proto3";
+
+package cicd_sensor.manager.v1;
+
+import "google/protobuf/timestamp.proto";
+import "cicd_sensor/manager/v1/types.proto";
+
+// CollectorService is the output data plane. Each request carries one
+// gzip-compressed JSONL batch and is handled as a unary RPC so the manager can
+// run behind HTTP/1.1 load balancers and serverless runtimes.
+service CollectorService {
+  rpc IngestLog(IngestLogRequest) returns (IngestLogResponse);
+}
+
+// LogKind identifies the JSONL log encoded in an ingest batch.
+enum LogKind {
+  LOG_KIND_UNSPECIFIED = 0;
+  LOG_KIND_JOB_DETECTION = 1;
+  LOG_KIND_JOB_RUNTIME_TELEMETRY = 2;
+  LOG_KIND_JOB_RESULT = 3;
+}
+
+// Scope identifies which ownership scope produced an ingest batch.
+enum Scope {
+  SCOPE_UNSPECIFIED = 0;
+  SCOPE_HOST = 1;
+  SCOPE_PROJECT = 2;
+}
+
+// IngestLogBatch carries one agent-side batch of gzip-compressed JSONL records.
+message IngestLogBatch {
+  JobIdentity job_identity = 1;
+  Scope scope = 2;
+  LogKind log_kind = 3;
+  // compressed_jsonl is gzip-compressed JSONL. The manager writes these bytes
+  // verbatim and only checks the gzip magic bytes.
+  bytes compressed_jsonl = 4;
+  // flush_at is the UTC wallclock time when the agent first flushed this
+  // batch. The manager formats it as YYYYMMDDhhmmssNNN (UTC, milliseconds
+  // zero-padded) and uses it as the leading object-key segment for sub-hour
+  // disambiguation and chronological lexical sort. Retries must reuse the
+  // original value so the same batch overwrites the same object key.
+  // Sub-millisecond precision is truncated.
+  google.protobuf.Timestamp flush_at = 5;
+}
+
+message IngestLogRequest {
+  IngestLogBatch batch = 1;
+}
+
+// IngestLogResponse confirms that the manager accepted and wrote one batch.
+message IngestLogResponse {
+  // received_batches is always 1 for unary Phase 2a ingest.
+  uint64 received_batches = 1;
+  uint64 bytes_written = 2;
+}

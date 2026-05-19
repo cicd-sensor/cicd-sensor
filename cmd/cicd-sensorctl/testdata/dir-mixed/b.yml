@@ -1,0 +1,7 @@
+rule_sets:
+  - ruleset_id: set-mixed-b
+    rules:
+      - rule_id: detect_b
+        event_kind: network_connect
+        condition: protocol == "tcp"
+        action: terminate

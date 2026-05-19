@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package cicd_sensor.log.v1;
+
+import "cicd_sensor/log/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+message JobResultLogEntry {
+  google.protobuf.Timestamp timestamp = 1 [json_name = "timestamp"];
+  // UUIDv7 for this result log row.
+  string log_id = 2 [json_name = "log_id"];
+  JobLogContext job = 3 [json_name = "job"];
+  string scope = 4 [json_name = "scope"];
+  string config_revision = 5 [json_name = "config_revision"];
+  repeated RulesetUse rulesets = 6 [json_name = "rulesets"];
+  repeated RuleModifierUse rule_modifiers = 7 [json_name = "rule_modifiers"];
+  repeated string network_connects = 8 [json_name = "network_connects"];
+  repeated string domains = 9 [json_name = "domains"];
+  repeated DetectedRuleSummary detections = 10 [json_name = "detections"];
+  uint64 events_total = 11 [json_name = "events_total"];
+  uint64 events_dropped = 12 [json_name = "events_dropped"];
+  string finalize_reason = 13 [json_name = "finalize_reason"];
+}
+
+message RulesetUse {
+  string ruleset_id = 1 [json_name = "ruleset_id"];
+  string revision = 2 [json_name = "revision"];
+}
+
+message RuleModifierUse {
+  string modifier_id = 1 [json_name = "modifier_id"];
+  string revision = 2 [json_name = "revision"];
+}
+
+message DetectedRuleSummary {
+  string ruleset_id = 1 [json_name = "ruleset_id"];
+  string rule_id = 2 [json_name = "rule_id"];
+  string ruleset_revision = 3 [json_name = "ruleset_revision"];
+  string action = 4 [json_name = "action"];
+  uint64 count = 5 [json_name = "count"];
+}

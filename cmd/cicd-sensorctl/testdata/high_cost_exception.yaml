@@ -1,0 +1,11 @@
+rule_sets:
+  - ruleset_id: set-high-cost-exc
+    rules:
+      - rule_id: cheap_condition_with_expensive_exception
+        event_kind: process_exec
+        condition: process.exec_path.endsWith("/bash")
+        # Literal-arg .contains() bypasses the specialized .exists rewrite
+        # so the nested ancestors × argv scan stays expensive in the static
+        # cost estimate.
+        exceptions: process.ancestors.exists(p, p.argv.exists(a, a.contains("token")))
+        action: detect

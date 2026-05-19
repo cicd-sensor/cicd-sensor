@@ -1,0 +1,7 @@
+rule_sets:
+  - ruleset_id: set-mixed-a
+    rules:
+      - rule_id: detect_a
+        event_kind: file_open
+        condition: path.endsWith(".env")
+        action: detect

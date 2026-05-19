@@ -1,0 +1,100 @@
+// Common types shared by manager wire services. Proto is the single schema
+// source of truth for jobcontext.
+//
+// Rule-authoring types mirror internal/rule/schema.go for manager delivery.
+syntax = "proto3";
+
+package cicd_sensor.manager.v1;
+
+import "buf/validate/validate.proto";
+
+// JobIdentity is the canonical identity of a single job execution,
+// shared between agent and manager. Mirrors jobcontext.JobIdentity.
+message JobIdentity {
+  string provider = 1 [(buf.validate.field).string = {in: ["github", "gitlab"]}];
+  string provider_host = 2;
+  string project_path = 3;
+
+  // GitHub-specific fields. Required when provider = "github".
+  string github_run_id = 10;
+  string github_job = 11;
+  string github_run_attempt = 12;
+  string github_runner_tracking_id = 13;
+
+  // GitLab-specific fields. Required when provider = "gitlab".
+  string gitlab_job_id = 20;
+}
+
+// Proto map values cannot be repeated fields directly.
+message StringList {
+  repeated string values = 1;
+}
+
+message RuleTargetMatcher {
+  string provider_host = 1;
+  string path = 2;
+}
+
+message RuleTarget {
+  repeated RuleTargetMatcher include = 1;
+  repeated RuleTargetMatcher exclude = 2;
+}
+
+message Rule {
+  string rule_id = 1;
+  string rule_name = 2;
+  string description = 3;
+  string type = 4;
+  string event_kind = 5;
+  RuleTarget target = 6;
+  string condition = 7;
+  string exceptions = 8;
+  int32 max_alerts = 9;
+  string action = 10;
+  map<string, string> tags = 11;
+}
+
+message RuleSet {
+  string ruleset_id = 1;
+  string revision = 2;
+  map<string, StringList> lists = 3;
+  repeated Rule rules = 4;
+}
+
+message RuleModifierTarget {
+  string ruleset_id = 1;
+  string rule_id = 2;
+}
+
+message RuleModifier {
+  string modifier_id = 1;
+  string revision = 2;
+  string description = 3;
+  repeated RuleModifierTarget targets = 4;
+  optional string override_action = 5;
+  optional int32 override_max_alerts = 6;
+  string add_exceptions = 7;
+  repeated RuleTargetMatcher add_target_exclude = 8;
+  optional bool disable = 9;
+}
+
+message RuleSource {
+  repeated RuleSet rule_sets = 1;
+  repeated RuleModifier rule_modifiers = 2;
+}
+
+// OutputSetting tells the agent whether to send one log kind and when to
+// flush buffered JSONL records.
+message OutputSetting {
+  bool enabled = 1;
+  // Flush when buffered JSONL bytes reach this threshold. Zero disables it.
+  uint32 flush_threshold_bytes = 2;
+  uint32 flush_interval_seconds = 3;
+}
+
+// OutputSettings tells the agent which logs should be sent to manager.
+message OutputSettings {
+  OutputSetting job_detection_log = 1;
+  OutputSetting job_runtime_telemetry_log = 2;
+  OutputSetting job_result_log = 3;
+}

@@ -1,0 +1,1830 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title><<{.Title}>></title>
+<style>
+:root {
+  --bg: #fafbfb;
+  --bg-pane: #ffffff;
+  --bg-side: #f4f6f5;
+  --bg-row: #f8faf9;
+  --bg-dark: #0e1411;
+  --rule: #e3e7e4;
+  --rule-soft: #ecefec;
+  --ink: #0d1411;
+  --ink-2: #3f4843;
+  --ink-3: #6b7570;
+  --ink-4: #a3aba6;
+  --green: #019f5f;
+  --green-deep: #036a40;
+  --green-fade: #d6ecdf;
+  --red: #b3261e;
+  --red-fade: #f6dcd8;
+  --amber: #8a5a00;
+  --amber-fade: #f6e8b8;
+  --blue: #1e4f8a;
+  --blue-fade: #dde8f4;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--ink); }
+body {
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── top bar (dark) ────────────────────── */
+.topbar {
+  background: var(--bg-dark);
+  color: #e9edec;
+  padding: 14px 28px;
+  display: grid;
+  grid-template-columns: 46px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  border-bottom: 2px solid var(--green);
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.topbar-logo { color: var(--green); width: 42px; height: 42px; display: block; text-decoration: none; }
+.topbar-logo:hover { color: #4ddca2; }
+.topbar-logo svg { width: 42px; height: 42px; display: block; }
+.topbar-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: #e9edec;
+  text-decoration: none;
+  display: inline-block;
+}
+.topbar-title:hover { color: var(--green); }
+.topbar-meta {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: #8a948f;
+  margin-top: 2px;
+}
+.topbar-meta .sep { color: #4a554f; padding: 0 6px; }
+.topbar-meta .k { color: #5e6863; }
+.topbar-meta .v { color: #c7cecb; }
+.topbar-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.topbar-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 8px;
+  background: rgba(138, 148, 143, 0.16);
+  border: 1px solid rgba(138, 148, 143, 0.42);
+  color: #c7cecb;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 3px;
+}
+.topbar-verdict.detected,
+.topbar-verdict.terminated {
+  background: rgba(179, 38, 30, 0.18);
+  border-color: rgba(179, 38, 30, 0.55);
+  color: #ff7b72;
+}
+.topbar-verdict .dot {
+  width: 7px; height: 7px;
+  background: #8a948f;
+  border-radius: 50%;
+}
+.topbar-verdict.detected .dot,
+.topbar-verdict.terminated .dot { background: #ff7b72; }
+
+/* ── command strip ─────────────────────── */
+.cmdstrip {
+  background: var(--bg-pane);
+  border-bottom: 1px solid var(--rule);
+  padding: 10px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12.5px;
+  font-family: var(--mono);
+  color: var(--ink-3);
+  flex-wrap: wrap;
+}
+.cmdstrip .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--bg-side);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  color: var(--ink-2);
+}
+.cmdstrip .pill strong { color: var(--ink); font-weight: 600; }
+.cmdstrip .pill .k { color: var(--ink-3); margin-right: 2px; }
+.cmdstrip .grow { flex: 1; }
+.cmdstrip .generated { color: var(--ink-3); }
+
+/* ── top grid: action counters + job context ── */
+.topgrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 24px;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
+  align-items: start;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.topgrid-left { display: flex; flex-direction: column; gap: 8px; }
+.actbox {
+  display: grid;
+  grid-template-columns: repeat(3, 160px);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--bg-pane);
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+}
+.actbox .act {
+  position: relative;
+  padding: 14px 18px 14px;
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.actbox .act:last-child { border-right: none; }
+/* status accent bar — calm green when clear, severity color when fired */
+.actbox .act-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--rule);
+}
+.actbox .act.act-terminate.clear .act-bar,
+.actbox .act.act-detect.clear .act-bar { background: var(--green); }
+.actbox .act.act-collect.clear .act-bar { background: var(--ink-4); }
+.actbox .act.act-terminate.fired .act-bar { background: #7a0a0a; }
+.actbox .act.act-detect.fired .act-bar { background: var(--red); }
+.actbox .act.act-collect.fired .act-bar { background: var(--ink-2); }
+
+.actbox .act-label {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+.actbox .act-n {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-top: 4px;
+}
+.actbox .act.clear .act-n { color: var(--ink-4); }
+.actbox .act.act-terminate.fired .act-n { color: #7a0a0a; }
+.actbox .act.act-detect.fired .act-n { color: var(--red); }
+.actbox .act.act-collect.fired .act-n { color: var(--ink); }
+.actbox .act-sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+.gen-stamp {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding-left: 4px;
+}
+
+.jobctx {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg-pane);
+  padding: 12px 16px 14px;
+}
+.jobctx-label {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+.jobctx-list {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 4px 16px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  margin: 0;
+}
+.jobctx-list dt { color: var(--ink-3); }
+.jobctx-list dd { color: var(--ink); margin: 0; overflow-wrap: anywhere; }
+
+/* ── layout ────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 0;
+  align-items: start;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* ── sidebar ───────────────────────────── */
+.side {
+  background: var(--bg-side);
+  border-right: 1px solid var(--rule);
+  padding: 24px 0;
+  min-height: calc(100vh - 96px);
+  position: sticky;
+  top: 0;
+}
+.side-grp { padding: 0 20px 20px; }
+.side-grp + .side-grp { border-top: 1px solid var(--rule); padding-top: 18px; }
+.side-label {
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.side-nav { display: flex; flex-direction: column; gap: 1px; }
+.side-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-radius: 3px;
+}
+.side-link.active { background: var(--green-fade); color: var(--green-deep); font-weight: 600; }
+.side-link .ct {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  padding: 0 5px;
+  border-radius: 2px;
+}
+.side-link.active .ct { background: var(--bg-pane); color: var(--green-deep); border-color: var(--green-fade); }
+
+.side-filter { display: flex; flex-direction: column; gap: 4px; }
+.side-filter .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.side-filter .check {
+  width: 12px; height: 12px;
+  border: 1px solid var(--ink-4);
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-pane);
+  flex-shrink: 0;
+}
+.side-filter .check.on { background: var(--green); border-color: var(--green); color: #fff; }
+.side-filter .check.on::after { content: "✓"; font-size: 9px; line-height: 1; font-weight: 700; }
+.side-filter .row { cursor: pointer; user-select: none; padding: 3px 4px; margin: 0 -4px; border-radius: 3px; }
+.side-filter .row:hover { background: var(--bg-row); }
+.side-filter .row.off .name { color: var(--ink-4); text-decoration: line-through; }
+.side-filter .row.off .swatch { opacity: 0.3; }
+.side-filter .row.off .ct { opacity: 0.5; }
+.side-filter .ct {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.side-filter .swatch { width: 6px; height: 6px; border-radius: 50%; }
+.side-filter .swatch.detect { background: var(--red); }
+.side-filter .swatch.collect { background: var(--ink-4); }
+.side-filter .swatch.terminate { background: #7a0a0a; }
+.side-filter .swatch.file_open { background: var(--amber); }
+.side-filter .swatch.network_connect { background: var(--red); }
+.side-filter .swatch.unix_socket_connect { background: var(--blue); }
+.side-filter .swatch.domain { background: var(--green); }
+.side-filter .swatch.correlation { background: #7e4dc4; }
+
+.side-job {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.side-job .k { color: var(--ink-3); }
+.side-job .v { color: var(--ink); word-break: break-all; }
+.side-job .row { padding: 3px 0; border-bottom: 1px dotted var(--rule); }
+.side-job .row:last-child { border-bottom: none; }
+
+/* ── main ──────────────────────────────── */
+.main { padding: 24px 28px 48px; min-width: 0; }
+
+/* search bar */
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin-bottom: 24px;
+}
+.searchbar:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-fade); }
+.search-icon { color: var(--ink-3); flex-shrink: 0; }
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink);
+}
+.search-input::placeholder { color: var(--ink-4); }
+.search-input::-webkit-search-cancel-button { display: none; }
+.search-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.search-clear {
+  border: none;
+  background: var(--bg-side);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 16px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.search-clear:hover { background: var(--rule); color: var(--ink); }
+
+.search-hidden { display: none !important; }
+
+.empty-state {
+  padding: 18px 14px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--bg-pane);
+}
+.htbl .empty-state {
+  border-bottom: 1px solid var(--rule-soft);
+}
+.domgrid > .empty-state,
+.netgrid > .empty-state {
+  border-top: 1px solid var(--rule-soft);
+}
+
+/* stat ribbon */
+.ribbon {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.kpi {
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 12px 14px;
+}
+.kpi-key {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.kpi-val {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-val .unit { font-size: 12.5px; font-weight: 500; color: var(--ink-3); margin-left: 3px; }
+.kpi.alert { background: linear-gradient(180deg, #fff 0%, #fff5f4 100%); border-color: #f4cfca; }
+.kpi.alert .kpi-val { color: var(--red); }
+.kpi.ok .kpi-val { color: var(--green-deep); }
+
+.kpi-bars {
+  margin-top: 8px;
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 18px;
+}
+.kpi-bars span {
+  flex: 1;
+  background: var(--ink-4);
+  opacity: 0.5;
+  min-height: 1px;
+  border-radius: 1px 1px 0 0;
+}
+.kpi.alert .kpi-bars span { background: var(--red); opacity: 0.85; }
+.kpi.ok .kpi-bars span { background: var(--green); opacity: 0.8; }
+.kpi-sub {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* section ─────── */
+.sec { margin-top: 28px; }
+.sec:first-of-type { margin-top: 0; }
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 0;
+}
+.sec-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.sec-id {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.sec-meta {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+}
+
+/* hits table — high-density, single-row-per-hit with status dot */
+.htbl {
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  border-collapse: collapse;
+}
+.htbl thead th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--ink-3);
+  padding: 8px 8px 6px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+  position: sticky;
+  top: 0;
+}
+.htbl tbody td {
+  padding: 8px 8px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.htbl tbody tr.hit:hover td { background: var(--bg-row); }
+
+/* clickable hit rows + expand/collapse detail */
+.htbl tr.hit { cursor: pointer; }
+.htbl tr.hit:focus { outline: none; }
+.htbl tr.hit:focus-visible td {
+  background: var(--bg-row);
+}
+.htbl tr.hit:focus-visible td:first-child {
+  box-shadow: inset 3px 0 0 var(--green);
+}
+.htbl tr.hit td:last-child {
+  position: relative;
+  padding-right: 24px;
+}
+.htbl tr.hit td:last-child::after {
+  content: '›';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--green-deep);
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.22;
+}
+.htbl tr.hit:hover td:last-child::after,
+.htbl tr.hit:focus-visible td:last-child::after,
+.htbl tr.hit.row-open td:last-child::after {
+  opacity: 1;
+}
+.htbl tr.hit.row-open td { background: var(--bg-side); border-bottom-color: transparent; }
+.htbl tr.hit-detail { display: none; }
+.htbl tr.hit-detail.open { display: table-row; }
+.htbl tr.hit-detail > td {
+  background: var(--bg-side);
+  border-top: 1px dashed var(--rule);
+  border-bottom: 2px solid var(--rule);
+  padding: 16px 24px 20px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 24px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  align-items: start;
+}
+.detail-key {
+  color: var(--ink-3);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  padding-top: 3px;
+}
+.detail-value { color: var(--ink); overflow-wrap: anywhere; min-width: 0; }
+.detail-value.danger { color: var(--red); font-weight: 600; }
+.detail-value code {
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: var(--mono);
+}
+.code-block {
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.payload-grid { display: flex; flex-direction: column; gap: 3px; }
+.payload-grid .kv { display: block; }
+.payload-grid .kv .dk { display: inline-block; min-width: 120px; color: var(--ink-3); }
+.payload-grid .kv .dv { color: var(--ink); overflow-wrap: anywhere; }
+.payload-grid .kv .dv.danger { color: var(--red); font-weight: 600; }
+
+.trunc-full {
+  background: var(--amber-fade);
+  color: var(--amber);
+  border-left: 3px solid var(--amber);
+  padding: 8px 12px;
+  border-radius: 0 3px 3px 0;
+}
+.trunc-full .trunc-stats { margin-top: 4px; color: var(--ink-2); font-size: 11.5px; }
+.trunc-full strong { color: var(--ink); font-weight: 700; }
+
+.ancestors-block {
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.ancestors-entry {
+  position: relative;
+  padding: 4px 0 6px 18px;
+}
+.ancestors-entry::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  border: 2px solid var(--bg-pane);
+  box-sizing: border-box;
+}
+.ancestors-entry.current::before { background: var(--green); }
+.ancestors-entry:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 18px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--rule);
+}
+.ancestors-exec { color: var(--ink); overflow-wrap: anywhere; }
+.ancestors-entry.current .ancestors-exec { font-weight: 600; }
+.ancestors-pid { color: var(--ink-3); font-weight: 400; font-size: 11.5px; margin-left: 4px; }
+.ancestors-argv { color: var(--ink-3); font-size: 11.5px; margin-top: 2px; overflow-wrap: anywhere; }
+
+/* correlation rule_condition surfaced in the rule cell */
+.rule-cond {
+  background: #f4eafb;
+  border-left: 3px solid #7e4dc4;
+  border-radius: 0 4px 4px 0;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+.rule-cond-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #5a30a3;
+  margin-bottom: 4px;
+}
+.rule-cond-body {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  line-height: 1.5;
+}
+.rule-cond-inline { margin-bottom: 8px; }
+
+.htbl col.c-dot { width: 16px; }
+.htbl col.c-time { width: 80px; }
+.htbl col.c-pack { width: 160px; }
+.htbl col.c-rule { width: 280px; }
+.htbl col.c-payload { width: auto; }
+.htbl col.c-proc { width: 220px; }
+
+.dot-status {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  margin-top: 5px;
+}
+.dot-status.detect { background: var(--red); }
+.dot-status.collect { background: var(--ink-4); }
+.dot-status.terminate { background: #7a0a0a; }
+
+.cell-time {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.cell-pack {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  word-break: break-all;
+}
+.cell-pack .sub { color: var(--ink); }
+
+.cell-rule,
+.cell-payload,
+.cell-proc,
+.cell-rule .name,
+.cell-rule .id,
+.cell-payload .kv,
+.cell-payload .kv .v,
+.cell-proc .exec,
+.cell-proc .argv,
+.cell-proc .anc {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.cell-rule .name { font-weight: 600; font-size: 14px; color: var(--ink); }
+.cell-rule .id { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+.cell-rule .tags { display: inline-flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.tag {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-weight: 600;
+  font-family: var(--mono);
+}
+.tag.detect { background: var(--red-fade); color: var(--red); }
+.tag.collect { background: var(--bg-side); color: var(--ink-2); border: 1px solid var(--rule); }
+.tag.terminate { background: #7a0a0a; color: #fff; }
+.tag.kind-file_open { background: var(--amber-fade); color: var(--amber); }
+.tag.kind-network_connect { background: var(--red-fade); color: var(--red); }
+.tag.kind-unix_socket_connect { background: var(--blue-fade); color: var(--blue); }
+.tag.kind-domain { background: var(--green-fade); color: var(--green-deep); }
+.tag.kind-correlation { background: #ece1f7; color: #5a30a3; }
+.tag.type { background: transparent; color: var(--ink-3); border: 1px solid var(--rule); }
+
+.cell-payload {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.cell-payload .kv { display: block; }
+.cell-payload .kv .k { display: inline-block; min-width: 64px; color: var(--ink-3); }
+.cell-payload .kv .v { color: var(--ink); }
+.cell-payload .kv .v.danger { color: var(--red); font-weight: 600; }
+.trunc {
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: var(--amber-fade);
+  color: var(--amber);
+  border-radius: 2px;
+  font-size: 12px;
+}
+.trunc strong { font-weight: 700; }
+
+.cell-proc {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.cell-proc .exec { color: var(--ink); }
+.cell-proc .pid { color: var(--ink-3); font-size: 12px; margin-top: 1px; }
+.cell-proc .argv { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+.cell-proc .anc {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--rule);
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.cell-proc .anc div { padding: 1px 0; }
+
+/* ruleset group header */
+.htbl tr.rs-head td {
+  background: var(--bg-side);
+  padding: 6px 8px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.htbl tr.rs-head td .meta {
+  margin-left: 8px;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.htbl tr.rs-head td .pill {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.htbl tr.rs-head td .pill.detect { background: var(--red-fade); color: var(--red); }
+.htbl tr.rs-head td .pill.collect { background: var(--bg-pane); color: var(--ink-2); border: 1px solid var(--rule); }
+
+/* network table */
+.netgrid {
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+.netgrid-head, .netrow {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 240px) 60px 70px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 14px;
+  align-items: center;
+}
+.netgrid-head > *,
+.netrow > * {
+  min-width: 0;
+}
+.netgrid-head {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  font-weight: 600;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+.netrow { border-bottom: 1px solid var(--rule-soft); align-items: start; padding: 10px 14px; cursor: pointer; }
+.netrow:last-child { border-bottom: none; }
+.netrow:hover { background: var(--bg-row); }
+.netrow.row-open { background: var(--bg-side); border-bottom-color: transparent; }
+.netrow-detail { display: none; padding: 16px 24px 20px; background: var(--bg-side); border-top: 1px dashed var(--rule); border-bottom: 2px solid var(--rule); }
+.netrow-detail.open { display: block; }
+.netrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-4); margin-top: 6px; }
+.netrow .dot.tcp { background: var(--blue); }
+.netrow .dot.udp { background: var(--amber); }
+.netrow .ip {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.netrow .proto { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; color: var(--ink-2); }
+.netrow .port { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.netrow .port.empty { color: var(--ink-4); }
+
+.proc-list { font-family: var(--mono); font-size: 12.5px; min-width: 0; }
+.proc-list-item {
+  padding: 4px 0;
+  border-top: 1px dashed var(--rule);
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.proc-list-item:first-child { border-top: none; padding-top: 0; }
+.proc-overflow { margin-top: 4px; font-size: 12px; color: var(--amber); font-style: italic; }
+
+/* domains */
+.domgrid {
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+.domgrid-head, .domrow {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 14px;
+}
+.domgrid-head > *,
+.domrow > * {
+  min-width: 0;
+}
+.domgrid-head {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  font-weight: 600;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+.domrow { border-bottom: 1px solid var(--rule-soft); align-items: start; cursor: pointer; }
+.domrow:last-child { border-bottom: none; }
+.domrow:hover { background: var(--bg-row); }
+.domrow.row-open { background: var(--bg-side); border-bottom-color: transparent; }
+.domrow-detail { display: none; padding: 16px 24px 20px; background: var(--bg-side); border-top: 1px dashed var(--rule); border-bottom: 2px solid var(--rule); }
+.domrow-detail.open { display: block; }
+
+.conn-detail-grid { display: flex; flex-direction: column; gap: 14px; }
+.conn-proc {
+  background: var(--bg-pane);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 10px 14px;
+  min-width: 0;
+}
+.conn-proc-head {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.conn-proc-argv {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  display: flex;
+  gap: 12px;
+}
+.conn-proc-argv .k { color: var(--ink-3); min-width: 50px; }
+.conn-proc-argv .v {
+  color: var(--ink);
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.domrow .dom {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--ink);
+  font-weight: 500;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.foot {
+  margin-top: 48px;
+  padding: 20px 0 24px;
+  border-top: 1px solid var(--rule);
+  font-size: 15px;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  text-align: center;
+}
+.foot-link {
+  color: var(--green-deep);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--green-fade);
+  padding: 0 2px;
+}
+.foot-link:hover { color: var(--green); border-bottom-color: var(--green); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<template id="cicd-sensor-logo"><<{.Logo}>></template>
+<script>window.REPORT_DATA = JSON.parse(<<{.JSON}>>);</script>
+<script>
+(function () {
+  'use strict';
+  var d = window.REPORT_DATA || {};
+  var hits = d.hits || [];
+  var networks = d.network_connections || [];
+  var domains = d.domain_observations || [];
+  var identity = d.job_identity || {};
+  var meta = d.metadata || {};
+  var rsum = d.result_summary || {};
+
+  // el(tag, opts?, ...children): DOM builder. opts.text uses textContent;
+  // string children use createTextNode; opts.attrs go through setAttribute;
+  // opts.on through addEventListener. No HTML string injection sinks.
+  function el(tag, opts) {
+    var n = document.createElement(tag);
+    if (opts) {
+      if (opts.class) n.className = opts.class;
+      if (opts.text != null) n.textContent = String(opts.text);
+      if (opts.attrs) {
+        for (var k in opts.attrs) {
+          if (Object.prototype.hasOwnProperty.call(opts.attrs, k)) {
+            n.setAttribute(k, String(opts.attrs[k]));
+          }
+        }
+      }
+      if (opts.on) {
+        for (var ev in opts.on) {
+          if (Object.prototype.hasOwnProperty.call(opts.on, ev)) {
+            n.addEventListener(ev, opts.on[ev]);
+          }
+        }
+      }
+    }
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c == null || c === false) continue;
+      n.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    }
+    return n;
+  }
+
+  // Clone the trusted logo from <template>; never parses untrusted strings.
+  function cloneLogo() {
+    var t = document.getElementById('cicd-sensor-logo');
+    if (!t || !t.content || !t.content.firstElementChild) return document.createTextNode('');
+    return t.content.firstElementChild.cloneNode(true);
+  }
+
+  // Inline magnifying-glass icon — built via createElementNS, no innerHTML.
+  function searchIcon() {
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'search-icon');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('aria-hidden', 'true');
+    var c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', '7'); c.setAttribute('cy', '7'); c.setAttribute('r', '5');
+    c.setAttribute('fill', 'none'); c.setAttribute('stroke', 'currentColor'); c.setAttribute('stroke-width', '1.6');
+    var ln = document.createElementNS(NS, 'line');
+    ln.setAttribute('x1', '11'); ln.setAttribute('y1', '11'); ln.setAttribute('x2', '14'); ln.setAttribute('y2', '14');
+    ln.setAttribute('stroke', 'currentColor'); ln.setAttribute('stroke-width', '1.6'); ln.setAttribute('stroke-linecap', 'round');
+    svg.append(c, ln);
+    return svg;
+  }
+
+  function fmtTs(iso) {
+    if (!iso) return '';
+    var t = new Date(iso);
+    if (isNaN(t.getTime())) return '';
+    var pad = function (n, l) { return String(n).padStart(l || 2, '0'); };
+    return pad(t.getUTCHours()) + ':' + pad(t.getUTCMinutes()) + ':' + pad(t.getUTCSeconds()) + '.' + pad(t.getUTCMilliseconds(), 3);
+  }
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var t = new Date(iso);
+    if (isNaN(t.getTime())) return String(iso);
+    return t.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
+  }
+  function argvText(argv) {
+    return (argv || []).map(function (x) { return '"' + String(x) + '"'; }).join(' ');
+  }
+
+  // ── small component builders ──
+  function procCompact(p) {
+    p = p || {};
+    var wrap = el('div');
+    wrap.append(el('div', { class: 'exec', text: p.exec_path || '' }));
+    if (p.pid != null) wrap.append(el('div', { class: 'pid', text: 'pid: ' + p.pid }));
+    return wrap;
+  }
+
+  function ancestorsBlock(p) {
+    p = p || {};
+    var items = ((p.ancestors || []).slice().reverse()).concat([p]);
+    var wrap = el('div', { class: 'ancestors-block' });
+    items.forEach(function (a, i) {
+      var isCurrent = i === items.length - 1;
+      var entry = el('div', { class: 'ancestors-entry' + (isCurrent ? ' current' : '') });
+      var execLine = el('div', { class: 'ancestors-exec' });
+      execLine.append(document.createTextNode(a.exec_path || ''));
+      if (a.pid != null) {
+        execLine.append(document.createTextNode(' '));
+        execLine.append(el('span', { class: 'ancestors-pid', text: 'pid: ' + a.pid }));
+      }
+      entry.append(execLine);
+      if (a.argv && a.argv.length) {
+        entry.append(el('div', { class: 'ancestors-argv', text: argvText(a.argv) }));
+      }
+      wrap.append(entry);
+    });
+    return wrap;
+  }
+
+  function ruleCondNode(condition, asBanner) {
+    if (asBanner) {
+      return el('div', { class: 'rule-cond rule-cond-inline' },
+        el('div', { class: 'rule-cond-label', text: 'Triggered when' }),
+        el('pre', { class: 'rule-cond-body', text: condition })
+      );
+    }
+    return el('pre', { class: 'code-block', text: condition });
+  }
+
+  function kvLine(k, v, kClass, vClass) {
+    var text = (v != null && typeof v === 'object') ? JSON.stringify(v) : String(v == null ? '' : v);
+    return el('div', { class: 'kv' },
+      el('span', { class: kClass, text: String(k) + ':' }),
+      document.createTextNode(' '),
+      el('span', { class: vClass, text: text })
+    );
+  }
+
+  function hitDetail(h) {
+    var grid = el('div', { class: 'detail-grid' });
+    function row(k, valueNode) {
+      grid.append(el('div', { class: 'detail-key', text: k }));
+      grid.append(valueNode);
+    }
+    function codeVal(v) {
+      return el('div', { class: 'detail-value' }, el('code', { text: v == null ? '' : String(v) }));
+    }
+    row('timestamp', codeVal(h.timestamp));
+    row('ruleset', codeVal(h.ruleset_id));
+    row('rule_id', codeVal(h.rule_id));
+    row('rule_type', codeVal(h.rule_type));
+    row('action', codeVal(h.action));
+    row('event_kind', codeVal(h.event_kind));
+    if (h.rule_condition) {
+      var isCorr = h.rule_type === 'correlation';
+      row('rule_condition', el('div', { class: 'detail-value' }, ruleCondNode(h.rule_condition, isCorr)));
+    }
+    if (h.payload && Object.keys(h.payload).length) {
+      var pg = el('div', { class: 'payload-grid' });
+      Object.keys(h.payload).forEach(function (k) {
+        pg.append(kvLine(k, h.payload[k], 'dk', 'dv'));
+      });
+      row('payload', el('div', { class: 'detail-value' }, pg));
+    }
+    if (h.alert_truncation) {
+      var tf = el('div', { class: 'trunc-full' });
+      tf.append(document.createTextNode(h.alert_truncation));
+      var stats = el('div', { class: 'trunc-stats' });
+      stats.append(
+        el('strong', { text: '+' + (h.alert_dropped || 0) }),
+        document.createTextNode(' dropped · cap '),
+        el('strong', { text: String(h.alert_cap != null ? h.alert_cap : '?') })
+      );
+      tf.append(stats);
+      row('alert_truncation', el('div', { class: 'detail-value' }, tf));
+    }
+    row('process', el('div', { class: 'detail-value' }, ancestorsBlock(h.process || {})));
+    return grid;
+  }
+
+  function connDetail(processes, overflow) {
+    var wrap = el('div', { class: 'conn-detail-grid' });
+    (processes || []).forEach(function (p, pi) {
+      var proc = el('div', { class: 'conn-proc' });
+      var headText = 'Process ' + (pi + 1) + ' of ' + processes.length + (p.pid != null ? ' · pid: ' + p.pid : '');
+      proc.append(el('div', { class: 'conn-proc-head', text: headText }));
+      proc.append(ancestorsBlock(p));
+      if (p.argv) {
+        proc.append(el('div', { class: 'conn-proc-argv' },
+          el('span', { class: 'k', text: 'argv:' }),
+          document.createTextNode(' '),
+          el('span', { class: 'v', text: argvText(p.argv) })
+        ));
+      }
+      wrap.append(proc);
+    });
+    if (overflow) {
+      wrap.append(el('div', { class: 'conn-proc' },
+        el('div', { class: 'proc-overflow', text: '+' + overflow + ' more processes were observed but truncated from this report.' })
+      ));
+    }
+    return wrap;
+  }
+
+  function searchableHit(h) {
+    var p = h.process || {};
+    var parts = [h.rule_name, h.ruleset_id, h.rule_id, h.rule_type, h.action, h.event_kind, h.rule_condition];
+    if (h.payload) {
+      Object.keys(h.payload).forEach(function (k) {
+        var v = h.payload[k];
+        parts.push(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+      });
+    }
+    parts.push(p.exec_path);
+    if (p.argv) parts.push.apply(parts, p.argv);
+    (p.ancestors || []).forEach(function (a) {
+      parts.push(a.exec_path);
+      if (a.argv) parts.push.apply(parts, a.argv);
+    });
+    return parts.filter(function (x) { return x != null && x !== ''; }).join(' ');
+  }
+  function searchableConn(c, ipField) {
+    var parts = [c[ipField], c.protocol, c.remote_port];
+    (c.processes || []).forEach(function (p) {
+      parts.push(p.exec_path);
+      if (p.argv) parts.push.apply(parts, p.argv);
+      (p.ancestors || []).forEach(function (a) {
+        parts.push(a.exec_path);
+        if (a.argv) parts.push.apply(parts, a.argv);
+      });
+    });
+    return parts.filter(function (x) { return x != null && x !== ''; }).join(' ');
+  }
+
+  // ── topbar ──
+  function verdictClass(result) {
+    if (result === 'detected') return 'detected';
+    if (result === 'terminated') return 'terminated';
+    return 'no-alert';
+  }
+
+  function topbarNode() {
+    var GH = 'https://github.com/cicd-sensor/cicd-sensor';
+    var meta_ = el('div', { class: 'topbar-meta' });
+    meta_.append(
+      el('span', { class: 'v', text: identity.project_path || '' }),
+      el('span', { class: 'sep', text: ' · ' }),
+      el('span', { class: 'k', text: 'branch' }),
+      document.createTextNode(' '),
+      el('span', { class: 'v', text: meta.branch || '' }),
+      el('span', { class: 'sep', text: ' · ' }),
+      el('span', { class: 'k', text: 'commit' }),
+      document.createTextNode(' '),
+      el('span', { class: 'v', text: (meta.commit_sha || '').slice(0, 12) }),
+      el('span', { class: 'sep', text: ' · ' }),
+      el('span', { class: 'k', text: 'run' }),
+      document.createTextNode(' '),
+      el('span', { class: 'v', text: identity.github_run_id || '' }),
+      el('span', { class: 'sep', text: ' · ' }),
+      el('span', { class: 'k', text: 'actor' }),
+      document.createTextNode(' '),
+      el('span', { class: 'v', text: meta.actor || '' })
+    );
+    var right = el('div', { class: 'topbar-right' },
+      el('div', { class: 'topbar-verdict ' + verdictClass(rsum.result || '') },
+        el('span', { class: 'dot' }),
+        document.createTextNode(rsum.result || '')
+      ),
+      el('div', { class: 'topbar-gen', text: 'generated ' + fmtDate(d.generated_at) })
+    );
+    return el('div', { class: 'topbar' },
+      el('a', { class: 'topbar-logo', attrs: { href: GH, target: '_blank', rel: 'noopener', 'aria-label': 'cicd-sensor on GitHub' } }, cloneLogo()),
+      el('div', null,
+        el('a', { class: 'topbar-title', attrs: { href: GH, target: '_blank', rel: 'noopener' }, text: 'cicd-sensor Report' }),
+        meta_
+      ),
+      right
+    );
+  }
+
+  // ── action box ──
+  function topgridNode() {
+    var counts = {
+      terminate: hits.filter(function (h) { return h.action === 'terminate'; }).length,
+      detect: hits.filter(function (h) { return h.action === 'detect'; }).length,
+      collect: hits.filter(function (h) { return h.action === 'collect'; }).length
+    };
+    function subFor(k, n) {
+      if (k === 'terminate') return n === 0 ? 'no blocks' : (n === 1 ? 'process' : 'processes') + ' terminated';
+      if (k === 'detect') return n === 0 ? 'no alerts' : (n === 1 ? 'rule fired' : 'rules fired');
+      if (k === 'collect') return n === 0 ? 'no events' : (n === 1 ? 'event' : 'events') + ' captured';
+      return '';
+    }
+    function actCell(kind, n) {
+      var cap = kind.charAt(0).toUpperCase() + kind.slice(1);
+      return el('div', { class: 'act act-' + kind + ' ' + (n > 0 ? 'fired' : 'clear') },
+        el('div', { class: 'act-bar' }),
+        el('div', { class: 'act-label', text: cap }),
+        el('div', { class: 'act-n', text: String(n) }),
+        el('div', { class: 'act-sub', text: subFor(kind, n) })
+      );
+    }
+    return el('div', { class: 'topgrid' },
+      el('div', { class: 'actbox' },
+        actCell('terminate', counts.terminate),
+        actCell('detect', counts.detect),
+        actCell('collect', counts.collect)
+      )
+    );
+  }
+
+  // ── sidebar ──
+  function sidebarNode(groups, groupKeys) {
+    var dur = new Date(d.generated_at) - new Date(d.started_at);
+    function filterRow(dim, value, swatchKind, label, count) {
+      var children = [
+        el('span', { class: 'check on' })
+      ];
+      if (swatchKind) children.push(el('span', { class: 'swatch ' + swatchKind }));
+      children.push(el('span', { class: 'name', text: label }));
+      children.push(el('span', { class: 'ct', text: String(count) }));
+      var row = el('label', {
+        class: 'row',
+        attrs: { 'data-filter': dim + ':' + value }
+      });
+      children.forEach(function (c) { row.append(c); });
+      return row;
+    }
+    function ctxRow(k, v) {
+      return el('div', { class: 'row' },
+        el('span', { class: 'k', text: k }),
+        document.createTextNode(' '),
+        el('span', { class: 'v', text: v == null ? '' : String(v) })
+      );
+    }
+
+    var sectionsNav = el('nav', { class: 'side-nav' },
+      el('a', { class: 'side-link active', attrs: { href: '#hits' } },
+        el('span', { text: 'Rule matches' }),
+        el('span', { class: 'ct', text: String(rsum.hits_count || hits.length) })
+      ),
+      el('a', { class: 'side-link', attrs: { href: '#domains' } },
+        el('span', { text: 'Domains' }),
+        el('span', { class: 'ct', text: String(domains.length) })
+      ),
+      el('a', { class: 'side-link', attrs: { href: '#network' } },
+        el('span', { text: 'Network' }),
+        el('span', { class: 'ct', text: String(networks.length) })
+      )
+    );
+
+    var actionFilter = el('div', { class: 'side-filter' });
+    ['terminate', 'detect', 'collect'].forEach(function (a) {
+      var n = hits.filter(function (h) { return h.action === a; }).length;
+      actionFilter.append(filterRow('action', a, a, a, n));
+    });
+
+    var kindFilter = el('div', { class: 'side-filter' });
+    ['file_open', 'network_connect', 'unix_socket_connect', 'domain', 'correlation'].forEach(function (k) {
+      var n = k === 'correlation'
+        ? hits.filter(function (h) { return h.rule_type === 'correlation'; }).length
+        : hits.filter(function (h) { return h.event_kind === k && h.rule_type !== 'correlation'; }).length;
+      kindFilter.append(filterRow('kind', k, k, k, n));
+    });
+
+    var rulesetFilter = el('div', { class: 'side-filter' });
+    groupKeys.forEach(function (rs) {
+      rulesetFilter.append(filterRow('ruleset', rs, null, rs, groups[rs].length));
+    });
+
+    var jobCtx = el('div', { class: 'side-job' });
+    jobCtx.append(
+      ctxRow('repository', identity.project_path),
+      ctxRow('branch', meta.branch),
+      ctxRow('commit', meta.commit_sha),
+      ctxRow('workflow', meta.workflow),
+      ctxRow('workflow_ref', meta.workflow_ref),
+      ctxRow('workflow_sha', meta.workflow_sha),
+      ctxRow('trigger', meta.trigger),
+      ctxRow('actor', meta.actor),
+      ctxRow('runner', d.runner_kind),
+      ctxRow('job', identity.github_job),
+      ctxRow('run id', identity.github_run_id ? (identity.github_run_id + ' · attempt ' + identity.github_run_attempt) : ''),
+      ctxRow('runner id', identity.github_runner_tracking_id),
+      ctxRow('started', fmtDate(d.started_at)),
+      ctxRow('duration', isNaN(dur) ? '' : (dur + ' ms')),
+      ctxRow('finalize', d.finalize_reason)
+    );
+
+    return el('aside', { class: 'side' },
+      el('div', { class: 'side-grp' },
+        el('div', { class: 'side-label', text: 'Sections' }),
+        sectionsNav
+      ),
+      el('div', { class: 'side-grp' },
+        el('div', { class: 'side-label', text: 'Action' }),
+        actionFilter
+      ),
+      el('div', { class: 'side-grp' },
+        el('div', { class: 'side-label', text: 'Event kind' }),
+        kindFilter
+      ),
+      el('div', { class: 'side-grp' },
+        el('div', { class: 'side-label', text: 'Ruleset' }),
+        rulesetFilter
+      ),
+      el('div', { class: 'side-grp' },
+        el('div', { class: 'side-label', text: 'Job context' }),
+        jobCtx
+      )
+    );
+  }
+
+  // ── search bar ──
+  function searchbarNode() {
+    return el('div', { class: 'searchbar' },
+      searchIcon(),
+      el('input', { class: 'search-input', attrs: {
+        type: 'search',
+        placeholder: 'Search hits, network, domains — rule name, path, ip, exec, argv, …'
+      }}),
+      el('span', { class: 'search-count', attrs: { 'data-search-count': '' } }),
+      el('button', { class: 'search-clear', attrs: { type: 'button', 'data-search-clear': '', hidden: '' }, text: '×' })
+    );
+  }
+
+  // ── hits section ──
+  function hitsSection(groupKeys) {
+    var sec = el('div', { class: 'sec', attrs: { id: 'hits' } });
+    sec.append(el('div', { class: 'sec-head' },
+      el('span', { class: 'sec-id', text: '§01' }),
+      el('span', { class: 'sec-title', text: 'Rule matches' }),
+      el('span', { class: 'sec-meta', text: (rsum.hits_count || hits.length) + ' total · ' + groupKeys.length + ' rulesets · time order' })
+    ));
+    var table = el('table', { class: 'htbl' });
+    var colgroup = document.createElement('colgroup');
+    ['c-dot', 'c-time', 'c-rule', 'c-payload', 'c-proc'].forEach(function (cls) {
+      var col = document.createElement('col');
+      col.className = cls;
+      colgroup.append(col);
+    });
+    table.append(colgroup);
+    table.append(el('thead', null,
+      el('tr', null,
+        el('th'),
+        el('th', { text: 'time (UTC)' }),
+        el('th', { text: 'rule' }),
+        el('th', { text: 'payload' }),
+        el('th', { text: 'process' })
+      )
+    ));
+    var tbody = el('tbody');
+    var sorted = hits.slice().sort(function (a, b) {
+      return String(a.timestamp || '').localeCompare(String(b.timestamp || ''));
+    });
+    if (sorted.length === 0) {
+      tbody.append(el('tr', { class: 'empty-row' },
+        el('td', {
+          class: 'empty-state',
+          attrs: { colspan: '5' },
+          text: 'No rule matches in this job.'
+        })
+      ));
+    }
+    sorted.forEach(function (h, idx) {
+      var isCorr = h.rule_type === 'correlation';
+
+      // Rule cell
+      var kindLabel = isCorr ? 'correlation' : (h.event_kind || '');
+      var kindClass = isCorr ? 'kind-correlation' : ('kind-' + (h.event_kind || 'other'));
+      var ruleCell = el('td', { class: 'cell-rule' },
+        el('div', { class: 'name', text: h.rule_name || '' }),
+        el('div', { class: 'id', text: (h.ruleset_id || '') + ' / ' + (h.rule_id || '') }),
+        el('div', { class: 'tags' },
+          el('span', { class: 'tag ' + (h.action || ''), text: h.action || '' }),
+          document.createTextNode(' '),
+          el('span', { class: 'tag ' + kindClass, text: kindLabel })
+        )
+      );
+
+      // Payload cell — for correlation, rule_condition appears first
+      var payloadCell = el('td', { class: 'cell-payload' });
+      if (isCorr && h.rule_condition) {
+        payloadCell.append(ruleCondNode(h.rule_condition, true));
+      }
+      if (h.payload) {
+        Object.keys(h.payload).forEach(function (k) {
+          payloadCell.append(kvLine(k, h.payload[k], 'k', 'v'));
+        });
+      }
+      if (h.alert_truncation) {
+        var t = el('div', { class: 'trunc' });
+        t.append(document.createTextNode(h.alert_truncation + ' '));
+        t.append(el('strong', { text: '(+' + (h.alert_dropped || 0) + ' dropped, cap ' + (h.alert_cap != null ? h.alert_cap : '?') + ')' }));
+        payloadCell.append(t);
+      }
+
+      var procCell = el('td', { class: 'cell-proc' }, procCompact(h.process || {}));
+
+      var dataKind = isCorr ? 'correlation' : (h.event_kind || '');
+      var hitRow = el('tr', {
+        class: 'hit',
+        attrs: {
+          'data-hit': String(idx),
+          'data-action': h.action || '',
+          'data-kind': dataKind,
+          'data-ruleset': h.ruleset_id || '',
+          'data-search': searchableHit(h)
+        }
+      },
+        el('td', null, el('span', { class: 'dot-status ' + (h.action || '') })),
+        el('td', { class: 'cell-time', text: fmtTs(h.timestamp) }),
+        ruleCell,
+        payloadCell,
+        procCell
+      );
+      tbody.append(hitRow);
+
+      var detailRow = el('tr', {
+        class: 'hit-detail',
+        attrs: { 'data-detail': String(idx) }
+      },
+        el('td', { attrs: { colspan: '5' } }, hitDetail(h))
+      );
+      tbody.append(detailRow);
+    });
+    table.append(tbody);
+    sec.append(table);
+    return sec;
+  }
+
+  // ── domains section ──
+  function domainsSection() {
+    var sec = el('div', { class: 'sec', attrs: { id: 'domains' } });
+    sec.append(el('div', { class: 'sec-head' },
+      el('span', { class: 'sec-id', text: '§02' }),
+      el('span', { class: 'sec-title', text: 'Domain observations' }),
+      el('span', { class: 'sec-meta', text: domains.length + ' domains' })
+    ));
+    var grid = el('div', { class: 'domgrid' });
+    grid.append(el('div', { class: 'domgrid-head' },
+      el('span', { text: 'domain' }),
+      el('span', { text: 'processes' })
+    ));
+    if (domains.length === 0) {
+      grid.append(el('div', {
+        class: 'empty-state',
+        attrs: { role: 'note' },
+        text: 'No resolved domains observed.'
+      }));
+    }
+    domains.forEach(function (dom, idx) {
+      var procsList = el('div', { class: 'proc-list' });
+      (dom.processes || []).forEach(function (p) {
+        procsList.append(el('div', { class: 'proc-list-item' }, procCompact(p)));
+      });
+      grid.append(el('div', {
+        class: 'domrow',
+        attrs: {
+          'data-dom': String(idx),
+          'data-search': searchableConn(dom, 'domain')
+        }
+      },
+        el('span', { class: 'dom', text: dom.domain || '' }),
+        el('span', null, procsList)
+      ));
+      grid.append(el('div', {
+        class: 'domrow-detail',
+        attrs: { 'data-dom-detail': String(idx) }
+      }, connDetail(dom.processes || [], null)));
+    });
+    sec.append(grid);
+    return sec;
+  }
+
+  // ── network section ──
+  function networkSection() {
+    var sec = el('div', { class: 'sec', attrs: { id: 'network' } });
+    sec.append(el('div', { class: 'sec-head' },
+      el('span', { class: 'sec-id', text: '§03' }),
+      el('span', { class: 'sec-title', text: 'Network connections' }),
+      el('span', { class: 'sec-meta', text: networks.length + ' endpoints' })
+    ));
+    var grid = el('div', { class: 'netgrid' });
+    grid.append(el('div', { class: 'netgrid-head' },
+      el('span'),
+      el('span', { text: 'remote' }),
+      el('span', { text: 'proto' }),
+      el('span', { text: 'port' }),
+      el('span', { text: 'processes' })
+    ));
+    if (networks.length === 0) {
+      grid.append(el('div', {
+        class: 'empty-state',
+        attrs: { role: 'note' },
+        text: 'No network connections observed.'
+      }));
+    }
+    networks.forEach(function (n, idx) {
+      var procsList = el('div', { class: 'proc-list' });
+      (n.processes || []).forEach(function (p) {
+        procsList.append(el('div', { class: 'proc-list-item' }, procCompact(p)));
+      });
+      var protoClass = (n.protocol === 'tcp' || n.protocol === 'udp') ? n.protocol : '';
+      var procWrap = el('span', null, procsList);
+      if (n.process_overflow_count) {
+        procWrap.append(el('div', { class: 'proc-overflow', text: '+' + n.process_overflow_count + ' more processes (overflow)' }));
+      }
+      grid.append(el('div', {
+        class: 'netrow',
+        attrs: {
+          'data-net': String(idx),
+          'data-search': searchableConn(n, 'remote_ip')
+        }
+      },
+        el('span', { class: 'dot ' + protoClass }),
+        el('span', { class: 'ip', text: n.remote_ip || '' }),
+        el('span', { class: 'proto', text: n.protocol || '' }),
+        el('span', {
+          class: 'port' + (n.remote_port == null ? ' empty' : ''),
+          text: n.remote_port == null ? '—' : String(n.remote_port)
+        }),
+        procWrap
+      ));
+      grid.append(el('div', {
+        class: 'netrow-detail',
+        attrs: { 'data-net-detail': String(idx) }
+      }, connDetail(n.processes || [], n.process_overflow_count || 0)));
+    });
+    sec.append(grid);
+    return sec;
+  }
+
+  function footerNode() {
+    var foot = el('div', { class: 'foot' });
+    foot.append(document.createTextNode('Generated by '));
+    foot.append(el('a', {
+      class: 'foot-link',
+      attrs: { href: 'https://github.com/cicd-sensor/cicd-sensor', target: '_blank', rel: 'noopener' },
+      text: 'cicd-sensor'
+    }));
+    return foot;
+  }
+
+  // ── build ──
+  var groups = {};
+  hits.forEach(function (h) { (groups[h.ruleset_id] = groups[h.ruleset_id] || []).push(h); });
+  var groupKeys = Object.keys(groups).sort();
+
+  var root = document.getElementById('root');
+  root.replaceChildren();
+  root.append(topbarNode());
+  root.append(topgridNode());
+
+  var layout = el('div', { class: 'layout' });
+  layout.append(sidebarNode(groups, groupKeys));
+  var main = el('main', { class: 'main' });
+  main.append(searchbarNode());
+  main.append(hitsSection(groupKeys));
+  main.append(domainsSection());
+  main.append(networkSection());
+  main.append(footerNode());
+  layout.append(main);
+  root.append(layout);
+
+  // ── interactions ──
+  var sectionLinks = Array.prototype.slice.call(document.querySelectorAll('.side-link[href^="#"]'));
+  var sectionRoots = sectionLinks.map(function (link) {
+    return document.getElementById(link.getAttribute('href').slice(1));
+  }).filter(Boolean);
+
+  function setActiveSection(id) {
+    sectionLinks.forEach(function (link) {
+      link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+    });
+  }
+
+  var suppressSectionObserverUntil = 0;
+  sectionLinks.forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      var id = link.getAttribute('href').slice(1);
+      var target = document.getElementById(id);
+      if (!target) return;
+      e.preventDefault();
+      suppressSectionObserverUntil = Date.now() + 700;
+      setActiveSection(id);
+      target.scrollIntoView({ block: 'start' });
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', '#' + id);
+      }
+    });
+  });
+
+  if (window.IntersectionObserver) {
+    var visibleSections = new Set();
+    var sectionObserver = new IntersectionObserver(function (entries) {
+      if (Date.now() < suppressSectionObserverUntil) return;
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) visibleSections.add(entry.target.id);
+        else visibleSections.delete(entry.target.id);
+      });
+      var best = sectionRoots.filter(function (section) {
+        return visibleSections.has(section.id);
+      }).sort(function (a, b) {
+        return Math.abs(a.getBoundingClientRect().top) - Math.abs(b.getBoundingClientRect().top);
+      })[0];
+      if (best) setActiveSection(best.id);
+    }, { root: null, rootMargin: '-20% 0px -65% 0px', threshold: 0 });
+    sectionRoots.forEach(function (section) { sectionObserver.observe(section); });
+  }
+  if (location.hash && document.getElementById(location.hash.slice(1))) {
+    setActiveSection(location.hash.slice(1));
+  }
+
+  function isSelecting() {
+    var sel = window.getSelection && window.getSelection();
+    return !!sel && sel.toString().length > 0;
+  }
+
+  function bindRowExpand(rowSelector, detailSelector, rowKey, detailKey) {
+    document.querySelectorAll(rowSelector).forEach(function (row) {
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-expanded', 'false');
+
+      function toggleRow() {
+        if (isSelecting()) return;
+        var idx = row.getAttribute(rowKey);
+        var detail = document.querySelector(detailSelector + '[' + detailKey + '="' + idx + '"]');
+        if (!detail) return;
+        var open = detail.classList.toggle('open');
+        row.classList.toggle('row-open', open);
+        row.setAttribute('aria-expanded', String(open));
+      }
+
+      row.addEventListener('click', toggleRow);
+      row.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        toggleRow();
+      });
+    });
+  }
+  bindRowExpand('tr.hit', 'tr.hit-detail', 'data-hit', 'data-detail');
+  bindRowExpand('.netrow', '.netrow-detail', 'data-net', 'data-net-detail');
+  bindRowExpand('.domrow', '.domrow-detail', 'data-dom', 'data-dom-detail');
+
+  // ── search + filter ──
+  var searchInput = document.querySelector('.search-input');
+  var clearBtn = document.querySelector('[data-search-clear]');
+  var countEl = document.querySelector('[data-search-count]');
+  var totalActions = 3, totalKinds = 5, totalRulesets = groupKeys.length;
+  var totalHits = document.querySelectorAll('tr.hit').length;
+  var totalNets = document.querySelectorAll('.netrow').length;
+  var totalDoms = document.querySelectorAll('.domrow').length;
+
+  var filters = {
+    action: new Set(['terminate', 'detect', 'collect']),
+    kind: new Set(['file_open', 'network_connect', 'unix_socket_connect', 'domain', 'correlation']),
+    ruleset: new Set(groupKeys)
+  };
+
+  function applyFilters() {
+    var raw = searchInput.value.trim();
+    var q = raw.toLowerCase();
+    clearBtn.hidden = !raw;
+
+    var hitsShown = 0, netShown = 0, domShown = 0;
+    document.querySelectorAll('tr.hit').forEach(function (tr) {
+      var passSearch = !q || (tr.dataset.search || '').toLowerCase().indexOf(q) >= 0;
+      var passAction = filters.action.has(tr.dataset.action);
+      var passKind = filters.kind.has(tr.dataset.kind);
+      var passRuleset = filters.ruleset.has(tr.dataset.ruleset);
+      var visible = passSearch && passAction && passKind && passRuleset;
+      tr.classList.toggle('search-hidden', !visible);
+      var detail = document.querySelector('tr.hit-detail[data-detail="' + tr.dataset.hit + '"]');
+      if (detail) detail.classList.toggle('search-hidden', !visible);
+      if (visible) hitsShown++;
+    });
+    document.querySelectorAll('.netrow').forEach(function (e) {
+      var v = !q || (e.dataset.search || '').toLowerCase().indexOf(q) >= 0;
+      e.classList.toggle('search-hidden', !v);
+      var d2 = document.querySelector('.netrow-detail[data-net-detail="' + e.dataset.net + '"]');
+      if (d2) d2.classList.toggle('search-hidden', !v);
+      if (v) netShown++;
+    });
+    document.querySelectorAll('.domrow').forEach(function (e) {
+      var v = !q || (e.dataset.search || '').toLowerCase().indexOf(q) >= 0;
+      e.classList.toggle('search-hidden', !v);
+      var d2 = document.querySelector('.domrow-detail[data-dom-detail="' + e.dataset.dom + '"]');
+      if (d2) d2.classList.toggle('search-hidden', !v);
+      if (v) domShown++;
+    });
+
+    var setCt = function (sel, n, total) {
+      var el2 = document.querySelector(sel);
+      if (el2) el2.textContent = n === total ? String(n) : (n + '/' + total);
+    };
+    setCt('.side-link[href="#hits"] .ct', hitsShown, totalHits);
+    setCt('.side-link[href="#network"] .ct', netShown, totalNets);
+    setCt('.side-link[href="#domains"] .ct', domShown, totalDoms);
+
+    var filterActive = filters.action.size < totalActions || filters.kind.size < totalKinds || filters.ruleset.size < totalRulesets;
+    var total = hitsShown + netShown + domShown;
+    countEl.textContent = (q || filterActive) ? (total + ' match' + (total === 1 ? '' : 'es')) : '';
+  }
+
+  searchInput.addEventListener('input', applyFilters);
+  clearBtn.addEventListener('click', function () {
+    searchInput.value = '';
+    searchInput.focus();
+    applyFilters();
+  });
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { searchInput.value = ''; applyFilters(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && document.activeElement !== searchInput && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault(); searchInput.focus(); searchInput.select();
+    }
+  });
+
+  // Filter row toggles (with optional shift-click solo behaviour)
+  document.querySelectorAll('.side-filter .row[data-filter]').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      e.preventDefault();
+      var spec = row.dataset.filter;
+      var sep = spec.indexOf(':');
+      var dim = spec.slice(0, sep);
+      var value = spec.slice(sep + 1);
+      var set = filters[dim];
+      if (!set) return;
+      var check = row.querySelector('.check');
+
+      if (e.shiftKey) {
+        // solo / restore-all
+        var peers = document.querySelectorAll('.side-filter .row[data-filter^="' + dim + ':"]');
+        if (set.size === 1 && set.has(value)) {
+          peers.forEach(function (r) {
+            var v = r.dataset.filter.slice(r.dataset.filter.indexOf(':') + 1);
+            set.add(v);
+            r.querySelector('.check').classList.add('on');
+            r.classList.remove('off');
+          });
+        } else {
+          set.clear(); set.add(value);
+          peers.forEach(function (r) {
+            var v = r.dataset.filter.slice(r.dataset.filter.indexOf(':') + 1);
+            var on = v === value;
+            r.querySelector('.check').classList.toggle('on', on);
+            r.classList.toggle('off', !on);
+          });
+        }
+      } else {
+        if (set.has(value)) { set.delete(value); check.classList.remove('on'); row.classList.add('off'); }
+        else { set.add(value); check.classList.add('on'); row.classList.remove('off'); }
+      }
+      applyFilters();
+    });
+  });
+})();
+</script>
+</body>
+</html>

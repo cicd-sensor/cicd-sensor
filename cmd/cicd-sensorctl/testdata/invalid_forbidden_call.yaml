@@ -1,0 +1,7 @@
+rule_sets:
+  - ruleset_id: set-invalid-forbidden
+    rules:
+      - rule_id: no_timestamp
+        event_kind: network_connect
+        condition: timestamp() == "2026-01-01T00:00:00Z"
+        action: detect

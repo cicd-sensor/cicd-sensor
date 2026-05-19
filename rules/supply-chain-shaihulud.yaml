@@ -1,0 +1,143 @@
+rule_sets:
+  - ruleset_id: supply-chain/shaihulud
+    lists:
+      shaihulud_scanner_basenames:
+        - "/trufflehog"
+      shaihulud_credential_suffixes:
+        - "/.npmrc"
+        - "/.aws/credentials"
+        - "/.docker/config.json"
+        - "/.config/gh/hosts.yml"
+      shaihulud_artefact_basenames:
+        - "/trufflesecrets.json"
+        - "/cloud.json"
+        - "/environment.json"
+        - "/contents.json"
+        - "/data.json"
+        - "/bun_environment.js"
+        - "/setup_bun.js"
+      mini_shaihulud_artefact_basenames:
+        - "/setup.mjs"
+        - "/router_runtime.js"
+      mini_shaihulud_persistence_path_fragments:
+        - "/.claude/settings.json"
+        - "/.claude/settings.local.json"
+        - "/.vscode/tasks.json"
+    rules:
+      # ---- Shai-Hulud original (TruffleHog) ----
+      - rule_id: shaihulud_scanner_exec
+        rule_name: "Shai-Hulud: trufflehog executed"
+        event_kind: process_exec
+        condition: list.shaihulud_scanner_basenames.exists(b, process.exec_path.endsWith(b))
+        action: collect
+        tags:
+          severity: high
+          category: credential-access
+
+      - rule_id: shaihulud_credential_read
+        rule_name: "Shai-Hulud: HOME credential read"
+        event_kind: file_open
+        condition: is_read && list.shaihulud_credential_suffixes.exists(p, path.endsWith(p))
+        action: collect
+        tags:
+          severity: medium
+          category: credential-access
+
+      - rule_id: shaihulud_artefact_write
+        rule_name: "Shai-Hulud: staging artefact written"
+        event_kind: file_open
+        condition: is_write && list.shaihulud_artefact_basenames.exists(p, path.endsWith(p))
+        action: collect
+        tags:
+          severity: high
+          category: credential-access
+
+      - rule_id: shaihulud_full_playbook
+        rule_name: "Shai-Hulud full playbook (scanner + credential + artefact)"
+        description: |
+          Canonical Shai-Hulud v1 / v2 signature: trufflehog ran AND
+          a HOME credential was read AND a staging artefact was
+          written within the same Job scope.
+        type: correlation
+        condition: |
+          rule.shaihulud_scanner_exec.total_count >= 1 &&
+          rule.shaihulud_credential_read.total_count >= 1 &&
+          rule.shaihulud_artefact_write.total_count >= 1
+        action: terminate
+        tags:
+          severity: critical
+          category: credential-access
+
+      - rule_id: shaihulud_partial_playbook
+        rule_name: "Shai-Hulud partial (scanner + credential)"
+        description: |
+          Lower-confidence partial signature: trufflehog ran AND a
+          credential file was read. detect only so jobs that
+          legitimately use trufflehog are not killed.
+        type: correlation
+        condition: |
+          rule.shaihulud_scanner_exec.total_count >= 1 &&
+          rule.shaihulud_credential_read.total_count >= 1
+        action: detect
+        tags:
+          severity: high
+          category: credential-access
+
+      # ---- Mini Shai-Hulud (Bun loader, 2026-04) ----
+      - rule_id: mini_shaihulud_bun_exec
+        rule_name: "Mini Shai-Hulud: bun runtime exec"
+        event_kind: process_exec
+        condition: process.exec_path.endsWith("/bun")
+        action: collect
+        tags:
+          severity: medium
+          category: execution
+
+      - rule_id: mini_shaihulud_artefact_write
+        rule_name: "Mini Shai-Hulud: setup.mjs / router_runtime.js written"
+        event_kind: file_open
+        condition: |
+          is_write &&
+          list.mini_shaihulud_artefact_basenames.exists(p, path.endsWith(p))
+        action: collect
+        tags:
+          severity: high
+          category: execution
+
+      - rule_id: mini_shaihulud_persistence_write
+        rule_name: "Mini Shai-Hulud: AI tool persistence write"
+        event_kind: file_open
+        condition: |
+          is_write &&
+          list.mini_shaihulud_persistence_path_fragments.exists(p, path.contains(p))
+        action: collect
+        tags:
+          severity: high
+          category: persistence
+
+      - rule_id: mini_shaihulud_full_playbook
+        rule_name: "Mini Shai-Hulud full playbook"
+        description: |
+          Bun loader exec AND credential read AND AI tool persistence
+          write in the same Job. Catches the SAP CAP / PyTorch
+          Lightning / intercom-client Mini Shai-Hulud v1 signature.
+        type: correlation
+        condition: |
+          rule.mini_shaihulud_bun_exec.total_count >= 1 &&
+          rule.shaihulud_credential_read.total_count >= 1 &&
+          rule.mini_shaihulud_persistence_write.total_count >= 1
+        action: terminate
+        tags:
+          severity: critical
+          category: credential-access
+
+      - rule_id: mini_shaihulud_artefact_playbook
+        rule_name: "Mini Shai-Hulud (artefact + credential read)"
+        type: correlation
+        condition: |
+          rule.mini_shaihulud_artefact_write.total_count >= 1 &&
+          rule.shaihulud_credential_read.total_count >= 1
+        action: terminate
+        tags:
+          severity: critical
+          category: credential-access

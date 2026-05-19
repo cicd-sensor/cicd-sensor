@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package cicd_sensor.log.v1;
+
+import "cicd_sensor/log/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+message JobDetectionLogEntry {
+  google.protobuf.Timestamp timestamp = 1 [json_name = "timestamp"];
+  // UUIDv7 for this detection log row.
+  string log_id = 2 [json_name = "log_id"];
+  JobLogContext job = 3 [json_name = "job"];
+  string scope = 4 [json_name = "scope"];
+  string config_revision = 5 [json_name = "config_revision"];
+  string ruleset_id = 7 [json_name = "ruleset_id"];
+  string rule_id = 8 [json_name = "rule_id"];
+  string ruleset_revision = 9 [json_name = "ruleset_revision"];
+  string rule_name = 10 [json_name = "rule_name"];
+  string rule_description = 11 [json_name = "rule_description"];
+  string action = 12 [json_name = "action"];
+  string rule_alert_truncation = 13 [json_name = "rule_alert_truncation"];
+  EventRecord event = 14 [json_name = "event"];
+}
