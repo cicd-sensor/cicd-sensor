@@ -8,6 +8,7 @@ name: Release Rules
 
 permissions:
   contents: read
+  id-token: write
   packages: write
 
 concurrency:
@@ -49,6 +50,9 @@ jobs:
 
       - name: Setup ORAS
         uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2.0.0
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Build rules bundle
         run: |
@@ -105,6 +109,15 @@ jobs:
         run: |
           for repo in "$GHCR_REPOSITORY" "$QUAY_REPOSITORY" "$GITLAB_REPOSITORY"; do
             make validate-rules-artifact RULE_ARTIFACT_REF="${repo}:${RULES_VERSION}"
+          done
+
+      - name: Sign versioned rules artifacts
+        env:
+          RULES_VERSION: ${{ steps.rules.outputs.version }}
+        run: |
+          for repo in "$GHCR_REPOSITORY" "$QUAY_REPOSITORY" "$GITLAB_REPOSITORY"; do
+            ref="$(oras resolve --full-reference "${repo}:${RULES_VERSION}")"
+            cosign sign --yes "$ref"
           done
 
       - name: Promote rules artifact to v1
