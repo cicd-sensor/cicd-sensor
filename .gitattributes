@@ -1,4 +1,4 @@
-internal/agent/bpf/include/vmlinux/*.h linguist-generated
-internal/agent/bpf/include/libbpf/*.h linguist-vendored
-internal/agent/bpf/generated/* linguist-generated
-vendor/** linguist-vendored
+/internal/agent/bpf/include/vmlinux/*.h linguist-generated
+/internal/agent/bpf/include/libbpf/*.h linguist-vendored
+/internal/agent/bpf/generated/* linguist-generated
+/vendor/** linguist-vendored
