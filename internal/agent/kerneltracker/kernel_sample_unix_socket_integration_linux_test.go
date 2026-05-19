@@ -21,7 +21,7 @@ import (
 // to the renamed real backend. Production layout:
 //
 //	/var/run/docker.sock       -> cicd-sensor proxy listen
-//	/var/run/real-docker.sock  -> renamed real dockerd
+//	/var/run/docker-upstream.sock  -> renamed real dockerd
 //
 // A bypass attempt = AF_UNIX connect(2) to the renamed real path. The hook
 // is pre-namei so `path` carries what the workload wrote, absolutized for
@@ -59,7 +59,7 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 
 	t.Run("absolute_path_simulating_renamed_real_backend", func(t *testing.T) {
 		tempDir := t.TempDir()
-		sockPath := filepath.Join(tempDir, "real-docker.sock")
+		sockPath := filepath.Join(tempDir, "docker-upstream.sock")
 		listener, err := net.Listen("unix", sockPath)
 		if err != nil {
 			t.Fatalf("Listen unix %s: %v", sockPath, err)
@@ -116,7 +116,7 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 
 	t.Run("relative_path_resolved_by_cwd", func(t *testing.T) {
 		tempDir := t.TempDir()
-		sockPath := filepath.Join(tempDir, "real-docker.sock")
+		sockPath := filepath.Join(tempDir, "docker-upstream.sock")
 		listener, err := net.Listen("unix", sockPath)
 		if err != nil {
 			t.Fatalf("Listen unix %s: %v", sockPath, err)
@@ -125,12 +125,12 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 		go acceptAndDiscardUnix(listener)
 
 		// t.Chdir reverts at sub-test exit. Closes the chdir bypass class:
-		// `connect("./real-docker.sock")` from cwd=tempDir must absolutize
+		// `connect("./docker-upstream.sock")` from cwd=tempDir must absolutize
 		// to sockPath via the kernel-side cwd walk + path.Clean.
 		t.Chdir(tempDir)
-		conn, err := net.Dial("unix", "./real-docker.sock")
+		conn, err := net.Dial("unix", "./docker-upstream.sock")
 		if err != nil {
-			t.Fatalf("Dial unix ./real-docker.sock: %v", err)
+			t.Fatalf("Dial unix ./docker-upstream.sock: %v", err)
 		}
 		defer conn.Close()
 
@@ -148,8 +148,8 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 			})
 	})
 
-	t.Run("real_var_run_real_docker_sock_if_proxy_deployed", func(t *testing.T) {
-		const realPath = "/var/run/real-docker.sock"
+	t.Run("real_var_run_docker_upstream_sock_if_proxy_deployed", func(t *testing.T) {
+		const realPath = "/var/run/docker-upstream.sock"
 		if _, err := os.Stat(realPath); err != nil {
 			t.Skipf("%s not present (dockerd proxy not deployed): %v", realPath, err)
 		}
@@ -159,7 +159,7 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 		}
 		defer conn.Close()
 
-		waitForEventRecord(t, eventCh, 5*time.Second, "real-docker.sock bypass",
+		waitForEventRecord(t, eventCh, 5*time.Second, "docker-upstream.sock bypass",
 			func(record jobevent.EventRecord) bool {
 				if record.EventKind != jobevent.UnixSocketConnect {
 					return false

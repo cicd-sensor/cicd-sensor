@@ -117,7 +117,7 @@ jobs:
             exit 1
           fi
           skips="$(grep -E '^[[:space:]]*--- SKIP:' "$log" \
-            | grep -v 'real_var_run_real_docker_sock_if_proxy_deployed' || true)"
+            | grep -v 'real_var_run_docker_upstream_sock_if_proxy_deployed' || true)"
           if [ -n "$skips" ]; then
             {
               echo "## Skipped tests on LVH ${{ matrix.kernel.label }}"

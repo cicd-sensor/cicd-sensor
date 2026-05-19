@@ -17,7 +17,7 @@ const proxyUsage = `usage:
   cicd-sensor proxy dockerd [flags]`
 
 const (
-	defaultDockerDaemonSocket = "/run/real-docker.sock"
+	defaultDockerDaemonSocket = "/run/docker-upstream.sock"
 	defaultDockerProxySocket  = "/run/docker.sock"
 )
 
