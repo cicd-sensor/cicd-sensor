@@ -38,9 +38,7 @@ func TestLoadFromOCI(t *testing.T) {
 	}{
 		{name: "quay", ref: QuayOCIRef},
 		{name: "gitlab", ref: GitLabOCIRef},
-		// GitHub is private for now. Enable this when the GHCR rules package is
-		// public or the integration environment provides registry auth.
-		// {name: "github", ref: GitHubOCIRef},
+		{name: "github", ref: GitHubOCIRef},
 	}
 
 	for _, tt := range tests {
