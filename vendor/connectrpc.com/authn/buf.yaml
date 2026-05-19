@@ -1,0 +1,10 @@
+version: v2
+modules:
+  - path: internal/proto
+lint:
+  use:
+    - DEFAULT
+  disallow_comment_ignores: true
+breaking:
+  use:
+    - WIRE_JSON

@@ -1,0 +1,54 @@
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  forbidigo:
+    forbid:
+      - '^fmt\.Print'
+      - '^log\.'
+      - '^print$'
+      - '^println$'
+      - '^panic$'
+  godox:
+    # TODO, OPT, etc. comments are fine to commit. Use FIXME comments for
+    # temporary hacks, and use godox to prevent committing them.
+    keywords: [FIXME]
+  varnamelen:
+    ignore-decls:
+      - T any
+      - i int
+      - wg sync.WaitGroup
+linters:
+  enable-all: true
+  disable:
+    - cyclop            # covered by gocyclo
+    - depguard          # unnecessary for small libraries
+    - execinquery       # deprecated since golangci v1.58
+    - exportloopref     # covered by copyloopvar
+    - funlen            # rely on code review to limit function length
+    - gocognit          # dubious "cognitive overhead" quantification
+    - gofumpt           # prefer standard gofmt
+    - goimports         # rely on gci instead
+    - gomnd             # some unnamed constants are okay
+    - inamedparam       # convention is not followed
+    - ireturn           # "accept interfaces, return structs" isn't ironclad
+    - lll               # don't want hard limits for line length
+    - maintidx          # covered by gocyclo
+    - mnd               # some unnamed constants are okay
+    - nlreturn          # generous whitespace violates house style
+    - nonamedreturns    # named returns are fine; it's *bare* returns that are bad
+    - protogetter       # too many false positives
+    - testpackage       # internal tests are fine
+    - wrapcheck         # don't _always_ need to wrap errors
+    - wsl               # generous whitespace violates house style
+issues:
+  exclude:
+    # Don't ban use of fmt.Errorf to create new errors, but the remaining
+    # checks from err113 are useful.
+    - "do not define dynamic errors.*"
+  exclude-rules:
+    # We need to init a global in-mem HTTP server for testable examples.
+    - path: examples_test.go
+      linters: [gocritic, gochecknoglobals, gosec]
+    # Allow more lenient rules in example code for brevity.
+    - path: examples_test.go
+      linters: [exhaustruct, nilnil, varnamelen]
