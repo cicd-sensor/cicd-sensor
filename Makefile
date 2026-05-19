@@ -100,6 +100,7 @@ rules-bundle-validate: rules-bundle
 .PHONY: diff-check
 diff-check:
 	git diff --check
+	git diff --exit-code
 
 .PHONY: check
 check: generate test test-abi rules-validate rules-bundle-validate test-integration-compile diff-check
