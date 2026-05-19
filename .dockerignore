@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+.gocache
+.gomodcache
+.tmp
+bin
+dist
+docs
+node_modules
+**/*.md
+**/testdata
+internal/agent/bpf/generated/*.o
+*.log

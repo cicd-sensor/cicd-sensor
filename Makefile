@@ -3,6 +3,7 @@ SHELL := /bin/sh
 GO ?= go
 BUF ?= buf
 SUDO ?= sudo
+VERSION ?= dev
 
 export GOCACHE ?= $(CURDIR)/.gocache
 
@@ -59,7 +60,12 @@ build-linux:
 	for arch in $(LINUX_ARCHES); do \
 		for bin in $(LINUX_BINS); do \
 			echo "building $$bin linux/$$arch"; \
-			GOOS=linux GOARCH=$$arch $(GO) build -o "$(DIST_DIR)/$${bin}_linux_$${arch}" "./cmd/$$bin"; \
+			CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build \
+				-trimpath \
+				-buildvcs=false \
+				-ldflags "-s -w -X main.version=$(VERSION)" \
+				-o "$(DIST_DIR)/$${bin}_linux_$${arch}" \
+				"./cmd/$$bin"; \
 		done; \
 	done
 

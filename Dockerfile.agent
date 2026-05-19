@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1.7
+#
+# cicd-sensor CI agent image (BPF-based observation agent).
+#
+# Runtime requires CAP_BPF + CAP_PERFMON + cgroup v2 access.
+
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:e797f1db0ae44e2d2ea4618a8be724f5a3c05f842af2ba47eadc0e573dad78ce AS builder
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . .
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ARG VERSION=dev
+
+ENV CGO_ENABLED=0
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build \
+        -trimpath \
+        -buildvcs=false \
+        -ldflags="-s -w -X main.version=${VERSION}" \
+        -o /out/cicd-sensor \
+        ./cmd/cicd-sensor && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build \
+        -trimpath \
+        -buildvcs=false \
+        -ldflags="-s -w" \
+        -o /out/cicd-sensorctl \
+        ./cmd/cicd-sensorctl
+
+FROM cgr.dev/chainguard/static:latest@sha256:1f14279403150757d801f6308bb0f4b816b162fddce10b9bd342f10adc3cf7fa
+COPY --from=builder /out/cicd-sensor /usr/local/bin/cicd-sensor
+COPY --from=builder /out/cicd-sensorctl /usr/local/bin/cicd-sensorctl
+
+ENTRYPOINT ["/usr/local/bin/cicd-sensor"]
