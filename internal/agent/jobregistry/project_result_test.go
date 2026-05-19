@@ -55,7 +55,7 @@ func TestJobRegistry_RequestGitHubProjectResult_ProjectScopeMissing(t *testing.T
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, nil, false); err != nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
 		t.Fatalf("apply host start: %v", err)
 	}
 	_, err := jr.RequestGitHubProjectResult(testCtx, id, 0)

@@ -30,6 +30,10 @@ var ErrHostAfterProject = errors.New("host start must happen before project star
 // that was created without host/start.
 var ErrHostScopeMissing = errors.New("host scope missing")
 
+// ErrHostManagerRequired reports that host scope configuration cannot be built
+// because the agent was started without a manager connection.
+var ErrHostManagerRequired = errors.New("host manager is required")
+
 // ErrJobAlreadyRegistered reports that the job identity is already active.
 var ErrJobAlreadyRegistered = errors.New("job already registered")
 

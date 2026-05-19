@@ -62,13 +62,13 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output(), "        CI provider this host runs.")
 		fmt.Fprintln(fs.Output(), "  --runner machine|kubernetes")
 		fmt.Fprintln(fs.Output(), "        Runner kind.")
-		fmt.Fprintln(fs.Output(), "  --manager-url URL")
-		fmt.Fprintln(fs.Output(), "        Host scope manager URL.")
-		fmt.Fprintln(fs.Output(), "  CICD_SENSOR_MANAGER_TOKEN or --manager-token-file PATH")
-		fmt.Fprintln(fs.Output(), "        Host scope manager bearer token.")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintf(fs.Output(), "  --socket PATH\n        Agent control socket path. (default %q)\n", defaultSocketPath)
+		fmt.Fprintln(fs.Output(), "  --manager-url URL")
+		fmt.Fprintln(fs.Output(), "        Host scope manager URL. Required for host/start.")
+		fmt.Fprintln(fs.Output(), "  CICD_SENSOR_MANAGER_TOKEN or --manager-token-file PATH")
+		fmt.Fprintln(fs.Output(), "        Host scope manager bearer token. Required only when --manager-url is set.")
 		fmt.Fprintln(fs.Output(), "  --shutdown-grace DURATION")
 		fmt.Fprintln(fs.Output(), "        Best-effort drain window used after SIGTERM. (default 8s)")
 	}
@@ -104,19 +104,6 @@ func runAgentStart(args []string) {
 		os.Exit(1)
 	}
 
-	managerToken, err := resolveManagerTokenSecret(managerTokenFilePath, logger)
-	if err != nil {
-		slog.ErrorContext(ctx, "agent_failed", "error", err)
-		os.Exit(1)
-	}
-
-	opts.ManagerToken = managerToken
-	if err := validateAgentStartOptions(opts); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	hostManager := managerclient.Connection{BaseURL: managerURL, Token: managerToken}
-
 	slog.InfoContext(ctx, "agent_started",
 		"version", version,
 		"socket", opts.SocketPath,
@@ -124,14 +111,32 @@ func runAgentStart(args []string) {
 		"runner", opts.Runner,
 	)
 
-	hostManagerClient, err := managerclient.NewConfigClient(logger, hostManager)
-	if err != nil {
-		slog.ErrorContext(ctx, "agent_failed", "error", err)
+	var hostManager managerclient.Connection
+	var hostManagerClient *managerclient.ConfigClient
+	if opts.ManagerURL != "" {
+		managerToken, err := resolveManagerTokenSecret(managerTokenFilePath, logger)
+		if err != nil {
+			slog.ErrorContext(ctx, "agent_failed", "error", err)
+			os.Exit(1)
+		}
+		opts.ManagerToken = managerToken
+		if err := validateAgentStartOptions(opts); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		hostManager = managerclient.Connection{BaseURL: opts.ManagerURL, Token: opts.ManagerToken}
+		hostManagerClient, err = managerclient.NewConfigClient(logger, hostManager)
+		if err != nil {
+			slog.ErrorContext(ctx, "agent_failed", "error", err)
+			os.Exit(1)
+		}
+		slog.InfoContext(ctx, "host_manager_client_enabled", "manager_url", hostManager.BaseURL)
+	} else if managerTokenFilePath != "" {
+		fmt.Fprintln(os.Stderr, "--manager-token-file requires --manager-url")
 		os.Exit(1)
 	}
-	slog.InfoContext(ctx, "host_manager_client_enabled", "manager_url", hostManager.BaseURL)
 
-	a := agent.NewAgent(logger, opts.SocketPath, jobcontext.Provider(opts.Provider), opts.Runner, hostManager, hostManagerClient, false)
+	a := agent.NewAgent(logger, opts.SocketPath, jobcontext.Provider(opts.Provider), opts.Runner, hostManager, hostManagerClient, true)
 	a.SetShutdownGrace(opts.ShutdownGrace)
 	if err := a.Run(ctx); err != nil {
 		if errors.Is(err, listener.ErrAlreadyRunning) {
@@ -148,6 +153,9 @@ func runAgentStart(args []string) {
 func validateAgentStartOptions(opts agentStartOptions) error {
 	if err := validateAgentStartRequiredOptions(opts); err != nil {
 		return err
+	}
+	if opts.ManagerURL == "" {
+		return nil
 	}
 	if opts.ManagerToken == "" {
 		return fmt.Errorf("manager token is required: set CICD_SENSOR_MANAGER_TOKEN or --manager-token-file")
@@ -174,9 +182,6 @@ func validateAgentStartRequiredOptions(opts agentStartOptions) error {
 	}
 	if opts.ShutdownGrace <= 0 {
 		return fmt.Errorf("shutdown-grace must be positive")
-	}
-	if opts.ManagerURL == "" {
-		return fmt.Errorf("manager-url is required")
 	}
 	return nil
 }

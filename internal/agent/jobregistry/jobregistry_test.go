@@ -58,3 +58,9 @@ func (f *slowFetcher) FetchConfig(ctx context.Context, _ *managerv1.FetchConfigR
 	}
 	return &managerclient.FetchResult{}, nil
 }
+
+type staticManagerFetcher struct{}
+
+func (staticManagerFetcher) FetchConfig(context.Context, *managerv1.FetchConfigRequest) (*managerclient.FetchResult, error) {
+	return &managerclient.FetchResult{}, nil
+}

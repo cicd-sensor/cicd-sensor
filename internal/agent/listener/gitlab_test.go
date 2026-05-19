@@ -76,6 +76,33 @@ func TestGitLabHostStart_RegistersJob(t *testing.T) {
 	}
 }
 
+func TestGitLabHostStart_RequiresManager(t *testing.T) {
+	matchAgentOwnerUIDToPeerCred(t)
+
+	client, _, cleanup := setupGitLabListenerWithHostManager(t, nil)
+	defer cleanup()
+
+	body := mustMarshal(t, jobcontext.GitLabHostStartRequest{
+		JobIdentity: jobcontext.JobIdentity{
+			Provider:     jobcontext.ProviderGitLab,
+			ProviderHost: "gitlab.com",
+			ProjectPath:  "cicd-sensor/cicd-sensor-testing",
+			GitLabJobID:  "14202203981",
+		},
+	})
+
+	resp, err := client.Post("http://cicd-sensor/v1/gitlab/host/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusBadRequest, dump)
+	}
+}
+
 // Idempotency invariant: a duplicate gitlab host_start must succeed
 // silently because the GitLab proxy issues host_start as a lazy create
 // after a 404 from staging/put. Concurrent container creates can race
@@ -274,7 +301,7 @@ func TestGitLabStagingPut_StagesWithPeerPIDWithoutIdentity(t *testing.T) {
 		ProjectPath:  "cicd-sensor/cicd-sensor-testing",
 		GitLabJobID:  "14202203981",
 	}
-	if _, err := registry.ApplyGitHubHostStart(context.Background(), identity, jobcontext.JobMetadata{}, "machine", int32(os.Getpid()), managerclient.Connection{}, nil, false); err != nil {
+	if _, err := registry.ApplyGitHubHostStart(context.Background(), identity, jobcontext.JobMetadata{}, "machine", int32(os.Getpid()), managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
 		t.Fatalf("seed peer tracking: %v", err)
 	}
 
@@ -316,7 +343,7 @@ func TestGitLabStagingPut_PeerPIDWinsWhenIdentityAlsoPresent(t *testing.T) {
 		ProjectPath:  "cicd-sensor/cicd-sensor-testing",
 		GitLabJobID:  "14202203981",
 	}
-	if _, err := registry.ApplyGitHubHostStart(context.Background(), peerIdentity, jobcontext.JobMetadata{}, "machine", int32(os.Getpid()), managerclient.Connection{}, nil, false); err != nil {
+	if _, err := registry.ApplyGitHubHostStart(context.Background(), peerIdentity, jobcontext.JobMetadata{}, "machine", int32(os.Getpid()), managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
 		t.Fatalf("seed peer tracking: %v", err)
 	}
 
@@ -595,6 +622,11 @@ func TestGitLabStagingPut_WrongUIDForbidden(t *testing.T) {
 // on identity provider exercises the GitLab path.
 func setupGitLabListener(t *testing.T) (*http.Client, *jobregistry.JobRegistry, func()) {
 	t.Helper()
+	return setupGitLabListenerWithHostManager(t, staticManagerFetcher{})
+}
+
+func setupGitLabListenerWithHostManager(t *testing.T, hostManagerClient jobregistry.ManagerConfigFetcher) (*http.Client, *jobregistry.JobRegistry, func()) {
+	t.Helper()
 
 	dir := newTestSocketDir(t, "cicd-sensor-gitlab-test-")
 	t.Cleanup(func() { os.RemoveAll(dir) })
@@ -617,6 +649,7 @@ func setupGitLabListener(t *testing.T) (*http.Client, *jobregistry.JobRegistry, 
 		JobRegistry:           registry,
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
+		HostManagerClient:     hostManagerClient,
 		RunnerKind:            "machine",
 		Provider:              jobcontext.ProviderGitLab,
 	})

@@ -162,7 +162,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_UpdatesExistingJob(t *testing.T) {
 	hostMeta := jobcontext.JobMetadata{}
 	projectMeta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubHostStart(testCtx, id, hostMeta, "machine", 0, managerclient.Connection{}, nil, false)
+	job, err := jr.ApplyGitHubHostStart(testCtx, id, hostMeta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false)
 	if err != nil {
 		t.Fatalf("apply host start: %v", err)
 	}

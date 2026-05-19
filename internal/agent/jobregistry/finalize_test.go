@@ -82,7 +82,7 @@ func TestJobRegistry_RequestGitHubHostEnd_FinalizesHostJob(t *testing.T) {
 
 	jr := newTestJobRegistry()
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
-	if _, err := jr.ApplyGitHubHostStart(testCtx, id, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, nil, false); err != nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, id, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, fakeManagerFetcher{}, false); err != nil {
 		t.Fatalf("host start: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestJobRegistry_GetGitHubJobHealth(t *testing.T) {
 
 	jr := newTestJobRegistry()
 	hostID := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
-	if _, err := jr.ApplyGitHubHostStart(testCtx, hostID, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, nil, false); err != nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, hostID, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, fakeManagerFetcher{}, false); err != nil {
 		t.Fatalf("host start: %v", err)
 	}
 	hostHealth, err := jr.GetGitHubJobHealth(testCtx, hostID, 1)

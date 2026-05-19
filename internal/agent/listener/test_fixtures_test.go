@@ -39,6 +39,12 @@ func (f *fakeConfigService) FetchConfig(ctx context.Context, req *connect.Reques
 	return f.handler(ctx, req)
 }
 
+type staticManagerFetcher struct{}
+
+func (staticManagerFetcher) FetchConfig(context.Context, *managerv1.FetchConfigRequest) (*managerclient.FetchResult, error) {
+	return &managerclient.FetchResult{}, nil
+}
+
 func newFakeConfigServer(t *testing.T, svc *fakeConfigService) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -63,6 +69,11 @@ func setupListenerWithRegistryAndRoot(t *testing.T) (*http.Client, *jobregistry.
 
 func setupListenerWithRegistryAndRootForProvider(t *testing.T, provider jobcontext.Provider) (*http.Client, *jobregistry.JobRegistry, string, func()) {
 	t.Helper()
+	return setupListenerWithRegistryAndRootForProviderWithHostManager(t, provider, staticManagerFetcher{})
+}
+
+func setupListenerWithRegistryAndRootForProviderWithHostManager(t *testing.T, provider jobcontext.Provider, hostManagerClient jobregistry.ManagerConfigFetcher) (*http.Client, *jobregistry.JobRegistry, string, func()) {
+	t.Helper()
 	dir := newTestSocketDir(t, "cicd-sensor-test-")
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	sock := filepath.Join(dir, "t.sock")
@@ -73,6 +84,7 @@ func setupListenerWithRegistryAndRootForProvider(t *testing.T, provider jobconte
 		JobRegistry:           jobRegistry,
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
+		HostManagerClient:     hostManagerClient,
 		RunnerKind:            "machine",
 		Provider:              provider,
 	})

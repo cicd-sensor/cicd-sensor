@@ -33,8 +33,8 @@ type Agent struct {
 const defaultAgentShutdownGrace = 8 * time.Second
 
 // NewAgent creates an agent for one provider and one control socket.
-// runnerKind is copied into every Job for logs/reports. If fetchBaseline is
-// true and no manager client is configured, host starts load the OCI baseline.
+// runnerKind is copied into every Job for logs/reports. fetchBaseline controls
+// whether project-local starts include the OCI baseline before request rules.
 func NewAgent(logger *slog.Logger, socketPath string, provider jobcontext.Provider, runnerKind string, hostManagerConn managerclient.Connection, hostManagerClient *managerclient.ConfigClient, fetchBaseline bool) *Agent {
 	if logger == nil {
 		logger = slog.Default()

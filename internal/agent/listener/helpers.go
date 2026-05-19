@@ -32,6 +32,8 @@ func (l *Listener) decodeJSONBody(w http.ResponseWriter, r *http.Request, target
 // writeStartError maps routine lifecycle conflicts to 409.
 func (l *Listener) writeStartError(w http.ResponseWriter, r *http.Request, logEvent string, err error) {
 	switch {
+	case errors.Is(err, jobregistry.ErrHostManagerRequired):
+		l.writeError(w, r, http.StatusBadRequest, jobregistry.ErrHostManagerRequired.Error())
 	case errors.Is(err, jobregistry.ErrHostAfterProject):
 		l.writeError(w, r, http.StatusConflict, jobregistry.ErrHostAfterProject.Error())
 	case errors.Is(err, job.ErrProjectScopeAlreadySet):

@@ -12,7 +12,6 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 	valid := agentStartOptions{
 		Provider:      "github",
 		Runner:        "machine",
-		ManagerURL:    "https://manager.example.com",
 		ShutdownGrace: time.Second,
 	}
 
@@ -27,7 +26,6 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 			opts: agentStartOptions{
 				Provider:      "gitlab",
 				Runner:        "kubernetes",
-				ManagerURL:    "https://manager.example.com",
 				ShutdownGrace: time.Second,
 			},
 		},
@@ -50,11 +48,6 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 			name:        "unsupported runner",
 			opts:        withAgentRunner(valid, "container"),
 			wantErrText: "runner must be machine or kubernetes",
-		},
-		{
-			name:        "missing manager url",
-			opts:        withAgentManagerURL(valid, ""),
-			wantErrText: "manager-url is required",
 		},
 		{
 			name:        "non-positive shutdown grace",
@@ -86,10 +79,14 @@ func TestValidateAgentStartOptionsRequiresManagerToken(t *testing.T) {
 	opts := agentStartOptions{
 		Provider:      "github",
 		Runner:        "machine",
-		ManagerURL:    "https://manager.example.com",
 		ShutdownGrace: time.Second,
 	}
 
+	if err := validateAgentStartOptions(opts); err != nil {
+		t.Fatalf("validateAgentStartOptions without manager: %v", err)
+	}
+
+	opts.ManagerURL = "https://manager.example.com"
 	err := validateAgentStartOptions(opts)
 	if err == nil {
 		t.Fatal("expected error")
@@ -111,11 +108,6 @@ func withAgentProvider(opts agentStartOptions, provider string) agentStartOption
 
 func withAgentRunner(opts agentStartOptions, runner string) agentStartOptions {
 	opts.Runner = runner
-	return opts
-}
-
-func withAgentManagerURL(opts agentStartOptions, managerURL string) agentStartOptions {
-	opts.ManagerURL = managerURL
 	return opts
 }
 

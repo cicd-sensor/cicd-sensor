@@ -151,6 +151,31 @@ func TestListener_HostStart_StartsJob(t *testing.T) {
 	}
 }
 
+func TestListener_HostStart_RequiresManager(t *testing.T) {
+	client, _, _, cleanup := setupListenerWithRegistryAndRootForProviderWithHostManager(t, jobcontext.ProviderGitHub, nil)
+	defer cleanup()
+
+	body, _ := json.Marshal(map[string]string{
+		"provider":                  "github",
+		"provider_host":             "github.com",
+		"project_path":              "acme/example",
+		"github_run_id":             "556",
+		"github_job":                "build",
+		"github_run_attempt":        "1",
+		"github_runner_tracking_id": "host_without_manager",
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/github/host/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusBadRequest, dump)
+	}
+}
+
 func TestListener_HostStartThenProjectStart_ReturnsExisting(t *testing.T) {
 	client, cleanup := setupListener(t)
 	defer cleanup()

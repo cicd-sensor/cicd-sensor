@@ -32,15 +32,10 @@ func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcon
 	}
 	defer reservation.done()
 
-	var hostScope *jobscope.JobScopeState
-	var err error
-	if hostManagerClient != nil {
-		hostScope, err = jr.buildHostScopeFromManagerConfig(ctx, identity, metadata, runnerKind, hostManagerConnection, hostManagerClient)
-	} else if fetchBaseline {
-		hostScope, err = jr.buildHostScopeFromBaseline(ctx, identity)
-	} else {
-		hostScope = buildEmptyHostScope(identity)
+	if hostManagerClient == nil {
+		return nil, ErrHostManagerRequired
 	}
+	hostScope, err := jr.buildHostScopeFromManagerConfig(ctx, identity, metadata, runnerKind, hostManagerConnection, hostManagerClient)
 	if err != nil {
 		return nil, err
 	}
@@ -78,14 +73,10 @@ func (jr *JobRegistry) ApplyGitLabHostStart(ctx context.Context, identity jobcon
 	}
 	defer reservation.done()
 
-	var hostScope *jobscope.JobScopeState
-	if hostManagerClient != nil {
-		hostScope, err = jr.buildHostScopeFromManagerConfig(ctx, identity, metadata, runnerKind, hostManagerConnection, hostManagerClient)
-	} else if fetchBaseline {
-		hostScope, err = jr.buildHostScopeFromBaseline(ctx, identity)
-	} else {
-		hostScope = buildEmptyHostScope(identity)
+	if hostManagerClient == nil {
+		return nil, ErrHostManagerRequired
 	}
+	hostScope, err := jr.buildHostScopeFromManagerConfig(ctx, identity, metadata, runnerKind, hostManagerConnection, hostManagerClient)
 	if err != nil {
 		return nil, err
 	}
@@ -115,27 +106,6 @@ func (jr *JobRegistry) buildHostScopeFromManagerConfig(ctx context.Context, iden
 	jr.startManagerJobLogs(hostScope, identity, hostManagerConnection)
 	hostScope.ResolveRules(identity)
 	return hostScope, nil
-}
-
-// buildHostScopeFromBaseline builds a resolved host scope from direct baseline rules.
-func (jr *JobRegistry) buildHostScopeFromBaseline(ctx context.Context, identity jobcontext.JobIdentity) (*jobscope.JobScopeState, error) {
-	hostScope := jobscope.NewHost()
-	baselineSource, err := jr.loadBaselineRules(ctx, identity)
-	if err != nil {
-		return nil, err
-	}
-	if err := hostScope.ApplyBaselineRules(baselineSource); err != nil {
-		return nil, err
-	}
-	hostScope.ResolveRules(identity)
-	return hostScope, nil
-}
-
-// buildEmptyHostScope builds a resolved host scope with no rules.
-func buildEmptyHostScope(identity jobcontext.JobIdentity) *jobscope.JobScopeState {
-	hostScope := jobscope.NewHost()
-	hostScope.ResolveRules(identity)
-	return hostScope
 }
 
 func (jr *JobRegistry) fetchManagerConfig(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, managerClient ManagerConfigFetcher, eventName string) (jobscope.ManagerConfig, error) {
