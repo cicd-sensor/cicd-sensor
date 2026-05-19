@@ -1,5 +1,5 @@
 ---
-name: BPF Integration x64
+name: BPF Cross-Kernel Integration
 
 "on":
   workflow_dispatch:
