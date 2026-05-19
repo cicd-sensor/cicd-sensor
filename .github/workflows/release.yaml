@@ -78,6 +78,7 @@ jobs:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-24.04
+    environment: sensor-releases
     permissions:
       contents: write
       id-token: write
@@ -137,6 +138,7 @@ jobs:
     name: Image (${{ matrix.image }})
     needs: build
     runs-on: ubuntu-24.04
+    environment: sensor-releases
     permissions:
       contents: read
       id-token: write
