@@ -348,7 +348,7 @@ func TestEvaluateEvent_ScopeFieldHostProject(t *testing.T) {
 	}
 }
 
-func TestEvaluateEvent_CollectHitDoesNotEmitDetectionLog(t *testing.T) {
+func TestEvaluateEvent_CollectHitEmitsDetectionLog(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingDetectionOutput{}
@@ -369,8 +369,12 @@ func TestEvaluateEvent_CollectHitDoesNotEmitDetectionLog(t *testing.T) {
 	evaluateTestRules(testCtx, eval, testDispatchEvent("/usr/bin/curl", "example.com", 443), hostScope, nil, testLogger)
 	closeRecordingOutputs(t, hostScope)
 
-	if got := len(stream.Entries(t)); got != 0 {
-		t.Fatalf("detection entries: got %d, want 0", got)
+	entries := stream.Entries(t)
+	if len(entries) != 1 {
+		t.Fatalf("detection entries: got %d, want 1", len(entries))
+	}
+	if got, want := entries[0].Action, string(rule.RuleActionCollect); got != want {
+		t.Fatalf("action: got %q, want %q", got, want)
 	}
 }
 

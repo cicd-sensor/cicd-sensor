@@ -28,10 +28,11 @@ const (
 )
 
 // NewS3 creates an S3-backed Sink using the AWS default credential chain.
-func NewS3(ctx context.Context, bucket, region, prefix string) (Sink, error) {
-	bucket, normalizedPrefix, err := normalizeObjectLocation("s3", bucket, prefix)
+// uri must be an s3:// URI; any path component becomes the object key prefix.
+func NewS3(ctx context.Context, uri, region string) (Sink, error) {
+	bucket, prefix, err := parseObjectURI("s3", uri)
 	if err != nil {
-		return nil, fmt.Errorf("invalid s3 location: %w", err)
+		return nil, fmt.Errorf("invalid s3 uri: %w", err)
 	}
 	opts := []func(*awsconfig.LoadOptions) error{}
 	if region != "" {
@@ -44,7 +45,7 @@ func NewS3(ctx context.Context, bucket, region, prefix string) (Sink, error) {
 	return &s3Sink{
 		client: s3.NewFromConfig(cfg),
 		bucket: bucket,
-		prefix: normalizedPrefix,
+		prefix: prefix,
 	}, nil
 }
 
@@ -75,11 +76,7 @@ func (s *s3Sink) Close() error {
 }
 
 func (s *s3Sink) Name() string {
-	name := "s3://" + s.bucket
-	if s.prefix != "" {
-		name += "/" + s.prefix
-	}
-	return name
+	return formatObjectURI("s3", s.bucket, s.prefix)
 }
 
 func (s *s3Sink) FlushPolicy(logKind LogKind) FlushPolicy {

@@ -24,11 +24,12 @@ const (
 )
 
 // NewGCS creates a GCS-backed Sink using Google Application Default
-// Credentials.
-func NewGCS(ctx context.Context, bucket, prefix string) (Sink, error) {
-	bucket, normalizedPrefix, err := normalizeObjectLocation("gs", bucket, prefix)
+// Credentials. uri must be a gs:// URI; any path component becomes the
+// object key prefix.
+func NewGCS(ctx context.Context, uri string) (Sink, error) {
+	bucket, prefix, err := parseObjectURI("gs", uri)
 	if err != nil {
-		return nil, fmt.Errorf("invalid gcs location: %w", err)
+		return nil, fmt.Errorf("invalid gcs uri: %w", err)
 	}
 	client, err := storage.NewClient(ctx)
 	if err != nil {
@@ -37,7 +38,7 @@ func NewGCS(ctx context.Context, bucket, prefix string) (Sink, error) {
 	return &gcsSink{
 		client: client,
 		bucket: bucket,
-		prefix: normalizedPrefix,
+		prefix: prefix,
 	}, nil
 }
 
@@ -71,11 +72,7 @@ func (s *gcsSink) Close() error {
 }
 
 func (s *gcsSink) Name() string {
-	name := "gs://" + s.bucket
-	if s.prefix != "" {
-		name += "/" + s.prefix
-	}
-	return name
+	return formatObjectURI("gs", s.bucket, s.prefix)
 }
 
 func (s *gcsSink) FlushPolicy(logKind LogKind) FlushPolicy {

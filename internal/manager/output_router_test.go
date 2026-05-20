@@ -171,8 +171,8 @@ func TestBuildOutputs_ClosesCreatedSinksOnBuildFailure(t *testing.T) {
 		context.Background(),
 		testLogger,
 		SinksConfig{
-			"first":  {Type: "gcs", Bucket: "first"},
-			"second": {Type: "gcs", Bucket: "second"},
+			"first":  {Type: "gcs", URI: "gs://first"},
+			"second": {Type: "gcs", URI: "gs://second"},
 		},
 		OutputConfig{
 			"job_detection_log": {Destination: "first"},

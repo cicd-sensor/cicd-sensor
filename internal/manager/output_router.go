@@ -90,21 +90,14 @@ func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, o
 func buildNamedSink(ctx context.Context, sc SinkConfig) (sink.Sink, error) {
 	switch sc.Type {
 	case "s3":
-		return sink.NewS3(ctx, firstNonEmpty(sc.Bucket, sc.URI), sc.Region, sc.Prefix)
+		return sink.NewS3(ctx, sc.URI, sc.Region)
 	case "gcs":
-		return sink.NewGCS(ctx, firstNonEmpty(sc.Bucket, sc.URI), sc.Prefix)
+		return sink.NewGCS(ctx, sc.URI)
 	case "pubsub":
 		return sink.NewPubSub(ctx, sc.ProjectID, sc.Topic)
 	default:
 		return nil, fmt.Errorf("unknown sink type %q", sc.Type)
 	}
-}
-
-func firstNonEmpty(first, second string) string {
-	if first != "" {
-		return first
-	}
-	return second
 }
 
 // OutputSettings exposes manager-owned batching policy to agents.

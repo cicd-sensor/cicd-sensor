@@ -88,7 +88,7 @@ defaults:
 sinks:
   test-sink:
     type: gcs
-    bucket: test-bucket
+    uri: gs://test-bucket
 output:
   job_result_log:
     destination: test-sink

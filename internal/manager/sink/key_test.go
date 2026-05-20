@@ -22,101 +22,114 @@ func TestJoinPrefix(t *testing.T) {
 	}
 }
 
-func TestNormalizeObjectLocation(t *testing.T) {
+func TestParseObjectURI(t *testing.T) {
 	cases := []struct {
 		name       string
 		scheme     string
-		bucket     string
-		prefix     string
+		uri        string
 		wantBucket string
 		wantPrefix string
 		wantError  bool
 	}{
 		{
-			name:       "bucket and prefix are kept separate",
-			scheme:     "gs",
-			bucket:     "logs",
-			prefix:     "prod/logs",
-			wantBucket: "logs",
-			wantPrefix: "prod/logs",
-		},
-		{
-			name:       "trailing and leading slashes are normalized",
-			scheme:     "gs",
-			bucket:     "logs",
-			prefix:     "/prod/",
-			wantBucket: "logs",
-			wantPrefix: "prod",
-		},
-		{
 			name:       "gcs uri splits bucket and prefix",
 			scheme:     "gs",
-			bucket:     "gs://logs/prod/logs",
+			uri:        "gs://logs/prod/logs",
 			wantBucket: "logs",
 			wantPrefix: "prod/logs",
 		},
 		{
 			name:       "s3 uri splits bucket and prefix",
 			scheme:     "s3",
-			bucket:     "s3://logs/prod/logs",
+			uri:        "s3://logs/prod/logs",
 			wantBucket: "logs",
 			wantPrefix: "prod/logs",
 		},
 		{
-			name:      "uri and explicit prefix is ambiguous",
+			name:       "trailing slash is trimmed from prefix",
+			scheme:     "gs",
+			uri:        "gs://logs/prod/",
+			wantBucket: "logs",
+			wantPrefix: "prod",
+		},
+		{
+			name:       "uri without prefix returns empty prefix",
+			scheme:     "gs",
+			uri:        "gs://logs",
+			wantBucket: "logs",
+			wantPrefix: "",
+		},
+		{
+			name:      "empty uri is rejected",
 			scheme:    "gs",
-			bucket:    "gs://logs/prod",
-			prefix:    "other",
+			uri:       "",
 			wantError: true,
 		},
 		{
 			name:      "wrong uri scheme is rejected",
 			scheme:    "gs",
-			bucket:    "s3://logs/prod",
+			uri:       "s3://logs/prod",
 			wantError: true,
 		},
 		{
 			name:      "uri query is rejected",
 			scheme:    "gs",
-			bucket:    "gs://logs/prod?x=1",
+			uri:       "gs://logs/prod?x=1",
 			wantError: true,
 		},
 		{
 			name:      "uri fragment is rejected",
 			scheme:    "gs",
-			bucket:    "gs://logs/prod#frag",
+			uri:       "gs://logs/prod#frag",
 			wantError: true,
 		},
 		{
 			name:      "uri without bucket is rejected",
 			scheme:    "gs",
-			bucket:    "gs:///prod",
+			uri:       "gs:///prod",
 			wantError: true,
 		},
 		{
-			name:      "bucket path without uri is rejected",
+			name:      "plain bucket name without scheme is rejected",
 			scheme:    "gs",
-			bucket:    "logs/prod",
+			uri:       "logs/prod",
 			wantError: true,
 		},
 		{
-			name:      "backslash bucket is rejected",
+			name:      "parent traversal segment is rejected",
 			scheme:    "gs",
-			bucket:    `logs\prod`,
+			uri:       "gs://logs/../etc/passwd",
 			wantError: true,
 		},
 		{
-			name:      "backslash prefix is rejected",
+			name:      "nested parent traversal segment is rejected",
 			scheme:    "gs",
-			bucket:    "logs",
-			prefix:    `prod\logs`,
+			uri:       "gs://logs/prod/../escape",
+			wantError: true,
+		},
+		{
+			name:      "current dir segment is rejected",
+			scheme:    "gs",
+			uri:       "gs://logs/./prod",
+			wantError: true,
+		},
+		{
+			name:      "consecutive slashes produce empty segment and are rejected",
+			scheme:    "gs",
+			uri:       "gs://logs/prod//logs",
+			wantError: true,
+		},
+		{
+			name:      "invalid utf8 prefix is rejected",
+			scheme:    "gs",
+			uri:       "gs://logs/" + string([]byte{0xff, 0xfe}),
 			wantError: true,
 		},
 	}
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			gotBucket, gotPrefix, err := normalizeObjectLocation(tt.scheme, tt.bucket, tt.prefix)
+			gotBucket, gotPrefix, err := parseObjectURI(tt.scheme, tt.uri)
 			if tt.wantError {
 				if err == nil {
 					t.Fatal("expected error")
@@ -124,7 +137,7 @@ func TestNormalizeObjectLocation(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("normalizeObjectLocation: %v", err)
+				t.Fatalf("parseObjectURI: %v", err)
 			}
 			if gotBucket != tt.wantBucket {
 				t.Fatalf("bucket: got %q, want %q", gotBucket, tt.wantBucket)

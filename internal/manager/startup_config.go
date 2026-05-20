@@ -44,10 +44,8 @@ type SinksConfig map[string]SinkConfig
 // SinkConfig describes one physical manager output destination.
 type SinkConfig struct {
 	Type      string `yaml:"type"`
-	Bucket    string `yaml:"bucket,omitempty"`
-	Region    string `yaml:"region,omitempty"`
-	Prefix    string `yaml:"prefix,omitempty"`
 	URI       string `yaml:"uri,omitempty"`
+	Region    string `yaml:"region,omitempty"`
 	ProjectID string `yaml:"project_id,omitempty"`
 	Topic     string `yaml:"topic,omitempty"`
 }
@@ -129,13 +127,10 @@ func validateSinks(sinks SinksConfig) error {
 }
 
 func validateS3Sink(name string, sc SinkConfig) error {
-	if sc.Bucket != "" && sc.URI != "" {
-		return fmt.Errorf("sinks.%s: cannot set both bucket and uri", name)
+	if sc.URI == "" {
+		return fmt.Errorf("sinks.%s.uri is required", name)
 	}
-	if sc.Bucket == "" && sc.URI == "" {
-		return fmt.Errorf("sinks.%s: bucket or uri is required", name)
-	}
-	if sc.URI != "" && !strings.HasPrefix(sc.URI, "s3://") {
+	if !strings.HasPrefix(sc.URI, "s3://") {
 		return fmt.Errorf("sinks.%s.uri must start with s3://", name)
 	}
 	if sc.Region == "" {
@@ -148,13 +143,10 @@ func validateS3Sink(name string, sc SinkConfig) error {
 }
 
 func validateGCSSink(name string, sc SinkConfig) error {
-	if sc.Bucket != "" && sc.URI != "" {
-		return fmt.Errorf("sinks.%s: cannot set both bucket and uri", name)
+	if sc.URI == "" {
+		return fmt.Errorf("sinks.%s.uri is required", name)
 	}
-	if sc.Bucket == "" && sc.URI == "" {
-		return fmt.Errorf("sinks.%s: bucket or uri is required", name)
-	}
-	if sc.URI != "" && !strings.HasPrefix(sc.URI, "gs://") {
+	if !strings.HasPrefix(sc.URI, "gs://") {
 		return fmt.Errorf("sinks.%s.uri must start with gs://", name)
 	}
 	if sc.Region != "" || sc.ProjectID != "" || sc.Topic != "" {
@@ -170,8 +162,8 @@ func validatePubSubSink(name string, sc SinkConfig) error {
 	if sc.Topic == "" {
 		return fmt.Errorf("sinks.%s.topic is required for pubsub", name)
 	}
-	if sc.Bucket != "" || sc.Region != "" || sc.Prefix != "" || sc.URI != "" {
-		return fmt.Errorf("sinks.%s: bucket, region, prefix, and uri are not valid for pubsub", name)
+	if sc.Region != "" || sc.URI != "" {
+		return fmt.Errorf("sinks.%s: region and uri are not valid for pubsub", name)
 	}
 	return nil
 }

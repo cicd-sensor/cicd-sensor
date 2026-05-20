@@ -136,9 +136,8 @@ func TestLoadStartupConfig_SinksAndOutput(t *testing.T) {
 sinks:
   s3-prod:
     type: s3
-    bucket: cicd-sensor-prod
+    uri: s3://cicd-sensor-prod/logs/
     region: us-east-1
-    prefix: logs
   pubsub-detect:
     type: pubsub
     project_id: cicd-sensor-prod
@@ -151,8 +150,8 @@ output:
 `,
 			assertCfg: func(t *testing.T, cfg StartupConfig) {
 				t.Helper()
-				if cfg.Sinks["s3-prod"].Bucket != "cicd-sensor-prod" {
-					t.Fatalf("s3 bucket: got %q", cfg.Sinks["s3-prod"].Bucket)
+				if cfg.Sinks["s3-prod"].URI != "s3://cicd-sensor-prod/logs/" {
+					t.Fatalf("s3 uri: got %q", cfg.Sinks["s3-prod"].URI)
 				}
 				got := cfg.Output["job_detection_log"].Destination
 				if got != "s3-prod" {
@@ -170,26 +169,14 @@ sinks:
 			wantErr: `sinks.bad.type "stdout" is not one of s3/gcs/pubsub`,
 		},
 		{
-			name: "s3_sink_missing_bucket_and_uri",
+			name: "s3_sink_missing_uri",
 			body: `
 sinks:
   s3-prod:
     type: s3
     region: us-east-1
 `,
-			wantErr: "sinks.s3-prod: bucket or uri is required",
-		},
-		{
-			name: "s3_sink_both_bucket_and_uri",
-			body: `
-sinks:
-  s3-prod:
-    type: s3
-    bucket: bucket
-    uri: s3://bucket/logs
-    region: us-east-1
-`,
-			wantErr: "sinks.s3-prod: cannot set both bucket and uri",
+			wantErr: "sinks.s3-prod.uri is required",
 		},
 		{
 			name: "s3_sink_uri_wrong_scheme",
@@ -208,7 +195,7 @@ sinks:
 sinks:
   s3-prod:
     type: s3
-    bucket: bucket
+    uri: s3://bucket/logs
 `,
 			wantErr: "sinks.s3-prod.region is required for s3",
 		},
@@ -218,20 +205,20 @@ sinks:
 sinks:
   s3-prod:
     type: s3
-    bucket: bucket
+    uri: s3://bucket/logs
     region: us-east-1
     project_id: project
 `,
 			wantErr: "sinks.s3-prod: project_id and topic are only valid for pubsub",
 		},
 		{
-			name: "gcs_sink_missing_bucket_and_uri",
+			name: "gcs_sink_missing_uri",
 			body: `
 sinks:
   gcs-prod:
     type: gcs
 `,
-			wantErr: "sinks.gcs-prod: bucket or uri is required",
+			wantErr: "sinks.gcs-prod.uri is required",
 		},
 		{
 			name: "gcs_sink_uri_wrong_scheme",
@@ -249,7 +236,7 @@ sinks:
 sinks:
   gcs-prod:
     type: gcs
-    bucket: bucket
+    uri: gs://bucket/logs
     project_id: project
 `,
 			wantErr: "sinks.gcs-prod: region, project_id, and topic are not valid for gcs",
@@ -282,9 +269,9 @@ sinks:
     type: pubsub
     project_id: project
     topic: detections
-    bucket: bucket
+    uri: gs://bucket/logs
 `,
-			wantErr: "sinks.pubsub-detect: bucket, region, prefix, and uri are not valid for pubsub",
+			wantErr: "sinks.pubsub-detect: region and uri are not valid for pubsub",
 		},
 		{
 			name: "sink_name_empty",
@@ -292,7 +279,7 @@ sinks:
 sinks:
   "":
     type: gcs
-    bucket: bucket
+    uri: gs://bucket/logs
 `,
 			wantErr: "sinks: name must not be empty",
 		},
@@ -302,7 +289,7 @@ sinks:
 sinks:
   gcs-prod:
     type: gcs
-    bucket: bucket
+    uri: gs://bucket/logs
 output:
   unknown:
     destination: gcs-prod
@@ -315,7 +302,7 @@ output:
 sinks:
   gcs-prod:
     type: gcs
-    bucket: bucket
+    uri: gs://bucket/logs
 output:
   job_detection_log:
     destination: ""

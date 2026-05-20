@@ -1,8 +1,8 @@
 package sink
 
 import (
-	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"strings"
 )
@@ -17,43 +17,41 @@ func joinPrefix(prefix, key string) string {
 	return prefix + "/" + strings.TrimLeft(key, "/")
 }
 
-func normalizeObjectLocation(scheme, bucket, prefix string) (string, string, error) {
-	if bucket == "" {
-		return "", "", fmt.Errorf("%s bucket is required", scheme)
+// formatObjectURI is the inverse of parseObjectURI: it composes a
+// scheme://bucket/prefix string from already-validated components. The prefix
+// may be empty.
+func formatObjectURI(scheme, bucket, prefix string) string {
+	if prefix == "" {
+		return scheme + "://" + bucket
 	}
-	if strings.Contains(bucket, "://") {
-		if prefix != "" {
-			return "", "", fmt.Errorf("prefix must be empty when bucket is a %s:// URI", scheme)
-		}
-		u, err := url.Parse(bucket)
-		if err != nil {
-			return "", "", fmt.Errorf("parse %s URI: %w", scheme, err)
-		}
-		if u.Scheme != scheme {
-			return "", "", fmt.Errorf("bucket URI must use %s:// scheme", scheme)
-		}
-		if u.Host == "" {
-			return "", "", fmt.Errorf("%s URI must include a bucket name", scheme)
-		}
-		if u.RawQuery != "" || u.Fragment != "" {
-			return "", "", fmt.Errorf("%s URI must not include query or fragment", scheme)
-		}
-		bucket = u.Host
-		prefix = strings.TrimPrefix(u.Path, "/")
-	}
-	if strings.Contains(bucket, "/") || strings.Contains(bucket, "\\") {
-		return "", "", fmt.Errorf("bucket must be a bucket name, not a path")
-	}
-	normalizedPrefix, err := normalizeObjectPrefix(prefix)
-	if err != nil {
-		return "", "", err
-	}
-	return bucket, normalizedPrefix, nil
+	return scheme + "://" + bucket + "/" + prefix
 }
 
-func normalizeObjectPrefix(prefix string) (string, error) {
-	if strings.Contains(prefix, "\\") {
-		return "", errors.New("prefix must use forward slash separators")
+// parseObjectURI splits an object storage URI like gs://bucket/prefix/path/
+// into its bucket and prefix components. The prefix may be empty. The prefix
+// is validated with fs.ValidPath to reject traversal segments (".", "..",
+// empty) so downstream consumers that mirror keys onto a filesystem cannot
+// be tricked into escaping their root directory.
+func parseObjectURI(scheme, uri string) (string, string, error) {
+	if uri == "" {
+		return "", "", fmt.Errorf("%s uri is required", scheme)
 	}
-	return strings.Trim(prefix, "/"), nil
+	u, err := url.Parse(uri)
+	if err != nil {
+		return "", "", fmt.Errorf("parse %s uri: %w", scheme, err)
+	}
+	if u.Scheme != scheme {
+		return "", "", fmt.Errorf("uri must use %s:// scheme", scheme)
+	}
+	if u.Host == "" {
+		return "", "", fmt.Errorf("%s uri must include a bucket name", scheme)
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return "", "", fmt.Errorf("%s uri must not include query or fragment", scheme)
+	}
+	prefix := strings.Trim(u.Path, "/")
+	if prefix != "" && !fs.ValidPath(prefix) {
+		return "", "", fmt.Errorf("%s uri prefix %q is invalid: must be UTF-8 and contain no \".\", \"..\", or empty path segments", scheme, prefix)
+	}
+	return u.Host, prefix, nil
 }
