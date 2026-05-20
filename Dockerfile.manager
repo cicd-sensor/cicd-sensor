@@ -30,7 +30,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM cgr.dev/chainguard/static:latest@sha256:1f14279403150757d801f6308bb0f4b816b162fddce10b9bd342f10adc3cf7fa
 COPY --from=builder /out/cicd-sensor-manager /usr/local/bin/cicd-sensor-manager
 
+# Default config and rules paths can be overridden by setting the env vars
+# or by passing --config / --rules flags. Set CICD_SENSOR_MANAGER_RULES_FILE
+# to enable customer rules (no default since the file is optional).
+ENV CICD_SENSOR_MANAGER_CONFIG_FILE=/etc/cicd-sensor/manager.yaml
+
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/local/bin/cicd-sensor-manager"]
-CMD ["--config=/etc/cicd-sensor/manager.yaml"]
