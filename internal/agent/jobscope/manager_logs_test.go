@@ -103,7 +103,7 @@ func (r *recordingJobScopeBatches) jobResultEntries(t *testing.T) []*logv1.JobRe
 	return out
 }
 
-func TestJobScopeStateWriteDetectionLogForHit_CollectDoesNotEmitDetectionLog(t *testing.T) {
+func TestJobScopeStateWriteDetectionLogForHit_CollectEmitsDetectionLog(t *testing.T) {
 	t.Parallel()
 
 	recorder := &recordingJobScopeBatches{}
@@ -122,8 +122,12 @@ func TestJobScopeStateWriteDetectionLogForHit_CollectDoesNotEmitDetectionLog(t *
 		t.Fatalf("finalize logs: %v", err)
 	}
 
-	if got := len(recorder.detectionEntries(t)); got != 0 {
-		t.Fatalf("detection entries: got %d, want 0", got)
+	entries := recorder.detectionEntries(t)
+	if len(entries) != 1 {
+		t.Fatalf("detection entries: got %d, want 1", len(entries))
+	}
+	if got, want := entries[0].Action, string(rule.RuleActionCollect); got != want {
+		t.Fatalf("action: got %q, want %q", got, want)
 	}
 	if got := scope.CorrelationHitCountFor(hit.Identity); got != 1 {
 		t.Fatalf("recorded hit count: got %d, want 1", got)

@@ -53,7 +53,7 @@ func (s *JobScopeState) WriteDetectionLogForHit(ctx context.Context, identity jo
 	switch hit.Action {
 	case string(rule.RuleActionTerminate):
 		s.writeDetectionLog(ctx, identity, metadata, runnerKind, &hit, event, logger, "")
-	case string(rule.RuleActionDetect):
+	case string(rule.RuleActionDetect), string(rule.RuleActionCollect):
 		if hit.MaxAlerts <= 0 {
 			s.writeDetectionLog(ctx, identity, metadata, runnerKind, &hit, event, logger, "")
 			return
@@ -68,19 +68,11 @@ func (s *JobScopeState) WriteDetectionLogForHit(ctx context.Context, identity jo
 			truncation = resultdoc.AlertTruncationMaxAlertsReached
 		}
 		s.writeDetectionLog(ctx, identity, metadata, runnerKind, &hit, event, logger, truncation)
-	case string(rule.RuleActionCollect):
-		// collect is retained in observations/result summaries, not alert logs.
-		return
-	default:
-		s.writeDetectionLog(ctx, identity, metadata, runnerKind, &hit, event, logger, "")
 	}
 }
 
 func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, hit *observations.HitEntry, event jobevent.EventRecord, logger *slog.Logger, truncation string) {
 	if s == nil || hit == nil {
-		return
-	}
-	if hit.Action != string(rule.RuleActionDetect) && hit.Action != string(rule.RuleActionTerminate) {
 		return
 	}
 

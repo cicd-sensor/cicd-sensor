@@ -30,8 +30,9 @@ package report
 //
 // fileAccess is intentionally not emitted: cicd-sensor does not observe file
 // events at the granularity attestation consumers expect, and emitting an
-// always-empty field is misleading. `collect` hits are likewise excluded
-// because their place is `job_runtime_telemetry_log`, not the attestation.
+// always-empty field is misleading. `collect` hits are likewise excluded:
+// the attestation records policy outcomes only (`detect`/`terminate`), while
+// `collect` is non-enforcing telemetry surfaced through the job logs.
 
 import (
 	"encoding/json"
@@ -86,7 +87,7 @@ func AttestationPredicate(log resultdoc.JobEventSummaryForReport) any {
 
 // splitHitsByAction routes each hit to the detection or termination list
 // based on its rule action. `collect` and any other action are dropped:
-// they belong in job_runtime_telemetry_log, not the attestation.
+// the attestation records policy outcomes only, not telemetry-style hits.
 func splitHitsByAction(hits []resultdoc.HitRecord) (detections, terminations []resultdoc.HitRecord) {
 	detections = []resultdoc.HitRecord{}
 	terminations = []resultdoc.HitRecord{}
