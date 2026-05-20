@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1.7
+#
+# cicd-sensor-manager container image (Lambda adapter).
+#
+
+FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0 AS lambda-adapter
+
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:e797f1db0ae44e2d2ea4618a8be724f5a3c05f842af2ba47eadc0e573dad78ce AS builder
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . .
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ARG VERSION=dev
+
+ENV CGO_ENABLED=0
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build \
+        -trimpath \
+        -buildvcs=false \
+        -ldflags="-s -w -X main.version=${VERSION}" \
+        -o /out/cicd-sensor-manager \
+        ./cmd/cicd-sensor-manager
+
+FROM cgr.dev/chainguard/static:latest@sha256:1f14279403150757d801f6308bb0f4b816b162fddce10b9bd342f10adc3cf7fa
+
+# Lambda adapter
+COPY --from=lambda-adapter /lambda-adapter /opt/extensions/lambda-adapter
+
+COPY --from=builder /out/cicd-sensor-manager /usr/local/bin/cicd-sensor-manager
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/cicd-sensor-manager", "--config=/etc/cicd-sensor/manager.yaml"]
