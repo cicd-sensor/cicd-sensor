@@ -260,7 +260,7 @@ func TestDispatch(t *testing.T) {
 			name:       "help",
 			args:       []string{"help"},
 			wantCode:   0,
-			wantStdout: "Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output PATH\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-path PATH]\n  cicd-sensorctl report html [--output-path PATH]\n",
+			wantStdout: "Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output PATH\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-path PATH]\n  cicd-sensorctl report html [--output-path PATH]\n  cicd-sensorctl report stepsummary [--html-url URL] [--debug-url URL] [--health-failed]\n",
 		},
 		{
 			name:       "no_args",

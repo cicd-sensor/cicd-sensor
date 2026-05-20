@@ -61,6 +61,8 @@ func runReport(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 		return runReportAttest(ctx, args[1:], stdin, stdout, stderr)
 	case "html":
 		return runReportHTML(ctx, args[1:], stdin, stdout, stderr)
+	case "stepsummary":
+		return runReportStepSummary(ctx, args[1:], stdin, stdout, stderr)
 	case "-h", "--help", "help":
 		printUsage(stdout)
 		return 0, nil
@@ -123,4 +125,5 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  cicd-sensorctl token generate")
 	fmt.Fprintln(w, "  cicd-sensorctl report attest [--output-path PATH]")
 	fmt.Fprintln(w, "  cicd-sensorctl report html [--output-path PATH]")
+	fmt.Fprintln(w, "  cicd-sensorctl report stepsummary [--html-url URL] [--debug-url URL] [--health-failed]")
 }
