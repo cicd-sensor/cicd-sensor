@@ -137,10 +137,12 @@ func (it *predefinedListIter) Next() ref.Val {
 }
 
 // ref.Val on the iterator (required by traits.Iterator).
-func (it *predefinedListIter) Type() ref.Type                   { return types.IteratorType }
-func (it *predefinedListIter) Value() any                       { return nil }
-func (it *predefinedListIter) Equal(ref.Val) ref.Val            { return types.False }
-func (it *predefinedListIter) ConvertToType(t ref.Type) ref.Val { return types.NewErr("iterator does not support type conversion") }
+func (it *predefinedListIter) Type() ref.Type        { return types.IteratorType }
+func (it *predefinedListIter) Value() any            { return nil }
+func (it *predefinedListIter) Equal(ref.Val) ref.Val { return types.False }
+func (it *predefinedListIter) ConvertToType(t ref.Type) ref.Val {
+	return types.NewErr("iterator does not support type conversion")
+}
 func (it *predefinedListIter) ConvertToNative(reflect.Type) (any, error) {
 	return nil, nil
 }

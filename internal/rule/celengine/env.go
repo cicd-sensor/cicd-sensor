@@ -30,10 +30,10 @@
 //
 // Performance posture: cel-go's interpreter is reflection-heavy by default.
 // We deliberately replace three paths that pprof flagged as hot:
-//   • reflect-based field resolution (cext.NativeTypes → CustomTypeProvider)
-//   • nativeToValue boxing on every primitive read (pre-boxed caches in
+//   - reflect-based field resolution (cext.NativeTypes → CustomTypeProvider)
+//   - nativeToValue boxing on every primitive read (pre-boxed caches in
 //     CELProcess / CELAncestor + types.* return values from EventActivation)
-//   • comprehension dispatch for common list-scan idioms (the .exists macro)
+//   - comprehension dispatch for common list-scan idioms (the .exists macro)
 package celengine
 
 import (

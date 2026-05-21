@@ -278,9 +278,9 @@ func TestAttestationPredicate_NetworkDedupAndSort(t *testing.T) {
 	log.NetworkConnections = []resultdoc.NetworkConnection{
 		{RemoteIP: "10.0.0.2"},
 		{RemoteIP: "10.0.0.1"},
-		{RemoteIP: ""},                     // empty IP must be skipped
-		{RemoteIP: "10.0.0.1"},             // duplicate must be deduped
-		{RemoteIP: "2606:4700::6810:122"},  // IPv6 should pass through
+		{RemoteIP: ""},                          // empty IP must be skipped
+		{RemoteIP: "10.0.0.1"},                  // duplicate must be deduped
+		{RemoteIP: "2606:4700::6810:122"},       // IPv6 should pass through
 		{RemoteIP: "10.0.0.1", Protocol: "udp"}, // duplicate with different port/proto still dedups
 	}
 

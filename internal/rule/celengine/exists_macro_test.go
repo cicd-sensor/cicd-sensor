@@ -119,9 +119,9 @@ func TestExistsMacroBehavioralCoverage(t *testing.T) {
 			wantMatch: true,
 		},
 		{
-			name:      "fallthrough/method_arg_is_other_iter_var",
-			kind:      jobevent.ProcessExec,
-			source:    `process.argv.exists(a, process.ancestors.exists(p, p.exec_path.endsWith(a)))`,
+			name:   "fallthrough/method_arg_is_other_iter_var",
+			kind:   jobevent.ProcessExec,
+			source: `process.argv.exists(a, process.ancestors.exists(p, p.exec_path.endsWith(a)))`,
 			input: CELInputEvent{Process: NewCELProcess("/usr/bin/python", []string{"sh"}, []CELAncestor{
 				{ExecPath: "/bin/sh"},
 			})},
