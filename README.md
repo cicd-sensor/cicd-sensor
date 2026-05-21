@@ -26,7 +26,7 @@ Every other runtime has its open-source defender — Falco, Tetragon, Tracee, Wa
 **That is the gap. cicd-sensor is built to close it** — using eBPF inside the CI/CD Pipeline to make runtime visible, detect attacks while they happen, and preserve the evidence teams need to respond.
 
 - **Developers — OSS or commercial — should be able to see what their own pipelines actually do, and prove it later** — process, network, and file activity across build, release, and deploy, plus a verifiable attestation predicate.
-- **Security teams should have the CI/CD runtime logs that should have existed long ago** — Job Result, Detection, and Runtime Telemetry, feeding the SIEMs and response workflows already in place.
+- **Security teams — defending against supply chain attacks — need tools built for the runtime** — real-time detection plus Job Result, Detection, and Runtime Telemetry logs — the detection, incident response, and forensics environment CI/CD has been missing.
 
 > [!NOTE]
 > **About the author** — Built by [Hiroki Suezawa (@rung)](https://www.suezawa.net), author of the [Common Threat Matrix for CI/CD Pipeline](https://github.com/rung/threat-matrix-cicd), contributor to the [OWASP Top 10 CI/CD Security Risks](https://owasp.org/www-project-top-10-ci-cd-security-risks/), and early contributor to [OSC&R / pbom.dev](https://pbom.dev/). cicd-sensor is the runtime defender that work has been pointing to.

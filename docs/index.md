@@ -23,7 +23,7 @@ Sigstore brought us cryptographic proof of *where* and *how* an artifact was bui
 **That is the gap. [cicd-sensor](https://github.com/cicd-sensor/cicd-sensor) is built to close it** — using eBPF inside the CI/CD Pipeline to make runtime visible, detect attacks while they happen, and preserve the evidence teams need to respond.
 
 - **Developers — OSS or commercial — should be able to see what their own pipelines actually do, and prove it later** — process, network, and file activity across build, release, and deploy, plus a verifiable attestation predicate.
-- **Security teams should have the CI/CD runtime logs that should have existed long ago** — Job Result, Detection, and Runtime Telemetry, feeding the SIEMs and response workflows already in place.
+- **Security teams — defending against supply chain attacks — need tools built for the runtime** — real-time detection plus Job Result, Detection, and Runtime Telemetry logs — the detection, incident response, and forensics environment CI/CD has been missing.
 
 <div style="border-left: 4px solid #0f766e; background: #ecfdf5; padding: 0.9rem 1rem; margin: 1.5rem 0;">
   <strong>About the author</strong><br>
