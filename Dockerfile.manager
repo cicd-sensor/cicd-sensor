@@ -1,9 +1,9 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.24
 #
 # cicd-sensor-manager container image (standard deploy).
 #
 
-FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:e797f1db0ae44e2d2ea4618a8be724f5a3c05f842af2ba47eadc0e573dad78ce AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:29c70d8bd05a956a07e880f8e00217172be765b36cdcd70ebe5c26a5ee9243c7 AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
         -o /out/cicd-sensor-manager \
         ./cmd/cicd-sensor-manager
 
-FROM cgr.dev/chainguard/static:latest@sha256:1f14279403150757d801f6308bb0f4b816b162fddce10b9bd342f10adc3cf7fa
+FROM cgr.dev/chainguard/static:latest@sha256:77d8b8925dc27970ec2f48243f44c7a260d52c49cd778288e4ee97566e0cb75b
 COPY --from=builder /out/cicd-sensor-manager /usr/local/bin/cicd-sensor-manager
 
 # Default config and rules paths can be overridden by setting the env vars
