@@ -27,21 +27,34 @@ permissions:
 
 jobs:
   kernel:
-    name: "x64 kernel ${{ matrix.kernel.label }}"
-    runs-on: ubuntu-24.04
+    name: "${{ matrix.arch }} kernel ${{ matrix.kernel-label }}"
+    runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         # Pin LVH kernel image tags so upstream rebuilds cannot silently
-        # change the verifier target. Bump by checking quay.io/lvh-images/kind.
-        # LVH runs on GitHub-hosted x64 runners because KVM access and the
-        # published kind images are x64-only in this workflow.
-        kernel:
-          - label: "5.15"
-            version: "5.15-20260416.033356"
-          - label: "6.18"
-            version: "6.18-20260504.013701"
+        # change the verifier target. Bump by checking the version files at
+        # https://github.com/cilium/little-vm-helper-images/tree/main/versions/kind.
+        # arm64 cannot exercise kernel 5.x: BPF trampoline / fentry attach only
+        # landed on arm64 in 6.0+, so we test arm64 starting from 6.1.
+        include:
+          - arch: amd64
+            runs-on: ubuntu-24.04
+            kernel-label: "5.15"
+            kernel-version: "5.15-20260520.041709-amd64"
+          - arch: amd64
+            runs-on: ubuntu-24.04
+            kernel-label: "6.18"
+            kernel-version: "6.18-20260520.041709-amd64"
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+            kernel-label: "6.1"
+            kernel-version: "6.1-20260520.041709-arm64"
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+            kernel-label: "6.18"
+            kernel-version: "6.18-20260520.041709-arm64"
     env:
       LVH_IMAGE: kind
       INTEGRATION_TEST_BIN: _lvh/tests/kerneltracker.test
@@ -71,7 +84,7 @@ jobs:
       - name: Environment info
         run: |
           {
-            echo "## Host environment for kernel ${{ matrix.kernel.label }}"
+            echo "## Host environment for ${{ matrix.arch }} kernel ${{ matrix.kernel-label }}"
             echo '```'
             uname -a
             cat /etc/os-release
@@ -101,12 +114,12 @@ jobs:
             exit 1
           fi
 
-      - name: "Run integration tests on kernel ${{ matrix.kernel.label }}"
+      - name: "Run integration tests on ${{ matrix.arch }} kernel ${{ matrix.kernel-label }}"
         uses: cilium/little-vm-helper@e249f34602b03d331320955be94cbaa2cc4fb6a8 # v0.0.29
         with:
-          test-name: "bpf-integration-${{ matrix.kernel.label }}"
+          test-name: "bpf-integration-${{ matrix.arch }}-${{ matrix.kernel-label }}"
           image: ${{ env.LVH_IMAGE }}
-          image-version: ${{ matrix.kernel.version }}
+          image-version: ${{ matrix.kernel-version }}
           host-mount: ./
           install-dependencies: 'true'
           # LVH interpolates this through a shell; escape literal $ as \$.
@@ -117,7 +130,7 @@ jobs:
             set -eo pipefail
             cd /host
             mkdir -p /host/_lvh/logs
-            log=/host/_lvh/logs/bpf-integration-${{ matrix.kernel.label }}.log
+            log=/host/_lvh/logs/bpf-integration-${{ matrix.arch }}-${{ matrix.kernel-label }}.log
             : >"\$log"
             uname -a | tee -a "\$log"
             test -e /sys/kernel/btf/vmlinux && echo "BTF: present" | tee -a "\$log"
@@ -129,7 +142,7 @@ jobs:
 
       - name: Reject unexpected skips
         run: |
-          log="_lvh/logs/bpf-integration-${{ matrix.kernel.label }}.log"
+          log="_lvh/logs/bpf-integration-${{ matrix.arch }}-${{ matrix.kernel-label }}.log"
           if [ ! -s "$log" ]; then
             echo "::error::LVH log not produced at $log"
             exit 1
@@ -138,12 +151,12 @@ jobs:
             | grep -v 'real_var_run_docker_upstream_sock_if_proxy_deployed' || true)"
           if [ -n "$skips" ]; then
             {
-              echo "## Skipped tests on LVH ${{ matrix.kernel.label }}"
+              echo "## Skipped tests on LVH ${{ matrix.arch }}/${{ matrix.kernel-label }}"
               echo '```'
               printf '%s\n' "$skips"
               echo '```'
             } | tee -a "$GITHUB_STEP_SUMMARY"
-            echo "::error::LVH ${{ matrix.kernel.label }} run contains skipped tests."
+            echo "::error::LVH ${{ matrix.arch }}/${{ matrix.kernel-label }} run contains skipped tests."
             exit 1
           fi
 
@@ -151,6 +164,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: "bpf-integration-${{ matrix.kernel.label }}"
+          name: "bpf-integration-${{ matrix.arch }}-${{ matrix.kernel-label }}"
           path: "_lvh/logs/*.log"
           if-no-files-found: ignore
