@@ -8,7 +8,9 @@ For the GitLab CI/CD runner model, see [GitLab CI/CD self-hosted](gitlab-ci.md).
 
 ## OS / Linux prerequisites
 
-- Linux kernel 5.15+.
+- Linux kernel:
+  - `x86_64` (AMD64): 5.15 or later.
+  - `aarch64` (ARM64): 6.1 or later. The arm64 lower bound is set by upstream Linux because BPF trampoline / fentry attach landed on arm64 only in 6.0+; on older arm64 kernels the agent fails to attach with `create raw tracepoint: not supported`.
 - cgroup v2.
 - systemd.
 - dockerd.
@@ -19,6 +21,16 @@ cicd-sensor releases are available from [cicd-sensor/cicd-sensor releases](https
 
 This guide uses `/opt/cicd-sensor` as the fixed install path.
 The systemd units, hook scripts, and manager token examples all assume this path.
+
+The release tarball ships architecture-suffixed binaries; rename them to the canonical names below so the systemd units resolve them:
+
+```sh
+sudo install -d -m 0755 /opt/cicd-sensor
+sudo tar -xzf cicd-sensor_<version>_linux_<arch>.tar.gz -C /opt/cicd-sensor
+sudo mv /opt/cicd-sensor/cicd-sensor-linux-<arch> /opt/cicd-sensor/cicd-sensor
+sudo mv /opt/cicd-sensor/cicd-sensor-manager-linux-<arch> /opt/cicd-sensor/cicd-sensor-manager
+sudo mv /opt/cicd-sensor/cicd-sensorctl-linux-<arch> /opt/cicd-sensor/cicd-sensorctl
+```
 
 ```text
 /opt/cicd-sensor/
@@ -83,6 +95,8 @@ Set `--provider` for the target environment.
 Description=cicd-sensor Agent
 After=network-online.target
 Wants=network-online.target
+RefuseManualStop=yes
+IgnoreOnIsolate=yes
 
 [Service]
 Type=simple
@@ -98,8 +112,6 @@ Restart=always
 RestartSec=5s
 NoNewPrivileges=yes
 PrivateTmp=yes
-RefuseManualStop=yes
-IgnoreOnIsolate=yes
 OOMScoreAdjust=-1000
 KillMode=mixed
 TimeoutStopSec=5s

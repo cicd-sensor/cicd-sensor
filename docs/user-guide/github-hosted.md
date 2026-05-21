@@ -30,6 +30,8 @@ Examples:
 - `ubuntu-24.04-arm`
 - `ubuntu-22.04-arm`
 
+The supported kernel ranges differ by architecture: 5.15 or later on `x86_64` (AMD64), 6.1 or later on `aarch64` (ARM64). The arm64 lower bound comes from upstream Linux because BPF trampoline / fentry attach was added on arm64 only in 6.0+.
+
 `ubuntu-slim` is not supported.
 It runs as a container on a shared VM and does not provide the host eBPF environment that cicd-sensor needs.
 
