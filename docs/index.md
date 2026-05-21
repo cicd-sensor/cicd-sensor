@@ -22,8 +22,13 @@ Sigstore brought us cryptographic proof of *where* and *how* an artifact was bui
 
 **That is the gap. [cicd-sensor](https://github.com/cicd-sensor/cicd-sensor) is built to close it** — using eBPF inside the CI/CD Pipeline to make runtime visible, detect attacks while they happen, and preserve the evidence teams need to respond.
 
-- For **Developers and SRE**, it detects suspicious activity during builds and releases and keeps runtime records and attestations that others can verify later.
-- For **Enterprise security teams**, it provides Job Result Logs, Detection Logs, and Runtime Telemetry Logs that support monitoring, incident response, and forensics.
+- **Developers — OSS or commercial — should be able to see what their own pipelines actually do, and prove it later** — process, network, and file activity across build, release, and deploy, plus a verifiable attestation predicate.
+- **Security teams should have the CI/CD runtime logs that should have existed long ago** — Job Result, Detection, and Runtime Telemetry, feeding the SIEMs and response workflows already in place.
+
+<div style="border-left: 4px solid #0f766e; background: #ecfdf5; padding: 0.9rem 1rem; margin: 1.5rem 0;">
+  <strong>About the author</strong><br>
+  Built by <a href="https://www.suezawa.net">Hiroki Suezawa (@rung)</a>, author of the <a href="https://github.com/rung/threat-matrix-cicd">Common Threat Matrix for CI/CD Pipeline</a>, contributor to the <a href="https://owasp.org/www-project-top-10-ci-cd-security-risks/">OWASP Top 10 CI/CD Security Risks</a>, and early contributor to <a href="https://pbom.dev/">OSC&amp;R / pbom.dev</a>. cicd-sensor is the runtime defender that work has been pointing to.
+</div>
 
 ## Getting Started
 
@@ -47,11 +52,6 @@ For self-hosted runner fleets or GitLab CI/CD, choose a deployment path from the
 <div style="position: relative; margin: 1.25rem 0;">
   <div style="position: absolute; top: 1rem; right: 1rem; padding: 0.35rem 0.85rem; border: 2px solid #0f766e; border-radius: 4px; background: #ecfdf5; color: #134e4a; font-size: 2.4rem; font-weight: 700; line-height: 1.1;">Demo</div>
   <img src="assets/demo.gif" alt="cicd-sensor GitHub Actions demo" width="100%" style="border: 1px solid #d0d7de; border-radius: 8px;">
-</div>
-
-<div style="border-left: 4px solid #0f766e; background: #ecfdf5; padding: 0.9rem 1rem; margin: 1.5rem 0;">
-  <strong>About the author</strong><br>
-  Built by <a href="https://www.suezawa.net">Hiroki Suezawa (@rung)</a>, author of the <a href="https://github.com/rung/threat-matrix-cicd">Common Threat Matrix for CI/CD Pipeline</a>, contributor to the <a href="https://owasp.org/www-project-top-10-ci-cd-security-risks/">OWASP Top 10 CI/CD Security Risks</a>, and early contributor to <a href="https://pbom.dev/">OSC&amp;R / pbom.dev</a>. cicd-sensor is the runtime defender that work has been pointing to.
 </div>
 
 ## Key Features
