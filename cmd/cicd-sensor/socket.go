@@ -68,3 +68,18 @@ func postSocketForResponse(ctx context.Context, socketPath, urlPath string, body
 	}
 	return out, nil
 }
+
+// formatAgentUnreachable produces a user-facing stderr message for cases
+// where the agent control socket failed to answer. The raw error is kept
+// verbatim so operators can still debug the root cause. `consequence`
+// describes what the caller could not finish because of the failure.
+func formatAgentUnreachable(socketPath, consequence string, err error) string {
+	return fmt.Sprintf(
+		"⚠️  cicd-sensor health check failed.\n"+
+			"   The agent encountered an error or was terminated unexpectedly before the job finished.\n"+
+			"   %s\n\n"+
+			"   socket: %s\n"+
+			"   underlying error: %v",
+		consequence, socketPath, err,
+	)
+}

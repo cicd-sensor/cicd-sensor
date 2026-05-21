@@ -80,7 +80,8 @@ func runJobHealth(args []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := postSocket(ctx, socketPath, "/v1/github/job/health", req); err != nil {
-		fmt.Fprintf(os.Stderr, "job health: %v\n", err)
+		fmt.Fprintln(os.Stderr, formatAgentUnreachable(socketPath,
+			"The cicd-sensor report cannot be produced for this run.", err))
 		os.Exit(1)
 	}
 }

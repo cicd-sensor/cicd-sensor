@@ -172,7 +172,8 @@ func runHostEnd(args []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := postGitHubHostEnd(ctx, socketPath, req); err != nil {
-		fmt.Fprintf(os.Stderr, "host end: %v\n", err)
+		fmt.Fprintln(os.Stderr, formatAgentUnreachable(socketPath,
+			"The job_result_log for this run cannot be emitted.", err))
 		os.Exit(1)
 	}
 }
