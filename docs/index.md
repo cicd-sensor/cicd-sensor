@@ -26,7 +26,7 @@ Sigstore brought us cryptographic proof of *where* and *how* an artifact was bui
 - **Security teams — defending against supply chain attacks — need tools built for the runtime** — real-time detection plus the runtime logs they actually need, like Job Result, Detection, and Runtime Telemetry, giving CI/CD the detection, incident response, and forensics environment it has been missing.
 
 <div style="border-left: 4px solid #0f766e; background: #ecfdf5; padding: 0.9rem 1rem; margin: 1.5rem 0;">
-  <strong>About the author</strong><br>
+  <strong>About the creator</strong><br>
   Built by <a href="https://www.suezawa.net">Hiroki Suezawa (@rung)</a>, author of the <a href="https://github.com/rung/threat-matrix-cicd">Common Threat Matrix for CI/CD Pipeline</a>, contributor to the <a href="https://owasp.org/www-project-top-10-ci-cd-security-risks/">OWASP Top 10 CI/CD Security Risks</a>, and early contributor to <a href="https://pbom.dev/">OSC&amp;R / pbom.dev</a>. cicd-sensor is the runtime defender that work has been pointing to.
 </div>
 
