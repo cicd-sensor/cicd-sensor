@@ -230,7 +230,7 @@ func topStepSummaryRuleHits(hits []resultdoc.HitRecord, limit int) []stepSummary
 		ruleID := stepSummaryDisplayText(hit.RuleID, 64, "unknown")
 		g := groups[ruleID]
 		if g == nil {
-			g = &group{ruleID: ruleID, action: "detect", processes: make(map[string]struct{})}
+			g = &group{ruleID: ruleID, processes: make(map[string]struct{})}
 			groups[ruleID] = g
 		}
 		g.count++
@@ -242,8 +242,12 @@ func topStepSummaryRuleHits(hits []resultdoc.HitRecord, limit int) []stepSummary
 		}
 	}
 
+	minRank := stepSummaryActionRank("detect")
 	ordered := make([]*group, 0, len(groups))
 	for _, g := range groups {
+		if stepSummaryActionRank(g.action) < minRank {
+			continue
+		}
 		ordered = append(ordered, g)
 	}
 	sort.Slice(ordered, func(i, j int) bool {

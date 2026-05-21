@@ -132,6 +132,39 @@ func TestRunReportStepSummary_TopFiveSummaries(t *testing.T) {
 	}
 }
 
+func TestRunReportStepSummary_OmitsCollectOnlyRules(t *testing.T) {
+	t.Parallel()
+
+	sample := sampleResultLog()
+	sample.Hits = []resultdoc.HitRecord{
+		{RuleID: "collect-only-rule", Action: "collect", Process: &resultdoc.ProcessSummary{ExecPath: "/usr/bin/curl"}},
+		{RuleID: "collect-only-rule", Action: "collect", Process: &resultdoc.ProcessSummary{ExecPath: "/usr/bin/curl"}},
+		{RuleID: "detect-rule", Action: "detect", Process: &resultdoc.ProcessSummary{ExecPath: "/usr/bin/node"}},
+	}
+	sample.DomainObservations = nil
+	sample.NetworkConnections = nil
+	body, err := json.Marshal(sample)
+	if err != nil {
+		t.Fatalf("marshal sample: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code, err := runReportStepSummary(context.Background(), nil, bytes.NewReader(body), &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("runReportStepSummary: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code: got %d, want 0", code)
+	}
+	got := stdout.String()
+	if strings.Contains(got, "collect-only-rule") {
+		t.Fatalf("collect-only rule must not appear in top matches:\n%s", got)
+	}
+	if !strings.Contains(got, "<code>detect-rule</code>") {
+		t.Fatalf("detect rule must appear in top matches:\n%s", got)
+	}
+}
+
 func TestRunReportStepSummary_ResultHeaders(t *testing.T) {
 	t.Parallel()
 
