@@ -103,7 +103,7 @@ jobs:
             mkdir -p "$pkg"
             install -m 755 "dist/cicd-sensorctl_windows_${arch}.exe" "$pkg/cicd-sensorctl-windows-${arch}.exe"
             zipfile="cicd-sensorctl_${version}_windows_${arch}.zip"
-            (cd "$pkg" && zip -q "../../release/${zipfile}" .)
+            (cd "$pkg" && zip -qr "../../release/${zipfile}" .)
             ls -lh "release/${zipfile}"
           done
 
