@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -158,7 +159,7 @@ func TestBuildOutputs_ClosesCreatedSinksOnBuildFailure(t *testing.T) {
 	originalBuilder := buildSink
 	created := sinktest.New("created")
 	calls := 0
-	buildSink = func(context.Context, SinkConfig) (sink.Sink, error) {
+	buildSink = func(context.Context, *slog.Logger, SinkConfig) (sink.Sink, error) {
 		calls++
 		if calls == 1 {
 			return created, nil

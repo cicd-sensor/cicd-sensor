@@ -43,7 +43,7 @@ func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, o
 	namedSinks := make(map[string]sink.Sink, len(sinks))
 	createdSinks := make([]sink.Sink, 0, len(sinks))
 	for name, sc := range sinks {
-		dst, err := buildSink(ctx, sc)
+		dst, err := buildSink(ctx, logger, sc)
 		if err != nil {
 			if closeErr := closeSinks(createdSinks); closeErr != nil {
 				return nil, fmt.Errorf("build sink %s: %w (cleanup: %v)", name, err, closeErr)
@@ -87,14 +87,14 @@ func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, o
 	}, nil
 }
 
-func buildNamedSink(ctx context.Context, sc SinkConfig) (sink.Sink, error) {
+func buildNamedSink(ctx context.Context, logger *slog.Logger, sc SinkConfig) (sink.Sink, error) {
 	switch sc.Type {
 	case "s3":
 		return sink.NewS3(ctx, sc.URI, sc.Region)
 	case "gcs":
 		return sink.NewGCS(ctx, sc.URI)
 	case "pubsub":
-		return sink.NewPubSub(ctx, sc.ProjectID, sc.Topic)
+		return sink.NewPubSub(ctx, logger, sc.ProjectID, sc.Topic)
 	default:
 		return nil, fmt.Errorf("unknown sink type %q", sc.Type)
 	}

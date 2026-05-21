@@ -1,13 +1,14 @@
 package sink
 
 import (
+	"bufio"
+	"bytes"
+	"compress/gzip"
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
 
 	"cloud.google.com/go/pubsub/v2"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type pubsubSink struct {
@@ -15,6 +16,7 @@ type pubsubSink struct {
 	projectID string
 	publisher *pubsub.Publisher
 	topicName string
+	logger    *slog.Logger
 }
 
 const (
@@ -27,7 +29,7 @@ const (
 
 // NewPubSub creates a Pub/Sub-backed Sink using Google Application Default
 // Credentials.
-func NewPubSub(ctx context.Context, projectID, topicName string) (Sink, error) {
+func NewPubSub(ctx context.Context, logger *slog.Logger, projectID, topicName string) (Sink, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("pubsub project_id is required")
 	}
@@ -39,24 +41,56 @@ func NewPubSub(ctx context.Context, projectID, topicName string) (Sink, error) {
 		return nil, fmt.Errorf("create pubsub client: %w", err)
 	}
 	publisher := client.Publisher(topicName)
+	// Wire-only gzip; does not reduce Pub/Sub billing.
+	publisher.PublishSettings.EnableCompression = true
+	// Block when the in-flight queue is full so we get backpressure
+	// instead of unbounded memory growth on Pub/Sub slowdowns.
+	publisher.PublishSettings.FlowControlSettings = pubsub.FlowControlSettings{
+		MaxOutstandingMessages: 1000,
+		MaxOutstandingBytes:    50 * 1024 * 1024,
+		LimitExceededBehavior:  pubsub.FlowControlBlock,
+	}
 	return &pubsubSink{
 		client:    client,
 		projectID: projectID,
 		publisher: publisher,
 		topicName: topicName,
+		logger:    logger.With("component", "pubsub_sink"),
 	}, nil
 }
 
+// Write decompresses the gzipped JSONL batch and publishes one Pub/Sub
+// message per record. Each publish is drained asynchronously and only
+// warning-logged on failure: the SDK already retries transient errors,
+// and FlowControlBlock provides backpressure when the queue fills.
 func (s *pubsubSink) Write(ctx context.Context, batch IngestLogBatch) error {
-	result := s.publisher.Publish(ctx, &pubsub.Message{
-		Data:       batch.Body,
-		Attributes: pubsubAttributes(batch),
-	})
-	if _, err := result.Get(ctx); err != nil {
-		if isPubSubThrottle(err) {
-			return fmt.Errorf("%w: %v", ErrThrottled, err)
+	reader, err := gzip.NewReader(bytes.NewReader(batch.Body))
+	if err != nil {
+		return fmt.Errorf("decode pubsub batch: %w", err)
+	}
+	defer reader.Close()
+
+	attrs := pubsubAttributes(batch)
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
 		}
-		return fmt.Errorf("publish pubsub message: %w", err)
+		record := append([]byte(nil), line...)
+		result := s.publisher.Publish(ctx, &pubsub.Message{
+			Data:       record,
+			Attributes: attrs,
+		})
+		go func() {
+			if _, err := result.Get(ctx); err != nil {
+				s.logger.WarnContext(ctx, "pubsub_publish_failed", "error", err)
+			}
+		}()
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("scan pubsub batch: %w", err)
 	}
 	return nil
 }
@@ -68,11 +102,10 @@ func (s *pubsubSink) Close() error {
 
 func pubsubAttributes(batch IngestLogBatch) map[string]string {
 	return map[string]string{
-		"content_encoding": ContentEncoding,
-		"content_type":     ContentTypeJSONL,
-		"flush_at":         formatFlushAt(batch.FlushAt),
-		"log_kind":         string(batch.LogKind),
-		"scope":            string(batch.Scope),
+		"content_type": "application/json",
+		"flush_at":     formatFlushAt(batch.FlushAt),
+		"log_kind":     string(batch.LogKind),
+		"scope":        string(batch.Scope),
 	}
 }
 
@@ -91,11 +124,4 @@ func (s *pubsubSink) FlushPolicy(logKind LogKind) FlushPolicy {
 		FlushThresholdBytes:  pubsubImmediateFlushBytes,
 		FlushIntervalSeconds: pubsubImmediateFlushSeconds,
 	}
-}
-
-func isPubSubThrottle(err error) bool {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
-	}
-	return status.Code(err) == codes.ResourceExhausted
 }

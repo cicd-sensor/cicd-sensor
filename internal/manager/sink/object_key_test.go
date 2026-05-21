@@ -65,16 +65,18 @@ func TestPubSubAttributes(t *testing.T) {
 		t.Fatalf("object_key attribute should not be emitted: %+v", got)
 	}
 	want := map[string]string{
-		"content_encoding": ContentEncoding,
-		"content_type":     ContentTypeJSONL,
-		"flush_at":         "20260426073045123",
-		"log_kind":         string(LogKindJobDetection),
-		"scope":            string(ScopeHost),
+		"content_type": "application/json",
+		"flush_at":     "20260426073045123",
+		"log_kind":     string(LogKindJobDetection),
+		"scope":        string(ScopeHost),
 	}
 	for key, value := range want {
 		if got[key] != value {
 			t.Fatalf("attribute %s: got %q, want %q", key, got[key], value)
 		}
+	}
+	if _, ok := got["content_encoding"]; ok {
+		t.Fatalf("content_encoding attribute should not be emitted: %+v", got)
 	}
 }
 

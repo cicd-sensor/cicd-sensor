@@ -23,7 +23,6 @@ require (
 	golang.org/x/sys v0.44.0
 	golang.org/x/text v0.37.0
 	google.golang.org/api v0.279.0
-	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 )
 
@@ -91,6 +90,7 @@ require (
 	google.golang.org/genproto v0.0.0-20260519071638-aa98bba5eb94 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260519071638-aa98bba5eb94 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260519071638-aa98bba5eb94 // indirect
+	google.golang.org/grpc v1.81.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
 
