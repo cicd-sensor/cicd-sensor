@@ -23,7 +23,7 @@ func runRuleBundle(_ context.Context, args []string, stdout, stderr io.Writer) (
 	if opts.help {
 		return 0, nil
 	}
-	if err := validateRuleBundlePath(opts.rulesDir, opts.outputPath); err != nil {
+	if err := validateRuleBundlePath(opts.rulesDir, opts.outputFile); err != nil {
 		return 2, err
 	}
 
@@ -42,18 +42,18 @@ func runRuleBundle(_ context.Context, args []string, stdout, stderr io.Writer) (
 	if err != nil {
 		return 1, err
 	}
-	if err := os.WriteFile(opts.outputPath, bundle, 0o644); err != nil {
-		return 1, fmt.Errorf("write rule bundle %s: %w", opts.outputPath, err)
+	if err := os.WriteFile(opts.outputFile, bundle, 0o644); err != nil {
+		return 1, fmt.Errorf("write rule bundle %s: %w", opts.outputFile, err)
 	}
 
-	fmt.Fprintf(stdout, "OK: %d file(s) bundled into %s\n", len(files), opts.outputPath)
-	fmt.Fprintf(stdout, "Next: cicd-sensorctl rule validate %s\n", opts.outputPath)
+	fmt.Fprintf(stdout, "OK: %d file(s) bundled into %s\n", len(files), opts.outputFile)
+	fmt.Fprintf(stdout, "Next: cicd-sensorctl rule validate %s\n", opts.outputFile)
 	return 0, nil
 }
 
 type ruleBundleOptions struct {
 	rulesDir   string
-	outputPath string
+	outputFile string
 	help       bool
 }
 
@@ -62,18 +62,18 @@ func parseRuleBundleArgs(args []string, stderr io.Writer) (ruleBundleOptions, er
 	fs := flag.NewFlagSet("rule bundle", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), "usage: cicd-sensorctl rule bundle --input-dir DIR --output PATH")
+		fmt.Fprintln(fs.Output(), "usage: cicd-sensorctl rule bundle --input-dir DIR --output-file FILE")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Input:")
 		fmt.Fprintln(fs.Output(), "  --input-dir DIR")
 		fmt.Fprintln(fs.Output(), "        Flat directory containing .yaml/.yml rule files.")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Required:")
-		fmt.Fprintln(fs.Output(), "  --output PATH")
+		fmt.Fprintln(fs.Output(), "  --output-file FILE")
 		fmt.Fprintln(fs.Output(), "        File to write the bundled rule YAML to. Must not already exist.")
 	}
 	fs.StringVar(&opts.rulesDir, "input-dir", "", "Flat directory containing rule YAML files.")
-	fs.StringVar(&opts.outputPath, "output", "", "File to write bundled rule YAML to.")
+	fs.StringVar(&opts.outputFile, "output-file", "", "File to write bundled rule YAML to.")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			opts.help = true
@@ -87,13 +87,13 @@ func parseRuleBundleArgs(args []string, stderr io.Writer) (ruleBundleOptions, er
 	if opts.rulesDir == "" {
 		return opts, newUsageError(2, "rule bundle: --input-dir is required")
 	}
-	if opts.outputPath == "" {
-		return opts, newUsageError(2, "rule bundle: --output is required")
+	if opts.outputFile == "" {
+		return opts, newUsageError(2, "rule bundle: --output-file is required")
 	}
 	return opts, nil
 }
 
-func validateRuleBundlePath(rulesDir string, outputPath string) error {
+func validateRuleBundlePath(rulesDir string, outputFile string) error {
 	info, err := os.Stat(rulesDir)
 	if err != nil {
 		return fmt.Errorf("stat rules directory %s: %w", rulesDir, err)
@@ -101,26 +101,26 @@ func validateRuleBundlePath(rulesDir string, outputPath string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("rule bundle: %s is not a directory", rulesDir)
 	}
-	if _, err := os.Stat(outputPath); err == nil {
-		return fmt.Errorf("rule bundle: output path already exists: %s", outputPath)
+	if _, err := os.Stat(outputFile); err == nil {
+		return fmt.Errorf("rule bundle: output file already exists: %s", outputFile)
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("stat output path %s: %w", outputPath, err)
+		return fmt.Errorf("stat output file %s: %w", outputFile, err)
 	}
 
 	rulesAbs, err := filepath.Abs(rulesDir)
 	if err != nil {
 		return fmt.Errorf("resolve rules directory %s: %w", rulesDir, err)
 	}
-	outputAbs, err := filepath.Abs(outputPath)
+	outputAbs, err := filepath.Abs(outputFile)
 	if err != nil {
-		return fmt.Errorf("resolve output path %s: %w", outputPath, err)
+		return fmt.Errorf("resolve output file %s: %w", outputFile, err)
 	}
 	rel, err := filepath.Rel(rulesAbs, outputAbs)
 	if err != nil {
-		return fmt.Errorf("compare output path %s with rules directory %s: %w", outputPath, rulesDir, err)
+		return fmt.Errorf("compare output file %s with rules directory %s: %w", outputFile, rulesDir, err)
 	}
 	if rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
-		return fmt.Errorf("rule bundle: output path must be outside the input rules directory")
+		return fmt.Errorf("rule bundle: output file must be outside the input rules directory")
 	}
 	return nil
 }

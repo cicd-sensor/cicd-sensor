@@ -284,7 +284,7 @@ func TestBuildProjectStartRequest_ProjectManagerRejectsLocalRules(t *testing.T) 
 		URL:   "https://project-manager.example.com",
 		Token: managerauth.TokenPrefix + strings.Repeat("a", 64),
 	})
-	if err == nil || !strings.Contains(err.Error(), "cannot be combined with --rules") {
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined with --rules-file") {
 		t.Fatalf("error: got %v, want rules conflict", err)
 	}
 }
@@ -296,7 +296,7 @@ func TestBuildProjectStartRequest_ProjectManagerRejectsAndDoesNotReadConfig(t *t
 		URL:   "https://project-manager.example.com",
 		Token: managerauth.TokenPrefix + strings.Repeat("a", 64),
 	})
-	if err == nil || !strings.Contains(err.Error(), "cannot be combined with --config") {
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined with --config-file") {
 		t.Fatalf("error: got %v, want config conflict without reading config", err)
 	}
 }
@@ -315,11 +315,11 @@ func TestWriteProjectResult(t *testing.T) {
 	})
 
 	t.Run("file", func(t *testing.T) {
-		outputPath := filepath.Join(t.TempDir(), "result.json")
-		if err := writeProjectResult(outputPath, body, io.Discard); err != nil {
+		outputFile := filepath.Join(t.TempDir(), "result.json")
+		if err := writeProjectResult(outputFile, body, io.Discard); err != nil {
 			t.Fatalf("writeProjectResult: %v", err)
 		}
-		got, err := os.ReadFile(outputPath)
+		got, err := os.ReadFile(outputFile)
 		if err != nil {
 			t.Fatalf("read output: %v", err)
 		}

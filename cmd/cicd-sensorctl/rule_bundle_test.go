@@ -47,26 +47,26 @@ rule_sets:
 		t.Fatalf("mkdir nested: %v", err)
 	}
 
-	outputPath := filepath.Join(t.TempDir(), "rules.yaml")
+	outputFile := filepath.Join(t.TempDir(), "rules.yaml")
 	var stdout, stderr bytes.Buffer
-	code, err := runRuleBundle(context.Background(), []string{"--input-dir", rulesDir, "--output", outputPath}, &stdout, &stderr)
+	code, err := runRuleBundle(context.Background(), []string{"--input-dir", rulesDir, "--output-file", outputFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code: got %d, want 0; stderr=%q err=%v", code, stderr.String(), err)
 	}
 	if err != nil {
 		t.Fatalf("runRuleBundle: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "OK: 3 file(s) bundled into "+outputPath) {
+	if !strings.Contains(stdout.String(), "OK: 3 file(s) bundled into "+outputFile) {
 		t.Fatalf("stdout: got %q", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Next: cicd-sensorctl rule validate "+outputPath) {
+	if !strings.Contains(stdout.String(), "Next: cicd-sensorctl rule validate "+outputFile) {
 		t.Fatalf("stdout: got %q, want validate hint", stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "subdirectory skipped") {
 		t.Fatalf("stderr: got %q, want subdirectory warning", stderr.String())
 	}
 
-	loaded, err := rulesource.LoadRulesFile(outputPath)
+	loaded, err := rulesource.LoadRulesFile(outputFile)
 	if err != nil {
 		t.Fatalf("LoadRulesFile generated bundle: %v", err)
 	}
@@ -125,47 +125,47 @@ rule_sets:
 	}{
 		{
 			name:    "missing_directory",
-			args:    []string{"--output", filepath.Join(root, "out.yaml")},
+			args:    []string{"--output-file", filepath.Join(root, "out.yaml")},
 			wantErr: "--input-dir is required",
 		},
 		{
 			name:    "unknown_flag",
-			args:    []string{"--input-dir", rulesDir, "--output", filepath.Join(root, "out.yaml"), "--bogus"},
+			args:    []string{"--input-dir", rulesDir, "--output-file", filepath.Join(root, "out.yaml"), "--bogus"},
 			wantErr: "flag provided but not defined",
 		},
 		{
 			name:    "unexpected_positional_arg",
-			args:    []string{"--input-dir", rulesDir, "--output", filepath.Join(root, "out.yaml"), "extra"},
+			args:    []string{"--input-dir", rulesDir, "--output-file", filepath.Join(root, "out.yaml"), "extra"},
 			wantErr: "unexpected positional arguments",
 		},
 		{
 			name:    "missing_output",
 			args:    []string{"--input-dir", rulesDir},
-			wantErr: "--output is required",
+			wantErr: "--output-file is required",
 		},
 		{
 			name:    "file_input",
-			args:    []string{"--input-dir", rulePath, "--output", filepath.Join(root, "out.yaml")},
+			args:    []string{"--input-dir", rulePath, "--output-file", filepath.Join(root, "out.yaml")},
 			wantErr: "is not a directory",
 		},
 		{
 			name:    "existing_output",
-			args:    []string{"--input-dir", rulesDir, "--output", existingOutput},
-			wantErr: "output path already exists",
+			args:    []string{"--input-dir", rulesDir, "--output-file", existingOutput},
+			wantErr: "output file already exists",
 		},
 		{
 			name:    "missing_output_directory",
-			args:    []string{"--input-dir", rulesDir, "--output", missingOutputDir},
+			args:    []string{"--input-dir", rulesDir, "--output-file", missingOutputDir},
 			wantErr: "write rule bundle",
 		},
 		{
 			name:    "output_inside_input_dir",
-			args:    []string{"--input-dir", rulesDir, "--output", filepath.Join(rulesDir, "bundle.yaml")},
-			wantErr: "output path must be outside",
+			args:    []string{"--input-dir", rulesDir, "--output-file", filepath.Join(rulesDir, "bundle.yaml")},
+			wantErr: "output file must be outside",
 		},
 		{
 			name:    "empty_directory",
-			args:    []string{"--input-dir", emptyRulesDir, "--output", filepath.Join(root, "empty-out.yaml")},
+			args:    []string{"--input-dir", emptyRulesDir, "--output-file", filepath.Join(root, "empty-out.yaml")},
 			wantErr: "no YAML rule files found",
 		},
 	}
@@ -209,7 +209,7 @@ func TestRunRuleBundleHelp(t *testing.T) {
 			if got := stdout.String(); got != "" {
 				t.Fatalf("stdout: got %q, want empty", got)
 			}
-			if !strings.Contains(stderr.String(), "cicd-sensorctl rule bundle --input-dir DIR --output PATH") {
+			if !strings.Contains(stderr.String(), "cicd-sensorctl rule bundle --input-dir DIR --output-file FILE") {
 				t.Fatalf("stderr: got %q, want usage", stderr.String())
 			}
 		})

@@ -45,8 +45,8 @@ func runProjectSubcommand(args []string) {
 func runProjectStart(args []string) {
 	fs := flag.NewFlagSet("project start", flag.ExitOnError)
 	socketPath := defaultSocketPath
-	var configPath string
-	var rulesPath string
+	var configFile string
+	var rulesFile string
 	var managerURL string
 	var managerTokenFilePath string
 	var debugOutputDir string
@@ -91,12 +91,12 @@ func runProjectStart(args []string) {
 		fmt.Fprintln(fs.Output(), "        Workflow file commit SHA associated with this job.")
 		fmt.Fprintln(fs.Output(), "  --actor NAME")
 		fmt.Fprintln(fs.Output(), "        User or actor that triggered this job.")
-		fmt.Fprintln(fs.Output(), "  --config PATH")
+		fmt.Fprintln(fs.Output(), "  --config-file PATH")
 		fmt.Fprintln(fs.Output(), "        Path to the project-side config YAML. Cannot be combined with --manager-url.")
-		fmt.Fprintln(fs.Output(), "  --rules PATH")
+		fmt.Fprintln(fs.Output(), "  --rules-file PATH")
 		fmt.Fprintln(fs.Output(), "        Path to the project-local rules YAML file.")
 		fmt.Fprintln(fs.Output(), "  --manager-url URL")
-		fmt.Fprintln(fs.Output(), "        Project scope manager URL. Cannot be combined with --config or --rules.")
+		fmt.Fprintln(fs.Output(), "        Project scope manager URL. Cannot be combined with --config-file or --rules-file.")
 		fmt.Fprintln(fs.Output(), "  --manager-token-file PATH")
 		fmt.Fprintln(fs.Output(), "        Path to a file containing the project manager bearer token. Overrides CICD_SENSOR_MANAGER_TOKEN.")
 		fmt.Fprintln(fs.Output(), "  --debug-output-dir DIR")
@@ -105,8 +105,8 @@ func runProjectStart(args []string) {
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
 	registerJobIdentityFlags(fs, &identity)
 	registerJobMetadataFlags(fs, &metadata)
-	fs.StringVar(&configPath, "config", "", "Path to the project-side config file.")
-	fs.StringVar(&rulesPath, "rules", "", "Path to the project-local rules YAML file.")
+	fs.StringVar(&configFile, "config-file", "", "Path to the project-side config file.")
+	fs.StringVar(&rulesFile, "rules-file", "", "Path to the project-local rules YAML file.")
 	fs.StringVar(&managerURL, "manager-url", "", "Project scope manager URL.")
 	fs.StringVar(&managerTokenFilePath, "manager-token-file", "", "Path to a file containing the project manager bearer token.")
 	fs.StringVar(&debugOutputDir, "debug-output-dir", "", "Directory for local debug output files.")
@@ -129,7 +129,7 @@ func runProjectStart(args []string) {
 		os.Exit(1)
 	}
 
-	req, err := buildProjectStartRequest(identity, metadata, configPath, rulesPath, projectManager, debugOutputDir)
+	req, err := buildProjectStartRequest(identity, metadata, configFile, rulesFile, projectManager, debugOutputDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build request: %v\n", err)
 		os.Exit(1)
@@ -147,7 +147,7 @@ func runProjectStart(args []string) {
 func runProjectResult(args []string) {
 	fs := flag.NewFlagSet("project result", flag.ExitOnError)
 	socketPath := defaultSocketPath
-	var outputPath string
+	var outputFile string
 	var identity jobIdentityFlags
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), projectResultUsage)
@@ -170,12 +170,12 @@ func runProjectResult(args []string) {
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintf(fs.Output(), "  --socket PATH\n        Agent control socket path. (default %q)\n", defaultSocketPath)
-		fmt.Fprintln(fs.Output(), "  --output-path PATH")
+		fmt.Fprintln(fs.Output(), "  --output-file FILE")
 		fmt.Fprintln(fs.Output(), "        File to write the job_result_log JSON to. Writes to stdout when empty.")
 	}
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
 	registerJobIdentityFlags(fs, &identity)
-	fs.StringVar(&outputPath, "output-path", "", "File to write the job_result_log JSON to (stdout when empty).")
+	fs.StringVar(&outputFile, "output-file", "", "File to write the job_result_log JSON to (stdout when empty).")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -204,7 +204,7 @@ func runProjectResult(args []string) {
 		os.Exit(1)
 	}
 
-	if err := writeProjectResult(outputPath, body, os.Stdout); err != nil {
+	if err := writeProjectResult(outputFile, body, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "project result: %v\n", err)
 		os.Exit(1)
 	}
@@ -225,21 +225,21 @@ func buildProjectManagerConnection(managerURL string, managerTokenFilePath strin
 	return managerConnectionConfig{URL: managerURL, Token: managerToken}, nil
 }
 
-func writeProjectResult(outputPath string, body []byte, stdout io.Writer) error {
-	if outputPath == "" {
+func writeProjectResult(outputFile string, body []byte, stdout io.Writer) error {
+	if outputFile == "" {
 		if _, err := stdout.Write(body); err != nil {
 			return fmt.Errorf("write stdout: %w", err)
 		}
 		return nil
 	}
 
-	if err := os.WriteFile(outputPath, body, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", outputPath, err)
+	if err := os.WriteFile(outputFile, body, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", outputFile, err)
 	}
 	return nil
 }
 
-func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFlags, configPath string, rulesPath string, manager managerConnectionConfig, debugOutputDirs ...string) (map[string]any, error) {
+func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFlags, configFile string, rulesFile string, manager managerConnectionConfig, debugOutputDirs ...string) (map[string]any, error) {
 	identityReq, err := buildJobIdentityRequest(identity)
 	if err != nil {
 		return nil, err
@@ -259,11 +259,11 @@ func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFla
 	}
 
 	if manager.URL != "" {
-		if configPath != "" {
-			return nil, fmt.Errorf("project manager cannot be combined with --config")
+		if configFile != "" {
+			return nil, fmt.Errorf("project manager cannot be combined with --config-file")
 		}
-		if rulesPath != "" {
-			return nil, fmt.Errorf("project manager cannot be combined with --rules")
+		if rulesFile != "" {
+			return nil, fmt.Errorf("project manager cannot be combined with --rules-file")
 		}
 		if manager.Token == "" {
 			return nil, fmt.Errorf("project manager requires CICD_SENSOR_MANAGER_TOKEN env or --manager-token-file")
@@ -273,8 +273,8 @@ func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFla
 		return req, nil
 	}
 
-	if configPath != "" {
-		projectConfig, err := projectconfig.Load(configPath)
+	if configFile != "" {
+		projectConfig, err := projectconfig.Load(configFile)
 		if err != nil {
 			return nil, err
 		}
@@ -283,8 +283,8 @@ func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFla
 		}
 	}
 
-	if rulesPath != "" {
-		loadedRules, err := rulesource.LoadRulesFile(rulesPath)
+	if rulesFile != "" {
+		loadedRules, err := rulesource.LoadRulesFile(rulesFile)
 		if err != nil {
 			return nil, err
 		}

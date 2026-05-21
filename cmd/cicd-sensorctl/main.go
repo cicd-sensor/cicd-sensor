@@ -121,9 +121,9 @@ func newUsageError(code int, message string) error {
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  cicd-sensorctl rule validate <path>...")
-	fmt.Fprintln(w, "  cicd-sensorctl rule bundle --input-dir DIR --output PATH")
+	fmt.Fprintln(w, "  cicd-sensorctl rule bundle --input-dir DIR --output-file FILE")
 	fmt.Fprintln(w, "  cicd-sensorctl token generate")
-	fmt.Fprintln(w, "  cicd-sensorctl report attest [--output-path PATH]")
-	fmt.Fprintln(w, "  cicd-sensorctl report html [--output-path PATH]")
+	fmt.Fprintln(w, "  cicd-sensorctl report attest [--output-file FILE]")
+	fmt.Fprintln(w, "  cicd-sensorctl report html [--output-file FILE]")
 	fmt.Fprintln(w, "  cicd-sensorctl report stepsummary [--html-url URL] [--debug-url URL] [--health-failed]")
 }

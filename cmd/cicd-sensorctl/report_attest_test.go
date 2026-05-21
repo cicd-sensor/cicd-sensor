@@ -72,11 +72,11 @@ func TestRunReportAttest_StdinHappyPath(t *testing.T) {
 	}
 }
 
-func TestRunReportAttest_OutputPath(t *testing.T) {
+func TestRunReportAttest_OutputFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	outputPath := filepath.Join(dir, "attestation.json")
+	outputFile := filepath.Join(dir, "attestation.json")
 	body, err := json.Marshal(sampleResultLog())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
@@ -85,7 +85,7 @@ func TestRunReportAttest_OutputPath(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code, err := runReportAttest(
 		context.Background(),
-		[]string{"--output-path", outputPath},
+		[]string{"--output-file", outputFile},
 		bytes.NewReader(body),
 		&stdout, &stderr,
 	)
@@ -96,10 +96,10 @@ func TestRunReportAttest_OutputPath(t *testing.T) {
 		t.Fatalf("exit code: got %d, want 0", code)
 	}
 	if stdout.Len() != 0 {
-		t.Fatalf("stdout should be empty when --output-path is set, got %s", stdout.String())
+		t.Fatalf("stdout should be empty when --output-file is set, got %s", stdout.String())
 	}
 
-	written, err := os.ReadFile(outputPath)
+	written, err := os.ReadFile(outputFile)
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestRunReportAttest_WriteError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code, err := runReportAttest(
 		context.Background(),
-		[]string{"--output-path", filepath.Join(t.TempDir(), "missing", "attestation.json")},
+		[]string{"--output-file", filepath.Join(t.TempDir(), "missing", "attestation.json")},
 		bytes.NewReader(body),
 		&stdout,
 		&stderr,
@@ -209,7 +209,7 @@ func TestRunReportAttest_Help(t *testing.T) {
 		"Reads job_result_log JSON from stdin.",
 		"Optional:",
 		"File to write runtime-trace attestation JSON to. Writes to stdout when empty.",
-		"--output-path",
+		"--output-file",
 	} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("stderr: got %q, want substring %q", stderr.String(), want)

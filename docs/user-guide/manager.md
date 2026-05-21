@@ -68,15 +68,15 @@ Allow outbound HTTPS to these hosts.
 ## Startup files
 
 The manager reads a startup config file and an optional rule bundle file.
-The file contents are not expanded into environment variables; the file paths can be specified by flags or environment variables.
+Their file locations can be specified by flags or environment variables.
 
 | File | Flag | Environment variable | Required |
 | --- | --- | --- | --- |
-| manager config | `--config /etc/cicd-sensor/manager.yaml` | `CICD_SENSOR_MANAGER_CONFIG_FILE=/etc/cicd-sensor/manager.yaml` | yes |
-| rule bundle | `--rules /etc/cicd-sensor/rules.yaml` | `CICD_SENSOR_MANAGER_RULES_FILE=/etc/cicd-sensor/rules.yaml` | no |
+| manager config | `--config-file /etc/cicd-sensor/manager.yaml` | `CICD_SENSOR_MANAGER_CONFIG_FILE=/etc/cicd-sensor/manager.yaml` | yes |
+| rule bundle | `--rules-file /etc/cicd-sensor/rules.yaml` | `CICD_SENSOR_MANAGER_RULES_FILE=/etc/cicd-sensor/rules.yaml` | no |
 
 When both a flag and an environment variable are set, the flag wins.
-If neither `--rules` nor `CICD_SENSOR_MANAGER_RULES_FILE` is set, the manager starts without a custom rule bundle.
+If neither `--rules-file` nor `CICD_SENSOR_MANAGER_RULES_FILE` is set, the manager starts without a custom rule bundle.
 
 ```sh
 export CICD_SENSOR_MANAGER_CONFIG_FILE=/etc/cicd-sensor/manager.yaml
@@ -102,8 +102,8 @@ Manager side:
 ```sh
 export CICD_SENSOR_MANAGER_TOKEN=sk_cs_...
 cicd-sensor-manager \
-  --config /etc/cicd-sensor/manager.yaml \
-  --rules /etc/cicd-sensor/rules.yaml
+  --config-file /etc/cicd-sensor/manager.yaml \
+  --rules-file /etc/cicd-sensor/rules.yaml
 ```
 
 Agent side:

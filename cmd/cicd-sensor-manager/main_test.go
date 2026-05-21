@@ -39,7 +39,7 @@ func TestValidateManagerStartupOptions(t *testing.T) {
 			opts: managerStartupOptions{
 				Tokens: []string{validToken},
 			},
-			wantErr: "--config or CICD_SENSOR_MANAGER_CONFIG_FILE",
+			wantErr: "--config-file or CICD_SENSOR_MANAGER_CONFIG_FILE",
 		},
 		{
 			name:    "missing token and config reports token first",

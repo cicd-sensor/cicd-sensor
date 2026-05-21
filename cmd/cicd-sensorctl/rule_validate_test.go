@@ -260,24 +260,24 @@ func TestDispatch(t *testing.T) {
 			name:       "help",
 			args:       []string{"help"},
 			wantCode:   0,
-			wantStdout: "Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output PATH\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-path PATH]\n  cicd-sensorctl report html [--output-path PATH]\n  cicd-sensorctl report stepsummary [--html-url URL] [--debug-url URL] [--health-failed]\n",
+			wantStdout: "Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output-file FILE\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-file FILE]\n  cicd-sensorctl report html [--output-file FILE]\n  cicd-sensorctl report stepsummary [--html-url URL] [--debug-url URL] [--health-failed]\n",
 		},
 		{
 			name:       "no_args",
 			wantCode:   2,
-			wantStderr: []string{"Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output PATH\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-path PATH]"},
+			wantStderr: []string{"Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output-file FILE\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-file FILE]"},
 		},
 		{
 			name:       "unknown_command",
 			args:       []string{"bogus"},
 			wantCode:   2,
-			wantStderr: []string{"unknown command: bogus", "Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output PATH\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-path PATH]"},
+			wantStderr: []string{"unknown command: bogus", "Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output-file FILE\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-file FILE]"},
 		},
 		{
 			name:       "unknown_rule_subcommand",
 			args:       []string{"rule", "bogus"},
 			wantCode:   2,
-			wantStderr: []string{"unknown rule subcommand: bogus", "Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output PATH\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-path PATH]"},
+			wantStderr: []string{"unknown rule subcommand: bogus", "Usage:\n  cicd-sensorctl rule validate <path>...\n  cicd-sensorctl rule bundle --input-dir DIR --output-file FILE\n  cicd-sensorctl token generate\n  cicd-sensorctl report attest [--output-file FILE]"},
 		},
 	}
 

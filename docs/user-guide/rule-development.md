@@ -39,7 +39,7 @@ cicd-sensorctl rule validate rules/acme-rule-set.yaml
 For deployment, create a bundle file.
 
 ```sh
-cicd-sensorctl rule bundle --input-dir rules --output rules.yaml
+cicd-sensorctl rule bundle --input-dir rules --output-file rules.yaml
 cicd-sensorctl rule validate rules.yaml
 ```
 
@@ -67,10 +67,10 @@ cicd-sensorctl rule validate .cicd-sensor/rules/
 ## Manager handoff
 
 A bundle is required when using rules with the manager.
-The manager receives the bundle file path through `--rules` or `CICD_SENSOR_MANAGER_RULES_FILE`.
+The manager receives the bundle file path through `--rules-file` or `CICD_SENSOR_MANAGER_RULES_FILE`.
 
 ```sh
-cicd-sensorctl rule bundle --input-dir /etc/cicd-sensor/rules --output /etc/cicd-sensor/rules.yaml
+cicd-sensorctl rule bundle --input-dir /etc/cicd-sensor/rules --output-file /etc/cicd-sensor/rules.yaml
 cicd-sensorctl rule validate /etc/cicd-sensor/rules.yaml
 
 export CICD_SENSOR_MANAGER_CONFIG_FILE=/etc/cicd-sensor/manager.yaml
@@ -79,4 +79,4 @@ cicd-sensor-manager
 ```
 
 Do not put a `rules:` list inside `manager.yaml`.
-Rule handoff is explicit at manager startup through `--rules <path>` or `CICD_SENSOR_MANAGER_RULES_FILE`.
+Rule handoff is explicit at manager startup through `--rules-file <path>` or `CICD_SENSOR_MANAGER_RULES_FILE`.

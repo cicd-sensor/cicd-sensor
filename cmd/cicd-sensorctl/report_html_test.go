@@ -46,11 +46,11 @@ func TestRunReportHTML_StdinHappyPath(t *testing.T) {
 	}
 }
 
-func TestRunReportHTML_OutputPath(t *testing.T) {
+func TestRunReportHTML_OutputFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	outputPath := filepath.Join(dir, "report.html")
+	outputFile := filepath.Join(dir, "report.html")
 	body, err := json.Marshal(sampleResultLog())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
@@ -59,7 +59,7 @@ func TestRunReportHTML_OutputPath(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code, err := runReportHTML(
 		context.Background(),
-		[]string{"--output-path", outputPath},
+		[]string{"--output-file", outputFile},
 		bytes.NewReader(body),
 		&stdout, &stderr,
 	)
@@ -70,10 +70,10 @@ func TestRunReportHTML_OutputPath(t *testing.T) {
 		t.Fatalf("exit code: got %d, want 0", code)
 	}
 	if stdout.Len() != 0 {
-		t.Fatalf("stdout should be empty when --output-path is set, got %s", stdout.String())
+		t.Fatalf("stdout should be empty when --output-file is set, got %s", stdout.String())
 	}
 
-	written, err := os.ReadFile(outputPath)
+	written, err := os.ReadFile(outputFile)
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestRunReportHTML_WriteError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code, err := runReportHTML(
 		context.Background(),
-		[]string{"--output-path", filepath.Join(t.TempDir(), "missing", "report.html")},
+		[]string{"--output-file", filepath.Join(t.TempDir(), "missing", "report.html")},
 		bytes.NewReader(body),
 		&stdout,
 		&stderr,
@@ -183,7 +183,7 @@ func TestRunReportHTML_Help(t *testing.T) {
 		"Reads job_result_log JSON from stdin.",
 		"Optional:",
 		"File to write a self-contained HTML report to. Writes to stdout when empty.",
-		"--output-path",
+		"--output-file",
 	} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("stderr: got %q, want substring %q", stderr.String(), want)

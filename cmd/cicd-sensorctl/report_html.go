@@ -13,7 +13,7 @@ import (
 
 // runReportHTML reads a job_result_log JSON document (from stdin or the
 // given file) and writes a single self-contained HTML report to stdout
-// (or --output-path).
+// (or --output-file).
 func runReportHTML(_ context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	opts, err := parseReportIOArgs("report html", args, stderr, "a self-contained HTML report")
 	if err != nil {

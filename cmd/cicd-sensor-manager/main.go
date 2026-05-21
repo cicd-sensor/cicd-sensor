@@ -41,23 +41,23 @@ func (f *tokenFileFlags) Set(value string) error {
 
 func main() {
 	var configFileFlag string
-	var rulesPath string
+	var rulesFileFlag string
 	var tokenFilePaths tokenFileFlags
 	flag.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), managerUsage)
 		fmt.Fprintln(flag.CommandLine.Output())
 		fmt.Fprintln(flag.CommandLine.Output(), "Required:")
-		fmt.Fprintln(flag.CommandLine.Output(), "  --config PATH or CICD_SENSOR_MANAGER_CONFIG_FILE")
+		fmt.Fprintln(flag.CommandLine.Output(), "  --config-file PATH or CICD_SENSOR_MANAGER_CONFIG_FILE")
 		fmt.Fprintln(flag.CommandLine.Output(), "        Manager startup config YAML.")
 		fmt.Fprintln(flag.CommandLine.Output(), "  CICD_SENSOR_MANAGER_TOKEN{,_2} or --manager-token-file PATH")
 		fmt.Fprintln(flag.CommandLine.Output(), "        Manager bearer token secret. Provide up to 2 tokens for rotation overlap.")
 		fmt.Fprintln(flag.CommandLine.Output())
 		fmt.Fprintln(flag.CommandLine.Output(), "Optional:")
-		fmt.Fprintln(flag.CommandLine.Output(), "  --rules PATH or CICD_SENSOR_MANAGER_RULES_FILE")
+		fmt.Fprintln(flag.CommandLine.Output(), "  --rules-file PATH or CICD_SENSOR_MANAGER_RULES_FILE")
 		fmt.Fprintln(flag.CommandLine.Output(), "        Customer rules YAML file. When omitted, only baseline rules are served unless disabled in config.")
 	}
-	flag.StringVar(&configFileFlag, "config", "", "Path to the manager startup config file.")
-	flag.StringVar(&rulesPath, "rules", "", "Path to the customer rules YAML file (optional).")
+	flag.StringVar(&configFileFlag, "config-file", "", "Path to the manager startup config file.")
+	flag.StringVar(&rulesFileFlag, "rules-file", "", "Path to the customer rules YAML file (optional).")
 	flag.Var(&tokenFilePaths, "manager-token-file", "Path to a file containing a bearer token. May be specified up to twice.")
 	flag.Parse()
 
@@ -73,7 +73,7 @@ func main() {
 		os.Exit(1)
 	}
 	configFile := resolveFilePathFromFlagOrEnv(configFileFlag, "CICD_SENSOR_MANAGER_CONFIG_FILE", "manager_config_file", logger)
-	rulesFile := resolveFilePathFromFlagOrEnv(rulesPath, "CICD_SENSOR_MANAGER_RULES_FILE", "manager_rules_file", logger)
+	rulesFile := resolveFilePathFromFlagOrEnv(rulesFileFlag, "CICD_SENSOR_MANAGER_RULES_FILE", "manager_rules_file", logger)
 	opts := managerStartupOptions{
 		ConfigFile: configFile,
 		Tokens:     tokens,
@@ -91,7 +91,7 @@ func main() {
 	bindAddress := startupConfig.BindAddress()
 
 	if rulesFile == "" {
-		slog.InfoContext(ctx, "manager_rules_disabled", "reason", "no --rules flag or CICD_SENSOR_MANAGER_RULES_FILE")
+		slog.InfoContext(ctx, "manager_rules_disabled", "reason", "no --rules-file flag or CICD_SENSOR_MANAGER_RULES_FILE")
 	}
 
 	baselineEnabled := !startupConfig.DisableBaseline
@@ -130,7 +130,7 @@ func validateManagerStartupOptions(opts managerStartupOptions) error {
 		return errors.New("manager token is required: set CICD_SENSOR_MANAGER_TOKEN or --manager-token-file")
 	}
 	if opts.ConfigFile == "" {
-		return errors.New("--config or CICD_SENSOR_MANAGER_CONFIG_FILE is required")
+		return errors.New("--config-file or CICD_SENSOR_MANAGER_CONFIG_FILE is required")
 	}
 	return nil
 }

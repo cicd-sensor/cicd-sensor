@@ -7,15 +7,6 @@ Request / response types are defined with Protocol Buffers, and the source of tr
 Runtime event observation, rule merge, and rule evaluation are Agent responsibilities.
 The Manager does not observe CI/CD runtime directly. It acts as the config / rule delivery and log delivery boundary.
 
-## Protocol boundary
-
-The Manager exposes two endpoints to Agents.
-
-| Service | Method | Purpose |
-| --- | --- | --- |
-| `ConfigService` | `FetchConfig` | Agent fetches config, rule source, and output policy |
-| `CollectorService` | `IngestLog` | Agent sends gzip-compressed JSONL log batches to the manager |
-
 ```mermaid
 flowchart LR
     AGENT["cicd-sensor Agent"]
@@ -43,6 +34,15 @@ flowchart LR
     class CONFIG,COLLECTOR service
 ```
 
+## Protocol boundary
+
+The Manager exposes two endpoints to Agents.
+
+| Service | Method | Purpose |
+| --- | --- | --- |
+| `ConfigService` | `FetchConfig` | Agent fetches config, rule source, and output policy |
+| `CollectorService` | `IngestLog` | Agent sends gzip-compressed JSONL log batches to the manager |
+
 ## Config and rule delivery
 
 Agents fetch config and rules with `ConfigService.FetchConfig`.
@@ -52,7 +52,14 @@ Startup config is read once at process start.
 Rules are checked on each `FetchConfig` request: if the rule bundle file's modification time or size has changed, it is re-parsed; otherwise the cached parse is reused.
 Rule updates therefore take effect by replacing the file on disk, without restarting the Manager.
 
-File paths can be specified by CLI flags or environment variables, but the config and rule contents themselves are not expanded into environment variables.
+The Manager process accepts file locations through either CLI flags or environment variables.
+
+| Input | CLI flag | Environment variable | Reload behavior |
+| --- | --- | --- | --- |
+| Startup config | `--config-file` | `CICD_SENSOR_MANAGER_CONFIG_FILE` | Read at process start |
+| Rule bundle | `--rules-file` | `CICD_SENSOR_MANAGER_RULES_FILE` | Rechecked on each `FetchConfig` request |
+
+Only file locations are part of this startup interface.
 
 Rule sources returned by the Manager are merged and compiled by the Agent.
 The Manager holds the rule bundle, but it does not evaluate runtime events.

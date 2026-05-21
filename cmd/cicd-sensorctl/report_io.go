@@ -9,7 +9,7 @@ import (
 )
 
 type reportIOOptions struct {
-	outputPath string
+	outputFile string
 	help       bool
 }
 
@@ -24,10 +24,10 @@ func parseReportIOArgs(command string, args []string, stderr io.Writer, outputLa
 		fmt.Fprintln(fs.Output(), "  Reads job_result_log JSON from stdin.")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
-		fmt.Fprintln(fs.Output(), "  --output-path PATH")
+		fmt.Fprintln(fs.Output(), "  --output-file FILE")
 		fmt.Fprintf(fs.Output(), "        File to write %s to. Writes to stdout when empty.\n", outputLabel)
 	}
-	fs.StringVar(&opts.outputPath, "output-path", "", "File to write output to.")
+	fs.StringVar(&opts.outputFile, "output-file", "", "File to write output to.")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			opts.help = true
@@ -46,9 +46,9 @@ func readReportInput(stdin io.Reader) ([]byte, error) {
 }
 
 func writeReportOutput(opts reportIOOptions, body []byte, stdout io.Writer) error {
-	if opts.outputPath == "" {
+	if opts.outputFile == "" {
 		_, err := stdout.Write(body)
 		return err
 	}
-	return os.WriteFile(opts.outputPath, body, 0o644)
+	return os.WriteFile(opts.outputFile, body, 0o644)
 }

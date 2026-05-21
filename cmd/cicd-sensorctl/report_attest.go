@@ -13,7 +13,7 @@ import (
 
 // runReportAttest reads a job_result_log JSON document (from stdin or the
 // given file) and writes the runtime-trace attestation predicate as JSON
-// to stdout (or --output-path).
+// to stdout (or --output-file).
 func runReportAttest(_ context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	opts, err := parseReportIOArgs("report attest", args, stderr, "runtime-trace attestation JSON")
 	if err != nil {
