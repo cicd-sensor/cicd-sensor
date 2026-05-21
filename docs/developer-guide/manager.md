@@ -36,7 +36,11 @@ flowchart LR
     COLLECTOR -->|"Stream"| PUBSUB
 
     classDef cicdSensor fill:#ecfdf5,stroke:#0f766e,color:#134e4a,stroke-width:1.5px;
-    class AGENT,MANAGER,CONFIG,COLLECTOR cicdSensor
+    classDef managerFrame fill:#ecfdf5,stroke:#0f766e,color:#134e4a,stroke-width:1.5px;
+    classDef service fill:#ffffff,stroke:#94a3b8,color:#374151,stroke-width:1px;
+    class AGENT cicdSensor
+    class MANAGER managerFrame
+    class CONFIG,COLLECTOR service
 ```
 
 The management API is not defined yet.
