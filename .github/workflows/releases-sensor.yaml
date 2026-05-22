@@ -52,17 +52,12 @@ jobs:
         id: parse
         env:
           VERSION: ${{ inputs.version }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::version must match vX.Y.Z (semver), got '$VERSION'"
             exit 1
           fi
           ref_tag="releases/$VERSION"
-          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${ref_tag}" --silent >/dev/null 2>&1; then
-            echo "::error::tag '$ref_tag' already exists; pick a fresh version"
-            exit 1
-          fi
           echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
           echo "version_tag=$VERSION" >> "$GITHUB_OUTPUT"
           echo "ref_tag=$ref_tag" >> "$GITHUB_OUTPUT"
@@ -83,9 +78,20 @@ jobs:
     needs: [validate]
     uses: ./.github/workflows/bpf-cross-kernel.yaml
 
+  approval:
+    name: Approve release
+    needs: [validate, ci, bpf-integration]
+    runs-on: ubuntu-24.04
+    environment: sensor-releases/approval
+    permissions:
+      contents: read
+    steps:
+      - name: Approved
+        run: echo "approved ${{ needs.validate.outputs.version_tag }}"
+
   build:
     name: Build release binaries
-    needs: [validate, ci, bpf-integration]
+    needs: [validate, approval]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -184,7 +190,6 @@ jobs:
     name: Sign and attest tarballs
     needs: [validate, build]
     runs-on: ubuntu-24.04
-    environment: sensor-releases
     permissions:
       contents: read
       id-token: write
@@ -261,7 +266,6 @@ jobs:
     name: Image (${{ matrix.image }})
     needs: [validate, build]
     runs-on: ubuntu-24.04
-    environment: sensor-releases
     permissions:
       contents: read
       id-token: write
@@ -370,7 +374,6 @@ jobs:
     name: Tag and publish GitHub Release
     needs: [validate, sign-tarballs, image]
     runs-on: ubuntu-24.04
-    environment: sensor-releases
     permissions:
       contents: write
     steps:
@@ -394,11 +397,23 @@ jobs:
           VERSION_TAG: ${{ needs.validate.outputs.version_tag }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          set -eu
           git config user.name  "$ACTOR"
           git config user.email "${ACTOR_ID}+${ACTOR}@users.noreply.github.com"
+          current_commit=$(git rev-parse HEAD)
+          if git ls-remote --exit-code --tags origin "refs/tags/${REF_TAG}" >/dev/null; then
+            git fetch --no-tags --force origin "refs/tags/${REF_TAG}:refs/tags/${REF_TAG}"
+            tag_commit=$(git rev-parse "${REF_TAG}^{commit}")
+            if [ "$tag_commit" != "$current_commit" ]; then
+              echo "::error::tag ${REF_TAG} already exists at ${tag_commit}, not ${current_commit}"
+              exit 1
+            fi
+            echo "::notice::tag ${REF_TAG} already exists at ${current_commit}; reusing it"
+            exit 0
+          fi
           git tag -a "$REF_TAG" \
             -m "Release ${VERSION_TAG} dispatched by @${ACTOR} (run ${RUN_ID})"
-          git push origin "$REF_TAG"
+          git push origin "refs/tags/${REF_TAG}"
 
       - name: Create GitHub Release
         env:
@@ -408,6 +423,10 @@ jobs:
           ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if gh release view "$REF_TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "::notice::release ${REF_TAG} already exists; skipping release creation"
+            exit 0
+          fi
           cd dist
           notes="Released by @${ACTOR} via [workflow run](${RUN_URL})."
           gh release create "$REF_TAG" \
@@ -422,6 +441,15 @@ jobs:
             checksums.txt \
             *.sigstore.json
 
+  bump-action:
+    name: Kick Renovate on cicd-sensor-action
+    needs: [validate, finalize]
+    runs-on: ubuntu-24.04
+    environment: sensor-releases/bump-action
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
       # Kick Renovate on cicd-sensor-action so its `cicd-sensor-version`
       # input default in action.yml gets bumped to this release without
       # waiting for the Mend Renovate App's default poll cycle.
