@@ -3,6 +3,8 @@ package baseline
 import (
 	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,10 +12,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+	cosign "github.com/sigstore/cosign/v3/pkg/cosign"
+	cosignoci "github.com/sigstore/cosign/v3/pkg/oci"
+	cosignremote "github.com/sigstore/cosign/v3/pkg/oci/remote"
+	"github.com/sigstore/sigstore-go/pkg/root"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -30,9 +37,74 @@ const (
 	defaultCacheTTL       = 60 * time.Second
 	defaultRefreshTimeout = 60 * time.Second
 	sourcePullAttempts    = 2
+
+	baselineSignatureExpectedRepository = "cicd-sensor/cicd-sensor"
+	baselineSignatureExpectedRef        = "refs/heads/main"
+	baselineSignatureExpectedIssuer     = "https://token.actions.githubusercontent.com"
+	baselineSignatureExpectedSubject    = `^https://github\.com/cicd-sensor/cicd-sensor/.+@refs/heads/main$`
+	baselineSignatureExpectedPredicate  = "https://sigstore.dev/cosign/sign/v1"
+
+	baselineSignatureVerificationWarning = "baseline_signature_unverified"
 )
 
 var sourcePullRetryDelay = time.Second
+
+type imageSignatureVerifier func(context.Context, name.Reference, *cosign.CheckOpts) ([]cosignoci.Signature, bool, error)
+
+var loadBaselineTrustedRoot = sync.OnceValues(cosign.TrustedRoot)
+var verifyBaselineSignatureBundle imageSignatureVerifier = verifyBaselineCosignBundle
+
+func baselineSignatureCheckOpts(trustedMaterial root.TrustedMaterial) *cosign.CheckOpts {
+	return &cosign.CheckOpts{
+		TrustedMaterial:              trustedMaterial,
+		RegistryClientOpts:           []cosignremote.Option{cosignremote.WithRemoteOptions(remote.WithAuth(authn.Anonymous))},
+		Offline:                      true,
+		NewBundleFormat:              true,
+		ClaimVerifier:                baselineCosignSignClaimVerifier,
+		Identities:                   []cosign.Identity{{Issuer: baselineSignatureExpectedIssuer, SubjectRegExp: baselineSignatureExpectedSubject}},
+		CertGithubWorkflowRepository: baselineSignatureExpectedRepository,
+		CertGithubWorkflowRef:        baselineSignatureExpectedRef,
+	}
+}
+
+func baselineCosignSignClaimVerifier(sig cosignoci.Signature, imageDigest v1.Hash, _ map[string]interface{}) error {
+	payload, err := sig.Payload()
+	if err != nil {
+		return err
+	}
+	var envelope struct {
+		Payload string `json:"payload"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return fmt.Errorf("parse cosign bundle DSSE envelope: %w", err)
+	}
+	statementBytes, err := base64.StdEncoding.DecodeString(envelope.Payload)
+	if err != nil {
+		return fmt.Errorf("decode cosign bundle DSSE payload: %w", err)
+	}
+	var statement struct {
+		PredicateType string `json:"predicateType"`
+		Subject       []struct {
+			Digest map[string]string `json:"digest"`
+		} `json:"subject"`
+	}
+	if err := json.Unmarshal(statementBytes, &statement); err != nil {
+		return fmt.Errorf("parse cosign bundle statement: %w", err)
+	}
+	if statement.PredicateType != baselineSignatureExpectedPredicate {
+		return fmt.Errorf("unexpected cosign bundle predicate type %q", statement.PredicateType)
+	}
+	for _, subject := range statement.Subject {
+		if subject.Digest["sha256"] == imageDigest.Hex {
+			return nil
+		}
+	}
+	return fmt.Errorf("cosign bundle subject does not match image digest %s", imageDigest.String())
+}
+
+func verifyBaselineCosignBundle(ctx context.Context, ref name.Reference, co *cosign.CheckOpts) ([]cosignoci.Signature, bool, error) {
+	return cosign.VerifyImageAttestations(ctx, ref, co)
+}
 
 type source struct {
 	name string
@@ -177,6 +249,7 @@ func pull(ctx context.Context, refStr string, logger *slog.Logger) (rulesource.L
 	if err != nil {
 		return rulesource.LoadedRules{}, "", fmt.Errorf("read baseline digest: %w", err)
 	}
+	verifyBaselineSignature(ctx, logger, refStr, ref, digest.String())
 
 	revision := baselineRevision(manifest, digest.String())
 	loaded, err := loadBaselineRulesFromLayer(img, layerDesc, revision)
@@ -195,6 +268,31 @@ func pull(ctx context.Context, refStr string, logger *slog.Logger) (rulesource.L
 	return loaded, digest.String(), nil
 }
 
+func verifyBaselineSignature(ctx context.Context, logger *slog.Logger, refStr string, ref name.Reference, digest string) {
+	trustedMaterial, err := loadBaselineTrustedRoot()
+	if err != nil {
+		err = fmt.Errorf("load Sigstore trusted root: %w", err)
+	} else {
+		digestRef := ref.Context().Digest(digest)
+		_, _, err = verifyBaselineSignatureBundle(ctx, digestRef, baselineSignatureCheckOpts(trustedMaterial))
+	}
+	if err != nil && logger != nil {
+		logger.WarnContext(ctx, baselineSignatureVerificationWarning,
+			"oci_ref", refStr,
+			"digest", digest,
+			"error", err,
+			"failure_policy", "warn_and_continue",
+			"rules_usage", "use_downloaded_rules",
+			"verification_mode", "offline",
+			"expected_repository", baselineSignatureExpectedRepository,
+			"expected_ref", baselineSignatureExpectedRef,
+			"expected_issuer", baselineSignatureExpectedIssuer,
+			"expected_subject", baselineSignatureExpectedSubject,
+			"expected_predicate", baselineSignatureExpectedPredicate,
+		)
+	}
+}
+
 func baselineLayerDescriptor(manifest *v1.Manifest) (v1.Descriptor, error) {
 	if manifest.MediaType != types.OCIManifestSchema1 {
 		return v1.Descriptor{}, fmt.Errorf("baseline OCI artifact manifest media type %q does not match expected %q", manifest.MediaType, types.OCIManifestSchema1)
@@ -203,8 +301,8 @@ func baselineLayerDescriptor(manifest *v1.Manifest) (v1.Descriptor, error) {
 		return v1.Descriptor{}, fmt.Errorf("baseline OCI artifact must have exactly 1 layer, got %d", len(manifest.Layers))
 	}
 	// Registry metadata is only a hint; the real contract is that the single
-	// layer decodes as a valid cicd-sensor rule bundle. Authenticity belongs to
-	// future Cosign/digest verification, not media type checks.
+	// layer decodes as a valid cicd-sensor rule bundle. Signature verification
+	// is performed separately and is fail-open for availability.
 	return manifest.Layers[0], nil
 }
 

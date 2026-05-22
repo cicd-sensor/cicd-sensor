@@ -190,6 +190,29 @@ jobs:
             cosign sign --yes "$ref"
           done
 
+      - name: Verify cosign v3 signature bundles
+        env:
+          RULES_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          for repo in "$GHCR_REPOSITORY" "$QUAY_REPOSITORY" "$GITLAB_REPOSITORY"; do
+            ref="$(oras resolve --full-reference "${repo}:${RULES_VERSION}")"
+            found=""
+            while IFS= read -r sigref; do
+              manifest="$(oras manifest fetch "$sigref")"
+              if jq -e \
+                --arg digest "${ref#*@}" \
+                '.artifactType == "application/vnd.dev.sigstore.bundle.v0.3+json"
+                 and .annotations["dev.sigstore.bundle.predicateType"] == "https://sigstore.dev/cosign/sign/v1"
+                 and .subject.digest == $digest
+                 and any(.layers[]?; .mediaType == "application/vnd.dev.sigstore.bundle.v0.3+json")' \
+                >/dev/null <<<"$manifest"; then
+                found=1
+                break
+              fi
+            done < <(oras discover --format json "$ref" | jq -r '.referrers[]?.reference')
+            test -n "$found" || { echo "::error::cosign v3 signature bundle not found for $ref"; exit 1; }
+          done
+
       - name: Attest SLSA build provenance (bundle)
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:

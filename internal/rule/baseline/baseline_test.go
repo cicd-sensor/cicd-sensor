@@ -3,14 +3,23 @@ package baseline
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"errors"
+	"log/slog"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+	cosign "github.com/sigstore/cosign/v3/pkg/cosign"
+	cosignoci "github.com/sigstore/cosign/v3/pkg/oci"
+	"github.com/sigstore/sigstore-go/pkg/root"
 )
 
 const validBaselineBundleYAML = `rule_sets:
@@ -31,6 +40,198 @@ rule_modifiers:
       - provider_host: github.com
         path: acme/example
 `
+
+func TestMain(m *testing.M) {
+	loadBaselineTrustedRoot = sync.OnceValues(testTrustedRoot(nil))
+	verifyBaselineSignatureBundle = func(context.Context, name.Reference, *cosign.CheckOpts) ([]cosignoci.Signature, bool, error) {
+		return nil, true, nil
+	}
+	os.Exit(m.Run())
+}
+
+func TestBaselineSignatureCheckOptsLocksExpectedPolicy(t *testing.T) {
+	opts := baselineSignatureCheckOpts(&root.BaseTrustedMaterial{})
+	if opts.TrustedMaterial == nil {
+		t.Fatal("TrustedMaterial should be set")
+	}
+	if len(opts.RegistryClientOpts) == 0 {
+		t.Fatal("RegistryClientOpts should force anonymous public baseline registry access")
+	}
+	if !opts.Offline {
+		t.Fatal("Offline should be true")
+	}
+	if opts.ClaimVerifier == nil {
+		t.Fatal("ClaimVerifier should be set")
+	}
+	if len(opts.Identities) != 1 || opts.Identities[0].Issuer != baselineSignatureExpectedIssuer || opts.Identities[0].SubjectRegExp != baselineSignatureExpectedSubject {
+		t.Fatalf("identity: got %+v want issuer %q subject %q", opts.Identities, baselineSignatureExpectedIssuer, baselineSignatureExpectedSubject)
+	}
+	if opts.CertGithubWorkflowRepository != baselineSignatureExpectedRepository {
+		t.Fatalf("repository: got %q want %q", opts.CertGithubWorkflowRepository, baselineSignatureExpectedRepository)
+	}
+	if opts.CertGithubWorkflowRef != baselineSignatureExpectedRef {
+		t.Fatalf("ref: got %q want %q", opts.CertGithubWorkflowRef, baselineSignatureExpectedRef)
+	}
+	if !opts.NewBundleFormat {
+		t.Fatal("NewBundleFormat should be true for cosign v3 bundle verification")
+	}
+}
+
+func TestVerifyBaselineSignatureSuccessDoesNotWarn(t *testing.T) {
+	ref := mustParseReference(t, "example.com/acme/rules:v1")
+	var calls int
+	withBaselineSignatureHooks(t,
+		testTrustedRoot(nil),
+		func(_ context.Context, got name.Reference, co *cosign.CheckOpts) ([]cosignoci.Signature, bool, error) {
+			calls++
+			if got.Name() != "example.com/acme/rules@"+testDigest() {
+				t.Fatalf("verified ref: got %q", got.Name())
+			}
+			if !co.Offline || co.CertGithubWorkflowRepository != baselineSignatureExpectedRepository || co.CertGithubWorkflowRef != baselineSignatureExpectedRef {
+				t.Fatalf("unexpected check opts: %+v", co)
+			}
+			return nil, true, nil
+		},
+	)
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	verifyBaselineSignature(context.Background(), logger, "example.com/acme/rules:v1", ref, testDigest())
+
+	if calls != 1 {
+		t.Fatalf("verify calls: got %d want 1", calls)
+	}
+	if strings.Contains(buf.String(), baselineSignatureVerificationWarning) {
+		t.Fatalf("unexpected warning log: %s", buf.String())
+	}
+}
+
+func TestVerifyBaselineSignatureFailureWarnsAndContinues(t *testing.T) {
+	ref := mustParseReference(t, "example.com/acme/rules:v1")
+	withBaselineSignatureHooks(t,
+		testTrustedRoot(nil),
+		func(context.Context, name.Reference, *cosign.CheckOpts) ([]cosignoci.Signature, bool, error) {
+			return nil, false, errors.New("bad signature")
+		},
+	)
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	verifyBaselineSignature(context.Background(), logger, "example.com/acme/rules:v1", ref, testDigest())
+
+	logOutput := buf.String()
+	for _, want := range []string{
+		baselineSignatureVerificationWarning,
+		"example.com/acme/rules:v1",
+		testDigest(),
+		"bad signature",
+		"failure_policy=warn_and_continue",
+		"rules_usage=use_downloaded_rules",
+		"verification_mode=offline",
+		"expected_repository=" + baselineSignatureExpectedRepository,
+		"expected_ref=" + baselineSignatureExpectedRef,
+		"expected_issuer=" + baselineSignatureExpectedIssuer,
+		"expected_subject=" + baselineSignatureExpectedSubject,
+	} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q: %s", want, logOutput)
+		}
+	}
+}
+
+func TestVerifyBaselineSignatureTrustedRootFailureWarnsAndSkipsVerifier(t *testing.T) {
+	ref := mustParseReference(t, "example.com/acme/rules:v1")
+	var calls int
+	withBaselineSignatureHooks(t,
+		testTrustedRoot(errors.New("root unavailable")),
+		func(context.Context, name.Reference, *cosign.CheckOpts) ([]cosignoci.Signature, bool, error) {
+			calls++
+			return nil, true, nil
+		},
+	)
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	verifyBaselineSignature(context.Background(), logger, "example.com/acme/rules:v1", ref, testDigest())
+
+	if calls != 0 {
+		t.Fatalf("verify should not be called after trusted root failure, got %d calls", calls)
+	}
+	if !strings.Contains(buf.String(), "load Sigstore trusted root") {
+		t.Fatalf("log should include trusted root failure: %s", buf.String())
+	}
+}
+
+func TestVerifyBaselineSignatureCachesTrustedRoot(t *testing.T) {
+	ref := mustParseReference(t, "example.com/acme/rules:v1")
+	var rootLoads int
+	withBaselineSignatureHooks(t,
+		func() (root.TrustedMaterial, error) {
+			rootLoads++
+			return &root.BaseTrustedMaterial{}, nil
+		},
+		func(context.Context, name.Reference, *cosign.CheckOpts) ([]cosignoci.Signature, bool, error) {
+			return nil, true, nil
+		},
+	)
+
+	verifyBaselineSignature(context.Background(), newTestLogger(), "example.com/acme/rules:v1", ref, testDigest())
+	verifyBaselineSignature(context.Background(), newTestLogger(), "example.com/acme/rules:v1", ref, testDigest())
+
+	if rootLoads != 1 {
+		t.Fatalf("trusted root loads: got %d want 1", rootLoads)
+	}
+}
+
+func TestPullVerifiesSignatureWithResolvedDigest(t *testing.T) {
+	tr := newTestRegistry(t, testRegistryAddr)
+	tr.publish(t, testRuleBundleA)
+
+	var verifiedRef string
+	withBaselineSignatureHooks(t,
+		testTrustedRoot(nil),
+		func(_ context.Context, got name.Reference, _ *cosign.CheckOpts) ([]cosignoci.Signature, bool, error) {
+			verifiedRef = got.Name()
+			return nil, true, nil
+		},
+	)
+
+	loaded, digest, err := pull(context.Background(), tr.ref(t), newTestLogger())
+	if err != nil {
+		t.Fatalf("pull: %v", err)
+	}
+	if len(loaded.RuleSets) != 1 {
+		t.Fatalf("loaded rule sets: got %d want 1", len(loaded.RuleSets))
+	}
+
+	ref := mustParseReference(t, tr.ref(t))
+	wantRef := ref.Context().Digest(digest).Name()
+	if verifiedRef != wantRef {
+		t.Fatalf("verified ref: got %q want %q", verifiedRef, wantRef)
+	}
+}
+
+func TestPullVerifiesSignatureBeforeRulesLayerLoadFails(t *testing.T) {
+	tr := newTestRegistry(t, testRegistryAddr)
+	tr.publish(t, "not: valid: yaml:")
+
+	var calls int
+	withBaselineSignatureHooks(t,
+		testTrustedRoot(nil),
+		func(context.Context, name.Reference, *cosign.CheckOpts) ([]cosignoci.Signature, bool, error) {
+			calls++
+			return nil, true, nil
+		},
+	)
+
+	_, _, err := pull(context.Background(), tr.ref(t), newTestLogger())
+	if err == nil || !strings.Contains(err.Error(), "parse baseline rules bundle") {
+		t.Fatalf("error: got %v want invalid rules bundle", err)
+	}
+	if calls != 1 {
+		t.Fatalf("signature verifier calls: got %d want 1", calls)
+	}
+}
 
 func TestParseRuleBundleGzip(t *testing.T) {
 	loaded, err := parseRuleBundleGzip(bytes.NewReader(gzipBytes(t, validBaselineBundleYAML)), "sha256:test")
@@ -235,6 +436,40 @@ func TestLoadBaselineRulesFromLayer(t *testing.T) {
 			t.Fatalf("error: got %v want invalid rules bundle", err)
 		}
 	})
+}
+
+func testTrustedRoot(err error) func() (root.TrustedMaterial, error) {
+	return func() (root.TrustedMaterial, error) {
+		if err != nil {
+			return nil, err
+		}
+		return &root.BaseTrustedMaterial{}, nil
+	}
+}
+
+func withBaselineSignatureHooks(t *testing.T, loadTrustedRoot func() (root.TrustedMaterial, error), verify imageSignatureVerifier) {
+	t.Helper()
+	oldLoadTrustedRoot := loadBaselineTrustedRoot
+	oldVerify := verifyBaselineSignatureBundle
+	loadBaselineTrustedRoot = sync.OnceValues(loadTrustedRoot)
+	verifyBaselineSignatureBundle = verify
+	t.Cleanup(func() {
+		loadBaselineTrustedRoot = oldLoadTrustedRoot
+		verifyBaselineSignatureBundle = oldVerify
+	})
+}
+
+func mustParseReference(t *testing.T, refStr string) name.Reference {
+	t.Helper()
+	ref, err := name.ParseReference(refStr)
+	if err != nil {
+		t.Fatalf("parse ref: %v", err)
+	}
+	return ref
+}
+
+func testDigest() string {
+	return "sha256:" + strings.Repeat("a", 64)
 }
 
 func imageWithLayers(t *testing.T, layers ...v1.Layer) v1.Image {
