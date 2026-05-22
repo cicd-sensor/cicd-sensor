@@ -421,3 +421,43 @@ jobs:
             cicd-sensor_*_sbom.cdx.json \
             checksums.txt \
             *.sigstore.json
+
+      # Kick Renovate on cicd-sensor-action so its `cicd-sensor-version`
+      # input default in action.yml gets bumped to this release without
+      # waiting for the Mend Renovate App's default poll cycle.
+      # Toggles the "manual job" checkbox on the Dependency Dashboard
+      # issue via the cicd-sensor-action-bump GitHub App.
+      - name: Mint GitHub App token (cicd-sensor-action-bump)
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ACTION_BUMP_APP_ID }}
+          private-key: ${{ secrets.ACTION_BUMP_APP_PRIVATE_KEY }}
+          owner: cicd-sensor
+          repositories: cicd-sensor-action
+
+      - name: Kick Renovate on cicd-sensor-action
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION_TAG: ${{ needs.validate.outputs.version_tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eu
+          target="cicd-sensor/cicd-sensor-action"
+          issue_num=$(gh issue list --repo "$target" --state open \
+            --search 'in:title "Dependency Dashboard"' \
+            --json number,title \
+            --jq '.[] | select(.title == "Dependency Dashboard") | .number' \
+            | head -1)
+          if [ -z "$issue_num" ]; then
+            echo "::warning::no Renovate Dashboard issue on ${target} yet; Mend may still be initialising"
+            exit 0
+          fi
+          body=$(gh issue view "$issue_num" --repo "$target" --json body --jq .body)
+          new_body=$(printf '%s' "$body" | sed 's|- \[ \] <!-- manual job -->|- [x] <!-- manual job -->|')
+          if [ "$body" = "$new_body" ]; then
+            echo "::notice::manual job checkbox already toggled or marker missing on ${target}"
+            exit 0
+          fi
+          printf '%s' "$new_body" | gh issue edit "$issue_num" --repo "$target" --body-file -
+          echo "::notice::kicked Renovate on ${target} for ${VERSION_TAG} (from ${RUN_URL})"
