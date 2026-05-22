@@ -353,6 +353,7 @@ jobs:
           subject-digest: ${{ steps.build_and_push.outputs.digest }}
           sbom-path: dist/cicd-sensor_${{ needs.validate.outputs.version }}_sbom.cdx.json
           push-to-registry: true
+          create-storage-record: false
 
       - name: Attest SLSA build provenance (image)
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
@@ -360,6 +361,7 @@ jobs:
           subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
           subject-digest: ${{ steps.build_and_push.outputs.digest }}
           push-to-registry: true
+          create-storage-record: true
 
       - name: Attest runtime-trace (image)
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
@@ -369,6 +371,7 @@ jobs:
           predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
           predicate-path: trace/predicate.json
           push-to-registry: true
+          create-storage-record: false
 
   finalize:
     name: Tag and publish GitHub Release
