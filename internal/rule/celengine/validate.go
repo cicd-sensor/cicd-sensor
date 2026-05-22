@@ -60,14 +60,14 @@ func newDenyCallValidator() cel.ASTValidator {
 }
 
 func newCorrelationDenyCallValidator() cel.ASTValidator {
-	// `+` is allowed for correlation-level count aggregation. Rule authors can
-	// add raw total_count values, or clamp each count to 0/1 first
-	// (`total_count >= 1 ? 1 : 0`) to count unique categories. Other
-	// arithmetic, regex, and size stay out.
+	// `+` and `-` are allowed for correlation-level scoring: authors add
+	// signals and subtract noise (e.g. presence-bit sums minus a noisy rule's
+	// presence bit). `*`, `/`, `%` stay out because they have no clear use for
+	// hit-count arithmetic and obscure rule intent.
 	return denyCallValidator{
 		name: "cicd_sensor.validator.correlation_deny_calls",
 		forbidden: denyCallSet("matches", "size",
-			operators.Subtract, operators.Multiply, operators.Divide, operators.Modulo,
+			operators.Multiply, operators.Divide, operators.Modulo,
 		),
 	}
 }

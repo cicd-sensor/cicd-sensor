@@ -48,8 +48,8 @@ The default pattern is to keep broad primitive rules as `collect` in the Detecti
 
 ## Adding counts
 
-`+` is allowed in correlation conditions when you want to combine hit counts from multiple primitive rules.
-`-`, `*`, `/`, and `%` are rejected.
+`+` and `-` are allowed in correlation conditions when you want to combine hit counts from multiple primitive rules.
+`*`, `/`, and `%` are rejected.
 
 ```yaml
 condition: |

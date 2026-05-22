@@ -419,6 +419,118 @@ func TestCompileCorrelationAllowsPresenceBitSum(t *testing.T) {
 	}
 }
 
+// TestCompileCorrelationAllowsSubtraction covers the scoring use case where
+// authors subtract a noise rule's presence bit from positive signal bits so a
+// noisy rule firing alone does not push the correlation over its threshold.
+func TestCompileCorrelationAllowsSubtraction(t *testing.T) {
+	t.Parallel()
+
+	env, err := NewEnv()
+	if err != nil {
+		t.Fatalf("new env: %v", err)
+	}
+
+	set := rule.RuleSet{
+		RulesetID: "set-1",
+		Rules: []rule.Rule{
+			{
+				RuleID:    "a",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "a.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+			{
+				RuleID:    "b",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "b.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+			{
+				RuleID:    "noise",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "noise.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+		},
+	}
+	candidate := rule.Rule{
+		RuleID: "scored",
+		Type:   "correlation",
+		Condition: `(
+			(rule.a.total_count >= 1 ? 1 : 0) +
+			(rule.b.total_count >= 1 ? 1 : 0) -
+			(rule.noise.total_count >= 1 ? 1 : 0)
+		) >= 1`,
+		Action: rule.RuleActionDetect,
+	}
+	set.Rules = append(set.Rules, candidate)
+	available := availableRuleCanonicalsForTest(set.RulesetID, set.Rules)
+
+	compiled, err := env.CompileCorrelation(set.RulesetID, candidate, available)
+	if err != nil {
+		t.Fatalf("compile scoring formula with subtraction: %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		counts map[string]int64
+		want   bool
+	}{
+		{"noise_only_does_not_fire", map[string]int64{"set-1/a": 0, "set-1/b": 0, "set-1/noise": 1}, false},
+		{"one_signal_no_noise_fires", map[string]int64{"set-1/a": 1, "set-1/b": 0, "set-1/noise": 0}, true},
+		{"noise_cancels_one_signal", map[string]int64{"set-1/a": 1, "set-1/b": 0, "set-1/noise": 1}, false},
+		{"two_signals_minus_noise_still_fires", map[string]int64{"set-1/a": 1, "set-1/b": 1, "set-1/noise": 1}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := compiled.CompiledCondition.EvalActivation(correlationTestActivation(t, tc.counts))
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("eval %v: got %v, want %v", tc.counts, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCompileCorrelationAllowsNegate locks current behaviour: cel-go's unary
+// negate (`-x`) is a distinct operator from binary subtract and was never on
+// the deny list, so it remains accepted independently of the Subtract change.
+func TestCompileCorrelationAllowsNegate(t *testing.T) {
+	t.Parallel()
+
+	env, err := NewEnv()
+	if err != nil {
+		t.Fatalf("new env: %v", err)
+	}
+
+	set := rule.RuleSet{
+		RulesetID: "set-1",
+		Rules: []rule.Rule{
+			{
+				RuleID:    "a",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "a.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+		},
+	}
+	candidate := rule.Rule{
+		RuleID:    "negated",
+		Type:      "correlation",
+		Condition: `-rule.a.total_count <= 0`,
+		Action:    rule.RuleActionDetect,
+	}
+	set.Rules = append(set.Rules, candidate)
+	available := availableRuleCanonicalsForTest(set.RulesetID, set.Rules)
+
+	if _, err := env.CompileCorrelation(set.RulesetID, candidate, available); err != nil {
+		t.Fatalf("compile negate: %v", err)
+	}
+}
+
 func TestCompileCorrelationRejectsDisallowedArithmetic(t *testing.T) {
 	t.Parallel()
 
@@ -449,7 +561,6 @@ func TestCompileCorrelationRejectsDisallowedArithmetic(t *testing.T) {
 		name      string
 		condition string
 	}{
-		{name: "subtract", condition: `rule.a.total_count - rule.b.total_count >= 1`},
 		{name: "multiply", condition: `rule.a.total_count * 2 >= 1`},
 		{name: "divide", condition: `rule.a.total_count / 2 >= 1`},
 		{name: "modulo", condition: `rule.a.total_count % 2 >= 1`},
