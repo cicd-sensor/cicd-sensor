@@ -64,6 +64,20 @@ When using local rules from the project, validate them before execution.
 cicd-sensorctl rule validate .cicd-sensor/rules/
 ```
 
+## Inspect runtime behavior on GitHub-hosted runners
+
+When iterating on rules on a GitHub-hosted runner in standalone mode, set `enable-debug: true` on the action.
+This starts the agent in debug mode and uploads a debug artifact that includes the Runtime Telemetry Log, so you can see exactly which events your rules observe without setting up a manager.
+
+```yaml
+    steps:
+      - uses: cicd-sensor/cicd-sensor-action@752d3dfc5a6ed789d34626f31b22b1e1068f1ace # v0.0.10
+        with:
+          enable-debug: true
+```
+
+This is the lightest path to confirm that a new rule matches the events you expect during development.
+
 ## Manager handoff
 
 A bundle is required when using rules with the manager.
