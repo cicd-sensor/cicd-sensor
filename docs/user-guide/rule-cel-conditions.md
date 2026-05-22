@@ -1,6 +1,6 @@
 # CEL conditions
 
-`condition` is written in CEL.
+`condition` is written in [Common Expression Language (CEL)](https://cel.dev/).
 A condition must return bool.
 
 ```yaml

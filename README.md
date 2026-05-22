@@ -56,7 +56,7 @@ jobs:
 ## Key features
 
 - **eBPF-powered observability** — observes process execution, network connections, and file access at the kernel level.
-- **CEL-based rule engine** — monitors CI/CD runtime events with readable, flexible expressions.
+- **Flexible rule engine** — monitors CI/CD runtime events with readable, concise expressions.
 - **Correlation detection** — detects combinations of events such as credential access plus suspicious execution, instead of relying only on single events.
 - **Runtime security logs** — emits Job Result Logs, Detection Logs, and Runtime Telemetry Logs for real-time detection, triage, incident response, and forensics.
 - **Runtime report and attestation** — generates a graphical report and an in-toto compatible runtime-trace attestation predicate so teams can review and verify CI/CD runtime activity.
