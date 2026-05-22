@@ -24,18 +24,18 @@ CTL_CROSS_TARGETS := darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 .PHONY: help
 help:
 	@printf '%s\n' 'Common targets:'
-	@printf '  %-24s %s\n' 'make generate' 'regenerate proto and BPF artifacts'
-	@printf '  %-24s %s\n' 'make test' 'run the normal Go test suite'
-	@printf '  %-24s %s\n' 'make check' 'run generation, tests, rule validation, and diff checks'
-	@printf '  %-24s %s\n' 'make build' 'build Linux amd64/arm64 release binaries into ./dist'
-	@printf '  %-24s %s\n' 'make build-ctl-cross' 'build cicd-sensorctl for macOS/Windows into ./dist'
-	@printf '  %-24s %s\n' 'make build-local-ctl' 'build cicd-sensorctl for the local host into ./bin'
-	@printf '  %-24s %s\n' 'make bench-cel' 'run CEL evaluation benchmark once'
-	@printf '  %-24s %s\n' 'make rules-bundle' 'bundle rules/ into $(RULE_BUNDLE)'
-	@printf '  %-24s %s\n' 'make validate-rules-artifact' 'pull and validate an OCI rules artifact'
-	@printf '  %-24s %s\n' 'make test-integration' 'run privileged Linux integration tests'
-	@printf '  %-24s %s\n' 'make vendor' 'refresh vendor/ from go.mod'
-	@printf '  %-24s %s\n' 'make clean' 'remove local build outputs'
+	@printf '  %-29s %s\n' 'make generate' 'regenerate proto and BPF artifacts'
+	@printf '  %-29s %s\n' 'make test' 'run the normal Go test suite'
+	@printf '  %-29s %s\n' 'make check' 'run generation, tests, rule validation, and diff checks'
+	@printf '  %-29s %s\n' 'make build' 'build Linux amd64/arm64 release binaries into ./dist'
+	@printf '  %-29s %s\n' 'make build-ctl-cross' 'build cicd-sensorctl for macOS/Windows into ./dist'
+	@printf '  %-29s %s\n' 'make build-local-ctl' 'build cicd-sensorctl for the local host into ./bin'
+	@printf '  %-29s %s\n' 'make bench-cel' 'run CEL evaluation benchmark once'
+	@printf '  %-29s %s\n' 'make rules-bundle' 'bundle rules/ into $(RULE_BUNDLE)'
+	@printf '  %-29s %s\n' 'make rules-artifact-validate' 'pull and validate an OCI rules artifact'
+	@printf '  %-29s %s\n' 'make test-integration' 'run privileged Linux integration tests'
+	@printf '  %-29s %s\n' 'make vendor' 'refresh vendor/ from go.mod'
+	@printf '  %-29s %s\n' 'make clean' 'remove local build outputs'
 
 .PHONY: generate
 generate: generate-proto generate-bpf
@@ -131,8 +131,8 @@ rules-bundle:
 rules-bundle-validate: rules-bundle
 	$(GO) run $(GO_MOD_FLAG) ./cmd/cicd-sensorctl rule validate $(RULE_BUNDLE)
 
-.PHONY: validate-rules-artifact
-validate-rules-artifact:
+.PHONY: rules-artifact-validate
+rules-artifact-validate:
 	@test -n "$(RULE_ARTIFACT_REF)" || { echo "RULE_ARTIFACT_REF is required"; exit 1; }
 	rm -rf $(RULE_ARTIFACT_DIR)
 	mkdir -p $(RULE_ARTIFACT_DIR)

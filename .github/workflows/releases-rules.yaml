@@ -108,7 +108,7 @@ jobs:
           RULES_VERSION: ${{ steps.rules.outputs.version }}
         run: |
           for repo in "$GHCR_REPOSITORY" "$QUAY_REPOSITORY" "$GITLAB_REPOSITORY"; do
-            make validate-rules-artifact RULE_ARTIFACT_REF="${repo}:${RULES_VERSION}"
+            make rules-artifact-validate RULE_ARTIFACT_REF="${repo}:${RULES_VERSION}"
           done
 
       - name: Sign versioned rules artifacts
