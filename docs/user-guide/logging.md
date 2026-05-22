@@ -20,10 +20,6 @@ Every log entry includes a `job` object.
 Use these fields to group logs for the same CI job.
 Other fields add useful context for search, reports, and triage.
 
-### Job Identity
-
-These fields identify where the job ran.
-
 | Field | Description |
 | --- | --- |
 | `provider` | `github` or `gitlab` |
@@ -36,13 +32,6 @@ These fields identify where the job ran.
 | `github_run_attempt` | GitHub Actions run attempt |
 | `github_runner_tracking_id` | GitHub runner tracking ID |
 | `gitlab_job_id` | GitLab CI job execution ID |
-
-### Job metadata
-
-These fields are enrichment for search, reports, and triage.
-
-| Field | Description |
-| --- | --- |
 | `commit_sha` | Target commit |
 | `ref_name` | Branch or tag |
 | `trigger` | CI event or trigger |

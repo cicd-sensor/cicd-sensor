@@ -77,6 +77,17 @@ Scope owns rule, summary, and output state, but it does not operate the Kernel R
 
 A **Job** is one CI/CD job tracked by the Agent. It is identified by the provider-supplied job identity (repository, workflow run, job name, runner) and owns its own cgroup tracking, rule evaluation, scope-local summaries, and outputs. The Agent can run many Jobs at the same time; each Job is finalized independently when its work completes.
 
+The Agent separates job identity from job metadata.
+Identity is required to register and track a Job.
+Metadata is attached to the Job for logs, reports, and search.
+
+| Category | Fields | Required | Purpose |
+| --- | --- | --- | --- |
+| Job identity | `provider`, `provider_host`, `project_path` | Yes | Common provider identity for every Job |
+| GitHub identity | `github_run_id`, `github_job`, `github_run_attempt`, `github_runner_tracking_id` | Yes for GitHub Jobs | Identifies a GitHub Actions job run attempt and runner tracking ID |
+| GitLab identity | `gitlab_job_id` | Yes for GitLab Jobs | Identifies a GitLab CI job execution |
+| Job metadata | `commit_sha`, `ref_name`, `trigger`, `actor_id`, `actor_name`, `github_workflow_ref`, `github_workflow_sha`, `github_workflow`, `gitlab_job_name`, `gitlab_config_ref_uri` | No | Enriches logs, reports, and triage |
+
 ### Scope
 
 A **Scope** is the configuration / control surface attached to a Job. Two kinds exist, and a single Job may have one or both:
