@@ -45,3 +45,24 @@ condition: |
 ```
 
 The default pattern is to keep broad primitive rules as `collect` in the Detection Log, then add a correlation rule that emits a stronger `detect` signal.
+
+## Counting unique categories with presence bits
+
+When you want a correlation to fire only when multiple distinct categories of primitive rule fire — rather than when one noisy rule fires many times — convert each `total_count` to a presence bit (`0` or `1`) with the ternary operator and add the bits together.
+
+`+` is the only arithmetic operator allowed in correlation conditions; `-`, `*`, `/`, and `%` are rejected so the only addition pattern that compiles is summing values you have already clamped to `0` or `1`.
+
+```yaml
+- rule_id: npm_install_multi_secret_surface
+  type: correlation
+  condition: |
+    (
+      (rule.npm_install_cloud_secret_surface.total_count >= 1 ? 1 : 0) +
+      (rule.npm_install_registry_secret_surface.total_count >= 1 ? 1 : 0) +
+      (rule.npm_install_vcs_secret_surface.total_count >= 1 ? 1 : 0) +
+      (rule.npm_install_ai_devtool_secret_surface.total_count >= 1 ? 1 : 0)
+    ) > 1
+  action: detect
+```
+
+Adding raw `total_count` values is *not* the same thing: 50 hits of one primitive rule would still cross the threshold, masking the "multiple surfaces touched" signal you actually want. Wrap each reference in `total_count >= 1 ? 1 : 0` first, then count those presence bits.

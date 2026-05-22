@@ -346,6 +346,134 @@ func TestCompileCorrelationKeepsRuleIDCase(t *testing.T) {
 	}
 }
 
+func TestCompileCorrelationAllowsPresenceBitSum(t *testing.T) {
+	t.Parallel()
+
+	env, err := NewEnv()
+	if err != nil {
+		t.Fatalf("new env: %v", err)
+	}
+
+	set := rule.RuleSet{
+		RulesetID: "set-1",
+		Rules: []rule.Rule{
+			{
+				RuleID:    "a",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "a.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+			{
+				RuleID:    "b",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "b.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+			{
+				RuleID:    "c",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "c.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+		},
+	}
+	candidate := rule.Rule{
+		RuleID: "presence_sum",
+		Type:   "correlation",
+		Condition: `(
+			(rule.a.total_count >= 1 ? 1 : 0) +
+			(rule.b.total_count >= 1 ? 1 : 0) +
+			(rule.c.total_count >= 1 ? 1 : 0)
+		) >= 2`,
+		Action: rule.RuleActionDetect,
+	}
+	set.Rules = append(set.Rules, candidate)
+	available := availableRuleCanonicalsForTest(set.RulesetID, set.Rules)
+
+	compiled, err := env.CompileCorrelation(set.RulesetID, candidate, available)
+	if err != nil {
+		t.Fatalf("compile presence-bit sum: %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		counts map[string]int64
+		want   bool
+	}{
+		{"all_zero", map[string]int64{"set-1/a": 0, "set-1/b": 0, "set-1/c": 0}, false},
+		{"single_category_many_hits", map[string]int64{"set-1/a": 3, "set-1/b": 0, "set-1/c": 0}, false},
+		{"two_categories", map[string]int64{"set-1/a": 3, "set-1/b": 1, "set-1/c": 0}, true},
+		{"three_categories_high_counts", map[string]int64{"set-1/a": 10, "set-1/b": 2, "set-1/c": 7}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := compiled.CompiledCondition.EvalActivation(correlationTestActivation(t, tc.counts))
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("eval %v: got %v, want %v", tc.counts, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCompileCorrelationRejectsDisallowedArithmetic(t *testing.T) {
+	t.Parallel()
+
+	env, err := NewEnv()
+	if err != nil {
+		t.Fatalf("new env: %v", err)
+	}
+
+	set := rule.RuleSet{
+		RulesetID: "set-1",
+		Rules: []rule.Rule{
+			{
+				RuleID:    "a",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "a.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+			{
+				RuleID:    "b",
+				EventKind: jobevent.NetworkConnect,
+				Condition: `remote_ip == "b.example.com"`,
+				Action:    rule.RuleActionDetect,
+			},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		condition string
+	}{
+		{name: "subtract", condition: `rule.a.total_count - rule.b.total_count >= 1`},
+		{name: "multiply", condition: `rule.a.total_count * 2 >= 1`},
+		{name: "divide", condition: `rule.a.total_count / 2 >= 1`},
+		{name: "modulo", condition: `rule.a.total_count % 2 >= 1`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := rule.Rule{
+				RuleID:    "corr",
+				Type:      "correlation",
+				Condition: tt.condition,
+				Action:    rule.RuleActionDetect,
+			}
+			rules := append([]rule.Rule{}, set.Rules...)
+			rules = append(rules, candidate)
+			available := availableRuleCanonicalsForTest(set.RulesetID, rules)
+			if _, err := env.CompileCorrelation(set.RulesetID, candidate, available); err == nil {
+				t.Fatalf("expected compile error for %s", tt.name)
+			}
+		})
+	}
+}
+
 func correlationTestActivation(t *testing.T, counts map[string]int64) cel.Activation {
 	t.Helper()
 

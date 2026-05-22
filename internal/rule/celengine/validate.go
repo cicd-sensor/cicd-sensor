@@ -10,7 +10,8 @@
 //     arithmetic and regex are footguns we don't want in the rule
 //     corpus today.
 //   - denyCallValidator (correlation): subset of the above. Index is
-//     allowed because `rule["id"]` uses it.
+//     allowed because `rule["id"]` uses it, and `+` is allowed for
+//     presence-bit sums across primitive rules.
 //   - inIPRangeValidator: confirm the CIDR argument to inIpRange is a
 //     literal string and parses. Variable CIDR is rejected because the
 //     current binding parses on every call (see inIPRangeBinding); we'd
@@ -58,12 +59,12 @@ func newDenyCallValidator() cel.ASTValidator {
 }
 
 func newCorrelationDenyCallValidator() cel.ASTValidator {
-	// Correlations only read `rule.<id>.total_count` / `rule["id"].total_count`.
-	// Regex, arithmetic, and size are out; macros are disabled in the env.
+	// `+` is allowed so presence-bit sums (`total_count >= 1 ? 1 : 0`) can
+	// count unique categories; other arithmetic, regex, and size stay out.
 	return denyCallValidator{
 		name: "cicd_sensor.validator.correlation_deny_calls",
 		forbidden: denyCallSet("matches", "size",
-			operators.Add, operators.Subtract, operators.Multiply, operators.Divide, operators.Modulo,
+			operators.Subtract, operators.Multiply, operators.Divide, operators.Modulo,
 		),
 	}
 }
