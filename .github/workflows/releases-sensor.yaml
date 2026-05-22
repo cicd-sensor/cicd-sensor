@@ -1,46 +1,108 @@
 ---
 name: Release Sensor
 
-# Tag-triggered release workflow. Produces binary-only GitHub Release tarballs,
-# SHA256 checksums, cosign keyless signature bundles, and GHCR images.
+# Dispatch-driven release workflow. Triggered from the GitHub Actions UI
+# with a semver `version` input. Produces binary-only GitHub Release
+# tarballs, SHA256 checksums, cosign keyless signature bundles, a
+# CycloneDX SBOM, and GHCR images, all bound to three GitHub Artifact
+# Attestations (CycloneDX SBOM, SLSA build provenance, and an in-toto
+# runtime-trace predicate emitted by cicd-sensor itself).
 #
-# Verify a tarball:
+# Verify a tarball (Sigstore bundle):
 #   cosign verify-blob \
 #     --bundle cicd-sensor_<version>_linux_amd64.tar.gz.sigstore.json \
 #     --certificate-identity \
-#       https://github.com/cicd-sensor/cicd-sensor/.github/workflows/releases-sensor.yaml@refs/tags/releases/v<version> \
+#       https://github.com/cicd-sensor/cicd-sensor/.github/workflows/releases-sensor.yaml@refs/heads/main \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     --certificate-github-workflow-trigger workflow_dispatch \
+#     --certificate-github-workflow-repository cicd-sensor/cicd-sensor \
 #     cicd-sensor_<version>_linux_amd64.tar.gz
+#
+# Verify the three attestations:
+#   gh attestation verify cicd-sensor_<version>_linux_amd64.tar.gz \
+#     --owner cicd-sensor \
+#     --predicate-type https://cyclonedx.org/bom/v1.6
+#   gh attestation verify cicd-sensor_<version>_linux_amd64.tar.gz \
+#     --owner cicd-sensor \
+#     --predicate-type https://slsa.dev/provenance/v1
+#   gh attestation verify cicd-sensor_<version>_linux_amd64.tar.gz \
+#     --owner cicd-sensor \
+#     --predicate-type https://in-toto.io/attestation/runtime-trace/v0.1
 "on":
-  push:
-    tags:
-      - "releases/v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v0.0.11)'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      version_tag: ${{ steps.parse.outputs.version_tag }}
+      ref_tag: ${{ steps.parse.outputs.ref_tag }}
+    steps:
+      - name: Parse and validate version
+        id: parse
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must match vX.Y.Z (semver), got '$VERSION'"
+            exit 1
+          fi
+          ref_tag="releases/$VERSION"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${ref_tag}" --silent >/dev/null 2>&1; then
+            echo "::error::tag '$ref_tag' already exists; pick a fresh version"
+            exit 1
+          fi
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref_tag=$ref_tag" >> "$GITHUB_OUTPUT"
+
   # Run the same CI checks (lint, unit tests, build sanity) the
   # branch sees on every PR / main push before any release artifact
   # is produced.
   ci:
     name: CI gate
+    needs: [validate]
     uses: ./.github/workflows/ci.yaml
 
-  # Real-kernel integration tests on multiple kernels. A release tag
+  # Real-kernel integration tests on multiple kernels. A release
   # waits for this to succeed so we never publish binaries that fail
   # the BPF verifier on a supported kernel.
   bpf-integration:
     name: BPF integration gate
+    needs: [validate]
     uses: ./.github/workflows/bpf-cross-kernel.yaml
 
   build:
     name: Build release binaries
-    needs: [ci, bpf-integration]
+    needs: [validate, ci, bpf-integration]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # cicd-sensor-action's predicate generation uses these to fetch
+      # config from the calling repo via the Contents API and to upload
+      # the cicd-sensor-attestation artifact.
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Self-monitor the release build. The post step uploads the
+      # cicd-sensor-attestation artifact (containing predicate.json)
+      # at job end, which the downstream sign-tarballs and image
+      # jobs sign with actions/attest as a runtime-trace attestation.
+      - name: Start cicd-sensor (self-monitoring)
+        uses: cicd-sensor/cicd-sensor-action@752d3dfc5a6ed789d34626f31b22b1e1068f1ace # v0.0.10
 
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -48,32 +110,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Resolve release tag
-        id: release
-        env:
-          REF_TAG: ${{ github.ref_name }}
-        run: |
-          ref_tag="${REF_TAG}"
-          case "$ref_tag" in
-            releases/v*) ;;
-            *) echo "::error::release tag must match releases/v*: $ref_tag"; exit 1 ;;
-          esac
-          version_tag="${ref_tag#releases/}"
-          echo "ref_tag=$ref_tag" >> "$GITHUB_OUTPUT"
-          echo "version_tag=$version_tag" >> "$GITHUB_OUTPUT"
-          echo "version=${version_tag#v}" >> "$GITHUB_OUTPUT"
-
       - name: Build Linux binaries
-        run: make build VERSION="${{ steps.release.outputs.version_tag }}"
+        run: make build VERSION="${{ needs.validate.outputs.version_tag }}"
 
       - name: Build cicd-sensorctl macOS/Windows binaries
-        run: make build-ctl-cross VERSION="${{ steps.release.outputs.version_tag }}"
+        run: make build-ctl-cross VERSION="${{ needs.validate.outputs.version_tag }}"
 
       - name: Package tarballs
         run: |
           set -eu
           mkdir -p release
-          version="${{ steps.release.outputs.version }}"
+          version="${{ needs.validate.outputs.version }}"
 
           for arch in amd64 arm64; do
             pkg="release/pkg-linux-${arch}"
@@ -107,6 +154,15 @@ jobs:
             ls -lh "release/${zipfile}"
           done
 
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: ./
+          format: cyclonedx-json
+          output-file: release/cicd-sensor_${{ needs.validate.outputs.version }}_sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
       - name: Upload archives
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -117,77 +173,101 @@ jobs:
             release/cicd-sensorctl_*.zip
           if-no-files-found: error
 
-  release:
-    name: Publish GitHub Release
-    needs: build
+      - name: Upload SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-sbom
+          path: release/cicd-sensor_*_sbom.cdx.json
+          if-no-files-found: error
+
+  sign-tarballs:
+    name: Sign and attest tarballs
+    needs: [validate, build]
     runs-on: ubuntu-24.04
     environment: sensor-releases
     permissions:
-      contents: write
+      contents: read
       id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
-      - name: Resolve release tag
-        id: release
-        env:
-          REF_TAG: ${{ github.ref_name }}
-        run: |
-          ref_tag="${REF_TAG}"
-          case "$ref_tag" in
-            releases/v*) ;;
-            *) echo "::error::release tag must match releases/v*: $ref_tag"; exit 1 ;;
-          esac
-          version_tag="${ref_tag#releases/}"
-          echo "ref_tag=$ref_tag" >> "$GITHUB_OUTPUT"
-          echo "version_tag=$version_tag" >> "$GITHUB_OUTPUT"
-
       - name: Download tarballs
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-tarballs
           path: dist
 
+      - name: Download SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-sbom
+          path: dist
+
+      - name: Download cicd-sensor runtime-trace predicate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cicd-sensor-attestation
+          path: trace
+
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum cicd-sensor_*.tar.gz cicd-sensorctl_*.tar.gz cicd-sensorctl_*.zip > checksums.txt
+          sha256sum cicd-sensor_*.tar.gz cicd-sensorctl_*.tar.gz cicd-sensorctl_*.zip cicd-sensor_*_sbom.cdx.json > checksums.txt
           cat checksums.txt
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      - name: Sign archives and checksums
+      - name: Sign archives, SBOM, and checksums
         run: |
           cd dist
-          for file in cicd-sensor_*.tar.gz cicd-sensorctl_*.tar.gz cicd-sensorctl_*.zip checksums.txt; do
-            cosign sign-blob --bundle "${file}.sigstore.json" "$file"
+          for file in cicd-sensor_*.tar.gz cicd-sensorctl_*.tar.gz cicd-sensorctl_*.zip cicd-sensor_*_sbom.cdx.json checksums.txt; do
+            cosign sign-blob --yes --bundle "${file}.sigstore.json" "$file"
           done
           ls -la
 
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cd dist
-          gh release create "${{ steps.release.outputs.ref_tag }}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "${{ steps.release.outputs.version_tag }}" \
-            --generate-notes \
-            --verify-tag \
-            cicd-sensor_*.tar.gz \
-            cicd-sensorctl_*.tar.gz \
-            cicd-sensorctl_*.zip \
-            checksums.txt \
-            *.sigstore.json
+      - name: Attest SBOM (CycloneDX)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-checksums: dist/checksums.txt
+          sbom-path: dist/cicd-sensor_${{ needs.validate.outputs.version }}_sbom.cdx.json
+
+      - name: Attest SLSA build provenance
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-checksums: dist/checksums.txt
+
+      - name: Attest runtime-trace (cicd-sensor)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-checksums: dist/checksums.txt
+          predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
+          predicate-path: trace/predicate.json
+
+      - name: Upload signed release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-signed
+          path: |
+            dist/cicd-sensor_*.tar.gz
+            dist/cicd-sensorctl_*.tar.gz
+            dist/cicd-sensorctl_*.zip
+            dist/cicd-sensor_*_sbom.cdx.json
+            dist/checksums.txt
+            dist/*.sigstore.json
+          if-no-files-found: error
 
   image:
     name: Image (${{ matrix.image }})
-    needs: build
+    needs: [validate, build]
     runs-on: ubuntu-24.04
     environment: sensor-releases
     permissions:
       contents: read
       id-token: write
       packages: write
+      attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -202,19 +282,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Resolve release tag
-        id: release
-        env:
-          REF_TAG: ${{ github.ref_name }}
-        run: |
-          ref_tag="${REF_TAG}"
-          case "$ref_tag" in
-            releases/v*) ;;
-            *) echo "::error::release tag must match releases/v*: $ref_tag"; exit 1 ;;
-          esac
-          version_tag="${ref_tag#releases/}"
-          echo "ref_tag=$ref_tag" >> "$GITHUB_OUTPUT"
-          echo "version_tag=$version_tag" >> "$GITHUB_OUTPUT"
+      - name: Download SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-sbom
+          path: dist
+
+      - name: Download cicd-sensor runtime-trace predicate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cicd-sensor-attestation
+          path: trace
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -230,7 +308,7 @@ jobs:
         id: tags
         env:
           IMAGE: ${{ matrix.image }}
-          TAG: ${{ steps.release.outputs.version_tag }}
+          TAG: ${{ needs.validate.outputs.version_tag }}
         run: |
           tags="ghcr.io/cicd-sensor/${IMAGE}:${TAG}"
           if [[ "$TAG" != *-* ]]; then
@@ -252,7 +330,7 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
-            VERSION=${{ steps.release.outputs.version_tag }}
+            VERSION=${{ needs.validate.outputs.version_tag }}
           provenance: true
           sbom: true
 
@@ -263,3 +341,83 @@ jobs:
         run: |
           cosign sign --yes \
             "ghcr.io/cicd-sensor/${{ matrix.image }}@${{ steps.build_and_push.outputs.digest }}"
+
+      - name: Attest SBOM (image)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
+          subject-digest: ${{ steps.build_and_push.outputs.digest }}
+          sbom-path: dist/cicd-sensor_${{ needs.validate.outputs.version }}_sbom.cdx.json
+          push-to-registry: true
+
+      - name: Attest SLSA build provenance (image)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
+          subject-digest: ${{ steps.build_and_push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest runtime-trace (image)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
+          subject-digest: ${{ steps.build_and_push.outputs.digest }}
+          predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
+          predicate-path: trace/predicate.json
+          push-to-registry: true
+
+  finalize:
+    name: Tag and publish GitHub Release
+    needs: [validate, sign-tarballs, image]
+    runs-on: ubuntu-24.04
+    environment: sensor-releases
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # We will push a new annotated tag back to the remote.
+          persist-credentials: true
+
+      - name: Download signed release assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-signed
+          path: dist
+
+      - name: Create annotated tag as dispatcher
+        env:
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
+          REF_TAG: ${{ needs.validate.outputs.ref_tag }}
+          VERSION_TAG: ${{ needs.validate.outputs.version_tag }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          git config user.name  "$ACTOR"
+          git config user.email "${ACTOR_ID}+${ACTOR}@users.noreply.github.com"
+          git tag -a "$REF_TAG" \
+            -m "Release ${VERSION_TAG} dispatched by @${ACTOR} (run ${RUN_ID})"
+          git push origin "$REF_TAG"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_TAG: ${{ needs.validate.outputs.ref_tag }}
+          VERSION_TAG: ${{ needs.validate.outputs.version_tag }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          cd dist
+          notes="Released by @${ACTOR} via [workflow run](${RUN_URL})."
+          gh release create "$REF_TAG" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "$VERSION_TAG" \
+            --notes "$notes" \
+            --verify-tag \
+            cicd-sensor_*.tar.gz \
+            cicd-sensorctl_*.tar.gz \
+            cicd-sensorctl_*.zip \
+            cicd-sensor_*_sbom.cdx.json \
+            checksums.txt \
+            *.sigstore.json

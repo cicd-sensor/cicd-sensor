@@ -84,6 +84,37 @@ Linux kernel: 5.15 or later on `x86_64`, 6.1 or later on `aarch64`.
 - [Attestation predicate](https://cicd-sensor.github.io/user-guide/attestation-predicate.html) — runtime-trace predicate for CI/CD runtime evidence.
 - [Developer Guide](https://cicd-sensor.github.io/developer-guide/overview.html) — agent, eBPF runtime, manager, and rule engine internals.
 
+## Verifying releases
+
+Every release tarball and container image is signed with Sigstore keyless signing and carries three GitHub Artifact Attestations: a CycloneDX SBOM, a SLSA build provenance, and an in-toto runtime-trace predicate that cicd-sensor itself records while monitoring the release build.
+
+```bash
+# Sigstore signature on the tarball
+cosign verify-blob \
+  --bundle cicd-sensor_v0.0.11_linux_amd64.tar.gz.sigstore.json \
+  --certificate-identity \
+    https://github.com/cicd-sensor/cicd-sensor/.github/workflows/releases-sensor.yaml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-github-workflow-trigger workflow_dispatch \
+  --certificate-github-workflow-repository cicd-sensor/cicd-sensor \
+  cicd-sensor_v0.0.11_linux_amd64.tar.gz
+
+# SBOM, SLSA provenance, and runtime-trace attestations
+gh attestation verify cicd-sensor_v0.0.11_linux_amd64.tar.gz --owner cicd-sensor \
+  --predicate-type https://cyclonedx.org/bom/v1.6
+gh attestation verify cicd-sensor_v0.0.11_linux_amd64.tar.gz --owner cicd-sensor \
+  --predicate-type https://slsa.dev/provenance/v1
+gh attestation verify cicd-sensor_v0.0.11_linux_amd64.tar.gz --owner cicd-sensor \
+  --predicate-type https://in-toto.io/attestation/runtime-trace/v0.1
+```
+
+Container images attach the same three attestations to the registry:
+
+```bash
+gh attestation verify oci://ghcr.io/cicd-sensor/cicd-sensor-agent:v0.0.11 --owner cicd-sensor \
+  --predicate-type https://in-toto.io/attestation/runtime-trace/v0.1
+```
+
 ## License
 
 Apache License 2.0 ([LICENSE](LICENSE)). BPF source under `internal/agent/bpf/` is dual-licensed `GPL-2.0-only OR BSD-2-Clause` ([details](internal/agent/bpf/README.md#licensing)).

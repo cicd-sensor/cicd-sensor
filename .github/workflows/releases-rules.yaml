@@ -1,18 +1,26 @@
 ---
 name: Release Rules
 
+# Dispatch-driven rules release workflow. Triggered from the GitHub
+# Actions UI with a `version` input (rules calendar versioning,
+# e.g. v20260522-001). Publishes the baseline rules bundle as a
+# signed OCI artifact to GHCR / Quay / GitLab and binds it to two
+# GitHub Artifact Attestations (SLSA build provenance and an
+# in-toto runtime-trace predicate emitted by cicd-sensor itself).
+
 "on":
-  push:
-    tags:
-      - "rules/v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Rules version (e.g. v20260522-001)'
+        required: true
+        type: string
 
 permissions:
   contents: read
-  id-token: write
-  packages: write
 
 concurrency:
-  group: publish-baseline-rules-${{ github.ref }}
+  group: publish-baseline-rules-${{ inputs.version }}
   cancel-in-progress: false
 
 env:
@@ -22,31 +30,57 @@ env:
   GITLAB_REPOSITORY: registry.gitlab.com/cicd-sensor/cicd-sensor-rules
 
 jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      ref_tag: ${{ steps.parse.outputs.ref_tag }}
+    steps:
+      - name: Parse and validate version
+        id: parse
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]{8}-[0-9]{3}$ ]]; then
+            echo "::error::version must match vYYYYMMDD-NNN, got '$VERSION'"
+            exit 1
+          fi
+          ref_tag="rules/$VERSION"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${ref_tag}" --silent >/dev/null 2>&1; then
+            echo "::error::tag '$ref_tag' already exists; pick a fresh version"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref_tag=$ref_tag" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish rules artifact
+    needs: [validate]
     runs-on: ubuntu-24.04
     environment: rules-releases
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Self-monitor the rules build and publish. The post step
+      # uploads the cicd-sensor-attestation artifact (containing
+      # predicate.json) at job end, which the downstream attest job
+      # signs with actions/attest as a runtime-trace attestation.
+      - name: Start cicd-sensor (self-monitoring)
+        uses: cicd-sensor/cicd-sensor-action@752d3dfc5a6ed789d34626f31b22b1e1068f1ace # v0.0.10
 
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Resolve rules version
-        id: rules
-        env:
-          REF_TAG: ${{ github.ref_name }}
-        run: |
-          version="${REF_TAG#rules/}"
-          if [[ ! "$version" =~ ^v[0-9]{8}-[0-9]{3}$ ]]; then
-            echo "::error::rules version must match rules/vYYYYMMDD-NNN, got '${REF_TAG}'"
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup ORAS
         uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2.0.0
@@ -89,7 +123,7 @@ jobs:
 
       - name: Push versioned rules artifact
         env:
-          RULES_VERSION: ${{ steps.rules.outputs.version }}
+          RULES_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           cd "$RUNNER_TEMP"
           for repo in "$GHCR_REPOSITORY" "$QUAY_REPOSITORY"; do
@@ -105,15 +139,24 @@ jobs:
 
       - name: Validate pushed rules artifacts
         env:
-          RULES_VERSION: ${{ steps.rules.outputs.version }}
+          RULES_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           for repo in "$GHCR_REPOSITORY" "$QUAY_REPOSITORY" "$GITLAB_REPOSITORY"; do
             make rules-artifact-validate RULE_ARTIFACT_REF="${repo}:${RULES_VERSION}"
           done
 
+      - name: Resolve GHCR digest
+        id: digest
+        env:
+          RULES_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          ref="$(oras resolve --full-reference "${GHCR_REPOSITORY}:${RULES_VERSION}")"
+          digest="${ref#*@}"
+          echo "ghcr_digest=${digest}" >> "$GITHUB_OUTPUT"
+
       - name: Sign versioned rules artifacts
         env:
-          RULES_VERSION: ${{ steps.rules.outputs.version }}
+          RULES_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           for repo in "$GHCR_REPOSITORY" "$QUAY_REPOSITORY" "$GITLAB_REPOSITORY"; do
             ref="$(oras resolve --full-reference "${repo}:${RULES_VERSION}")"
@@ -122,8 +165,97 @@ jobs:
 
       - name: Promote rules artifact to v1
         env:
-          RULES_VERSION: ${{ steps.rules.outputs.version }}
+          RULES_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           for repo in "$GHCR_REPOSITORY" "$QUAY_REPOSITORY" "$GITLAB_REPOSITORY"; do
             oras copy "${repo}:${RULES_VERSION}" "${repo}:v1"
           done
+
+      - name: Upload rules bundle for attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rules-bundle
+          path: ${{ runner.temp }}/baseline-rules.yaml.gz
+          if-no-files-found: error
+
+    outputs:
+      ghcr_digest: ${{ steps.digest.outputs.ghcr_digest }}
+
+  attest:
+    name: Attest rules artifact
+    needs: [validate, publish]
+    runs-on: ubuntu-24.04
+    environment: rules-releases
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Download rules bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rules-bundle
+          path: dist
+
+      - name: Download cicd-sensor runtime-trace predicate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cicd-sensor-attestation
+          path: trace
+
+      - name: Attest SLSA build provenance (bundle)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: dist/baseline-rules.yaml.gz
+
+      - name: Attest runtime-trace (bundle)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: dist/baseline-rules.yaml.gz
+          predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
+          predicate-path: trace/predicate.json
+
+      - name: Attest SLSA build provenance (GHCR image)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ghcr.io/cicd-sensor/cicd-sensor-rules
+          subject-digest: ${{ needs.publish.outputs.ghcr_digest }}
+          push-to-registry: true
+
+      - name: Attest runtime-trace (GHCR image)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ghcr.io/cicd-sensor/cicd-sensor-rules
+          subject-digest: ${{ needs.publish.outputs.ghcr_digest }}
+          predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
+          predicate-path: trace/predicate.json
+          push-to-registry: true
+
+  finalize:
+    name: Tag release
+    needs: [validate, attest]
+    runs-on: ubuntu-24.04
+    environment: rules-releases
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: true
+
+      - name: Create annotated tag as dispatcher
+        env:
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
+          REF_TAG: ${{ needs.validate.outputs.ref_tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          git config user.name  "$ACTOR"
+          git config user.email "${ACTOR_ID}+${ACTOR}@users.noreply.github.com"
+          git tag -a "$REF_TAG" \
+            -m "Rules release ${VERSION} dispatched by @${ACTOR} (run ${RUN_ID})"
+          git push origin "$REF_TAG"
