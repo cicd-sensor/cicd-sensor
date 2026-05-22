@@ -11,7 +11,8 @@
 //     corpus today.
 //   - denyCallValidator (correlation): subset of the above. Index is
 //     allowed because `rule["id"]` uses it, and `+` is allowed for
-//     presence-bit sums across primitive rules.
+//     aggregating rule hit counts, including presence-bit sums across
+//     primitive rules.
 //   - inIPRangeValidator: confirm the CIDR argument to inIpRange is a
 //     literal string and parses. Variable CIDR is rejected because the
 //     current binding parses on every call (see inIPRangeBinding); we'd
@@ -59,8 +60,10 @@ func newDenyCallValidator() cel.ASTValidator {
 }
 
 func newCorrelationDenyCallValidator() cel.ASTValidator {
-	// `+` is allowed so presence-bit sums (`total_count >= 1 ? 1 : 0`) can
-	// count unique categories; other arithmetic, regex, and size stay out.
+	// `+` is allowed for correlation-level count aggregation. Rule authors can
+	// add raw total_count values, or clamp each count to 0/1 first
+	// (`total_count >= 1 ? 1 : 0`) to count unique categories. Other
+	// arithmetic, regex, and size stay out.
 	return denyCallValidator{
 		name: "cicd_sensor.validator.correlation_deny_calls",
 		forbidden: denyCallSet("matches", "size",
