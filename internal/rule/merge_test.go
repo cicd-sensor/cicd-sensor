@@ -438,6 +438,106 @@ func TestMerge_TargetFilter(t *testing.T) {
 			project:   "acme/repo",
 			wantRules: 0,
 		},
+		{
+			name: "exclude multiple matchers OR drops when second matches",
+			target: rule.RuleTarget{
+				Exclude: []rule.RuleTargetMatcher{
+					{ProviderHost: "gitlab.com"},
+					{Path: "acme/repo"},
+				},
+			},
+			host:      "github.com",
+			project:   "acme/repo",
+			wantRules: 0,
+		},
+		{
+			name: "exclude multiple matchers passes when none match",
+			target: rule.RuleTarget{
+				Exclude: []rule.RuleTargetMatcher{
+					{ProviderHost: "gitlab.com"},
+					{Path: "other/repo"},
+				},
+			},
+			host:      "github.com",
+			project:   "acme/repo",
+			wantRules: 1,
+		},
+		{
+			name: "include passes when exclude targets different host",
+			target: rule.RuleTarget{
+				Include: []rule.RuleTargetMatcher{{ProviderHost: "github.com"}},
+				Exclude: []rule.RuleTargetMatcher{{ProviderHost: "gitlab.com"}},
+			},
+			host:      "github.com",
+			project:   "acme/repo",
+			wantRules: 1,
+		},
+		{
+			name: "path exact match passes",
+			target: rule.RuleTarget{
+				Include: []rule.RuleTargetMatcher{{Path: "acme/repo"}},
+			},
+			host:      "github.com",
+			project:   "acme/repo",
+			wantRules: 1,
+		},
+		{
+			name: "path prefix matches sibling repo (HasPrefix has no path-boundary guard)",
+			target: rule.RuleTarget{
+				Exclude: []rule.RuleTargetMatcher{{Path: "acme/repo"}},
+			},
+			host:    "github.com",
+			project: "acme/repo-fork",
+			// Documents current HasPrefix behavior: "acme/repo" prefix
+			// matches "acme/repo-fork". Users wanting org-only scoping
+			// should write "acme/repo/" with a trailing slash.
+			wantRules: 0,
+		},
+		{
+			name: "path with trailing slash matches subpath only",
+			target: rule.RuleTarget{
+				Include: []rule.RuleTargetMatcher{{Path: "acme/repo/"}},
+			},
+			host:      "github.com",
+			project:   "acme/repo/subdir",
+			wantRules: 1,
+		},
+		{
+			name: "path with trailing slash does not match exact parent",
+			target: rule.RuleTarget{
+				Include: []rule.RuleTargetMatcher{{Path: "acme/repo/"}},
+			},
+			host:      "github.com",
+			project:   "acme/repo",
+			wantRules: 0,
+		},
+		{
+			name: "path with trailing slash does not match sibling repo",
+			target: rule.RuleTarget{
+				Exclude: []rule.RuleTargetMatcher{{Path: "acme/repo/"}},
+			},
+			host:      "github.com",
+			project:   "acme/repo-fork",
+			wantRules: 1,
+		},
+		{
+			name: "empty matcher in include acts as match-all",
+			target: rule.RuleTarget{
+				Include: []rule.RuleTargetMatcher{{}},
+			},
+			host:      "github.com",
+			project:   "acme/repo",
+			wantRules: 1,
+		},
+		{
+			name: "empty matcher in exclude drops everything",
+			target: rule.RuleTarget{
+				Exclude: []rule.RuleTargetMatcher{{}},
+			},
+			host:      "github.com",
+			project:   "acme/repo",
+			wantRules: 0,
+		},
 	}
 
 	for _, tt := range tests {
