@@ -71,7 +71,7 @@ This starts the agent in debug mode and uploads a debug artifact that includes t
 
 ```yaml
     steps:
-      - uses: cicd-sensor/cicd-sensor-action@44fad3a9afa0fc1e3a313f56e7c914211e40b62e # v0.0.12
+      - uses: cicd-sensor/cicd-sensor-action@8974716cf8328c8cf080834d88f4c53cda487e30 # v0.0.13
         with:
           enable-debug: true
 ```
