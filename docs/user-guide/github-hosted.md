@@ -53,7 +53,7 @@ Signing is not done by the action itself; use a downstream step or job, such as 
 
 ## Config and Rules
 
-Project-local config and rules live under `.cicd-sensor/`.
+In standalone mode, project-local config and custom rules live under `.cicd-sensor/`.
 
 ```text
 repo/
@@ -64,8 +64,41 @@ repo/
       b.yaml
 ```
 
-You can place one or more YAML files under `rules/`.
-Even when project rules are not present, the standard rules bundled with cicd-sensor still apply.
+Even when project-local rules are not present, [Baseline Rules](baseline-rules.md) still apply.
+Use project-local files only for repository-specific tuning or additional detections.
+
+### config.yaml
+
+`config.yaml` controls project-local defaults for the GitHub-hosted standalone mode.
+
+```yaml
+default_max_alerts_per_rule: 20
+```
+
+| Field | Meaning |
+| --- | --- |
+| `default_max_alerts_per_rule` | Default Detection Log limit for rules that do not set `max_alerts`. Allowed values are 1-100. |
+
+See [RuleSet max_alerts](rule-set.md#max_alerts) for per-rule limits.
+
+### rules/
+
+Place one or more YAML files under `.cicd-sensor/rules/`.
+For example:
+
+```yaml
+rule_sets:
+  - ruleset_id: acme/github-hosted
+    rules:
+      - rule_id: curl_exec
+        rule_name: "curl executed"
+        event_kind: process_exec
+        condition: process.exec_path.endsWith("/curl")
+        action: detect
+```
+
+This emits a Detection Log entry when `curl` is executed during the job.
+See [RuleSet](rule-set.md), [Event kinds](rule-event-kinds.md), [CEL conditions](rule-cel-conditions.md), [Correlation](rule-correlation.md), and [Rule modifiers](rule-modifiers.md) for the full rule syntax.
 
 The action can be placed as the first step so it can monitor the whole job.
 It is fine to place it before `actions/checkout`.
