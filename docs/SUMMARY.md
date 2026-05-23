@@ -11,6 +11,7 @@
 - [GitLab CI/CD self-hosted](user-guide/gitlab-ci.md)
 - [Manager](user-guide/manager.md)
 - [Rules](user-guide/rules.md)
+  - [Baseline Rules](user-guide/baseline-rules.md)
   - [RuleSet](user-guide/rule-set.md)
   - [Event kinds](user-guide/rule-event-kinds.md)
   - [CEL conditions](user-guide/rule-cel-conditions.md)

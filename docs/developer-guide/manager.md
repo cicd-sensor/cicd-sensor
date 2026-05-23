@@ -1,11 +1,11 @@
 # Manager Architecture
 
-The Manager is the server component that receives config fetch and log ingest requests from Agents.
-Agent-to-manager communication uses the gRPC-based Connect protocol.
-Request / response types are defined with Protocol Buffers, and the source of truth for the wire contract is `proto/cicd_sensor/manager/v1`.
+The Manager is the optional server component that operators deploy when they want to run cicd-sensor across a runner fleet.
+It centralizes config delivery, rule delivery, and log routing, so individual CI/CD jobs do not need to carry rule bundles or cloud output credentials.
 
-Runtime event observation, rule merge, and rule evaluation are Agent responsibilities.
-The Manager does not observe CI/CD runtime directly. It acts as the config / rule delivery and log delivery boundary.
+The Manager is not a runtime sensor.
+Agents still observe CI/CD runtime activity and evaluate rules locally in each job or host scope.
+The Manager provides the operational boundary for distributing policy and receiving the resulting logs.
 
 ```mermaid
 flowchart LR

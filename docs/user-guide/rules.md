@@ -2,10 +2,24 @@
 
 cicd-sensor rules evaluate events from CI/CD job runtime and use them for detection, collection, and correlation.
 
-This section is written for SIRT and security teams who need to write real detection rules.
-The expected operating model is to start with the standard rules bundled with cicd-sensor, then gradually add project-specific or organization-specific rules.
+The normal operating model is to start with Baseline Rules maintained by cicd-sensor, then add project-specific or organization-specific rules and modifiers only where needed.
+Baseline Rules are updated as new CI/CD supply-chain attack patterns emerge and are applied when a CI/CD job starts.
 
-## Minimal rule
+This section explains how to understand the baseline, tune it, and write custom detection rules.
+
+## Reading order
+
+| Page | Content |
+| --- | --- |
+| [Baseline Rules](baseline-rules.md) | Standard rules shipped and updated by cicd-sensor |
+| [RuleSet](rule-set.md) | Basic rule files, actions, targets, and `max_alerts` |
+| [Event kinds](rule-event-kinds.md) | Fields and examples for event kinds such as `process_exec`, `network_connect`, and `file_open` |
+| [CEL conditions](rule-cel-conditions.md) | Examples for conditions, strings, lists, ancestors, and IP ranges |
+| [Correlation](rule-correlation.md) | Detections that combine multiple rule hits |
+| [Rule modifiers](rule-modifiers.md) | Tuning existing rules with action overrides, exceptions, target excludes, and disable flags |
+| [Rule development](rule-development.md) | Creating local rules, validating them, bundling them, and handing them to the manager |
+
+## Writing a custom rule
 
 ```yaml
 rule_sets:
@@ -19,17 +33,6 @@ rule_sets:
 ```
 
 This rule emits a Detection Log entry when `curl` is executed during a CI/CD job runtime.
-
-## Reading order
-
-| Page | Content |
-| --- | --- |
-| [RuleSet](rule-set.md) | Basic rule files, actions, targets, and `max_alerts` |
-| [Event kinds](rule-event-kinds.md) | Fields and examples for event kinds such as `process_exec`, `network_connect`, and `file_open` |
-| [CEL conditions](rule-cel-conditions.md) | Examples for conditions, strings, lists, ancestors, and IP ranges |
-| [Correlation](rule-correlation.md) | Detections that combine multiple rule hits |
-| [Rule modifiers](rule-modifiers.md) | Tuning existing rules with action overrides, exceptions, target excludes, and disable flags |
-| [Rule development](rule-development.md) | Creating local rules, validating them, bundling them, and handing them to the manager |
 
 ## Important rules
 
