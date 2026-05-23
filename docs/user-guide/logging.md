@@ -59,8 +59,15 @@ This object describes the runtime behavior that triggered a rule hit or was emit
 | `process` | PID, executable path, argv, and ancestor processes |
 | event-specific payload | Fields for the specific event kind, such as network destination, file path, or domain |
 
-`process.argv` and `process.ancestors.argv` are redacted for output.
-Values that look like tokens, passwords, secrets, or auth headers are replaced with `<redacted>`.
+### argv output sanitization
+
+`process.argv` and `process.ancestors.argv` can contain credentials.
+Rules are evaluated against the captured process context, but logs and reports use an output-sanitized form.
+
+In output, argv values that look like tokens, passwords, secrets, credential material, or auth headers are replaced with `<redacted>`.
+Long argv values are shortened and marked with `<truncated, N bytes>`.
+
+This means a rule can match full argv content even when the corresponding log entry shows only a redacted or shortened value.
 
 ## How to use the logs
 
