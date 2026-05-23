@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -58,13 +59,14 @@ func (s *s3Sink) Write(ctx context.Context, batch IngestLogBatch) error {
 	if err != nil {
 		return err
 	}
+	fullKey := joinPrefix(s.prefix, key)
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:          aws.String(s.bucket),
-		Key:             aws.String(joinPrefix(s.prefix, key)),
-		Body:            bytes.NewReader(batch.Body),
-		ContentType:     aws.String(ContentTypeJSONL),
-		ContentEncoding: aws.String(ContentEncoding),
-		Metadata:        map[string]string{"flush_at": formatFlushAt(batch.FlushAt)},
+		Bucket:             aws.String(s.bucket),
+		Key:                aws.String(fullKey),
+		Body:               bytes.NewReader(batch.Body),
+		ContentType:        aws.String(ContentTypeGzip),
+		ContentDisposition: aws.String(`attachment; filename="` + path.Base(fullKey) + `"`),
+		Metadata:           map[string]string{"flush_at": formatFlushAt(batch.FlushAt)},
 	})
 	if err != nil {
 		if isS3Throttle(err) {

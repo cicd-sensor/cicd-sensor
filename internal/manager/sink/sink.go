@@ -13,10 +13,7 @@ import (
 // backpressure rather than as a generic downstream failure.
 var ErrThrottled = errors.New("sink throttled")
 
-const (
-	ContentTypeJSONL = "application/x-ndjson"
-	ContentEncoding  = "gzip"
-)
+const ContentTypeGzip = "application/gzip"
 
 // LogKind is the manager output key used in manager.yaml and object paths.
 type LogKind string

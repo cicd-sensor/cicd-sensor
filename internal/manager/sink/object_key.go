@@ -29,7 +29,7 @@ func objectKey(batch IngestLogBatch) (string, error) {
 		return "", err
 	}
 	receivedAt := batch.ReceivedAt.UTC()
-	return fmt.Sprintf("%s/dt=%s/hour=%02d/%s__%s__%s__%s.json.gz",
+	return fmt.Sprintf("%s/dt=%s/hour=%02d/%s_%s_%s_%s.json.gz",
 		batch.LogKind,
 		receivedAt.Format("2006-01-02"),
 		receivedAt.Hour(),

@@ -17,7 +17,7 @@ func TestObjectKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("objectKey: %v", err)
 	}
-	pattern := `^job_detection_log/dt=2026-04-26/hour=07/20260426073045123__github-github-com-acme-example-123-build-1-a28bbc96-b9a8d436bdb471f3__host__[0-9a-f]{8}\.json\.gz$`
+	pattern := `^job_detection_log/dt=2026-04-26/hour=07/20260426073045123_github-github-com-acme-example-123-build-1-a28bbc96-b9a8d436bdb471f3_host_[0-9a-f]{8}\.json\.gz$`
 	if !regexp.MustCompile(pattern).MatchString(got) {
 		t.Fatalf("key: got %q, want pattern %s", got, pattern)
 	}
@@ -37,7 +37,7 @@ func TestObjectKey_RandomSuffixIsLastSegment(t *testing.T) {
 	if firstKey == secondKey {
 		t.Fatalf("same batch produced duplicate object key: %q", firstKey)
 	}
-	prefix := "job_detection_log/dt=2026-04-26/hour=07/20260426073045123__github-github-com-acme-example-123-build-1-a28bbc96-b9a8d436bdb471f3__host__"
+	prefix := "job_detection_log/dt=2026-04-26/hour=07/20260426073045123_github-github-com-acme-example-123-build-1-a28bbc96-b9a8d436bdb471f3_host_"
 	for _, key := range []string{firstKey, secondKey} {
 		if !strings.HasPrefix(key, prefix) || !strings.HasSuffix(key, ".json.gz") {
 			t.Fatalf("random suffix is not the final key segment: %q", key)

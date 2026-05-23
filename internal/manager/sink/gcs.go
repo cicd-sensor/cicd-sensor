@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
@@ -48,9 +49,10 @@ func (s *gcsSink) Write(ctx context.Context, batch IngestLogBatch) error {
 	if err != nil {
 		return err
 	}
-	writer := s.client.Bucket(s.bucket).Object(joinPrefix(s.prefix, key)).NewWriter(ctx)
-	writer.ContentType = ContentTypeJSONL
-	writer.ContentEncoding = ContentEncoding
+	fullKey := joinPrefix(s.prefix, key)
+	writer := s.client.Bucket(s.bucket).Object(fullKey).NewWriter(ctx)
+	writer.ContentType = ContentTypeGzip
+	writer.ContentDisposition = `attachment; filename="` + path.Base(fullKey) + `"`
 	writer.Metadata = map[string]string{"flush_at": formatFlushAt(batch.FlushAt)}
 	if _, err := writer.Write(batch.Body); err != nil {
 		_ = writer.Close()
