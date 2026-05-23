@@ -34,7 +34,14 @@ flowchart LR
     class CONFIG,COLLECTOR service
 ```
 
-## Protocol boundary
+## Agent to Manager protocol
+
+cicd-sensor uses the gRPC-based [Connect protocol](https://connectrpc.com/) with Protocol Buffers for Agent-to-Manager communication.
+Connect keeps the typed protobuf contract while allowing the same services to run over HTTP/1.1 and HTTP/2.
+This is the main reason cicd-sensor uses Connect rather than plain gRPC: plain gRPC generally assumes HTTP/2, while Connect can run through infrastructure that only supports HTTP/1.1.
+
+HTTP/1.1 support makes the Manager easier to place behind load balancers that do not support HTTP/2 and easier to adapt to serverless environments such as AWS Lambda.
+The wire schema is defined in [`proto/cicd_sensor/manager/v1`](https://github.com/cicd-sensor/cicd-sensor/tree/main/proto/cicd_sensor/manager/v1).
 
 The Manager exposes two endpoints to Agents.
 
