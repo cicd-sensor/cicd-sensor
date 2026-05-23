@@ -14,6 +14,20 @@ The manager delivers each batch to the configured sink.
 | `job_detection_log` | Per-rule-hit log for real-time detection and triage. Includes both `detect` and `collect` actions. | Streamed while the job is running. |
 | `job_runtime_telemetry_log` | Detailed runtime events for incident response and forensics. | Streamed while the job is running. |
 
+## Common fields
+
+Every log entry carries these top-level fields, regardless of log kind.
+
+| Field | Description |
+| --- | --- |
+| `timestamp` | UTC, RFC 3339 |
+| `log_type` | One of the log kinds listed above |
+| `schema_version` | Schema version of this `log_type`. Bumped on breaking changes |
+| `agent_version` | Agent build version |
+| `log_id` | UUID(v7) per log row |
+| `scope` | `host` for self-hosted configuration, `project` for GitHub Action invocations |
+| `config_revision` | Manager config revision used for this job, or `(none)` |
+
 ## Job context
 
 Every log entry includes a `job` object.
@@ -42,9 +56,6 @@ Other fields add useful context for search, reports, and triage.
 | `github_workflow` | GitHub Actions workflow name |
 | `gitlab_job_name` | GitLab CI job name |
 | `gitlab_config_ref_uri` | GitLab CI config provenance URI |
-
-Each log entry also includes `log_id`, `timestamp`, `scope`, and `config_revision`.
-`log_id` is a UUID(v7) for each log row.
 
 ## Runtime event format
 

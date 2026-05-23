@@ -73,7 +73,7 @@ See [Correlation](rule-correlation.md) for details.
 | `action` | yes | `detect`, `collect`, or `terminate` |
 | `tags` | no | Metadata such as severity or category |
 | `target` | no | Repository / project scope where the rule applies |
-| `max_alerts` | no | Maximum entries emitted to the Detection Log per job / scope / rule |
+| `max_alerts` | no | Maximum entries emitted to the Detection Log per job / rule |
 
 ## Actions
 
@@ -113,7 +113,7 @@ If both include and exclude match, exclude wins.
 
 ## max_alerts
 
-`max_alerts` limits how many entries a rule can emit to the Detection Log per job / scope / rule.
+`max_alerts` limits how many entries a rule can emit to the Detection Log per job / rule.
 Use it to prevent noisy rules from filling the log.
 
 ```yaml
