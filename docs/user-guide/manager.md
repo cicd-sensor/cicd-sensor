@@ -154,6 +154,8 @@ output:
     destination: s3-out
 ```
 
+`bind` is optional. Omitted or empty values fall back to `address: "0.0.0.0"` (listen on all interfaces) and `port: 8080`. `port` must be in 0–65535.
+
 For richer routing (per-log-kind destinations, multiple sinks), see
 [Output routing](#output-routing).
 
