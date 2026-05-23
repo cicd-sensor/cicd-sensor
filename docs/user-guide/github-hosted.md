@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: cicd-sensor/cicd-sensor-action@44fad3a9afa0fc1e3a313f56e7c914211e40b62e # v0.0.12
+      - uses: cicd-sensor/cicd-sensor-action@8974716cf8328c8cf080834d88f4c53cda487e30 # v0.0.13
 ```
 
 This action targets Linux GitHub-hosted VM runners.
@@ -123,7 +123,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: cicd-sensor/cicd-sensor-action@44fad3a9afa0fc1e3a313f56e7c914211e40b62e # v0.0.12
+      - uses: cicd-sensor/cicd-sensor-action@8974716cf8328c8cf080834d88f4c53cda487e30 # v0.0.13
         with:
           manager-url: https://cicd-sensor-manager.example.com
           manager-token: ${{ secrets.CICD_SENSOR_MANAGER_TOKEN }}
