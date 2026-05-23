@@ -446,7 +446,7 @@ jobs:
 
   bump-action:
     name: Kick Renovate on cicd-sensor-action
-    needs: [validate, finalize]
+    needs: [finalize]
     runs-on: ubuntu-24.04
     environment: sensor-releases/bump-action
     continue-on-error: true
@@ -470,7 +470,7 @@ jobs:
       - name: Kick Renovate on cicd-sensor-action
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          VERSION_TAG: ${{ needs.validate.outputs.version_tag }}
+          VERSION_TAG: ${{ inputs.version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -eu
