@@ -12,6 +12,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
+	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
 var (
@@ -24,7 +25,10 @@ func newTestJobRegistry() *JobRegistry {
 		logger:    testLogger.With("component", "job_registry"),
 		jobLogger: testLogger,
 		jobs:      make(map[jobcontext.JobIdentity]*job.Job),
-		starting:  make(map[jobcontext.JobIdentity]chan struct{}),
+		baselineLoad: func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+			return rulesource.LoadedRules{}, nil
+		},
+		starting: make(map[jobcontext.JobIdentity]chan struct{}),
 	}
 }
 
@@ -33,7 +37,7 @@ func TestJobRegistry_FinalizeAll_RemovesJobs(t *testing.T) {
 
 	jr := newTestJobRegistry()
 	for _, jobID := range []string{"a", "b"} {
-		if _, err := jr.ApplyGitHubProjectStart(testCtx, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", jobID), jobcontext.JobMetadata{}, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false); err != nil {
+		if _, err := jr.ApplyGitHubProjectStart(testCtx, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", jobID), jobcontext.JobMetadata{}, "machine", 0, 0, nil, managerclient.Connection{}, nil, false); err != nil {
 			t.Fatalf("start %s: %v", jobID, err)
 		}
 	}
@@ -49,7 +53,7 @@ func TestJobRegistry_FinalizeExpiredJobs_RemovesJob(t *testing.T) {
 	t.Parallel()
 
 	jr := newTestJobRegistry()
-	j, err := jr.ApplyGitHubProjectStart(testCtx, jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"), jobcontext.JobMetadata{}, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false)
+	j, err := jr.ApplyGitHubProjectStart(testCtx, jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"), jobcontext.JobMetadata{}, "machine", 0, 0, nil, managerclient.Connection{}, nil, false)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -82,7 +86,7 @@ func TestJobRegistry_RequestGitHubHostEnd_FinalizesHostJob(t *testing.T) {
 
 	jr := newTestJobRegistry()
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
-	if _, err := jr.ApplyGitHubHostStart(testCtx, id, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, fakeManagerFetcher{}, false); err != nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, id, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, fakeManagerFetcher{}); err != nil {
 		t.Fatalf("host start: %v", err)
 	}
 
@@ -99,7 +103,7 @@ func TestJobRegistry_RequestGitHubHostEnd_ProjectOnlyJobReturnsError(t *testing.
 
 	jr := newTestJobRegistry()
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
-	if _, err := jr.ApplyGitHubProjectStart(testCtx, id, jobcontext.JobMetadata{}, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false); err != nil {
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, id, jobcontext.JobMetadata{}, "machine", 0, 0, nil, managerclient.Connection{}, nil, false); err != nil {
 		t.Fatalf("project start: %v", err)
 	}
 
@@ -126,7 +130,7 @@ func TestJobRegistry_GetGitHubJobHealth(t *testing.T) {
 
 	jr := newTestJobRegistry()
 	hostID := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
-	if _, err := jr.ApplyGitHubHostStart(testCtx, hostID, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, fakeManagerFetcher{}, false); err != nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, hostID, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, fakeManagerFetcher{}); err != nil {
 		t.Fatalf("host start: %v", err)
 	}
 	hostHealth, err := jr.GetGitHubJobHealth(testCtx, hostID, 1)
@@ -141,7 +145,7 @@ func TestJobRegistry_GetGitHubJobHealth(t *testing.T) {
 	}
 
 	projectOnlyID := jobcontext.GitHubJobIdentity("github.com", "acme/example", "124", "build", "1", "runner-2")
-	if _, err := jr.ApplyGitHubProjectStart(testCtx, projectOnlyID, jobcontext.JobMetadata{}, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false); err != nil {
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, projectOnlyID, jobcontext.JobMetadata{}, "machine", 0, 0, nil, managerclient.Connection{}, nil, false); err != nil {
 		t.Fatalf("project start: %v", err)
 	}
 	projectHealth, err := jr.GetGitHubJobHealth(testCtx, projectOnlyID, 1)

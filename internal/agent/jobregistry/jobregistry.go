@@ -16,6 +16,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	"github.com/cicd-sensor/cicd-sensor/internal/rule/baseline"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
@@ -46,6 +47,8 @@ type ManagerConfigFetcher interface {
 	FetchConfig(ctx context.Context, req *managerv1.FetchConfigRequest) (*managerclient.FetchResult, error)
 }
 
+type BaselineLoader func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error)
+
 // JobRegistry is the registry of all active jobs.
 type JobRegistry struct {
 	mu     sync.Mutex
@@ -54,6 +57,7 @@ type JobRegistry struct {
 	jobLogger     *slog.Logger
 	kernelTracker *kerneltracker.KernelTracker
 	jobs          map[jobcontext.JobIdentity]*job.Job
+	baselineLoad  BaselineLoader
 	// starting hides half-created jobs and serializes duplicate start requests.
 	starting map[jobcontext.JobIdentity]chan struct{}
 }
@@ -65,11 +69,16 @@ func New(logger *slog.Logger) *JobRegistry {
 		logger = slog.Default()
 	}
 	return &JobRegistry{
-		logger:    logger.With("component", "job_registry"),
-		jobLogger: logger,
-		jobs:      make(map[jobcontext.JobIdentity]*job.Job),
-		starting:  make(map[jobcontext.JobIdentity]chan struct{}),
+		logger:       logger.With("component", "job_registry"),
+		jobLogger:    logger,
+		jobs:         make(map[jobcontext.JobIdentity]*job.Job),
+		baselineLoad: baseline.LoadForProvider,
+		starting:     make(map[jobcontext.JobIdentity]chan struct{}),
 	}
+}
+
+func (jr *JobRegistry) SetBaselineLoadForTesting(load BaselineLoader) {
+	jr.baselineLoad = load
 }
 
 // BindKernelTracker completes startup wiring after the KernelTracker is built.

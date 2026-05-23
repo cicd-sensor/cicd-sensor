@@ -56,10 +56,10 @@ func TestJobRegistry_PeerPIDAuthorization(t *testing.T) {
 	t.Run("host_linked_same_cgroup_peer_authorizes", func(t *testing.T) {
 		jr, ctx := startPeerPIDAuthRegistry(t)
 		id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "r1")
-		if _, err := jr.ApplyGitHubHostStart(ctx, id, meta, "machine", selfPID, managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
+		if _, err := jr.ApplyGitHubHostStart(ctx, id, meta, "machine", selfPID, managerclient.Connection{}, staticManagerFetcher{}); err != nil {
 			t.Fatalf("ApplyGitHubHostStart: %v", err)
 		}
-		if _, err := jr.ApplyGitHubProjectStart(ctx, id, meta, "machine", selfPID, 0, nil, managerclient.Connection{}, nil, false, false); err != nil {
+		if _, err := jr.ApplyGitHubProjectStart(ctx, id, meta, "machine", selfPID, 0, nil, managerclient.Connection{}, nil, false); err != nil {
 			t.Fatalf("ApplyGitHubProjectStart same-cgroup peer: %v", err)
 		}
 		if _, err := jr.RequestGitHubProjectResult(ctx, id, selfPID); err != nil {
@@ -70,11 +70,11 @@ func TestJobRegistry_PeerPIDAuthorization(t *testing.T) {
 	t.Run("host_linked_foreign_cgroup_peer_rejected", func(t *testing.T) {
 		jr, ctx := startPeerPIDAuthRegistry(t)
 		id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "2", "build", "1", "r1")
-		if _, err := jr.ApplyGitHubHostStart(ctx, id, meta, "machine", selfPID, managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
+		if _, err := jr.ApplyGitHubHostStart(ctx, id, meta, "machine", selfPID, managerclient.Connection{}, staticManagerFetcher{}); err != nil {
 			t.Fatalf("ApplyGitHubHostStart: %v", err)
 		}
 		// PID 1 lives in a different cgroup than the test process.
-		_, err := jr.ApplyGitHubProjectStart(ctx, id, meta, "machine", 1, 0, nil, managerclient.Connection{}, nil, false, false)
+		_, err := jr.ApplyGitHubProjectStart(ctx, id, meta, "machine", 1, 0, nil, managerclient.Connection{}, nil, false)
 		if !errors.Is(err, ErrPeerNotInJob) {
 			t.Fatalf("ApplyGitHubProjectStart foreign peer: got %v, want ErrPeerNotInJob", err)
 		}
@@ -88,7 +88,7 @@ func TestJobRegistry_PeerPIDAuthorization(t *testing.T) {
 		jr, ctx := startPeerPIDAuthRegistry(t)
 		id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "3", "build", "1", "r1")
 		// No ApplyGitHubHostStart: project_start creates a hosted-only Job.
-		if _, err := jr.ApplyGitHubProjectStart(ctx, id, meta, "machine", selfPID, 0, nil, managerclient.Connection{}, nil, false, false); err != nil {
+		if _, err := jr.ApplyGitHubProjectStart(ctx, id, meta, "machine", selfPID, 0, nil, managerclient.Connection{}, nil, false); err != nil {
 			t.Fatalf("ApplyGitHubProjectStart hosted: %v", err)
 		}
 		if _, err := jr.RequestGitHubProjectResult(ctx, id, selfPID); err != nil {

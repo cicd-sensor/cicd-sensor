@@ -21,7 +21,7 @@ var lifecycleTestLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 func TestNewAgentDefaultsNilLogger(t *testing.T) {
 	t.Parallel()
 
-	a := NewAgent(nil, "/tmp/cicd-sensor-test.sock", jobcontext.ProviderGitHub, "machine", managerclient.Connection{}, nil, false)
+	a := NewAgent(nil, "/tmp/cicd-sensor-test.sock", jobcontext.ProviderGitHub, "machine", managerclient.Connection{}, nil)
 	if a.logger == nil {
 		t.Fatal("logger is nil")
 	}
@@ -36,7 +36,7 @@ func TestNewAgentDefaultsNilLogger(t *testing.T) {
 func TestSetShutdownGrace(t *testing.T) {
 	t.Parallel()
 
-	a := NewAgent(lifecycleTestLogger, "/tmp/cicd-sensor-test.sock", jobcontext.ProviderGitHub, "machine", managerclient.Connection{}, nil, false)
+	a := NewAgent(lifecycleTestLogger, "/tmp/cicd-sensor-test.sock", jobcontext.ProviderGitHub, "machine", managerclient.Connection{}, nil)
 	a.SetShutdownGrace(0)
 	if a.shutdownGrace != 0 {
 		t.Fatalf("zero grace changed shutdownGrace to %s", a.shutdownGrace)
@@ -53,7 +53,7 @@ func TestSetShutdownGrace(t *testing.T) {
 
 func TestAgentRunStopsOnContextCancel(t *testing.T) {
 	socketPath := filepath.Join(newAgentTestSocketDir(t), "agent.sock")
-	a := NewAgent(lifecycleTestLogger, socketPath, jobcontext.ProviderGitHub, "machine", managerclient.Connection{}, nil, false)
+	a := NewAgent(lifecycleTestLogger, socketPath, jobcontext.ProviderGitHub, "machine", managerclient.Connection{}, nil)
 	a.SetShutdownGrace(time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -82,7 +82,7 @@ func TestAgentRunReturnsListenerError(t *testing.T) {
 		t.Fatalf("write regular file: %v", err)
 	}
 
-	a := NewAgent(lifecycleTestLogger, socketPath, jobcontext.ProviderGitHub, "machine", managerclient.Connection{}, nil, false)
+	a := NewAgent(lifecycleTestLogger, socketPath, jobcontext.ProviderGitHub, "machine", managerclient.Connection{}, nil)
 	err := a.Run(context.Background())
 	if err == nil {
 		t.Fatal("Run returned nil, want listener error")

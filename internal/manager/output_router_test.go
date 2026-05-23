@@ -176,8 +176,8 @@ func TestBuildOutputs_ClosesCreatedSinksOnBuildFailure(t *testing.T) {
 			"first":  {Type: "gcs", URI: "gs://first"},
 			"second": {Type: "gcs", URI: "gs://second"},
 		},
-		OutputConfig{
-			"job_detection_log": {Destination: "first"},
+		LogsConfig{
+			"job_detection_log": {Sink: "first"},
 		},
 	)
 	if err == nil {

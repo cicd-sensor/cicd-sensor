@@ -15,8 +15,7 @@ import (
 func TestBuildProjectScopeFromLocalConfigCanAddBaselineFallback(t *testing.T) {
 	jr := newTestJobRegistry()
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "runner-1")
-	restoreBaselineLoad := baselineLoad
-	baselineLoad = func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+	jr.SetBaselineLoadForTesting(func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
 		return rulesource.LoadedRules{RuleSets: []rule.RuleSet{{
 			RulesetID: "baseline",
 			Rules: []rule.Rule{{
@@ -26,8 +25,7 @@ func TestBuildProjectScopeFromLocalConfigCanAddBaselineFallback(t *testing.T) {
 				Action:    rule.RuleActionDetect,
 			}},
 		}}}, nil
-	}
-	t.Cleanup(func() { baselineLoad = restoreBaselineLoad })
+	})
 
 	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, 7, []rulesource.LoadedRules{{
 		RuleSets: []rule.RuleSet{{
@@ -39,7 +37,7 @@ func TestBuildProjectScopeFromLocalConfigCanAddBaselineFallback(t *testing.T) {
 				Action:    rule.RuleActionDetect,
 			}},
 		}},
-	}}, true)
+	}})
 	if err != nil {
 		t.Fatalf("buildProjectScopeFromLocalConfig: %v", err)
 	}
@@ -57,8 +55,7 @@ func TestBuildProjectScopeFromLocalConfigCanAddBaselineFallback(t *testing.T) {
 func TestBuildProjectScopeFromLocalConfigKeepsBaselineFirst(t *testing.T) {
 	jr := newTestJobRegistry()
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "runner-1")
-	restoreBaselineLoad := baselineLoad
-	baselineLoad = func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+	jr.SetBaselineLoadForTesting(func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
 		return rulesource.LoadedRules{RuleSets: []rule.RuleSet{{
 			RulesetID: "shared",
 			Rules: []rule.Rule{{
@@ -68,8 +65,7 @@ func TestBuildProjectScopeFromLocalConfigKeepsBaselineFirst(t *testing.T) {
 				Action:    rule.RuleActionDetect,
 			}},
 		}}}, nil
-	}
-	t.Cleanup(func() { baselineLoad = restoreBaselineLoad })
+	})
 
 	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, 0, []rulesource.LoadedRules{{
 		RuleSets: []rule.RuleSet{{
@@ -81,7 +77,7 @@ func TestBuildProjectScopeFromLocalConfigKeepsBaselineFirst(t *testing.T) {
 				Action:    rule.RuleActionDetect,
 			}},
 		}},
-	}}, true)
+	}})
 	if err != nil {
 		t.Fatalf("buildProjectScopeFromLocalConfig: %v", err)
 	}
@@ -98,12 +94,10 @@ func TestBuildProjectScopeFromManagerConfigSkipsLocalAndBaseline(t *testing.T) {
 	jr := newTestJobRegistry()
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
-	restoreBaselineLoad := baselineLoad
-	baselineLoad = func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+	jr.SetBaselineLoadForTesting(func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
 		t.Fatal("baseline loader should not be called in project manager mode")
 		return rulesource.LoadedRules{}, nil
-	}
-	t.Cleanup(func() { baselineLoad = restoreBaselineLoad })
+	})
 
 	scope, err := jr.buildProjectScopeFromManagerConfig(testCtx, id, meta, "machine", managerclient.Connection{}, fakeManagerFetcher{})
 	if err != nil {

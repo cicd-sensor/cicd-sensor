@@ -15,8 +15,7 @@ func TestLoadStartupConfig(t *testing.T) {
 		wantPort    int
 		wantBind    string
 		wantDefault int
-		wantDisable bool
-		wantErr     bool
+		wantErrText string
 	}{
 		{
 			name: "valid startup config returns bind defaults",
@@ -24,15 +23,12 @@ func TestLoadStartupConfig(t *testing.T) {
 bind:
   address: 127.0.0.1
   port: 7443
-defaults:
-  default_max_alerts_per_rule: 25
-disable_baseline: true
+default_max_alerts_per_rule: 25
 `,
 			wantAddress: "127.0.0.1",
 			wantPort:    7443,
 			wantBind:    "127.0.0.1:7443",
 			wantDefault: 25,
-			wantDisable: true,
 		},
 		{
 			name: "missing bind address uses default",
@@ -69,7 +65,7 @@ bind:
   address: 127.0.0.1
   port: -1
 `,
-			wantErr: true,
+			wantErrText: "bind.port must be between 0 and 65535",
 		},
 		{
 			name: "default above hard ceiling returns error",
@@ -77,24 +73,41 @@ bind:
 bind:
   address: 127.0.0.1
   port: 7443
-defaults:
-  default_max_alerts_per_rule: 101
+default_max_alerts_per_rule: 101
 `,
-			wantErr: true,
+			wantErrText: "default_max_alerts_per_rule must be <= 100",
 		},
 		{
-			name:    "invalid yaml returns error",
-			content: "bind: [",
-			wantErr: true,
+			name: "old defaults object is rejected",
+			content: `
+defaults:
+  default_max_alerts_per_rule: 25
+`,
+			wantErrText: "field defaults not found",
+		},
+		{
+			name: "unknown top-level field is rejected",
+			content: `
+unexpected_field: true
+`,
+			wantErrText: "field unexpected_field not found",
+		},
+		{
+			name:        "invalid yaml returns error",
+			content:     "bind: [",
+			wantErrText: "parse startup config",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := loadStartupConfigFromString(t, tt.content)
-			if tt.wantErr {
+			if tt.wantErrText != "" {
 				if err == nil {
 					t.Fatal("expected error")
+				}
+				if !strings.Contains(err.Error(), tt.wantErrText) {
+					t.Fatalf("error: got %q, want substring %q", err.Error(), tt.wantErrText)
 				}
 				return
 			}
@@ -110,11 +123,8 @@ defaults:
 			if got.BindAddress() != tt.wantBind {
 				t.Fatalf("bind address: got %q, want %q", got.BindAddress(), tt.wantBind)
 			}
-			if got.Defaults.DefaultMaxAlertsPerRule != tt.wantDefault {
-				t.Fatalf("default_max_alerts_per_rule: got %d, want %d", got.Defaults.DefaultMaxAlertsPerRule, tt.wantDefault)
-			}
-			if got.DisableBaseline != tt.wantDisable {
-				t.Fatalf("disable_baseline: got %v, want %v", got.DisableBaseline, tt.wantDisable)
+			if got.DefaultMaxAlertsPerRule != tt.wantDefault {
+				t.Fatalf("default_max_alerts_per_rule: got %d, want %d", got.DefaultMaxAlertsPerRule, tt.wantDefault)
 			}
 			if !strings.HasPrefix(got.Revision, "sha256:") {
 				t.Fatalf("revision: got %q, want sha256 prefix", got.Revision)
@@ -123,7 +133,7 @@ defaults:
 	}
 }
 
-func TestLoadStartupConfig_SinksAndOutput(t *testing.T) {
+func TestLoadStartupConfig_SinksAndLogs(t *testing.T) {
 	tests := []struct {
 		name      string
 		body      string
@@ -131,7 +141,7 @@ func TestLoadStartupConfig_SinksAndOutput(t *testing.T) {
 		assertCfg func(*testing.T, StartupConfig)
 	}{
 		{
-			name: "happy_sinks_and_outputs",
+			name: "happy_sinks_and_logs",
 			body: `
 sinks:
   s3-prod:
@@ -142,20 +152,20 @@ sinks:
     type: pubsub
     project_id: cicd-sensor-prod
     topic: detections
-output:
+logs:
   job_detection_log:
-    destination: s3-prod
+    sink: s3-prod
   job_result_log:
-    destination: s3-prod
+    sink: s3-prod
 `,
 			assertCfg: func(t *testing.T, cfg StartupConfig) {
 				t.Helper()
 				if cfg.Sinks["s3-prod"].URI != "s3://cicd-sensor-prod/logs/" {
 					t.Fatalf("s3 uri: got %q", cfg.Sinks["s3-prod"].URI)
 				}
-				got := cfg.Output["job_detection_log"].Destination
+				got := cfg.Logs["job_detection_log"].Sink
 				if got != "s3-prod" {
-					t.Fatalf("detection destination: got %q", got)
+					t.Fatalf("detection sink: got %q", got)
 				}
 			},
 		},
@@ -284,39 +294,65 @@ sinks:
 			wantErr: "sinks: name must not be empty",
 		},
 		{
-			name: "output_unknown_log_key",
+			name: "logs_unknown_log_key",
+			body: `
+sinks:
+  gcs-prod:
+    type: gcs
+    uri: gs://bucket/logs
+logs:
+  unknown:
+    sink: gcs-prod
+`,
+			wantErr: "logs.unknown: unknown log key",
+		},
+		{
+			name: "logs_sink_empty",
+			body: `
+sinks:
+  gcs-prod:
+    type: gcs
+    uri: gs://bucket/logs
+logs:
+  job_detection_log:
+    sink: ""
+`,
+			wantErr: "logs.job_detection_log.sink: sink name is required",
+		},
+		{
+			name: "logs_sink_references_missing_sink",
+			body: `
+logs:
+  job_detection_log:
+    sink: missing
+`,
+			wantErr: `logs.job_detection_log.sink "missing" is not a defined sink name`,
+		},
+		{
+			name: "old_output_key_is_rejected",
 			body: `
 sinks:
   gcs-prod:
     type: gcs
     uri: gs://bucket/logs
 output:
-  unknown:
+  job_detection_log:
     destination: gcs-prod
 `,
-			wantErr: "output.unknown: unknown log key",
+			wantErr: `field output not found`,
 		},
 		{
-			name: "output_destination_empty",
+			name: "old_destination_key_is_rejected",
 			body: `
 sinks:
   gcs-prod:
     type: gcs
     uri: gs://bucket/logs
-output:
+logs:
   job_detection_log:
-    destination: ""
+    destination: gcs-prod
 `,
-			wantErr: "output.job_detection_log.destination: sink name is required",
-		},
-		{
-			name: "output_destination_references_missing_sink",
-			body: `
-output:
-  job_detection_log:
-    destination: missing
-`,
-			wantErr: `output.job_detection_log.destination "missing" is not a defined sink name`,
+			wantErr: `field destination not found`,
 		},
 	}
 

@@ -37,7 +37,7 @@ func TestJobRegistry_StageCgroupBasenameForJob_BlockedDuringHostStartInflight(t 
 
 	startDone := make(chan error, 1)
 	go func() {
-		_, err := jr.ApplyGitLabHostStart(testCtx, id, meta, "machine", managerclient.Connection{}, fetcher, false)
+		_, err := jr.ApplyGitLabHostStart(testCtx, id, meta, "machine", managerclient.Connection{}, fetcher)
 		startDone <- err
 	}()
 

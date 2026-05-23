@@ -2,6 +2,7 @@ package jobregistry_test
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/job"
@@ -10,6 +11,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
 var testCtx = context.Background()
@@ -18,7 +20,11 @@ const testManagerToken = managerauth.TokenPrefix + "aaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 func newJobRegistry(t *testing.T) *jobregistry.JobRegistry {
 	t.Helper()
-	return jobregistry.New(testLogger)
+	jr := jobregistry.New(testLogger)
+	jr.SetBaselineLoadForTesting(func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+		return rulesource.LoadedRules{}, nil
+	})
+	return jr
 }
 
 func registeredJob(jr *jobregistry.JobRegistry, identity jobcontext.JobIdentity) *job.Job {

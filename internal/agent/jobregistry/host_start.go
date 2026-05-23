@@ -10,14 +10,11 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
-	"github.com/cicd-sensor/cicd-sensor/internal/rule/baseline"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
-var baselineLoad = baseline.LoadForProvider
-
 // ApplyGitHubHostStart starts a host scope and seeds tracking from the caller cgroup.
-func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, rootPID int32, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher, fetchBaseline bool) (*job.Job, error) {
+func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, rootPID int32, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*job.Job, error) {
 	// Build scope config first, register the Job runtime, attach the scope, then
 	// bind the caller cgroup so routed events always see a resolved scope.
 	reservation := jr.reserveJobStart(identity)
@@ -61,7 +58,7 @@ func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcon
 }
 
 // ApplyGitLabHostStart lazily creates the GitLab host scope from docker proxy labels.
-func (jr *JobRegistry) ApplyGitLabHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher, fetchBaseline bool) (*job.Job, error) {
+func (jr *JobRegistry) ApplyGitLabHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*job.Job, error) {
 	// Docker proxy calls can race; wait for any in-flight lazy create, then
 	// build and attach the host scope. Cgroup tracking starts later via staging.
 	reservation, err := jr.waitForJobStartReservation(ctx, identity)
@@ -126,7 +123,7 @@ func (jr *JobRegistry) fetchManagerConfig(ctx context.Context, identity jobconte
 }
 
 func (jr *JobRegistry) loadBaselineRules(ctx context.Context, identity jobcontext.JobIdentity) (rulesource.LoadedRules, error) {
-	baselineSource, err := baselineLoad(ctx, jr.logger, string(identity.Provider))
+	baselineSource, err := jr.baselineLoad(ctx, jr.logger, string(identity.Provider))
 	if err != nil {
 		return rulesource.LoadedRules{}, fmt.Errorf("baseline fetch: %w", err)
 	}

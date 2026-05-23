@@ -301,7 +301,7 @@ func TestGitLabStagingPut_StagesWithPeerPIDWithoutIdentity(t *testing.T) {
 		ProjectPath:  "cicd-sensor/cicd-sensor-testing",
 		GitLabJobID:  "14202203981",
 	}
-	if _, err := registry.ApplyGitHubHostStart(context.Background(), identity, jobcontext.JobMetadata{}, "machine", int32(os.Getpid()), managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
+	if _, err := registry.ApplyGitHubHostStart(context.Background(), identity, jobcontext.JobMetadata{}, "machine", int32(os.Getpid()), managerclient.Connection{}, staticManagerFetcher{}); err != nil {
 		t.Fatalf("seed peer tracking: %v", err)
 	}
 
@@ -343,7 +343,7 @@ func TestGitLabStagingPut_PeerPIDWinsWhenIdentityAlsoPresent(t *testing.T) {
 		ProjectPath:  "cicd-sensor/cicd-sensor-testing",
 		GitLabJobID:  "14202203981",
 	}
-	if _, err := registry.ApplyGitHubHostStart(context.Background(), peerIdentity, jobcontext.JobMetadata{}, "machine", int32(os.Getpid()), managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
+	if _, err := registry.ApplyGitHubHostStart(context.Background(), peerIdentity, jobcontext.JobMetadata{}, "machine", int32(os.Getpid()), managerclient.Connection{}, staticManagerFetcher{}); err != nil {
 		t.Fatalf("seed peer tracking: %v", err)
 	}
 

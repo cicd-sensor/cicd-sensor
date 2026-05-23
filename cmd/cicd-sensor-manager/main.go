@@ -55,7 +55,7 @@ func main() {
 		fmt.Fprintln(flag.CommandLine.Output())
 		fmt.Fprintln(flag.CommandLine.Output(), "Optional:")
 		fmt.Fprintln(flag.CommandLine.Output(), "  --rules-file PATH or CICD_SENSOR_MANAGER_RULES_FILE")
-		fmt.Fprintln(flag.CommandLine.Output(), "        Customer rules YAML file. When omitted, only baseline rules are served unless disabled in config.")
+		fmt.Fprintln(flag.CommandLine.Output(), "        Customer rules YAML file. When omitted, only baseline rules are served.")
 	}
 	flag.StringVar(&configFileFlag, "config-file", "", "Path to the manager startup config file.")
 	flag.StringVar(&rulesFileFlag, "rules-file", "", "Path to the customer rules YAML file (optional).")
@@ -95,9 +95,7 @@ func main() {
 		slog.InfoContext(ctx, "manager_rules_disabled", "reason", "no --rules-file flag or CICD_SENSOR_MANAGER_RULES_FILE")
 	}
 
-	baselineEnabled := !startupConfig.DisableBaseline
-
-	router, err := manager.BuildOutputs(ctx, logger, startupConfig.Sinks, startupConfig.Output)
+	router, err := manager.BuildOutputs(ctx, logger, startupConfig.Sinks, startupConfig.Logs)
 	if err != nil {
 		slog.ErrorContext(ctx, "manager_failed", "error", err)
 		os.Exit(1)
@@ -106,14 +104,13 @@ func main() {
 	if router != nil {
 		outputSettings = router.OutputSettings()
 	}
-	servedConfig := buildServedConfig(startupConfig, baselineEnabled, outputSettings)
+	servedConfig := buildServedConfig(startupConfig, outputSettings)
 
 	slog.InfoContext(ctx, "manager_started",
 		"version", version,
 		"addr", bindAddress,
 		"config_file", opts.ConfigFile,
 		"rules_file", rulesFile,
-		"baseline_enabled", baselineEnabled,
 		"transport", "plain-http",
 		"transport_note", "TLS must be terminated by upstream load balancer or similar",
 	)
@@ -219,11 +216,10 @@ func readManagerTokenFile(path string) (string, error) {
 	return strings.TrimRight(string(data), "\n"), nil
 }
 
-func buildServedConfig(startup manager.StartupConfig, baselineEnabled bool, outputSettings *managerv1.OutputSettings) *manager.ServedConfig {
+func buildServedConfig(startup manager.StartupConfig, outputSettings *managerv1.OutputSettings) *manager.ServedConfig {
 	return &manager.ServedConfig{
 		ConfigRevision:          startup.Revision,
-		BaselineEnabled:         baselineEnabled,
-		DefaultMaxAlertsPerRule: startup.Defaults.DefaultMaxAlertsPerRule,
+		DefaultMaxAlertsPerRule: startup.DefaultMaxAlertsPerRule,
 		OutputSettings:          outputSettings,
 	}
 }

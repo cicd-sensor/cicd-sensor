@@ -43,7 +43,7 @@ func TestApplyGitLabHostStart_WaitsForInflightStart(t *testing.T) {
 
 	startDone := make(chan error, 1)
 	go func() {
-		_, err := jr.ApplyGitLabHostStart(testCtx, id, meta, "machine", managerclient.Connection{}, fetcher, false)
+		_, err := jr.ApplyGitLabHostStart(testCtx, id, meta, "machine", managerclient.Connection{}, fetcher)
 		startDone <- err
 	}()
 
@@ -55,7 +55,7 @@ func TestApplyGitLabHostStart_WaitsForInflightStart(t *testing.T) {
 
 	waitDone := make(chan error, 1)
 	go func() {
-		_, err := jr.ApplyGitLabHostStart(testCtx, id, meta, "machine", managerclient.Connection{}, nil, false)
+		_, err := jr.ApplyGitLabHostStart(testCtx, id, meta, "machine", managerclient.Connection{}, nil)
 		waitDone <- err
 	}()
 

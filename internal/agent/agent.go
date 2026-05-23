@@ -18,7 +18,6 @@ type Agent struct {
 	logger            *slog.Logger
 	hostManagerConn   managerclient.Connection
 	hostManagerClient *managerclient.ConfigClient
-	fetchBaseline     bool
 	provider          jobcontext.Provider
 	runnerKind        string
 	jobRegistry       *jobregistry.JobRegistry
@@ -33,9 +32,8 @@ type Agent struct {
 const defaultAgentShutdownGrace = 8 * time.Second
 
 // NewAgent creates an agent for one provider and one control socket.
-// runnerKind is copied into every Job for logs/reports. fetchBaseline controls
-// whether project-local starts include the OCI baseline before request rules.
-func NewAgent(logger *slog.Logger, socketPath string, provider jobcontext.Provider, runnerKind string, hostManagerConn managerclient.Connection, hostManagerClient *managerclient.ConfigClient, fetchBaseline bool) *Agent {
+// runnerKind is copied into every Job for logs/reports.
+func NewAgent(logger *slog.Logger, socketPath string, provider jobcontext.Provider, runnerKind string, hostManagerConn managerclient.Connection, hostManagerClient *managerclient.ConfigClient) *Agent {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -43,7 +41,6 @@ func NewAgent(logger *slog.Logger, socketPath string, provider jobcontext.Provid
 		logger:            logger.With("component", "agent"),
 		hostManagerConn:   hostManagerConn,
 		hostManagerClient: hostManagerClient,
-		fetchBaseline:     fetchBaseline,
 		provider:          provider,
 		runnerKind:        runnerKind,
 		socketPath:        socketPath,
@@ -80,7 +77,6 @@ func (a *Agent) Run(ctx context.Context) error {
 		SocketPath:            a.socketPath,
 		HostManagerConnection: a.hostManagerConn,
 		HostManagerClient:     hostManagerClient,
-		FetchBaseline:         a.fetchBaseline,
 		RunnerKind:            a.runnerKind,
 		Provider:              a.provider,
 	})

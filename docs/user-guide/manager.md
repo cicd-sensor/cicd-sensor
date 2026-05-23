@@ -139,30 +139,41 @@ bind:
   address: "0.0.0.0"
   port: 8080
 
+default_max_alerts_per_rule: 10
+
 sinks:
   s3-out:
     type: s3
     uri: s3://cicd-sensor-prod/cicd-sensor/
     region: ap-northeast-1
 
-output:
+logs:
   job_result_log:
-    destination: s3-out
+    sink: s3-out
   job_detection_log:
-    destination: s3-out
+    sink: s3-out
   job_runtime_telemetry_log:
-    destination: s3-out
+    sink: s3-out
 ```
 
 `bind` is optional. Omitted or empty values fall back to `address: "0.0.0.0"` (listen on all interfaces) and `port: 8080`. `port` must be in 0–65535.
+`default_max_alerts_per_rule` is optional and uses the same meaning as project config: it sets the default Detection Log limit for rules that do not set `max_alerts`.
 
 For richer routing (per-log-kind destinations, multiple sinks), see
-[Output routing](#output-routing).
+[Log routing](#log-routing).
 
-## Output routing
+| Setting | Purpose |
+| --- | --- |
+| `bind.address` | Listen address. Defaults to `0.0.0.0`. |
+| `bind.port` | Listen port. Defaults to `8080`. |
+| `default_max_alerts_per_rule` | Default per-rule Detection Log limit. Use 1-100 to set a value; omit it or set 0 to use the system default. |
+| `sinks` | Physical log destinations. |
+| `logs` | Mapping from log `log_type` to one sink. |
 
-When logs are aggregated through the manager, define `sinks` and `output`.
-`sinks` define physical destinations, and `output` maps each log kind to a destination.
+## Log routing
+
+When logs are aggregated through the manager, define `sinks` and `logs`.
+`sinks` define physical destinations, and `logs` maps each log kind to one sink.
 
 ```yaml
 sinks:
@@ -180,13 +191,13 @@ sinks:
     project_id: security-prod
     topic: cicd-sensor-runtime-telemetry-log
 
-output:
+logs:
   job_result_log:
-    destination: gcs-result
+    sink: gcs-result
   job_detection_log:
-    destination: pubsub-detection
+    sink: pubsub-detection
   job_runtime_telemetry_log:
-    destination: pubsub-telemetry
+    sink: pubsub-telemetry
 ```
 
 Supported log kinds:
@@ -197,7 +208,7 @@ Supported log kinds:
 | `job_detection_log` | Detection stream for rule hits |
 | `job_runtime_telemetry_log` | Runtime telemetry for incident response and forensics |
 
-Each log kind takes one `destination`.
+Each log kind takes one `sink`.
 Use this mapping to choose patterns such as storing all logs in one GCS destination, streaming only Detection Logs to Pub/Sub, or retaining Runtime Telemetry Logs in object storage.
 
 ### Sink settings
@@ -216,13 +227,13 @@ sinks:
     type: gcs
     uri: gs://cicd-sensor-prod/cicd-sensor/
 
-output:
+logs:
   job_result_log:
-    destination: gcs-prod
+    sink: gcs-prod
   job_detection_log:
-    destination: gcs-prod
+    sink: gcs-prod
   job_runtime_telemetry_log:
-    destination: gcs-prod
+    sink: gcs-prod
 ```
 
 Send logs to Pub/Sub:
@@ -239,11 +250,11 @@ sinks:
     project_id: security-prod
     topic: cicd-sensor-runtime-telemetry-log
 
-output:
+logs:
   job_detection_log:
-    destination: pubsub-detection
+    sink: pubsub-detection
   job_runtime_telemetry_log:
-    destination: pubsub-telemetry
+    sink: pubsub-telemetry
 ```
 
 For GCS / Pub/Sub authentication, the manager process uses standard Google Cloud Application Default Credentials.

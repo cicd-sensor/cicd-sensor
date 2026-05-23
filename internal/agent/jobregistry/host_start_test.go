@@ -26,7 +26,7 @@ func TestJobRegistry_ApplyGitHubHostStart_RegistersAndGet(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false)
+	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{})
 	if err != nil {
 		t.Fatalf("apply host start: %v", err)
 	}
@@ -48,10 +48,10 @@ func TestJobRegistry_ApplyGitHubHostStart_DuplicateReturnsError(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}); err != nil {
 		t.Fatalf("first host start: %v", err)
 	}
-	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false); err == nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}); err == nil {
 		t.Fatal("expected error on duplicate host start")
 	}
 }
@@ -61,7 +61,7 @@ func TestJobRegistry_ApplyGitHubHostStart_RequiresManager(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, nil, true)
+	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, nil)
 	if !errors.Is(err, jobregistry.ErrHostManagerRequired) {
 		t.Fatalf("apply host start: got %v, want %v", err, jobregistry.ErrHostManagerRequired)
 	}
@@ -84,7 +84,7 @@ func TestJobRegistry_ApplyGitHubHostStart_PendingDuplicateReturnsError(t *testin
 
 	startDone := make(chan error, 1)
 	go func() {
-		_, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, fetcher, false)
+		_, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, fetcher)
 		startDone <- err
 	}()
 
@@ -94,7 +94,7 @@ func TestJobRegistry_ApplyGitHubHostStart_PendingDuplicateReturnsError(t *testin
 		t.Fatal("ApplyGitHubHostStart did not reach manager fetch within timeout")
 	}
 
-	_, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, nil, false)
+	_, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, nil)
 	if !errors.Is(err, jobregistry.ErrJobAlreadyRegistered) {
 		t.Fatalf("in-flight duplicate host start: got %v, want %v", err, jobregistry.ErrJobAlreadyRegistered)
 	}
@@ -124,7 +124,7 @@ func TestJobRegistry_ApplyGitHubHostStart_UnwindsOnBindFailure(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", math.MaxInt32, managerclient.Connection{}, staticManagerFetcher{}, false); err == nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", math.MaxInt32, managerclient.Connection{}, staticManagerFetcher{}); err == nil {
 		t.Fatal("expected apply host start to fail when BindProcessCgroupToJob errors")
 	}
 
@@ -151,7 +151,7 @@ func TestJobRegistry_ApplyGitHubHostStart_SetsHostScope(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false)
+	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{})
 	if err != nil {
 		t.Fatalf("apply host start: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, client, true)
+	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, client)
 	if err != nil {
 		t.Fatalf("apply host start: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, client, false); err != nil {
+	if _, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, client); err != nil {
 		t.Fatalf("apply host start: %v", err)
 	}
 	collect := rule.RuleActionCollect
@@ -269,7 +269,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 			Targets:        []rule.RuleModifierTarget{{RulesetID: "project", RuleID: "project-only"}},
 			OverrideAction: &collect,
 		}},
-	}}, managerclient.Connection{}, nil, false, false)
+	}}, managerclient.Connection{}, nil, false)
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestJobRegistry_ApplyGitHubHostStart_ManagerFailureFailsClosed(t *testing.T
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, client, false)
+	job, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, client)
 	if err == nil {
 		t.Fatal("expected manager fetch failure")
 	}
@@ -326,7 +326,7 @@ func TestJobRegistry_ApplyGitLabHostStart_RequiresManager(t *testing.T) {
 	id := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
 	meta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitLabHostStart(testCtx, id, meta, "machine", managerclient.Connection{}, nil, true)
+	job, err := jr.ApplyGitLabHostStart(testCtx, id, meta, "machine", managerclient.Connection{}, nil)
 	if !errors.Is(err, jobregistry.ErrHostManagerRequired) {
 		t.Fatalf("apply gitlab host start: got %v, want %v", err, jobregistry.ErrHostManagerRequired)
 	}
@@ -343,7 +343,7 @@ func TestJobRegistry_ApplyGitHubHostStart_RejectsAfterProjectOnly(t *testing.T) 
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	projectJob, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false)
+	projectJob, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false)
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestJobRegistry_ApplyGitHubHostStart_RejectsAfterProjectOnly(t *testing.T) 
 		t.Fatal("expected project-only job to have a project scope")
 	}
 
-	hostJob, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, nil, false)
+	hostJob, err := jr.ApplyGitHubHostStart(testCtx, id, meta, "machine", 0, managerclient.Connection{}, nil)
 	if !errors.Is(err, jobregistry.ErrHostAfterProject) {
 		t.Fatalf("apply host start after project: got %v, want %v", err, jobregistry.ErrHostAfterProject)
 	}

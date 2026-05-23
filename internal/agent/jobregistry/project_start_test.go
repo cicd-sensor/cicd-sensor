@@ -23,7 +23,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_SeedsProjectDefaultMaxAlerts(t *tes
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 12, nil, managerclient.Connection{}, nil, false, false)
+	job, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 12, nil, managerclient.Connection{}, nil, false)
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_AppliesProjectRules(t *testing.T) {
 			Targets:        []rule.RuleModifierTarget{{RulesetID: "project", RuleID: "project_exec"}},
 			OverrideAction: &collect,
 		}},
-	}}, managerclient.Connection{}, nil, false, false)
+	}}, managerclient.Connection{}, nil, false)
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_ManagerConfigIgnoresLocalProjectInp
 	job, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 12, localSources, managerclient.Connection{
 		BaseURL: server.URL,
 		Token:   testManagerToken,
-	}, client, true, false)
+	}, client, false)
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_SetsProjectScopeOnNewJob(t *testing
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false)
+	job, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false)
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
@@ -162,11 +162,11 @@ func TestJobRegistry_ApplyGitHubProjectStart_UpdatesExistingJob(t *testing.T) {
 	hostMeta := jobcontext.JobMetadata{}
 	projectMeta := jobcontext.JobMetadata{}
 
-	job, err := jr.ApplyGitHubHostStart(testCtx, id, hostMeta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false)
+	job, err := jr.ApplyGitHubHostStart(testCtx, id, hostMeta, "machine", 0, managerclient.Connection{}, staticManagerFetcher{})
 	if err != nil {
 		t.Fatalf("apply host start: %v", err)
 	}
-	got, err := jr.ApplyGitHubProjectStart(testCtx, id, projectMeta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false)
+	got, err := jr.ApplyGitHubProjectStart(testCtx, id, projectMeta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false)
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
@@ -186,10 +186,10 @@ func TestJobRegistry_ApplyGitHubProjectStart_DuplicateReturnsError(t *testing.T)
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	if _, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false); err != nil {
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false); err != nil {
 		t.Fatalf("first project start: %v", err)
 	}
-	if _, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false); !errors.Is(err, jobpkg.ErrProjectScopeAlreadySet) {
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false); !errors.Is(err, jobpkg.ErrProjectScopeAlreadySet) {
 		t.Fatalf("second project start error: got %v, want %v", err, jobpkg.ErrProjectScopeAlreadySet)
 	}
 }
@@ -205,7 +205,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_PendingDuplicateReturnsError(t *tes
 
 	startDone := make(chan error, 1)
 	go func() {
-		_, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, fetcher, false, false)
+		_, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, fetcher, false)
 		startDone <- err
 	}()
 
@@ -215,7 +215,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_PendingDuplicateReturnsError(t *tes
 		t.Fatal("ApplyGitHubProjectStart did not reach manager fetch within timeout")
 	}
 
-	_, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false, false)
+	_, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false)
 	if !errors.Is(err, jobregistry.ErrJobAlreadyRegistered) {
 		t.Fatalf("in-flight duplicate project start: got %v, want %v", err, jobregistry.ErrJobAlreadyRegistered)
 	}

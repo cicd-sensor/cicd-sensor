@@ -31,7 +31,7 @@ func (staticManagerFetcher) FetchConfig(context.Context, *managerv1.FetchConfigR
 func TestGitHubJobHealth_RequiresPeerPID(t *testing.T) {
 	registry := jobregistry.New(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "host-health-auth", "build", "1", "runner-health-auth")
-	if _, err := registry.ApplyGitHubHostStart(context.Background(), identity, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
+	if _, err := registry.ApplyGitHubHostStart(context.Background(), identity, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}); err != nil {
 		t.Fatalf("host start: %v", err)
 	}
 
@@ -59,7 +59,7 @@ func TestGitHubJobHealth_RequiresPeerPID(t *testing.T) {
 func TestGitHubHostEnd_RequiresPeerPIDBeforeFinalizing(t *testing.T) {
 	registry := jobregistry.New(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "host-end-auth", "build", "1", "runner-end-auth")
-	if _, err := registry.ApplyGitHubHostStart(context.Background(), identity, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}, false); err != nil {
+	if _, err := registry.ApplyGitHubHostStart(context.Background(), identity, jobcontext.JobMetadata{}, "machine", 0, managerclient.Connection{}, staticManagerFetcher{}); err != nil {
 		t.Fatalf("host start: %v", err)
 	}
 

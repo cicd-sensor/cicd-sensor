@@ -83,22 +83,21 @@ rule_sets:
 bind:
   address: 127.0.0.1
   port: 0
-defaults:
-  default_max_alerts_per_rule: 25
+default_max_alerts_per_rule: 25
 sinks:
   test-sink:
     type: gcs
     uri: gs://test-bucket
-output:
+logs:
   job_result_log:
-    destination: test-sink
+    sink: test-sink
 `,
-			wantRuleSets: 1,
+			wantRuleSets: 2,
 			wantManager:  true,
 			wantDefault:  25,
 		},
 		{
-			name:      "empty bundle response is allowed when no rules file is configured",
+			name:      "baseline response is allowed when no rules file is configured",
 			token:     testManagerSecret,
 			req:       &managerv1.FetchConfigRequest{JobIdentity: validIdentity},
 			ruleFiles: map[string]string{},
@@ -107,7 +106,7 @@ bind:
   address: 127.0.0.1
   port: 0
 `,
-			wantRuleSets: 0,
+			wantRuleSets: 1,
 		},
 		{
 			name:     "token mismatch returns unauthenticated",
@@ -158,13 +157,13 @@ bind:
 			}
 			config := &ServedConfig{
 				ConfigRevision:          startupCfg.Revision,
-				DefaultMaxAlertsPerRule: startupCfg.Defaults.DefaultMaxAlertsPerRule,
+				DefaultMaxAlertsPerRule: startupCfg.DefaultMaxAlertsPerRule,
 			}
 			var rulesPath string
 			if len(tt.ruleFiles) > 0 {
 				rulesPath = writeManagerRuleBundle(t, dir, tt.ruleFiles)
 			}
-			if startupCfg.Output["job_result_log"].Destination != "" {
+			if startupCfg.Logs["job_result_log"].Sink != "" {
 				config.OutputSettings = &managerv1.OutputSettings{
 					JobResultLog: &managerv1.OutputSetting{
 						Enabled:              true,
@@ -175,6 +174,20 @@ bind:
 			}
 
 			server := NewServer(testLogger, ":0", testManagerTokens, config, rulesPath, &startupCfg, nil)
+			server.baselineRules = &fakeBaselineRuleSource{
+				rules: rulesource.LoadedRules{
+					RuleSets: []rule.RuleSet{{
+						RulesetID: "baseline-set",
+						Revision:  "v20260519-001",
+						Rules: []rule.Rule{{
+							RuleID:    "baseline_detect",
+							EventKind: "process_exec",
+							Condition: `process_name == "true"`,
+							Action:    rule.RuleActionDetect,
+						}},
+					}},
+				},
+			}
 			ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
 			defer ts.Close()
 
@@ -207,9 +220,9 @@ bind:
 			if got := len(sets); got != tt.wantRuleSets {
 				t.Fatalf("rule_sets: got %d, want %d", got, tt.wantRuleSets)
 			}
-			if tt.wantRuleSets > 0 {
-				if got := sets[0].Revision; !strings.HasPrefix(got, "sha256:") {
-					t.Fatalf("rule_sets[0].revision: got %q, want sha256 revision", got)
+			if len(tt.ruleFiles) > 0 {
+				if got := sets[len(sets)-1].Revision; !strings.HasPrefix(got, "sha256:") {
+					t.Fatalf("last rule set revision: got %q, want sha256 revision", got)
 				}
 			}
 			if resp.Msg.GetConfig().GetDefaultMaxAlertsPerRule() != tt.wantDefault {
@@ -257,8 +270,7 @@ rule_sets:
 `,
 	})
 	server := NewServer(testLogger, ":0", testManagerTokens, &ServedConfig{
-		ConfigRevision:  "rev",
-		BaselineEnabled: true,
+		ConfigRevision: "rev",
 	}, rulesPath, &StartupConfig{}, nil)
 	server.baselineRules = baselineRules
 	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
@@ -297,8 +309,7 @@ rule_sets:
 
 func TestConfigService_FetchConfig_BaselineFailureReturnsUnavailable(t *testing.T) {
 	server := NewServer(testLogger, ":0", testManagerTokens, &ServedConfig{
-		ConfigRevision:  "rev",
-		BaselineEnabled: true,
+		ConfigRevision: "rev",
 	}, "", &StartupConfig{}, nil)
 	server.baselineRules = &fakeBaselineRuleSource{err: errors.New("registry unavailable")}
 	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
@@ -357,7 +368,7 @@ rule_sets:
 	if err != nil {
 		t.Fatalf("initial fetch config: %v", err)
 	}
-	assertFirstRuleSetID(t, first.Msg.RuleSources, "initial-set")
+	assertRuleSetIDAt(t, first.Msg.RuleSources, 1, "initial-set")
 
 	if err := os.WriteFile(rulesPath, []byte(`
 rule_sets:
@@ -377,7 +388,7 @@ rule_sets:
 	if err != nil {
 		t.Fatalf("updated fetch config: %v", err)
 	}
-	assertFirstRuleSetID(t, second.Msg.RuleSources, "updated-set")
+	assertRuleSetIDAt(t, second.Msg.RuleSources, 1, "updated-set")
 }
 
 func TestConfigService_FetchConfig_LocalRulesFailureReturnsUnavailable(t *testing.T) {
@@ -425,14 +436,14 @@ func writeManagerRuleBundle(t *testing.T, dir string, ruleFiles map[string]strin
 	return path
 }
 
-func assertFirstRuleSetID(t *testing.T, sources []*managerv1.RuleSource, want string) {
+func assertRuleSetIDAt(t *testing.T, sources []*managerv1.RuleSource, index int, want string) {
 	t.Helper()
 	loaded := protoconv.FromProtoRuleSources(sources)
-	if len(loaded) == 0 || len(loaded[0].RuleSets) == 0 {
-		t.Fatalf("rule sources: got %+v, want first ruleset %q", loaded, want)
+	if len(loaded) <= index || len(loaded[index].RuleSets) == 0 {
+		t.Fatalf("rule sources: got %+v, want ruleset %q at index %d", loaded, want, index)
 	}
-	if got := loaded[0].RuleSets[0].RulesetID; got != want {
-		t.Fatalf("first ruleset: got %q, want %q", got, want)
+	if got := loaded[index].RuleSets[0].RulesetID; got != want {
+		t.Fatalf("ruleset at index %d: got %q, want %q", index, got, want)
 	}
 }
 

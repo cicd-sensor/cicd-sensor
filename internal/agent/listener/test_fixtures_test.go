@@ -79,6 +79,9 @@ func setupListenerWithRegistryAndRootForProviderWithHostManager(t *testing.T, pr
 	sock := filepath.Join(dir, "t.sock")
 
 	jobRegistry := jobregistry.New(testLogger)
+	jobRegistry.SetBaselineLoadForTesting(func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+		return rulesource.LoadedRules{}, nil
+	})
 	l := listener.New(listener.Config{
 		Logger:                testLogger,
 		JobRegistry:           jobRegistry,

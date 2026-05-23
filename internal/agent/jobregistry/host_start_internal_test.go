@@ -14,12 +14,10 @@ func TestBuildHostScopeFromManagerConfigSkipsDirectBaseline(t *testing.T) {
 	jr := newTestJobRegistry()
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
-	restoreBaselineLoad := baselineLoad
-	baselineLoad = func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+	jr.SetBaselineLoadForTesting(func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
 		t.Fatal("baseline loader should not be called when manager config is present")
 		return rulesource.LoadedRules{}, nil
-	}
-	t.Cleanup(func() { baselineLoad = restoreBaselineLoad })
+	})
 
 	scope, err := jr.buildHostScopeFromManagerConfig(testCtx, id, meta, "machine", managerclient.Connection{}, fakeManagerFetcher{})
 	if err != nil {

@@ -97,12 +97,12 @@ rule_modifiers:
 	if result.DefaultMaxAlertsPerRule != 23 {
 		t.Fatalf("default_max_alerts_per_rule: got %d, want 23", result.DefaultMaxAlertsPerRule)
 	}
-	if len(result.RuleSources) != 1 {
-		t.Fatalf("rule_sources: got %d, want 1", len(result.RuleSources))
+	if len(result.RuleSources) != 2 {
+		t.Fatalf("rule_sources: got %d, want 2", len(result.RuleSources))
 	}
-	ruleSets := result.RuleSources[0].RuleSets
+	ruleSets := result.RuleSources[1].RuleSets
 	if len(ruleSets) != 1 {
-		t.Fatalf("rule_sources[0].rule_sets: got %d, want 1", len(ruleSets))
+		t.Fatalf("rule_sources[1].rule_sets: got %d, want 1", len(ruleSets))
 	}
 	if got := ruleSets[0].Rules[0].RuleID; got != "detect_bash" {
 		t.Fatalf("rule_id: got %q, want detect_bash", got)
@@ -110,9 +110,9 @@ rule_modifiers:
 	if got := ruleSets[0].Rules[0].EventKind; got != jobevent.ProcessExec {
 		t.Fatalf("event_kind: got %q, want %q", got, jobevent.ProcessExec)
 	}
-	ruleModifiers := result.RuleSources[0].RuleModifiers
+	ruleModifiers := result.RuleSources[1].RuleModifiers
 	if len(ruleModifiers) != 1 {
-		t.Fatalf("rule_sources[0].rule_modifiers: got %d, want 1", len(ruleModifiers))
+		t.Fatalf("rule_sources[1].rule_modifiers: got %d, want 1", len(ruleModifiers))
 	}
 	if !result.OutputSettings.GetJobResultLog().GetEnabled() {
 		t.Fatal("output_settings.job_result_log.enabled: got false, want true")
@@ -132,8 +132,8 @@ rule_modifiers:
 	if scope.DefaultMaxAlertsPerRule != 23 {
 		t.Fatalf("scope default_max_alerts_per_rule: got %d, want 23", scope.DefaultMaxAlertsPerRule)
 	}
-	if len(scope.ResolvedRules.Rules) != 1 {
-		t.Fatalf("resolved rules: got %d, want 1", len(scope.ResolvedRules.Rules))
+	if !resolvedRulesContain(scope, "detect_bash") {
+		t.Fatalf("resolved rules do not contain detect_bash")
 	}
 	if !scope.OutputSettings.GetJobResultLog().GetEnabled() {
 		t.Fatal("expected scope to store output settings from manager response")
@@ -200,8 +200,8 @@ func TestManagerIntegration_FetchConfig_RejectsInvalidIdentity(t *testing.T) {
 	}
 }
 
-// TestManagerIntegration_FetchConfig_EmptyBundle verifies that an empty rule
-// tree round-trips without triggering digest or parse errors on the agent.
+// TestManagerIntegration_FetchConfig_EmptyBundle verifies that an empty local
+// rule tree still receives the baseline rules from the manager.
 func TestManagerIntegration_FetchConfig_EmptyBundle(t *testing.T) {
 	managerToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
 
@@ -229,7 +229,19 @@ func TestManagerIntegration_FetchConfig_EmptyBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetch config: %v", err)
 	}
-	if len(result.RuleSources) != 0 {
-		t.Fatalf("expected empty rule sources, got %d", len(result.RuleSources))
+	if len(result.RuleSources) != 1 {
+		t.Fatalf("rule_sources: got %d, want 1 baseline source", len(result.RuleSources))
 	}
+	if len(result.RuleSources[0].RuleSets) == 0 {
+		t.Fatal("expected baseline rule sets")
+	}
+}
+
+func resolvedRulesContain(scope *jobscope.JobScopeState, ruleID string) bool {
+	for _, resolved := range scope.ResolvedRules.Rules {
+		if resolved.Rule.RuleID == ruleID {
+			return true
+		}
+	}
+	return false
 }

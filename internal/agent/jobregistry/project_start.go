@@ -23,21 +23,20 @@ func (jr *JobRegistry) ApplyGitHubProjectStart(
 	projectRuleSources []rulesource.LoadedRules,
 	projectManagerConnection managerclient.Connection,
 	projectManagerClient ManagerConfigFetcher,
-	fetchBaseline bool,
 	debugEnabled bool,
 ) (*job.Job, error) {
 	// Project/start peer authorization lives here because existing-host and
 	// hosted project-only flows use different Job/BPF state.
 	reservation := jr.reserveJobStart(identity)
 	if reservation.existing != nil {
-		return jr.attachGitHubProjectScopeToExistingJob(ctx, reservation.existing, identity, metadata, runnerKind, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, fetchBaseline, debugEnabled)
+		return jr.attachGitHubProjectScopeToExistingJob(ctx, reservation.existing, identity, metadata, runnerKind, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, debugEnabled)
 	}
 	if reservation.inFlight() {
 		return nil, ErrJobAlreadyRegistered
 	}
 	defer reservation.done()
 
-	return jr.startGitHubProjectOnlyJob(ctx, identity, metadata, runnerKind, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, fetchBaseline, debugEnabled)
+	return jr.startGitHubProjectOnlyJob(ctx, identity, metadata, runnerKind, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, debugEnabled)
 }
 
 func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
@@ -51,7 +50,6 @@ func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
 	projectRuleSources []rulesource.LoadedRules,
 	projectManagerConnection managerclient.Connection,
 	projectManagerClient ManagerConfigFetcher,
-	fetchBaseline bool,
 	debugEnabled bool,
 ) (*job.Job, error) {
 	if existing.ProjectScope() != nil {
@@ -67,7 +65,7 @@ func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
 	if projectManagerClient != nil {
 		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, identity, metadata, runnerKind, projectManagerConnection, projectManagerClient)
 	} else {
-		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, identity, projectDefaultMaxAlertsPerRule, projectRuleSources, fetchBaseline)
+		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, identity, projectDefaultMaxAlertsPerRule, projectRuleSources)
 	}
 	if err != nil {
 		return nil, err
@@ -90,7 +88,6 @@ func (jr *JobRegistry) startGitHubProjectOnlyJob(
 	projectRuleSources []rulesource.LoadedRules,
 	projectManagerConnection managerclient.Connection,
 	projectManagerClient ManagerConfigFetcher,
-	fetchBaseline bool,
 	debugEnabled bool,
 ) (*job.Job, error) {
 	var projectScope *jobscope.JobScopeState
@@ -98,7 +95,7 @@ func (jr *JobRegistry) startGitHubProjectOnlyJob(
 	if projectManagerClient != nil {
 		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, identity, metadata, runnerKind, projectManagerConnection, projectManagerClient)
 	} else {
-		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, identity, projectDefaultMaxAlertsPerRule, projectRuleSources, fetchBaseline)
+		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, identity, projectDefaultMaxAlertsPerRule, projectRuleSources)
 	}
 	if err != nil {
 		return nil, err
@@ -155,16 +152,14 @@ func (jr *JobRegistry) buildProjectScopeFromManagerConfig(ctx context.Context, i
 }
 
 // buildProjectScopeFromLocalConfig builds a resolved project scope from project-local config.
-func (jr *JobRegistry) buildProjectScopeFromLocalConfig(ctx context.Context, identity jobcontext.JobIdentity, projectDefaultMaxAlertsPerRule int, projectRuleSources []rulesource.LoadedRules, fetchBaseline bool) (*jobscope.JobScopeState, error) {
+func (jr *JobRegistry) buildProjectScopeFromLocalConfig(ctx context.Context, identity jobcontext.JobIdentity, projectDefaultMaxAlertsPerRule int, projectRuleSources []rulesource.LoadedRules) (*jobscope.JobScopeState, error) {
 	projectScope := jobscope.NewProject()
-	if fetchBaseline {
-		baselineSource, err := jr.loadBaselineRules(ctx, identity)
-		if err != nil {
-			return nil, err
-		}
-		if err := projectScope.ApplyBaselineRules(baselineSource); err != nil {
-			return nil, err
-		}
+	baselineSource, err := jr.loadBaselineRules(ctx, identity)
+	if err != nil {
+		return nil, err
+	}
+	if err := projectScope.ApplyBaselineRules(baselineSource); err != nil {
+		return nil, err
 	}
 	if err := projectScope.ApplyProjectLocalConfig(jobscope.ProjectLocalConfig{
 		RuleSources:             projectRuleSources,

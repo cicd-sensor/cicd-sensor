@@ -16,7 +16,6 @@ type ServedConfig struct {
 	ConfigRevision          string
 	DefaultMaxAlertsPerRule int
 	OutputSettings          *managerv1.OutputSettings
-	BaselineEnabled         bool
 }
 
 type BaselineRuleSource interface {

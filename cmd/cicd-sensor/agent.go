@@ -137,7 +137,7 @@ func runAgentStart(args []string) {
 		os.Exit(1)
 	}
 
-	a := agent.NewAgent(logger, opts.SocketPath, jobcontext.Provider(opts.Provider), opts.Runner, hostManager, hostManagerClient, true)
+	a := agent.NewAgent(logger, opts.SocketPath, jobcontext.Provider(opts.Provider), opts.Runner, hostManager, hostManagerClient)
 	a.SetShutdownGrace(opts.ShutdownGrace)
 	if err := a.Run(ctx); err != nil {
 		if errors.Is(err, listener.ErrAlreadyRunning) {

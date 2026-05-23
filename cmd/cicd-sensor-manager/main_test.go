@@ -273,9 +273,9 @@ func TestResolveFilePathFromFlagOrEnv(t *testing.T) {
 
 func TestBuildServedConfig(t *testing.T) {
 	startup := manager.StartupConfig{
-		Revision: "sha256:config",
+		Revision:                "sha256:config",
+		DefaultMaxAlertsPerRule: 7,
 	}
-	startup.Defaults.DefaultMaxAlertsPerRule = 7
 	settings := &managerv1.OutputSettings{
 		JobDetectionLog: &managerv1.OutputSetting{
 			Enabled:              true,
@@ -289,11 +289,8 @@ func TestBuildServedConfig(t *testing.T) {
 		},
 	}
 
-	served := buildServedConfig(startup, true, settings)
+	served := buildServedConfig(startup, settings)
 
-	if !served.BaselineEnabled {
-		t.Fatalf("BaselineEnabled: got false, want true")
-	}
 	if served.ConfigRevision != "sha256:config" {
 		t.Fatalf("ConfigRevision: got %q, want sha256:config", served.ConfigRevision)
 	}
@@ -308,11 +305,6 @@ func TestBuildServedConfig(t *testing.T) {
 	}
 	if !served.OutputSettings.GetJobResultLog().GetEnabled() {
 		t.Fatalf("result settings: got false, want true")
-	}
-
-	served = buildServedConfig(startup, false, settings)
-	if served.BaselineEnabled {
-		t.Fatalf("BaselineEnabled after disabled apply: got true, want false")
 	}
 }
 

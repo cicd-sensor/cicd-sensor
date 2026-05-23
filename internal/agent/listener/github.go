@@ -36,7 +36,7 @@ func (l *Listener) handleGitHubHostStart(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, err = l.jobRegistry.ApplyGitHubHostStart(r.Context(), identity, metadata, l.runnerKind, rootPID, l.hostManagerConn, l.hostManagerClient, l.fetchBaseline)
+	_, err = l.jobRegistry.ApplyGitHubHostStart(r.Context(), identity, metadata, l.runnerKind, rootPID, l.hostManagerConn, l.hostManagerClient)
 	if err != nil {
 		l.writeStartError(w, r, "host_start_failed", err)
 		return
@@ -99,7 +99,6 @@ func (l *Listener) handleGitHubProjectStart(w http.ResponseWriter, r *http.Reque
 		req.RuleSources,
 		managerConnection,
 		projectManagerClient,
-		l.fetchBaseline,
 		req.DebugEnabled,
 	)
 	if err != nil {

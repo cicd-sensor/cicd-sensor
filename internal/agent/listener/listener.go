@@ -43,7 +43,6 @@ type Listener struct {
 	socketPath        string
 	hostManagerConn   managerclient.Connection
 	hostManagerClient jobregistry.ManagerConfigFetcher
-	fetchBaseline     bool
 	runnerKind        string
 	provider          jobcontext.Provider
 	server            *http.Server
@@ -57,7 +56,6 @@ type Config struct {
 	SocketPath            string
 	HostManagerConnection managerclient.Connection
 	HostManagerClient     jobregistry.ManagerConfigFetcher
-	FetchBaseline         bool
 	RunnerKind            string
 	Provider              jobcontext.Provider
 }
@@ -74,7 +72,6 @@ func New(cfg Config) *Listener {
 		socketPath:        cfg.SocketPath,
 		hostManagerConn:   cfg.HostManagerConnection,
 		hostManagerClient: cfg.HostManagerClient,
-		fetchBaseline:     cfg.FetchBaseline,
 		runnerKind:        cfg.RunnerKind,
 		provider:          cfg.Provider,
 	}

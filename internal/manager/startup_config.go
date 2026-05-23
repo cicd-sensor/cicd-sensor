@@ -19,10 +19,6 @@ type startupBindConfig struct {
 	Port    *int   `yaml:"port"`
 }
 
-type startupDefaultsConfig struct {
-	DefaultMaxAlertsPerRule int `yaml:"default_max_alerts_per_rule,omitempty"`
-}
-
 const (
 	defaultBindAddress = "0.0.0.0"
 	defaultBindPort    = 8080
@@ -30,12 +26,11 @@ const (
 
 // StartupConfig is the manager startup configuration loaded from manager.yaml.
 type StartupConfig struct {
-	Revision        string                `yaml:"-"`
-	Bind            startupBindConfig     `yaml:"bind"`
-	Defaults        startupDefaultsConfig `yaml:"defaults,omitempty"`
-	Sinks           SinksConfig           `yaml:"sinks,omitempty"`
-	Output          OutputConfig          `yaml:"output,omitempty"`
-	DisableBaseline bool                  `yaml:"disable_baseline,omitempty"`
+	Revision                string            `yaml:"-"`
+	Bind                    startupBindConfig `yaml:"bind"`
+	DefaultMaxAlertsPerRule int               `yaml:"default_max_alerts_per_rule,omitempty"`
+	Sinks                   SinksConfig       `yaml:"sinks,omitempty"`
+	Logs                    LogsConfig        `yaml:"logs,omitempty"`
 }
 
 // SinksConfig maps an operator-defined sink name to its physical destination.
@@ -50,12 +45,12 @@ type SinkConfig struct {
 	Topic     string `yaml:"topic,omitempty"`
 }
 
-// OutputConfig maps a log name to one sink name.
-type OutputConfig map[string]LogOutput
+// LogsConfig maps a log type to one sink name.
+type LogsConfig map[string]LogOutput
 
 // LogOutput selects the named sink for one manager-ingested log.
 type LogOutput struct {
-	Destination string `yaml:"destination"`
+	Sink string `yaml:"sink"`
 }
 
 // LoadStartupConfig reads and validates the manager startup config file.
@@ -66,7 +61,7 @@ func LoadStartupConfig(path string) (StartupConfig, error) {
 	}
 
 	var cfg StartupConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Load(data, &cfg, yaml.WithKnownFields()); err != nil {
 		return StartupConfig{}, fmt.Errorf("parse startup config %s: %w", path, err)
 	}
 	if cfg.Bind.Address == "" {
@@ -80,15 +75,15 @@ func LoadStartupConfig(path string) (StartupConfig, error) {
 		return StartupConfig{}, fmt.Errorf("bind.port must be between 0 and 65535")
 	}
 	if err := rule.ValidateMaxAlertsBound(
-		cfg.Defaults.DefaultMaxAlertsPerRule,
-		"defaults.default_max_alerts_per_rule",
+		cfg.DefaultMaxAlertsPerRule,
+		"default_max_alerts_per_rule",
 	); err != nil {
 		return StartupConfig{}, err
 	}
 	if err := validateSinks(cfg.Sinks); err != nil {
 		return StartupConfig{}, err
 	}
-	if err := validateOutput(cfg.Output, cfg.Sinks); err != nil {
+	if err := validateLogs(cfg.Logs, cfg.Sinks); err != nil {
 		return StartupConfig{}, err
 	}
 	sum := sha256.Sum256(data)
@@ -168,16 +163,16 @@ func validatePubSubSink(name string, sc SinkConfig) error {
 	return nil
 }
 
-func validateOutput(output OutputConfig, sinks SinksConfig) error {
-	for logName, logOutput := range output {
+func validateLogs(logs LogsConfig, sinks SinksConfig) error {
+	for logName, logOutput := range logs {
 		if !knownOutputKind(logName) {
-			return fmt.Errorf("output.%s: unknown log key", logName)
+			return fmt.Errorf("logs.%s: unknown log key", logName)
 		}
-		if strings.TrimSpace(logOutput.Destination) == "" {
-			return fmt.Errorf("output.%s.destination: sink name is required", logName)
+		if strings.TrimSpace(logOutput.Sink) == "" {
+			return fmt.Errorf("logs.%s.sink: sink name is required", logName)
 		}
-		if _, ok := sinks[logOutput.Destination]; !ok {
-			return fmt.Errorf("output.%s.destination %q is not a defined sink name", logName, logOutput.Destination)
+		if _, ok := sinks[logOutput.Sink]; !ok {
+			return fmt.Errorf("logs.%s.sink %q is not a defined sink name", logName, logOutput.Sink)
 		}
 	}
 	return nil

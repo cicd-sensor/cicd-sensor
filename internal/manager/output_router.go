@@ -22,7 +22,7 @@ const (
 
 var errNoCollectorSinks = errors.New("collector sinks are not configured")
 
-// OutputRouter owns the manager sinks selected by manager.yaml output routing.
+// OutputRouter owns the manager sinks selected by manager.yaml log routing.
 type OutputRouter struct {
 	logger  *slog.Logger
 	perKind map[logkind.LogKind]sink.Sink
@@ -36,8 +36,8 @@ var buildSink = buildNamedSink
 
 // BuildOutputs wires validated startup config into per-log-kind routing.
 // Returning nil means the manager accepts no collector ingest destination.
-func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, output OutputConfig) (*OutputRouter, error) {
-	if len(output) == 0 {
+func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, logs LogsConfig) (*OutputRouter, error) {
+	if len(logs) == 0 {
 		return nil, nil
 	}
 
@@ -55,21 +55,21 @@ func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, o
 		createdSinks = append(createdSinks, dst)
 	}
 
-	perKind := make(map[logkind.LogKind]sink.Sink, len(output))
-	for logName, logOutput := range output {
+	perKind := make(map[logkind.LogKind]sink.Sink, len(logs))
+	for logName, logOutput := range logs {
 		logKind, ok := logkind.Parse(logName)
 		if !ok {
 			if closeErr := closeSinks(createdSinks); closeErr != nil {
-				return nil, fmt.Errorf("unknown output log kind %q (cleanup: %v)", logName, closeErr)
+				return nil, fmt.Errorf("unknown log kind %q (cleanup: %v)", logName, closeErr)
 			}
-			return nil, fmt.Errorf("unknown output log kind %q", logName)
+			return nil, fmt.Errorf("unknown log kind %q", logName)
 		}
-		dst, ok := namedSinks[logOutput.Destination]
+		dst, ok := namedSinks[logOutput.Sink]
 		if !ok {
 			if closeErr := closeSinks(createdSinks); closeErr != nil {
-				return nil, fmt.Errorf("output.%s.destination %q is not a defined sink name (cleanup: %v)", logName, logOutput.Destination, closeErr)
+				return nil, fmt.Errorf("logs.%s.sink %q is not a defined sink name (cleanup: %v)", logName, logOutput.Sink, closeErr)
 			}
-			return nil, fmt.Errorf("output.%s.destination %q is not a defined sink name", logName, logOutput.Destination)
+			return nil, fmt.Errorf("logs.%s.sink %q is not a defined sink name", logName, logOutput.Sink)
 		}
 		perKind[logKind] = dst
 	}
