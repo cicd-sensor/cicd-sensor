@@ -25,7 +25,7 @@ Every log entry carries these top-level fields, regardless of log type.
 | `timestamp` | UTC, RFC 3339 |
 | `log_type` | One of the log types listed above (e.g. `cicd_sensor.summary`) |
 | `service_name` | Identifies the emitter of this log. Currently always `cicd-sensor` |
-| `service_version` | Component build version (e.g. `v0.0.27`) |
+| `service_version` | Agent build version (e.g. `v0.0.27`) |
 | `schema_version` | Schema version of this `log_type`. Bumped on breaking changes |
 | `log_id` | UUID(v7) per log row |
 | `scope` | `host` for self-hosted configuration, `project` for GitHub Action invocations |
