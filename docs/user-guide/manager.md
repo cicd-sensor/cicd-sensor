@@ -3,7 +3,7 @@
 cicd-sensor-manager is the component for operating cicd-sensor across multiple runners and projects.
 
 The manager is the central point for config delivery, rule delivery, log ingest, and output routing.
-Agent-to-manager communication uses the gRPC-based Connect protocol, and request / response types are defined with Protocol Buffers.
+Agent-to-manager communication is carried over HTTP/1.1 or HTTP/2.
 
 ```mermaid
 flowchart LR
@@ -12,8 +12,8 @@ flowchart LR
     CLOUD["Cloud Outputs<br/>S3 / GCS / Pub/Sub"]
     SIEM["SIEM"]
 
-    AGENT -->|"FetchConfig<br/>Connect / Proto"| MANAGER
-    AGENT -->|"IngestLog<br/>Connect / Proto"| MANAGER
+    AGENT -->|"FetchConfig"| MANAGER
+    AGENT -->|"IngestLog"| MANAGER
     MANAGER -->|"Store / Stream"| CLOUD
     CLOUD --> SIEM
 
