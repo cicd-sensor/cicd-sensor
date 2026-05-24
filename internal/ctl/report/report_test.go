@@ -37,8 +37,7 @@ func sampleResultLog() resultdoc.JobEventSummaryForReport {
 		GeneratedAt:    time.Date(2026, 4, 30, 12, 5, 0, 0, time.UTC),
 		FinalizeReason: "shutdown",
 		ResultSummary: resultdoc.ResultSummary{
-			Result:    resultdoc.ResultDetected,
-			HitsCount: 1,
+			Result: resultdoc.ResultDetected,
 		},
 		NetworkConnections: []resultdoc.NetworkConnection{{
 			RemoteIP:   "8.8.8.8",
@@ -56,7 +55,10 @@ func sampleResultLog() resultdoc.JobEventSummaryForReport {
 				RuleID:    "curl-egress",
 				RuleName:  "curl egress",
 				Action:    "detect",
-				Timestamp: time.Date(2026, 4, 30, 12, 3, 0, 0, time.UTC),
+				HitCount:  1,
+				AlertEvents: []resultdoc.AlertEvent{{
+					Timestamp: time.Date(2026, 4, 30, 12, 3, 0, 0, time.UTC),
+				}},
 			},
 		},
 	}
@@ -73,8 +75,7 @@ func TestRender_HappyPath(t *testing.T) {
 		StartedAt:   time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
 		GeneratedAt: time.Date(2026, 4, 30, 12, 5, 0, 0, time.UTC),
 		ResultSummary: resultdoc.ResultSummary{
-			Result:    resultdoc.ResultDetected,
-			HitsCount: 1,
+			Result: resultdoc.ResultDetected,
 		},
 		NetworkConnections: []resultdoc.NetworkConnection{{
 			RemoteIP:   "1.1.1.1",
@@ -87,24 +88,27 @@ func TestRender_HappyPath(t *testing.T) {
 			Processes: []resultdoc.ObservationProcess{{PID: 43, ExecPath: "/usr/bin/dig"}},
 		}},
 		Hits: []resultdoc.HitRecord{{
-			Timestamp: time.Date(2026, 4, 30, 12, 3, 0, 0, time.UTC),
 			RulesetID: "set",
 			RuleID:    "curl-egress",
 			RuleName:  "curl egress",
 			RuleType:  "event",
 			RuleCondition: `process.exec_path.endsWith("/curl") &&
 remote_ip == "1.1.1.1"`,
-			Action:    "detect",
-			EventType: "network_connect",
-			Process: &resultdoc.ProcessSummary{
-				PID:      42,
-				ExecPath: "/usr/bin/curl",
-				Argv:     []string{"curl", "-X", "POST", "https://1.1.1.1"},
-				Ancestors: []resultdoc.AncestorProcess{
-					{ExecPath: "/bin/bash"},
-					{ExecPath: "/sbin/init"},
+			Action:   "detect",
+			HitCount: 1,
+			AlertEvents: []resultdoc.AlertEvent{{
+				Timestamp: time.Date(2026, 4, 30, 12, 3, 0, 0, time.UTC),
+				EventType: "network_connect",
+				Process: &resultdoc.ProcessSummary{
+					PID:      42,
+					ExecPath: "/usr/bin/curl",
+					Argv:     []string{"curl", "-X", "POST", "https://1.1.1.1"},
+					Ancestors: []resultdoc.AncestorProcess{
+						{ExecPath: "/bin/bash"},
+						{ExecPath: "/sbin/init"},
+					},
 				},
-			},
+			}},
 		}},
 	}
 
@@ -166,16 +170,19 @@ func TestRender_CorrelationHitShowsRuleMetadataForDetail(t *testing.T) {
 
 	log := &resultdoc.JobEventSummaryForReport{
 		JobIdentity:   jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "r"),
-		ResultSummary: resultdoc.ResultSummary{Result: resultdoc.ResultDetected, HitsCount: 1},
+		ResultSummary: resultdoc.ResultSummary{Result: resultdoc.ResultDetected},
 		Hits: []resultdoc.HitRecord{{
-			Timestamp:     time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
 			RulesetID:     "ci-invariant",
 			RuleID:        "literal_ipv4_egress_burst",
 			RuleName:      "literal ipv4 egress burst",
 			RuleType:      "correlation",
 			RuleCondition: "rule.first.total_count >= 1 && rule.second.total_count >= 1",
 			Action:        "detect",
-			EventType:     "network_connect",
+			HitCount:      1,
+			AlertEvents: []resultdoc.AlertEvent{{
+				Timestamp: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+				EventType: "network_connect",
+			}},
 		}},
 	}
 
@@ -201,20 +208,23 @@ func TestRender_AncestorArgvEmbedded(t *testing.T) {
 
 	log := &resultdoc.JobEventSummaryForReport{
 		JobIdentity:   jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "r"),
-		ResultSummary: resultdoc.ResultSummary{Result: resultdoc.ResultDetected, HitsCount: 1},
+		ResultSummary: resultdoc.ResultSummary{Result: resultdoc.ResultDetected},
 		Hits: []resultdoc.HitRecord{{
 			RulesetID: "set",
 			RuleID:    "curl",
 			Action:    "detect",
-			Timestamp: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
-			Process: &resultdoc.ProcessSummary{
-				ExecPath: "/usr/bin/curl",
-				Argv:     []string{"curl", "https://example.com"},
-				Ancestors: []resultdoc.AncestorProcess{
-					{ExecPath: "/bin/bash", Argv: []string{"bash", "-c", "curl https://example.com"}},
-					{ExecPath: "/sbin/init"},
+			HitCount:  1,
+			AlertEvents: []resultdoc.AlertEvent{{
+				Timestamp: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+				Process: &resultdoc.ProcessSummary{
+					ExecPath: "/usr/bin/curl",
+					Argv:     []string{"curl", "https://example.com"},
+					Ancestors: []resultdoc.AncestorProcess{
+						{ExecPath: "/bin/bash", Argv: []string{"bash", "-c", "curl https://example.com"}},
+						{ExecPath: "/sbin/init"},
+					},
 				},
-			},
+			}},
 		}},
 	}
 
@@ -357,22 +367,25 @@ func TestRender_TruncationMarkerEmbedded(t *testing.T) {
 
 	log := &resultdoc.JobEventSummaryForReport{
 		JobIdentity:   jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "r"),
-		ResultSummary: resultdoc.ResultSummary{Result: resultdoc.ResultDetected, HitsCount: 1},
+		ResultSummary: resultdoc.ResultSummary{Result: resultdoc.ResultDetected},
 		Hits: []resultdoc.HitRecord{{
-			RulesetID:       "set",
-			RuleID:          "curl",
-			Action:          "detect",
-			Timestamp:       time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
-			AlertTruncation: resultdoc.AlertTruncationMaxAlertsReached,
-			AlertCap:        3,
-			AlertDropped:    7,
+			RulesetID: "set",
+			RuleID:    "curl",
+			Action:    "detect",
+			HitCount:  10,
+			MaxAlerts: 3,
+			AlertEvents: []resultdoc.AlertEvent{
+				{Timestamp: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)},
+				{Timestamp: time.Date(2026, 4, 30, 12, 1, 0, 0, time.UTC)},
+				{Timestamp: time.Date(2026, 4, 30, 12, 2, 0, 0, time.UTC)},
+			},
 		}},
 	}
 
 	html := renderString(t, log)
 
-	// The truncation marker travels through the embedded JSON; the JSX
-	// reads it at runtime to render the warning row.
+	// The HTML JSON is pre-flattened in Go; the truncation marker sits on
+	// the last retained event.
 	for _, want := range []string{
 		embeddedJSONFragment(`"alert_dropped":7`),
 		embeddedJSONFragment(`"alert_cap":3`),
@@ -402,7 +415,7 @@ func TestRender_EscapesUntrustedReportData(t *testing.T) {
 			GitHubWorkflowSHA: `sha&value`,
 			GitHubWorkflow:    `workflow "quoted"`,
 		},
-		ResultSummary: resultdoc.ResultSummary{Result: resultdoc.ResultDetected, HitsCount: 1},
+		ResultSummary: resultdoc.ResultSummary{Result: resultdoc.ResultDetected},
 		NetworkConnections: []resultdoc.NetworkConnection{{
 			RemoteIP:   `10.0.0.1"><svg/onload=alert(1)>`,
 			RemotePort: 443,
@@ -420,30 +433,33 @@ func TestRender_EscapesUntrustedReportData(t *testing.T) {
 			}},
 		}},
 		Hits: []resultdoc.HitRecord{{
-			Timestamp: time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC),
 			RulesetID: `set<script>`,
 			RuleID:    `rule</script>`,
 			RuleName:  `name<img src=x onerror=alert(1)>`,
 			Action:    "detect",
-			EventType: "process_exec",
-			Process: &resultdoc.ProcessSummary{
-				PID:      100,
-				ExecPath: `/tmp/evil"><script>alert(1)</script>`,
-				Argv: []string{
-					"node",
-					breakout,
-					lineSeparators,
+			HitCount:  1,
+			AlertEvents: []resultdoc.AlertEvent{{
+				Timestamp: time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC),
+				EventType: "process_exec",
+				Process: &resultdoc.ProcessSummary{
+					PID:      100,
+					ExecPath: `/tmp/evil"><script>alert(1)</script>`,
+					Argv: []string{
+						"node",
+						breakout,
+						lineSeparators,
+					},
+					Ancestors: []resultdoc.AncestorProcess{{
+						ExecPath: `/bin/sh<script>`,
+						Argv:     []string{"sh", "-c", commentBreakout},
+					}},
 				},
-				Ancestors: []resultdoc.AncestorProcess{{
-					ExecPath: `/bin/sh<script>`,
-					Argv:     []string{"sh", "-c", commentBreakout},
-				}},
-			},
-			Payload: map[string]any{
-				"domain":  breakout,
-				"comment": commentBreakout,
-				"unicode": lineSeparators,
-			},
+				Payload: map[string]any{
+					"domain":  breakout,
+					"comment": commentBreakout,
+					"unicode": lineSeparators,
+				},
+			}},
 		}},
 	}
 

@@ -130,5 +130,5 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  cicd-sensorctl token generate")
 	fmt.Fprintln(w, "  cicd-sensorctl report attest [--output-file FILE]")
 	fmt.Fprintln(w, "  cicd-sensorctl report html [--output-file FILE]")
-	fmt.Fprintln(w, "  cicd-sensorctl report stepsummary [--html-url URL] [--debug-url URL] [--health-failed]")
+	fmt.Fprintln(w, "  cicd-sensorctl report stepsummary [--html-url URL] [--health-failed]")
 }

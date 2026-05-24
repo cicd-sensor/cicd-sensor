@@ -63,13 +63,14 @@ func TestBuildJobEventSummaryForReportSanitizesRetainedEvent(t *testing.T) {
 	}
 
 	doc := scope.BuildJobEventSummaryForReport(jobscope.ReportInputs{}, "test", now)
-	if len(doc.Hits) != 1 || doc.Hits[0].Process == nil {
+	if len(doc.Hits) != 1 || len(doc.Hits[0].AlertEvents) != 1 || doc.Hits[0].AlertEvents[0].Process == nil {
 		t.Fatalf("expected 1 hit with process, got %#v", doc.Hits)
 	}
-	if got, want := doc.Hits[0].Process.Argv[1], "<redacted>"; got != want {
+	ev := doc.Hits[0].AlertEvents[0]
+	if got, want := ev.Process.Argv[1], "<redacted>"; got != want {
 		t.Fatalf("report argv: got %q, want %q", got, want)
 	}
-	if got, want := doc.Hits[0].Process.Ancestors[0].Argv[2], "<redacted>"; got != want {
+	if got, want := ev.Process.Ancestors[0].Argv[2], "<redacted>"; got != want {
 		t.Fatalf("report ancestor argv: got %q, want %q", got, want)
 	}
 }

@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"html/template"
 	"io"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 )
@@ -25,7 +27,7 @@ var tmpl = template.Must(template.New("report").Delims("<<{", "}>>").Parse(tmplS
 
 // Render writes a single self-contained HTML report for log to w.
 func Render(w io.Writer, log *resultdoc.JobEventSummaryForReport) error {
-	js, err := json.Marshal(log)
+	js, err := json.Marshal(htmlReportFrom(log))
 	if err != nil {
 		return err
 	}
@@ -34,6 +36,72 @@ func Render(w io.Writer, log *resultdoc.JobEventSummaryForReport) error {
 		JSON  string
 		Logo  template.HTML
 	}{Title: reportTitle(log), JSON: string(js), Logo: template.HTML(logoSVG)})
+}
+
+// htmlHit is one event row consumed by the HTML report's JS. Pre-flattened
+// in Go so the JS does no computation — it just renders.
+type htmlHit struct {
+	Timestamp       time.Time                 `json:"timestamp"`
+	RulesetID       string                    `json:"ruleset_id"`
+	RuleID          string                    `json:"rule_id"`
+	RulesetRevision string                    `json:"ruleset_revision,omitempty"`
+	RuleName        string                    `json:"rule_name,omitempty"`
+	RuleType        string                    `json:"rule_type,omitempty"`
+	RuleCondition   string                    `json:"rule_condition,omitempty"`
+	Action          string                    `json:"action"`
+	EventType       string                    `json:"event_type,omitempty"`
+	Process         *resultdoc.ProcessSummary `json:"process,omitempty"`
+	Payload         map[string]any            `json:"payload,omitempty"`
+	AlertTruncation string                    `json:"alert_truncation,omitempty"`
+	AlertCap        int                       `json:"alert_cap,omitempty"`
+	AlertDropped    int64                     `json:"alert_dropped,omitempty"`
+}
+
+// htmlReport wraps the project result document but replaces per-rule Hits
+// with the flat per-event list the HTML page expects, and forces domain
+// observations through IDNA. The IDNA step is a *visual-spoofing*
+// mitigation (IDN homograph) for human reviewers, not an XSS defense —
+// html/template + textContent already covers XSS.
+type htmlReport struct {
+	*resultdoc.JobEventSummaryForReport
+	Hits               []htmlHit                     `json:"hits"`
+	DomainObservations []resultdoc.DomainObservation `json:"domain_observations"`
+}
+
+func htmlReportFrom(log *resultdoc.JobEventSummaryForReport) htmlReport {
+	if log == nil {
+		return htmlReport{}
+	}
+	flat := make([]htmlHit, 0, len(log.Hits))
+	for _, h := range log.Hits {
+		dropped := h.HitCount - int64(len(h.AlertEvents))
+		for i, e := range h.AlertEvents {
+			rec := htmlHit{
+				Timestamp:       e.Timestamp,
+				RulesetID:       h.RulesetID,
+				RuleID:          h.RuleID,
+				RulesetRevision: h.RulesetRevision,
+				RuleName:        h.RuleName,
+				RuleType:        h.RuleType,
+				RuleCondition:   h.RuleCondition,
+				Action:          h.Action,
+				EventType:       string(e.EventType),
+				Process:         e.Process,
+				Payload:         e.Payload,
+			}
+			if dropped > 0 && i == len(h.AlertEvents)-1 {
+				rec.AlertTruncation = resultdoc.AlertTruncationMaxAlertsReached
+				rec.AlertCap = h.MaxAlerts
+				rec.AlertDropped = dropped
+			}
+			flat = append(flat, rec)
+		}
+	}
+	domains := slices.Clone(log.DomainObservations)
+	for i := range domains {
+		domains[i].Domain = displayDomain(domains[i].Domain)
+	}
+	return htmlReport{JobEventSummaryForReport: log, Hits: flat, DomainObservations: domains}
 }
 
 func reportTitle(log *resultdoc.JobEventSummaryForReport) string {

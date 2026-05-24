@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package cicd_sensor.attestation.v1alpha1;
+
+import "buf/validate/validate.proto";
+
+// Predicate is the body emitted as the in-toto `runtime-trace` v0.1 predicate.
+// The outer in-toto Statement is constructed by the signing step (e.g.
+// actions/attest), not by cicd-sensor.
+message Predicate {
+  MonitorLog monitor_log = 1 [json_name = "monitorLog"];
+}
+
+// MonitorLog mirrors runtime-trace v0.1 monitorLog. Standard runtime-trace
+// fields use plain keys; cicd-sensor extensions use URI keys per spec so
+// that generic consumers can ignore unknown schemas while preserving the
+// evidence for cicd-sensor-aware consumers.
+//
+// `v1alpha1` in the package name marks this schema as pre-stable: it may
+// change — including breaking changes — based on industry movement and
+// feedback. Stable schemas will live under a separate `v1` package.
+message MonitorLog {
+  repeated string network = 1 [json_name = "network"];
+  repeated RuleHitSummary detections = 2 [json_name = "https://cicd-sensor.github.io/detections"];
+  repeated string domains = 3 [json_name = "https://cicd-sensor.github.io/domains"];
+  optional string result = 4 [json_name = "https://cicd-sensor.github.io/result", (buf.validate.field).string = {in: ["passed", "detected", "terminated"]}];
+  JobContext job = 5 [json_name = "https://cicd-sensor.github.io/job"];
+}
+
+// JobContext is the attestation-side job identity + metadata. Defined here
+// (not imported from log/v1) so the attestation schema is independent of the
+// log envelope schema and can evolve separately.
+message JobContext {
+  string provider = 1 [json_name = "provider"];
+  string provider_host = 2 [json_name = "provider_host"];
+  string project_path = 3 [json_name = "project_path"];
+  string job_link = 4 [json_name = "job_link"];
+  string commit_sha = 5 [json_name = "commit_sha"];
+  string ref_name = 6 [json_name = "ref_name"];
+  string trigger = 7 [json_name = "trigger"];
+  string actor_id = 8 [json_name = "actor_id"];
+  string actor_name = 9 [json_name = "actor_name"];
+
+  // GitHub only.
+  string github_run_id = 10 [json_name = "github_run_id"];
+  string github_job = 11 [json_name = "github_job"];
+  string github_run_attempt = 12 [json_name = "github_run_attempt"];
+  string github_runner_tracking_id = 13 [json_name = "github_runner_tracking_id"];
+  string github_workflow_ref = 14 [json_name = "github_workflow_ref"];
+  string github_workflow_sha = 15 [json_name = "github_workflow_sha"];
+  string github_workflow = 16 [json_name = "github_workflow"];
+
+  // GitLab only.
+  string gitlab_job_id = 17 [json_name = "gitlab_job_id"];
+  string gitlab_job_name = 18 [json_name = "gitlab_job_name"];
+  string gitlab_config_ref_uri = 19 [json_name = "gitlab_config_ref_uri"];
+}
+
+// RuleHitSummary mirrors log.v1.DetectedRuleSummary one-to-one. Per-event
+// detail (process tree, payload, event type, timestamp) is intentionally
+// omitted; that detail lives in the detection log and would only inflate
+// the attestation.
+message RuleHitSummary {
+  optional string ruleset_id = 1 [json_name = "ruleset_id"];
+  optional string rule_id = 2 [json_name = "rule_id"];
+  optional string ruleset_revision = 3 [json_name = "ruleset_revision"];
+  optional string action = 4 [json_name = "action", (buf.validate.field).string = {in: ["detect", "terminate"]}];
+  optional uint32 count = 5 [json_name = "count"];
+}
+

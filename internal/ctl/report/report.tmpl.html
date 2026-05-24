@@ -971,6 +971,7 @@ body {
 (function () {
   'use strict';
   var d = window.REPORT_DATA || {};
+  // d.hits is already per-event flat (computed in Go); JS just renders it.
   var hits = d.hits || [];
   var networks = d.network_connections || [];
   var domains = d.domain_observations || [];
@@ -1303,7 +1304,7 @@ body {
     var sectionsNav = el('nav', { class: 'side-nav' },
       el('a', { class: 'side-link active', attrs: { href: '#hits' } },
         el('span', { text: 'Rule matches' }),
-        el('span', { class: 'ct', text: String(rsum.hits_count || hits.length) })
+        el('span', { class: 'ct', text: String(hits.length) })
       ),
       el('a', { class: 'side-link', attrs: { href: '#domains' } },
         el('span', { text: 'Domains' }),
@@ -1396,7 +1397,7 @@ body {
     sec.append(el('div', { class: 'sec-head' },
       el('span', { class: 'sec-id', text: '§01' }),
       el('span', { class: 'sec-title', text: 'Rule matches' }),
-      el('span', { class: 'sec-meta', text: (rsum.hits_count || hits.length) + ' total · ' + groupKeys.length + ' rulesets · time order' })
+      el('span', { class: 'sec-meta', text: hits.length + ' total · ' + groupKeys.length + ' rulesets · time order' })
     ));
     var table = el('table', { class: 'htbl' });
     var colgroup = document.createElement('colgroup');

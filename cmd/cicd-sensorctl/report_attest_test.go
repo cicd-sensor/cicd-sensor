@@ -25,8 +25,7 @@ func sampleProjectResult() resultdoc.JobEventSummaryForReport {
 		GeneratedAt:    time.Date(2026, 4, 30, 12, 5, 0, 0, time.UTC),
 		FinalizeReason: "shutdown",
 		ResultSummary: resultdoc.ResultSummary{
-			Result:    resultdoc.ResultDetected,
-			HitsCount: 1,
+			Result: resultdoc.ResultDetected,
 		},
 		NetworkConnections: []resultdoc.NetworkConnection{{
 			RemoteIP:   "8.8.8.8",
@@ -40,7 +39,10 @@ func sampleProjectResult() resultdoc.JobEventSummaryForReport {
 				RuleID:    "curl-egress",
 				RuleName:  "curl egress",
 				Action:    "detect",
-				Timestamp: time.Date(2026, 4, 30, 12, 3, 0, 0, time.UTC),
+				HitCount:  1,
+				AlertEvents: []resultdoc.AlertEvent{{
+					Timestamp: time.Date(2026, 4, 30, 12, 3, 0, 0, time.UTC),
+				}},
 			},
 		},
 	}

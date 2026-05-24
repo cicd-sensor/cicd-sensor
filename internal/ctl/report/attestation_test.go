@@ -29,16 +29,34 @@ func renderAttestationJSON(t *testing.T, log resultdoc.JobEventSummaryForReport)
 	return got
 }
 
+type ruleHitWire struct {
+	RulesetID       string `json:"ruleset_id,omitempty"`
+	RuleID          string `json:"rule_id,omitempty"`
+	RulesetRevision string `json:"ruleset_revision,omitempty"`
+	Action          string `json:"action,omitempty"`
+	Count           uint32 `json:"count,omitempty"`
+}
+
+// jobWire mirrors log.v1 LogContext keys we care about in tests. We unmarshal
+// loosely because protojson emits empty strings depending on field presence.
+type jobWire struct {
+	Provider          string `json:"provider,omitempty"`
+	ProviderHost      string `json:"provider_host,omitempty"`
+	ProjectPath       string `json:"project_path,omitempty"`
+	CommitSHA         string `json:"commit_sha,omitempty"`
+	ActorName         string `json:"actor_name,omitempty"`
+	GitHubRunID       string `json:"github_run_id,omitempty"`
+	GitHubWorkflow    string `json:"github_workflow,omitempty"`
+	GitHubWorkflowRef string `json:"github_workflow_ref,omitempty"`
+}
+
 type attestationWire struct {
 	MonitorLog struct {
-		Network      []string                `json:"network"`
-		Detections   []resultdoc.HitRecord   `json:"https://cicd-sensor.github.io/detections"`
-		Terminations []resultdoc.HitRecord   `json:"https://cicd-sensor.github.io/terminations"`
-		Domains      []string                `json:"https://cicd-sensor.github.io/domains"`
-		Summary      resultdoc.ResultSummary `json:"https://cicd-sensor.github.io/summary"`
-		JobIdentity  jobcontext.JobIdentity  `json:"https://cicd-sensor.github.io/job-identity"`
-		Metadata     jobcontext.JobMetadata  `json:"https://cicd-sensor.github.io/metadata"`
-		RunnerType   string                  `json:"https://cicd-sensor.github.io/runner-type"`
+		Network    []string      `json:"network"`
+		Detections []ruleHitWire `json:"https://cicd-sensor.github.io/detections"`
+		Domains    []string      `json:"https://cicd-sensor.github.io/domains"`
+		Result     string        `json:"https://cicd-sensor.github.io/result"`
+		Job        jobWire       `json:"https://cicd-sensor.github.io/job"`
 	} `json:"monitorLog"`
 }
 
@@ -66,29 +84,36 @@ func TestRenderAttestation_HappyPath(t *testing.T) {
 		t.Fatalf("output is not valid JSON: %s", got)
 	}
 
-	for _, want := range []string{
+	for _, key := range []string{
 		`"network"`,
 		`"https://cicd-sensor.github.io/detections"`,
-		`"https://cicd-sensor.github.io/terminations"`,
 		`"https://cicd-sensor.github.io/domains"`,
-		`"https://cicd-sensor.github.io/summary"`,
-		`"https://cicd-sensor.github.io/job-identity"`,
-		`"https://cicd-sensor.github.io/metadata"`,
-		`"https://cicd-sensor.github.io/runner-type"`,
-		`"result": "detected"`,
-		`"machine"`,
-		`"hits_count": 1`,
-		`"ruleset_id": "set"`,
-		`"rule_id": "curl-egress"`,
+		`"https://cicd-sensor.github.io/result"`,
+		`"https://cicd-sensor.github.io/job"`,
 	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("missing fragment %q in output:\n%s", want, got)
+		if !strings.Contains(got, key) {
+			t.Fatalf("missing fragment %q in output:\n%s", key, got)
 		}
+	}
+	wire := renderAttestationJSON(t, log)
+	if wire.MonitorLog.Result != "detected" {
+		t.Errorf("result: got %q, want %q", wire.MonitorLog.Result, "detected")
+	}
+	if len(wire.MonitorLog.Detections) != 1 {
+		t.Fatalf("detections: got %d, want 1", len(wire.MonitorLog.Detections))
+	}
+	d := wire.MonitorLog.Detections[0]
+	if d.RulesetID != "set" || d.RuleID != "curl-egress" || d.Action != "detect" || d.Count != 1 {
+		t.Errorf("detection entry: got %#v", d)
 	}
 	for _, mustNotContain := range []string{
 		`"fileAccess"`,
+		`"https://cicd-sensor.github.io/terminations"`,
 		`"https://cicd-sensor.github.io/hits"`,
 		`"https://cicd-sensor.github.io/actions"`,
+		`"https://cicd-sensor.github.io/job-identity"`,
+		`"https://cicd-sensor.github.io/metadata"`,
+		`"hits_count"`,
 	} {
 		if strings.Contains(got, mustNotContain) {
 			t.Fatalf("unexpected fragment %q in output:\n%s", mustNotContain, got)
@@ -96,37 +121,7 @@ func TestRenderAttestation_HappyPath(t *testing.T) {
 	}
 }
 
-func TestRenderAttestation_PreservesEmptyArrays(t *testing.T) {
-	t.Parallel()
-
-	log := resultdoc.JobEventSummaryForReport{
-		JobIdentity: jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "9"),
-		ResultSummary: resultdoc.ResultSummary{
-			Result: resultdoc.ResultPassed,
-		},
-	}
-	var buf bytes.Buffer
-	if err := report.RenderAttestation(&buf, &log); err != nil {
-		t.Fatalf("RenderAttestation: %v", err)
-	}
-
-	got := buf.String()
-	for _, want := range []string{
-		`"network": []`,
-		`"https://cicd-sensor.github.io/detections": []`,
-		`"https://cicd-sensor.github.io/terminations": []`,
-		`"https://cicd-sensor.github.io/domains": []`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("missing empty-array fragment %q in output:\n%s", want, got)
-		}
-	}
-	if strings.Contains(got, ":null") || strings.Contains(got, ": null") {
-		t.Fatalf("output should not contain null arrays:\n%s", got)
-	}
-}
-
-func TestAttestationPredicate_SplitsHitsByAction(t *testing.T) {
+func TestAttestationPredicate_KeepsDetectAndTerminateActions(t *testing.T) {
 	t.Parallel()
 
 	log := resultdoc.JobEventSummaryForReport{
@@ -134,9 +129,9 @@ func TestAttestationPredicate_SplitsHitsByAction(t *testing.T) {
 			"github.com", "acme/example", "1", "build", "1", "runner",
 		),
 		Hits: []resultdoc.HitRecord{
-			{RulesetID: "s", RuleID: "warn-rule", Action: "detect"},
-			{RulesetID: "s", RuleID: "kill-rule", Action: "terminate"},
-			{RulesetID: "s", RuleID: "collect-rule", Action: "collect"},
+			{RulesetID: "s", RuleID: "warn-rule", Action: "detect", HitCount: 2},
+			{RulesetID: "s", RuleID: "kill-rule", Action: "terminate", HitCount: 1},
+			{RulesetID: "s", RuleID: "collect-rule", Action: "collect", HitCount: 5},
 		},
 	}
 	var buf bytes.Buffer
@@ -144,21 +139,30 @@ func TestAttestationPredicate_SplitsHitsByAction(t *testing.T) {
 		t.Fatalf("RenderAttestation: %v", err)
 	}
 
-	var got struct {
-		MonitorLog struct {
-			Detections   []resultdoc.HitRecord `json:"https://cicd-sensor.github.io/detections"`
-			Terminations []resultdoc.HitRecord `json:"https://cicd-sensor.github.io/terminations"`
-		} `json:"monitorLog"`
-	}
+	var got attestationWire
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	if len(got.MonitorLog.Detections) != 1 || got.MonitorLog.Detections[0].RuleID != "warn-rule" {
-		t.Fatalf("detections: got %#v, want one warn-rule entry", got.MonitorLog.Detections)
+	if len(got.MonitorLog.Detections) != 2 {
+		t.Fatalf("detections: got %#v, want 2 entries (warn + kill)", got.MonitorLog.Detections)
 	}
-	if len(got.MonitorLog.Terminations) != 1 || got.MonitorLog.Terminations[0].RuleID != "kill-rule" {
-		t.Fatalf("terminations: got %#v, want one kill-rule entry", got.MonitorLog.Terminations)
+	want := map[string]struct {
+		action string
+		count  uint32
+	}{
+		"warn-rule": {"detect", 2},
+		"kill-rule": {"terminate", 1},
+	}
+	for _, d := range got.MonitorLog.Detections {
+		w, ok := want[d.RuleID]
+		if !ok {
+			t.Errorf("unexpected rule %q in detections", d.RuleID)
+			continue
+		}
+		if d.Action != w.action || d.Count != w.count {
+			t.Errorf("rule %q: got action=%q count=%d, want action=%q count=%d", d.RuleID, d.Action, d.Count, w.action, w.count)
+		}
 	}
 	if strings.Contains(buf.String(), "collect-rule") {
 		t.Fatalf("collect hits must not appear in attestation; got:\n%s", buf.String())
@@ -179,95 +183,90 @@ func TestAttestationPredicate_DropsUnknownActions(t *testing.T) {
 	if len(got.MonitorLog.Detections) != 1 || got.MonitorLog.Detections[0].RuleID != "ok" {
 		t.Fatalf("detections: got %#v, want only the detect hit", got.MonitorLog.Detections)
 	}
-	if len(got.MonitorLog.Terminations) != 0 {
-		t.Fatalf("terminations: got %#v, want empty", got.MonitorLog.Terminations)
-	}
 }
 
-func TestAttestationPredicate_PreservesHitOrder(t *testing.T) {
+func TestAttestationPredicate_PreservesRuleHitsOrder(t *testing.T) {
 	t.Parallel()
 
-	t0 := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)
 	log := minimalLogForIdentity()
 	log.Hits = []resultdoc.HitRecord{
-		{RulesetID: "s", RuleID: "d1", Action: "detect", Timestamp: t0},
-		{RulesetID: "s", RuleID: "t1", Action: "terminate", Timestamp: t0.Add(1 * time.Second)},
-		{RulesetID: "s", RuleID: "d2", Action: "detect", Timestamp: t0.Add(2 * time.Second)},
-		{RulesetID: "s", RuleID: "t2", Action: "terminate", Timestamp: t0.Add(3 * time.Second)},
+		{RulesetID: "s", RuleID: "a", Action: "detect"},
+		{RulesetID: "s", RuleID: "b", Action: "terminate"},
+		{RulesetID: "s", RuleID: "c", Action: "detect"},
 	}
 
 	got := renderAttestationJSON(t, log)
-	if len(got.MonitorLog.Detections) != 2 ||
-		got.MonitorLog.Detections[0].RuleID != "d1" ||
-		got.MonitorLog.Detections[1].RuleID != "d2" {
-		t.Fatalf("detection order: got %#v, want [d1, d2]", got.MonitorLog.Detections)
+	if len(got.MonitorLog.Detections) != 3 {
+		t.Fatalf("detections: got %d, want 3", len(got.MonitorLog.Detections))
 	}
-	if len(got.MonitorLog.Terminations) != 2 ||
-		got.MonitorLog.Terminations[0].RuleID != "t1" ||
-		got.MonitorLog.Terminations[1].RuleID != "t2" {
-		t.Fatalf("termination order: got %#v, want [t1, t2]", got.MonitorLog.Terminations)
+	wantOrder := []string{"a", "b", "c"}
+	for i, w := range wantOrder {
+		if got.MonitorLog.Detections[i].RuleID != w {
+			t.Fatalf("rule order: got %q at %d, want %q", got.MonitorLog.Detections[i].RuleID, i, w)
+		}
 	}
 }
 
-func TestAttestationPredicate_PreservesHitRecordFields(t *testing.T) {
+func TestAttestationPredicate_KeepsRuleIdentityOmitsEventAndPerHitDetail(t *testing.T) {
 	t.Parallel()
 
-	hit := resultdoc.HitRecord{
-		Timestamp:     time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
-		RulesetID:     "set",
-		RuleID:        "rule-x",
-		RuleName:      "rule x",
-		RuleType:      "correlation",
-		RuleCondition: "first && second",
-		Action:        "detect",
-		EventType:     "process_exec",
-		Process: &resultdoc.ProcessSummary{
-			PID:      99,
-			ExecPath: "/usr/bin/curl",
-			Argv:     []string{"curl", "https://example.com"},
-			Ancestors: []resultdoc.AncestorProcess{
-				{ExecPath: "/bin/bash", Argv: []string{"bash", "-c", "curl https://example.com"}},
-			},
-		},
-		Payload:         map[string]any{"remote_ip": "203.0.113.10"},
-		AlertTruncation: resultdoc.AlertTruncationMaxAlertsReached,
-		AlertCap:        3,
-		AlertDropped:    7,
-	}
 	log := minimalLogForIdentity()
-	log.Hits = []resultdoc.HitRecord{hit}
+	// HitCount = 7 (5 retained + 2 dropped). Per-event detail attached;
+	// none of it should leak into the predicate.
+	mkEvent := func() resultdoc.AlertEvent {
+		return resultdoc.AlertEvent{
+			Timestamp: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+			EventType: "process_exec",
+			Process: &resultdoc.ProcessSummary{
+				PID: 99, ExecPath: "/usr/bin/curl",
+			},
+			Payload: map[string]any{"remote_ip": "203.0.113.10"},
+		}
+	}
+	log.Hits = []resultdoc.HitRecord{{
+		RulesetID:       "set",
+		RuleID:          "rule-x",
+		RulesetRevision: "rev123",
+		RuleName:        "should not appear",
+		RuleType:        "correlation",
+		RuleCondition:   "should not appear",
+		Action:          "detect",
+		HitCount:        7,
+		MaxAlerts:       5,
+		AlertEvents:     []resultdoc.AlertEvent{mkEvent(), mkEvent(), mkEvent(), mkEvent(), mkEvent()},
+	}}
 
-	got := renderAttestationJSON(t, log)
-	if len(got.MonitorLog.Detections) != 1 {
-		t.Fatalf("detections: got %d, want 1", len(got.MonitorLog.Detections))
+	var buf bytes.Buffer
+	if err := report.RenderAttestation(&buf, &log); err != nil {
+		t.Fatalf("RenderAttestation: %v", err)
 	}
-	d := got.MonitorLog.Detections[0]
-	if d.RuleID != hit.RuleID || d.RuleName != hit.RuleName || d.RuleType != hit.RuleType {
-		t.Errorf("rule metadata not preserved: %#v", d)
+	raw := buf.String()
+
+	wire := renderAttestationJSON(t, log)
+	if len(wire.MonitorLog.Detections) != 1 {
+		t.Fatalf("detections: got %d, want 1", len(wire.MonitorLog.Detections))
 	}
-	if d.RuleCondition != hit.RuleCondition {
-		t.Errorf("rule_condition not preserved: %q", d.RuleCondition)
+	d := wire.MonitorLog.Detections[0]
+	if d.RulesetID != "set" || d.RuleID != "rule-x" || d.RulesetRevision != "rev123" ||
+		d.Action != "detect" || d.Count != 7 {
+		t.Errorf("detection entry: got %#v", d)
 	}
-	if d.EventType != hit.EventType {
-		t.Errorf("event_type not preserved: %q", d.EventType)
-	}
-	if d.Process == nil || d.Process.ExecPath != hit.Process.ExecPath {
-		t.Fatalf("process not preserved: %#v", d.Process)
-	}
-	if len(d.Process.Argv) != 2 || d.Process.Argv[0] != "curl" {
-		t.Errorf("process argv not preserved: %#v", d.Process.Argv)
-	}
-	if len(d.Process.Ancestors) != 1 || d.Process.Ancestors[0].ExecPath != "/bin/bash" {
-		t.Errorf("ancestor not preserved: %#v", d.Process.Ancestors)
-	}
-	if got, want := d.Payload["remote_ip"], any("203.0.113.10"); got != want {
-		t.Errorf("payload not preserved: got %v, want %v", got, want)
-	}
-	if d.AlertTruncation == "" || d.AlertCap != 3 || d.AlertDropped != 7 {
-		t.Errorf("truncation markers not preserved: %#v", d)
-	}
-	if !d.Timestamp.Equal(hit.Timestamp) {
-		t.Errorf("timestamp not preserved: got %v, want %v", d.Timestamp, hit.Timestamp)
+
+	for _, mustNot := range []string{
+		`"timestamp"`,
+		`"rule_name"`,
+		`"rule_type"`,
+		`"rule_condition"`,
+		`"event_type"`,
+		`"process"`,
+		`"payload"`,
+		`"alert_truncation"`,
+		`"alert_cap"`,
+		`"alert_dropped"`,
+	} {
+		if strings.Contains(raw, mustNot) {
+			t.Errorf("predicate must not embed %s; got:\n%s", mustNot, raw)
+		}
 	}
 }
 
@@ -310,33 +309,6 @@ func TestAttestationPredicate_DomainsDedupAndSort(t *testing.T) {
 	}
 }
 
-func TestAttestationPredicate_OmitsEmptyRunnerType(t *testing.T) {
-	t.Parallel()
-
-	log := minimalLogForIdentity()
-	log.RunnerType = ""
-
-	var buf bytes.Buffer
-	if err := report.RenderAttestation(&buf, &log); err != nil {
-		t.Fatalf("RenderAttestation: %v", err)
-	}
-	if strings.Contains(buf.String(), `"https://cicd-sensor.github.io/runner-type"`) {
-		t.Fatalf("runner-type key should be omitted when empty:\n%s", buf.String())
-	}
-}
-
-func TestAttestationPredicate_KeepsRunnerTypeWhenSet(t *testing.T) {
-	t.Parallel()
-
-	log := minimalLogForIdentity()
-	log.RunnerType = "kubernetes"
-
-	got := renderAttestationJSON(t, log)
-	if got.MonitorLog.RunnerType != "kubernetes" {
-		t.Fatalf("runner-type: got %q, want %q", got.MonitorLog.RunnerType, "kubernetes")
-	}
-}
-
 func TestAttestationPredicate_GitLabJobIdentityRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -344,13 +316,13 @@ func TestAttestationPredicate_GitLabJobIdentityRoundTrip(t *testing.T) {
 		JobIdentity: jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "42"),
 	}
 	got := renderAttestationJSON(t, log)
-	if got.MonitorLog.JobIdentity.ProjectPath != "group/project" {
+	if got.MonitorLog.Job.ProjectPath != "group/project" {
 		t.Errorf("project_path: got %q, want %q",
-			got.MonitorLog.JobIdentity.ProjectPath, "group/project")
+			got.MonitorLog.Job.ProjectPath, "group/project")
 	}
-	if got.MonitorLog.JobIdentity.ProviderHost != "gitlab.com" {
+	if got.MonitorLog.Job.ProviderHost != "gitlab.com" {
 		t.Errorf("provider_host: got %q, want %q",
-			got.MonitorLog.JobIdentity.ProviderHost, "gitlab.com")
+			got.MonitorLog.Job.ProviderHost, "gitlab.com")
 	}
 }
 
@@ -369,14 +341,14 @@ func TestAttestationPredicate_PreservesMetadata(t *testing.T) {
 	}
 
 	got := renderAttestationJSON(t, log)
-	if got.MonitorLog.Metadata.GitHubWorkflow != "release" {
-		t.Errorf("github_workflow: got %q, want %q", got.MonitorLog.Metadata.GitHubWorkflow, "release")
+	if got.MonitorLog.Job.GitHubWorkflow != "release" {
+		t.Errorf("github_workflow: got %q, want %q", got.MonitorLog.Job.GitHubWorkflow, "release")
 	}
-	if got.MonitorLog.Metadata.ActorName != "alice" {
-		t.Errorf("actor_name: got %q, want %q", got.MonitorLog.Metadata.ActorName, "alice")
+	if got.MonitorLog.Job.ActorName != "alice" {
+		t.Errorf("actor_name: got %q, want %q", got.MonitorLog.Job.ActorName, "alice")
 	}
-	if got.MonitorLog.Metadata.CommitSHA != "def456" {
-		t.Errorf("commit_sha: got %q, want %q", got.MonitorLog.Metadata.CommitSHA, "def456")
+	if got.MonitorLog.Job.CommitSHA != "def456" {
+		t.Errorf("commit_sha: got %q, want %q", got.MonitorLog.Job.CommitSHA, "def456")
 	}
 }
 
@@ -385,17 +357,19 @@ func TestAttestationPredicate_PreservesResultSummary(t *testing.T) {
 
 	log := minimalLogForIdentity()
 	log.ResultSummary = resultdoc.ResultSummary{
-		Result:    resultdoc.ResultTerminated,
-		HitsCount: 5,
+		Result: resultdoc.ResultTerminated,
 	}
 
 	got := renderAttestationJSON(t, log)
-	if got.MonitorLog.Summary.Result != resultdoc.ResultTerminated {
-		t.Errorf("result: got %q, want %q",
-			got.MonitorLog.Summary.Result, resultdoc.ResultTerminated)
+	if got.MonitorLog.Result != resultdoc.ResultTerminated {
+		t.Errorf("result: got %q, want %q", got.MonitorLog.Result, resultdoc.ResultTerminated)
 	}
-	if got.MonitorLog.Summary.HitsCount != 5 {
-		t.Errorf("hits_count: got %d, want 5", got.MonitorLog.Summary.HitsCount)
+	var buf bytes.Buffer
+	if err := report.RenderAttestation(&buf, &log); err != nil {
+		t.Fatalf("RenderAttestation: %v", err)
+	}
+	if strings.Contains(buf.String(), "hits_count") {
+		t.Errorf("hits_count must not appear in predicate:\n%s", buf.String())
 	}
 }
 

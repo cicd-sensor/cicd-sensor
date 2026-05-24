@@ -34,16 +34,17 @@ func TestBuildJobEventSummaryForReportSanitizesRetainedEvent(t *testing.T) {
 		},
 	})
 
-	if len(doc.Hits) != 1 || doc.Hits[0].Process == nil {
+	if len(doc.Hits) != 1 || len(doc.Hits[0].AlertEvents) != 1 || doc.Hits[0].AlertEvents[0].Process == nil {
 		t.Fatalf("hits: got %#v, want one process detail", doc.Hits)
 	}
-	if got, want := doc.Hits[0].Process.Argv[1], "<redacted>"; got != want {
+	ev := doc.Hits[0].AlertEvents[0]
+	if got, want := ev.Process.Argv[1], "<redacted>"; got != want {
 		t.Fatalf("report argv: got %q, want %q", got, want)
 	}
-	if got, want := doc.Hits[0].Process.StartBoottime, uint64(200); got != want {
+	if got, want := ev.Process.StartBoottime, uint64(200); got != want {
 		t.Fatalf("report start_boottime: got %d, want %d", got, want)
 	}
-	if got, want := doc.Hits[0].Process.Ancestors[0].Argv[2], "<redacted>"; got != want {
+	if got, want := ev.Process.Ancestors[0].Argv[2], "<redacted>"; got != want {
 		t.Fatalf("report ancestor argv: got %q, want %q", got, want)
 	}
 	if got, want := doc.RunnerType, "machine"; got != want {
@@ -102,8 +103,8 @@ func TestBuildJobEventSummaryForReportBuildsPassSummary(t *testing.T) {
 	if doc.RulesSummary.RuleCount != 2 || doc.RulesSummary.WarningsCount != 1 {
 		t.Fatalf("rules summary: got %+v", doc.RulesSummary)
 	}
-	if doc.ResultSummary.HitsCount != 0 {
-		t.Fatalf("result summary: got %+v", doc.ResultSummary)
+	if len(doc.Hits) != 0 {
+		t.Fatalf("hits: got %d, want 0", len(doc.Hits))
 	}
 	if len(doc.NetworkConnections) != 1 || doc.NetworkConnections[0].RemoteIP != "203.0.113.10" {
 		t.Fatalf("network connections: got %#v", doc.NetworkConnections)
@@ -161,27 +162,19 @@ func TestBuildJobEventSummaryForReportBuildsHitsWithTruncation(t *testing.T) {
 	if doc.ResultSummary.Result != resultdoc.ResultDetected {
 		t.Fatalf("result: got %q, want detected", doc.ResultSummary.Result)
 	}
-	if doc.ResultSummary.HitsCount != 2 {
-		t.Fatalf("hits count: got %d, want 2", doc.ResultSummary.HitsCount)
+	if len(doc.Hits) != 1 {
+		t.Fatalf("hits: got %d, want 1 (per-rule)", len(doc.Hits))
 	}
-	if len(doc.Hits) != 2 {
-		t.Fatalf("hits: got %d, want 2", len(doc.Hits))
+	h := doc.Hits[0]
+	if h.RuleName != "Curl token" || h.RuleType != "event" ||
+		h.RuleCondition != `process.exec_path.endsWith("curl")` {
+		t.Fatalf("rule metadata: got %+v", h)
 	}
-	first := doc.Hits[0]
-	if first.RuleName != "Curl token" || first.AlertTruncation != "" {
-		t.Fatalf("first hit: got %+v", first)
+	if h.HitCount != 3 || h.MaxAlerts != 2 || len(h.AlertEvents) != 2 {
+		t.Fatalf("counts: got hit_count=%d max_alerts=%d alert_events=%d, want 3/2/2",
+			h.HitCount, h.MaxAlerts, len(h.AlertEvents))
 	}
-	if first.RuleType != "event" || first.RuleCondition != `process.exec_path.endsWith("curl")` {
-		t.Fatalf("first hit rule metadata: got type=%q condition=%q", first.RuleType, first.RuleCondition)
-	}
-	last := doc.Hits[1]
-	if last.AlertTruncation != resultdoc.AlertTruncationMaxAlertsReached {
-		t.Fatalf("truncation: got %q", last.AlertTruncation)
-	}
-	if last.AlertCap != 2 || last.AlertDropped != 1 {
-		t.Fatalf("hit cap/dropped: got cap=%d dropped=%d", last.AlertCap, last.AlertDropped)
-	}
-	if got := last.Payload["label"]; got != "second" {
+	if got := h.AlertEvents[1].Payload["label"]; got != "second" {
 		t.Fatalf("payload: got %v, want second", got)
 	}
 }
@@ -243,9 +236,6 @@ func TestBuildJobEventSummaryForReportIncludesAllHitActions(t *testing.T) {
 	if got := doc.Hits[2].Action; got != string(rule.RuleActionCollect) {
 		t.Fatalf("third hit action: got %q, want collect", got)
 	}
-	if got := doc.ResultSummary.HitsCount; got != 3 {
-		t.Fatalf("hits count: got %d, want 3", got)
-	}
 }
 
 func TestBuildJobEventSummaryForReportIncludesCorrelationRuleMetadata(t *testing.T) {
@@ -286,8 +276,8 @@ func TestBuildJobEventSummaryForReportIncludesCorrelationRuleMetadata(t *testing
 	if hit.RuleCondition != "rule.first.total_count >= 1 && rule.second.total_count >= 1" {
 		t.Fatalf("rule_condition: got %q", hit.RuleCondition)
 	}
-	if hit.EventType != jobevent.ProcessExec {
-		t.Fatalf("event_type: got %q, want evidence event type", hit.EventType)
+	if len(hit.AlertEvents) == 0 || hit.AlertEvents[0].EventType != jobevent.ProcessExec {
+		t.Fatalf("alert event type: got %+v", hit.AlertEvents)
 	}
 }
 
@@ -309,9 +299,6 @@ func TestBuildJobEventSummaryForReportCollectOnlyKeepsPassResult(t *testing.T) {
 
 	if got := doc.ResultSummary.Result; got != resultdoc.ResultPassed {
 		t.Fatalf("result: got %q, want passed", got)
-	}
-	if got := doc.ResultSummary.HitsCount; got != 1 {
-		t.Fatalf("hits count: got %d, want 1", got)
 	}
 	if got := len(doc.Hits); got != 1 {
 		t.Fatalf("hits length: got %d, want 1", got)

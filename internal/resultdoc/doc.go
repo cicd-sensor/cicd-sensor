@@ -41,8 +41,7 @@ type RulesSummary struct {
 }
 
 type ResultSummary struct {
-	Result    string `json:"result"`
-	HitsCount int    `json:"hits_count"`
+	Result string `json:"result"`
 }
 
 type AncestorProcess struct {
@@ -85,18 +84,25 @@ type NetworkConnection struct {
 	ProcessOverflowCount int64                `json:"process_overflow_count,omitempty"`
 }
 
+// HitRecord is one rule firing — mirrors observations.HitSummary.
+// HitCount is the total firing count (including events suppressed by max_alerts).
+// AlertEvents holds the retained events (len ≤ MaxAlerts).
 type HitRecord struct {
-	Timestamp       time.Time       `json:"timestamp"`
-	RulesetID       string          `json:"ruleset_id"`
-	RuleID          string          `json:"rule_id"`
-	RuleName        string          `json:"rule_name,omitempty"`
-	RuleType        string          `json:"rule_type,omitempty"`
-	RuleCondition   string          `json:"rule_condition,omitempty"`
-	Action          string          `json:"action"`
-	EventType       jobevent.Type   `json:"event_type,omitempty"`
-	Process         *ProcessSummary `json:"process,omitempty"`
-	Payload         map[string]any  `json:"payload,omitempty"`
-	AlertTruncation string          `json:"alert_truncation,omitempty"`
-	AlertCap        int             `json:"alert_cap,omitempty"`
-	AlertDropped    int64           `json:"alert_dropped,omitempty"`
+	RulesetID       string       `json:"ruleset_id"`
+	RuleID          string       `json:"rule_id"`
+	RulesetRevision string       `json:"ruleset_revision,omitempty"`
+	RuleName        string       `json:"rule_name,omitempty"`
+	RuleType        string       `json:"rule_type,omitempty"`
+	RuleCondition   string       `json:"rule_condition,omitempty"`
+	Action          string       `json:"action"`
+	HitCount        int64        `json:"hit_count"`
+	MaxAlerts       int          `json:"max_alerts,omitempty"`
+	AlertEvents     []AlertEvent `json:"alert_events,omitempty"`
+}
+
+type AlertEvent struct {
+	Timestamp time.Time       `json:"timestamp"`
+	EventType jobevent.Type   `json:"event_type,omitempty"`
+	Process   *ProcessSummary `json:"process,omitempty"`
+	Payload   map[string]any  `json:"payload,omitempty"`
 }

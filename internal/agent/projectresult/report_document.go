@@ -31,32 +31,32 @@ func BuildJobEventSummaryForReport(in ReportDocumentInput) resultdoc.JobEventSum
 		}
 	}
 
-	hits := make([]resultdoc.HitRecord, 0)
 	result := observations.OverallResult(in.Snapshot.Hits)
+	hits := make([]resultdoc.HitRecord, 0, len(in.Snapshot.Hits))
 	for _, hit := range in.Snapshot.Hits {
-		dropped := hit.HitCount - int64(len(hit.AlertEventRecords))
-		for i, event := range hit.AlertEventRecords {
-			detail := ruleDetails[hit.Identity]
+		detail := ruleDetails[hit.Identity]
+		events := make([]resultdoc.AlertEvent, 0, len(hit.AlertEventRecords))
+		for _, event := range hit.AlertEventRecords {
 			process := resultProcessSummary(jobevent.RedactProcessSummaryForOutput(event.Process))
-			rec := resultdoc.HitRecord{
-				Timestamp:     event.Timestamp,
-				RulesetID:     hit.RulesetID,
-				RuleID:        hit.RuleID,
-				RuleName:      detail.name,
-				RuleType:      detail.ruleType,
-				RuleCondition: detail.condition,
-				Action:        hit.Action,
-				EventType:     event.EventType,
-				Process:       &process,
-				Payload:       event.Payload,
-			}
-			if dropped > 0 && i == len(hit.AlertEventRecords)-1 {
-				rec.AlertTruncation = resultdoc.AlertTruncationMaxAlertsReached
-				rec.AlertCap = hit.MaxAlerts
-				rec.AlertDropped = dropped
-			}
-			hits = append(hits, rec)
+			events = append(events, resultdoc.AlertEvent{
+				Timestamp: event.Timestamp,
+				EventType: event.EventType,
+				Process:   &process,
+				Payload:   event.Payload,
+			})
 		}
+		hits = append(hits, resultdoc.HitRecord{
+			RulesetID:       hit.RulesetID,
+			RuleID:          hit.RuleID,
+			RulesetRevision: hit.RulesetRevision,
+			RuleName:        detail.name,
+			RuleType:        detail.ruleType,
+			RuleCondition:   detail.condition,
+			Action:          hit.Action,
+			HitCount:        hit.HitCount,
+			MaxAlerts:       hit.MaxAlerts,
+			AlertEvents:     events,
+		})
 	}
 
 	return resultdoc.JobEventSummaryForReport{
@@ -71,8 +71,7 @@ func BuildJobEventSummaryForReport(in ReportDocumentInput) resultdoc.JobEventSum
 			WarningsCount: len(in.ResolvedRules.Warnings),
 		},
 		ResultSummary: resultdoc.ResultSummary{
-			Result:    result,
-			HitsCount: len(hits),
+			Result: result,
 		},
 		NetworkConnections: networkConnections(in.Snapshot.ObservationNetwork.Records),
 		DomainObservations: domainObservations(in.Snapshot.ObservationDomain.Records),
