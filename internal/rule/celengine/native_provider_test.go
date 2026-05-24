@@ -571,6 +571,29 @@ func TestNewCELProcessNestedDescendantCache(t *testing.T) {
 	}
 }
 
+func TestNewCELProcessDescendantsShareRootToCurrentBacking(t *testing.T) {
+	t.Parallel()
+
+	p := NewCELProcess("/usr/bin/cat", nil, []CELAncestor{
+		{ExecPath: "/bin/sh"},
+		{ExecPath: "/usr/bin/python"},
+		{ExecPath: "/bin/bash"},
+	})
+	bash := p.Ancestors[2]
+
+	// Mutate through the nested python -> sh suffix. If bash.descendants
+	// uses the same root-to-current backing slice, the sibling sh element
+	// in bash.descendants observes the same change. Production code treats
+	// Descendants as immutable; this mutation only guards the sharing shape.
+	bash.Descendants[0].Descendants[0].ExecPath = "/mutated-sh"
+	if got := bash.Descendants[1].ExecPath; got != "/mutated-sh" {
+		t.Fatalf("nested descendants did not share backing slice: got %q", got)
+	}
+	if got := p.ancestorDescendants[2].ExecPath; got != "/mutated-sh" {
+		t.Fatalf("process-owned descendant backing was not shared: got %q", got)
+	}
+}
+
 func ancestorListExecPaths(list traits.Lister) []string {
 	size := int(list.Size().(types.Int))
 	out := make([]string, size)

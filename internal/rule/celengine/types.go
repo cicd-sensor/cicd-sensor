@@ -28,9 +28,10 @@ type CELProcess struct {
 	Ancestors []CELAncestor
 
 	// Populated by NewCELProcess. Nil = build on the fly (test path).
-	execPathVal  ref.Val // types.String wrapping ExecPath
-	argvVal      ref.Val // types.NewRefValList over pre-boxed Argv
-	ancestorsVal ref.Val // types.NewRefValList over ancestorVal wrappers
+	ancestorDescendants []CELAncestor // root-to-current backing for Descendants
+	execPathVal         ref.Val       // types.String wrapping ExecPath
+	argvVal             ref.Val       // types.NewRefValList over pre-boxed Argv
+	ancestorsVal        ref.Val       // types.NewRefValList over ancestorVal wrappers
 }
 
 // CELAncestor is one entry of process.ancestors, ordered newest parent

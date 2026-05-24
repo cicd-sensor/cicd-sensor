@@ -148,59 +148,49 @@ func (h ruleHitVal) ConvertToNative(t reflect.Type) (any, error) {
 // nil and build the ref.Val on the fly. This keeps tests ergonomic
 // without forcing them to call NewCELProcess.
 func NewCELProcess(execPath string, argv []string, ancestors []CELAncestor) CELProcess {
-	ancestors = withDescendants(ancestors)
+	ancestors, ancestorDescendants := withDescendants(ancestors)
 	return CELProcess{
-		ExecPath:     execPath,
-		Argv:         argv,
-		Ancestors:    ancestors,
-		execPathVal:  types.String(execPath),
-		argvVal:      buildStringRefList(argv),
-		ancestorsVal: buildAncestorRefList(ancestors),
+		ExecPath:            execPath,
+		Argv:                argv,
+		Ancestors:           ancestors,
+		ancestorDescendants: ancestorDescendants,
+		execPathVal:         types.String(execPath),
+		argvVal:             buildStringRefList(argv),
+		ancestorsVal:        buildAncestorRefList(ancestors),
 	}
 }
 
-func withDescendants(ancestors []CELAncestor) []CELAncestor {
-	// Own the ancestor slice before wiring descendants. The CEL evaluation
-	// view must not change if the caller later mutates or reuses the input
-	// slice.
+func withDescendants(ancestors []CELAncestor) ([]CELAncestor, []CELAncestor) {
+	// Own the input before wiring derived descendant views.
 	out := slices.Clone(ancestors)
 	for i := range out {
-		// Clone copies the unexported cache fields too. Drop them before
-		// changing Descendants so the rule-visible fields and cached ref.Val
-		// lists cannot disagree; buildAncestorRefList will rebuild caches for
-		// this event.
+		// Drop cloned caches; this event gets rebuilt values below.
 		out[i].execPathVal = nil
 		out[i].argvVal = nil
 		out[i].descendantsVal = nil
-		if i == 0 {
-			// ancestors is newest-first: [0] is the immediate parent. There
-			// is no intermediate ancestor between the immediate parent and
-			// the current process, and current process itself is intentionally
-			// not part of Descendants.
-			out[i].Descendants = nil
-			continue
-		}
-		// Example for Runner -> npm -> sh -> cat, where cat is current:
-		//
-		//   out = [sh, npm, Runner]
-		//
-		// Descendants are exposed in tree-walk order from the selected
-		// ancestor toward the current process:
-		//
-		//   npm.descendants    = [sh]
-		//   Runner.descendants = [npm, sh]
-		//
-		// A simple prefix view out[:i] would be cheaper, but it would expose
-		// [sh, npm] for Runner because process.ancestors itself is stored
-		// newest-first. Build the small reversed slice so rule authors can
-		// read descendants in parent -> child order.
-		descendants := make([]CELAncestor, i)
-		for j := range descendants {
-			descendants[j] = out[i-1-j]
-		}
-		out[i].Descendants = descendants
+		out[i].Descendants = nil
 	}
-	return out
+
+	// process.ancestors stays newest-first: [sh, npm, Runner].
+	// Descendants read ancestor -> current, so build one reversed backing
+	// slice and share suffixes:
+	//   ancestorDescendants = [Runner, npm, sh]
+	//   Runner.descendants  = [npm, sh]
+	//   npm.descendants     = [sh]
+	// The current process itself is not in descendants.
+	ancestorDescendants := make([]CELAncestor, len(out))
+	for i := range out {
+		ancestorDescendants[len(out)-1-i] = out[i]
+	}
+	for i := range ancestorDescendants {
+		if i+1 < len(ancestorDescendants) {
+			ancestorDescendants[i].Descendants = ancestorDescendants[i+1 : len(ancestorDescendants) : len(ancestorDescendants)]
+		}
+	}
+	for i := range out {
+		out[i] = ancestorDescendants[len(out)-1-i]
+	}
+	return out, ancestorDescendants
 }
 
 // newCELAncestorVal / newCELRuleHitVal: explicit boxing helpers. The
