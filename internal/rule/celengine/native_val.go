@@ -50,7 +50,7 @@ type ancestorVal struct{ v CELAncestor }
 func (a ancestorVal) Type() ref.Type { return celAncestorType }
 func (a ancestorVal) Value() any     { return a.v }
 
-// Equal compares the logical fields (ExecPath, Argv) and ignores the
+// Equal compares the logical fields and ignores the
 // unexported ref.Val cache fields. Without this, a CELAncestor built from
 // a test literal (caches nil) would not compare equal to the same value
 // returned through buildAncestorRefList (caches populated), even though
@@ -70,7 +70,13 @@ func (a ancestorVal) Equal(other ref.Val) ref.Val {
 	if !ok {
 		return types.False
 	}
-	return types.Bool(a.v.ExecPath == o.v.ExecPath && slices.Equal(a.v.Argv, o.v.Argv))
+	return types.Bool(equalCELAncestor(a.v, o.v))
+}
+
+func equalCELAncestor(a, b CELAncestor) bool {
+	return a.ExecPath == b.ExecPath &&
+		slices.Equal(a.Argv, b.Argv) &&
+		slices.EqualFunc(a.Descendants, b.Descendants, equalCELAncestor)
 }
 
 func (a ancestorVal) ConvertToType(t ref.Type) ref.Val {
@@ -142,6 +148,7 @@ func (h ruleHitVal) ConvertToNative(t reflect.Type) (any, error) {
 // nil and build the ref.Val on the fly. This keeps tests ergonomic
 // without forcing them to call NewCELProcess.
 func NewCELProcess(execPath string, argv []string, ancestors []CELAncestor) CELProcess {
+	ancestors = withDescendants(ancestors)
 	return CELProcess{
 		ExecPath:     execPath,
 		Argv:         argv,
@@ -150,6 +157,42 @@ func NewCELProcess(execPath string, argv []string, ancestors []CELAncestor) CELP
 		argvVal:      buildStringRefList(argv),
 		ancestorsVal: buildAncestorRefList(ancestors),
 	}
+}
+
+func withDescendants(ancestors []CELAncestor) []CELAncestor {
+	// Own the ancestor slice before wiring descendants. Descendants point
+	// back into this backing array, so keeping the caller-owned slice would
+	// let later caller mutations change the CEL evaluation view.
+	out := slices.Clone(ancestors)
+	for i := range out {
+		// Clone copies the unexported cache fields too. Drop them before
+		// changing Descendants so the rule-visible fields and cached ref.Val
+		// lists cannot disagree; buildAncestorRefList will rebuild caches for
+		// this event.
+		out[i].execPathVal = nil
+		out[i].argvVal = nil
+		out[i].descendantsVal = nil
+		if i == 0 {
+			// ancestors is newest-first: [0] is the immediate parent. There
+			// is no intermediate ancestor between the immediate parent and
+			// the current process, and current process itself is intentionally
+			// not part of Descendants.
+			out[i].Descendants = nil
+			continue
+		}
+		// Example for Runner -> npm -> sh -> cat, where cat is current:
+		//
+		//   out = [sh, npm, Runner]
+		//
+		// For npm (i=1), descendants are out[:1] == [sh].
+		// For Runner (i=2), descendants are out[:2] == [sh, npm].
+		//
+		// The third index closes capacity. Descendants are immutable views,
+		// but if future code accidentally appends to one, it must allocate a
+		// new array instead of overwriting later ancestors in out.
+		out[i].Descendants = out[:i:i]
+	}
+	return out
 }
 
 // newCELAncestorVal / newCELRuleHitVal: explicit boxing helpers. The
@@ -182,13 +225,15 @@ func buildStringRefList(xs []string) ref.Val {
 }
 
 // buildAncestorRefList wraps each ancestor in ancestorVal with its
-// hot-field caches pre-populated. The loop body writes a.execPathVal /
-// a.argvVal directly instead of going through a helper that would take
-// &a; that's deliberate. A helper accepting *CELAncestor would force the
-// loop variable to escape to the heap (one alloc per ancestor per event)
-// because Go's escape analysis assumes the helper might retain the
-// pointer. The inline writes keep `a` on the stack — the wrapper
-// ancestorVal copies the struct by value into its `v` field.
+// hot-field caches pre-populated. It derives descendants from the
+// newest-first list order: index i can only see the prefix xs[:i], so
+// nested descendants always get shorter and cannot cycle.
+//
+// The loop body writes cache fields directly instead of going through a
+// helper that would take &a; that's deliberate. A helper accepting
+// *CELAncestor would force the loop variable to escape to the heap (one
+// alloc per ancestor per event) because Go's escape analysis assumes the
+// helper might retain the pointer.
 func buildAncestorRefList(xs []CELAncestor) ref.Val {
 	if len(xs) == 0 {
 		return types.NewRefValList(types.DefaultTypeAdapter, nil)
@@ -197,6 +242,7 @@ func buildAncestorRefList(xs []CELAncestor) ref.Val {
 	for i, a := range xs {
 		a.execPathVal = types.String(a.ExecPath)
 		a.argvVal = buildStringRefList(a.Argv)
+		a.descendantsVal = types.NewRefValList(types.DefaultTypeAdapter, out[:i:i])
 		out[i] = newCELAncestorVal(a)
 	}
 	return types.NewRefValList(types.DefaultTypeAdapter, out)

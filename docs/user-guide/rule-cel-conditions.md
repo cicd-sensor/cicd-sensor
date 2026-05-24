@@ -138,15 +138,39 @@ condition: |
   )
 ```
 
-Example: network tool started from a package manager.
+Each ancestor also exposes `descendants`.
+It contains only the processes forked below that ancestor on the path to the current process.
+The current process itself is not included.
+
+`descendants` is useful in many process-chain rules.
+For example, a suspicious npm post-install script starts a shell, and that shell starts the process that triggers the event:
+
+```text
+Runner -> npm -> sh -> cat
+```
+
+When the current process is `cat`, the ancestors and descendants look like this:
+
+```text
+process.ancestors = [sh, npm, Runner]
+
+sh.descendants     = []
+npm.descendants    = [sh]
+Runner.descendants = [sh, npm]
+```
+
+Example: detect an event that happened under a shell launched by an npm post-install script.
+The event process can be `cat`, `curl`, `node`, or another child of that shell; the rule only requires that a shell exists below the npm ancestor.
 
 ```yaml
 condition: |
-  process.exec_path.endsWith("/curl") &&
   process.ancestors.exists(parent,
-    parent.exec_path.endsWith("/npm") ||
-    parent.exec_path.endsWith("/pnpm") ||
-    parent.exec_path.endsWith("/yarn")
+    parent.exec_path.endsWith("/npm") &&
+    parent.argv.exists(arg, arg == "install") &&
+    parent.descendants.exists(child,
+      child.exec_path.endsWith("/sh") ||
+      child.exec_path.endsWith("/bash")
+    )
   )
 ```
 

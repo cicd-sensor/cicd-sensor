@@ -37,11 +37,13 @@ type CELProcess struct {
 // first (immediate parent at index 0). Same caching pattern as
 // CELProcess; populated by buildAncestorRefList in native_val.go.
 type CELAncestor struct {
-	ExecPath string
-	Argv     []string
+	ExecPath    string
+	Argv        []string
+	Descendants []CELAncestor
 
-	execPathVal ref.Val // types.String wrapping ExecPath
-	argvVal     ref.Val // types.NewRefValList over pre-boxed Argv
+	execPathVal    ref.Val // types.String wrapping ExecPath
+	argvVal        ref.Val // types.NewRefValList over pre-boxed Argv
+	descendantsVal ref.Val // types.NewRefValList over ancestorVal wrappers
 }
 
 // CELInputEvent holds the variables for one event-specific CEL evaluation.

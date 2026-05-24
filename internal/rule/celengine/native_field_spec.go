@@ -95,6 +95,16 @@ var ancestorFieldSpecs = []fieldSpec[CELAncestor]{
 			return buildStringRefList(a.Argv)
 		},
 	},
+	{
+		name:    "descendants",
+		celType: types.NewListType(celAncestorType),
+		get: func(a CELAncestor) ref.Val {
+			if a.descendantsVal != nil {
+				return a.descendantsVal
+			}
+			return buildAncestorRefList(a.Descendants)
+		},
+	},
 }
 
 // CELRuleHit has no cache: total_count is materialized per lookup by

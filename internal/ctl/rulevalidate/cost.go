@@ -123,6 +123,8 @@ func (variableSizeEstimator) EstimateSize(node checker.AstNode) *checker.SizeEst
 					return &checker.SizeEstimate{Min: 0, Max: argvItemTypicalBytes}
 				}
 				return &checker.SizeEstimate{Min: 0, Max: argvTypicalItems}
+			case "descendants":
+				return &checker.SizeEstimate{Min: 0, Max: ancestorTypicalItems}
 			}
 		}
 		return nil

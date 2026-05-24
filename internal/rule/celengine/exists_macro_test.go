@@ -245,6 +245,70 @@ func TestExistsMacroBehavioralCoverage(t *testing.T) {
 			wantMatch: true,
 		},
 		{
+			name:      "source/ancestor_descendants_iteration",
+			eventType: jobevent.ProcessExec,
+			source: `process.ancestors.exists(a,
+                a.exec_path.endsWith("/python") &&
+                a.descendants.exists(d, d.exec_path.endsWith("/sh")))`,
+			input: CELInputEvent{Process: NewCELProcess("/usr/bin/cat", nil, []CELAncestor{
+				{ExecPath: "/bin/sh"}, {ExecPath: "/usr/bin/python"}, {ExecPath: "/bin/bash"},
+			})},
+			wantMatch: true,
+		},
+		{
+			name:      "source/ancestor_descendants_excludes_current_process",
+			eventType: jobevent.ProcessExec,
+			source: `process.ancestors.exists(a,
+                a.exec_path.endsWith("/python") &&
+                a.descendants.exists(d, d.exec_path.endsWith("/sh")))`,
+			input: CELInputEvent{Process: NewCELProcess("/bin/sh", nil, []CELAncestor{
+				{ExecPath: "/usr/bin/python"}, {ExecPath: "/bin/bash"},
+			})},
+			wantMatch: false,
+		},
+		{
+			name:      "source/current_or_descendant_shell_matches_current_exec",
+			eventType: jobevent.ProcessExec,
+			source: `process.ancestors.exists(a,
+                a.exec_path.endsWith("/python") &&
+                (
+                    process.exec_path.endsWith("/sh") ||
+                    a.descendants.exists(d, d.exec_path.endsWith("/sh"))
+                ))`,
+			input: CELInputEvent{Process: NewCELProcess("/bin/sh", nil, []CELAncestor{
+				{ExecPath: "/usr/bin/python"}, {ExecPath: "/bin/bash"},
+			})},
+			wantMatch: true,
+		},
+		{
+			name:      "source/ancestor_descendant_argv_condition",
+			eventType: jobevent.ProcessExec,
+			source: `process.ancestors.exists(a,
+                a.exec_path.endsWith("/python") &&
+                a.descendants.exists(d,
+                    d.exec_path.endsWith("/sh") &&
+                    d.argv.exists(arg, arg == "-c")))`,
+			input: CELInputEvent{Process: NewCELProcess("/usr/bin/cat", nil, []CELAncestor{
+				{ExecPath: "/bin/sh", Argv: []string{"sh", "-c"}},
+				{ExecPath: "/usr/bin/python"},
+				{ExecPath: "/bin/bash"},
+			})},
+			wantMatch: true,
+		},
+		{
+			name:      "source/nested_ancestor_descendants",
+			eventType: jobevent.ProcessExec,
+			source: `process.ancestors.exists(a,
+                a.exec_path.endsWith("/bash") &&
+                a.descendants.exists(d,
+                    d.exec_path.endsWith("/python") &&
+                    d.descendants.exists(g, g.exec_path.endsWith("/sh"))))`,
+			input: CELInputEvent{Process: NewCELProcess("/usr/bin/cat", nil, []CELAncestor{
+				{ExecPath: "/bin/sh"}, {ExecPath: "/usr/bin/python"}, {ExecPath: "/bin/bash"},
+			})},
+			wantMatch: true,
+		},
+		{
 			name:      "source/empty_argv_returns_false",
 			eventType: jobevent.ProcessExec,
 			source:    `process.argv.exists(a, a == "anything")`,

@@ -142,7 +142,7 @@ func TestProviderFindStructFieldNames(t *testing.T) {
 		want       []string
 	}{
 		{celProcessTypeName, []string{"exec_path", "argv", "ancestors"}},
-		{celAncestorTypeName, []string{"exec_path", "argv"}},
+		{celAncestorTypeName, []string{"exec_path", "argv", "descendants"}},
 		{celRuleHitTypeName, []string{"total_count"}},
 	}
 	for _, tt := range tests {
@@ -192,6 +192,23 @@ func TestAncestorValEqualIgnoresCacheFields(t *testing.T) {
 	}
 	if eq := withCaches.Equal(literal); eq != types.True {
 		t.Fatalf("ancestorVal equality should be symmetric: got %v", eq)
+	}
+}
+
+func TestAncestorValEqualComparesDescendants(t *testing.T) {
+	t.Parallel()
+
+	left := newCELAncestorVal(CELAncestor{
+		ExecPath:    "/usr/bin/python",
+		Descendants: []CELAncestor{{ExecPath: "/bin/sh"}},
+	})
+	right := newCELAncestorVal(CELAncestor{
+		ExecPath:    "/usr/bin/python",
+		Descendants: []CELAncestor{{ExecPath: "/bin/bash"}},
+	})
+
+	if eq := left.Equal(right); eq != types.False {
+		t.Fatalf("ancestorVal equality should include descendants: got %v", eq)
 	}
 }
 
@@ -369,4 +386,200 @@ func TestNewCELProcessPopulatesAncestorsCache(t *testing.T) {
 	if _, ok := first.(ancestorVal); !ok {
 		t.Fatalf("ancestors[0]: got %T, want ancestorVal", first)
 	}
+}
+
+func TestNewCELProcessDescendantViews(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		current   string
+		ancestors []CELAncestor
+		wantPaths [][]string
+	}{
+		{
+			name:      "nil_ancestors",
+			current:   "/usr/bin/cat",
+			ancestors: nil,
+			wantPaths: nil,
+		},
+		{
+			name:      "immediate_parent_only",
+			current:   "/bin/sh",
+			ancestors: []CELAncestor{{ExecPath: "/usr/bin/python"}},
+			wantPaths: [][]string{{}},
+		},
+		{
+			name:    "parent_and_grandparent_current_is_excluded",
+			current: "/bin/sh",
+			ancestors: []CELAncestor{
+				{ExecPath: "/usr/bin/python"},
+				{ExecPath: "/bin/bash"},
+			},
+			wantPaths: [][]string{{}, {"/usr/bin/python"}},
+		},
+		{
+			name:    "three_level_prefix_views",
+			current: "/usr/bin/cat",
+			ancestors: []CELAncestor{
+				{ExecPath: "/bin/sh"},
+				{ExecPath: "/usr/bin/python"},
+				{ExecPath: "/bin/bash"},
+			},
+			wantPaths: [][]string{{}, {"/bin/sh"}, {"/bin/sh", "/usr/bin/python"}},
+		},
+		{
+			name:    "preexisting_descendants_are_rederived",
+			current: "/usr/bin/cat",
+			ancestors: []CELAncestor{
+				{ExecPath: "/bin/sh", Descendants: []CELAncestor{{ExecPath: "/stale"}}},
+				{ExecPath: "/usr/bin/python", Descendants: []CELAncestor{{ExecPath: "/stale"}}},
+			},
+			wantPaths: [][]string{{}, {"/bin/sh"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			input := slicesCloneAncestors(tt.ancestors)
+			p := NewCELProcess(tt.current, nil, input)
+			if len(input) > 0 {
+				input[0].ExecPath = "/mutated"
+			}
+
+			if got := len(p.Ancestors); got != len(tt.wantPaths) {
+				t.Fatalf("ancestor count = %d, want %d", got, len(tt.wantPaths))
+			}
+			for i, want := range tt.wantPaths {
+				if got := ancestorExecPaths(p.Ancestors[i].Descendants); !reflect.DeepEqual(got, want) {
+					t.Fatalf("ancestors[%d].descendants = %v, want %v", i, got, want)
+				}
+				for _, descendant := range p.Ancestors[i].Descendants {
+					if descendant.ExecPath == p.ExecPath {
+						t.Fatalf("ancestors[%d].descendants included current process %q", i, p.ExecPath)
+					}
+				}
+			}
+			if len(tt.ancestors) > 0 && p.Ancestors[0].ExecPath == "/mutated" {
+				t.Fatal("NewCELProcess retained caller-owned ancestor slice")
+			}
+		})
+	}
+}
+
+func TestAncestorDescendantsFieldReturnsList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		ancestor  CELAncestor
+		wantPaths []string
+	}{
+		{
+			name: "literal_fallback",
+			ancestor: CELAncestor{
+				ExecPath:    "/usr/bin/python",
+				Descendants: []CELAncestor{{ExecPath: "/bin/sh"}},
+			},
+			wantPaths: []string{"/bin/sh"},
+		},
+		{
+			name: "cached_ancestor_from_NewCELProcess",
+			ancestor: func() CELAncestor {
+				p := NewCELProcess("/usr/bin/cat", nil, []CELAncestor{
+					{ExecPath: "/bin/sh"},
+					{ExecPath: "/usr/bin/python"},
+					{ExecPath: "/bin/bash"},
+				})
+				ancestors := p.ancestorsVal.(traits.Lister)
+				return ancestors.Get(types.Int(2)).(ancestorVal).Value().(CELAncestor)
+			}(),
+			wantPaths: []string{"/bin/sh", "/usr/bin/python"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			list := ancestorFieldSpecs[2].get(tt.ancestor).(traits.Lister)
+			if size := list.Size().(types.Int); int(size) != len(tt.wantPaths) {
+				t.Fatalf("descendants size = %d, want %d", size, len(tt.wantPaths))
+			}
+			if got := ancestorListExecPaths(list); !reflect.DeepEqual(got, tt.wantPaths) {
+				t.Fatalf("descendants exec paths = %v, want %v", got, tt.wantPaths)
+			}
+		})
+	}
+}
+
+func TestNewCELProcessNestedDescendantCache(t *testing.T) {
+	t.Parallel()
+
+	p := NewCELProcess("/usr/bin/cat", nil, []CELAncestor{
+		{ExecPath: "/bin/sh"},
+		{ExecPath: "/usr/bin/python"},
+		{ExecPath: "/bin/bash"},
+	})
+	ancestors := p.ancestorsVal.(traits.Lister)
+	bash := ancestors.Get(types.Int(2)).(ancestorVal).Value().(CELAncestor)
+	bashDescendants := ancestorFieldSpecs[2].get(bash).(traits.Lister)
+
+	tests := []struct {
+		name      string
+		ancestor  CELAncestor
+		wantPaths []string
+	}{
+		{
+			name:      "bash_sees_sh_and_python",
+			ancestor:  bash,
+			wantPaths: []string{"/bin/sh", "/usr/bin/python"},
+		},
+		{
+			name:      "python_sees_only_sh",
+			ancestor:  bashDescendants.Get(types.Int(1)).(ancestorVal).Value().(CELAncestor),
+			wantPaths: []string{"/bin/sh"},
+		},
+		{
+			name:      "sh_sees_empty_descendants",
+			ancestor:  bashDescendants.Get(types.Int(0)).(ancestorVal).Value().(CELAncestor),
+			wantPaths: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			list := ancestorFieldSpecs[2].get(tt.ancestor).(traits.Lister)
+			if got := ancestorListExecPaths(list); !reflect.DeepEqual(got, tt.wantPaths) {
+				t.Fatalf("descendants exec paths = %v, want %v", got, tt.wantPaths)
+			}
+		})
+	}
+}
+
+func ancestorListExecPaths(list traits.Lister) []string {
+	size := int(list.Size().(types.Int))
+	out := make([]string, size)
+	for i := range size {
+		out[i] = list.Get(types.Int(i)).(ancestorVal).Value().(CELAncestor).ExecPath
+	}
+	return out
+}
+
+func ancestorExecPaths(xs []CELAncestor) []string {
+	out := make([]string, len(xs))
+	for i, x := range xs {
+		out[i] = x.ExecPath
+	}
+	return out
+}
+
+func slicesCloneAncestors(xs []CELAncestor) []CELAncestor {
+	out := make([]CELAncestor, len(xs))
+	copy(out, xs)
+	return out
 }
