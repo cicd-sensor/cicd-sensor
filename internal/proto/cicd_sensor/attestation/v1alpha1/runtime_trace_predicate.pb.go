@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: cicd_sensor/attestation/v1alpha1/predicate.proto
+// source: cicd_sensor/attestation/v1alpha1/runtime_trace_predicate.proto
 
 package attestationv1alpha1
 
@@ -28,13 +28,14 @@ const (
 type Predicate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MonitorLog    *MonitorLog            `protobuf:"bytes,1,opt,name=monitor_log,json=monitorLog,proto3" json:"monitor_log,omitempty"`
+	Metadata      *Metadata              `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Predicate) Reset() {
 	*x = Predicate{}
-	mi := &file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[0]
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +47,7 @@ func (x *Predicate) String() string {
 func (*Predicate) ProtoMessage() {}
 
 func (x *Predicate) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[0]
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +60,7 @@ func (x *Predicate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Predicate.ProtoReflect.Descriptor instead.
 func (*Predicate) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescGZIP(), []int{0}
+	return file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Predicate) GetMonitorLog() *MonitorLog {
@@ -67,6 +68,69 @@ func (x *Predicate) GetMonitorLog() *MonitorLog {
 		return x.MonitorLog
 	}
 	return nil
+}
+
+func (x *Predicate) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+// Metadata mirrors runtime-trace v0.1 predicate-level metadata. Timestamps
+// are RFC 3339 strings. buildStartedOn is the job start observed by the
+// agent; buildFinishedOn is the moment the report document was finalized,
+// which is the end of the monitoring window.
+type Metadata struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	BuildStartedOn  *string                `protobuf:"bytes,1,opt,name=build_started_on,json=buildStartedOn,proto3,oneof" json:"build_started_on,omitempty"`
+	BuildFinishedOn *string                `protobuf:"bytes,2,opt,name=build_finished_on,json=buildFinishedOn,proto3,oneof" json:"build_finished_on,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *Metadata) Reset() {
+	*x = Metadata{}
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Metadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Metadata) ProtoMessage() {}
+
+func (x *Metadata) ProtoReflect() protoreflect.Message {
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Metadata.ProtoReflect.Descriptor instead.
+func (*Metadata) Descriptor() ([]byte, []int) {
+	return file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Metadata) GetBuildStartedOn() string {
+	if x != nil && x.BuildStartedOn != nil {
+		return *x.BuildStartedOn
+	}
+	return ""
+}
+
+func (x *Metadata) GetBuildFinishedOn() string {
+	if x != nil && x.BuildFinishedOn != nil {
+		return *x.BuildFinishedOn
+	}
+	return ""
 }
 
 // MonitorLog mirrors runtime-trace v0.1 monitorLog. Standard runtime-trace
@@ -80,17 +144,17 @@ func (x *Predicate) GetMonitorLog() *MonitorLog {
 type MonitorLog struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Network       []string               `protobuf:"bytes,1,rep,name=network,proto3" json:"network,omitempty"`
-	Detections    []*RuleHitSummary      `protobuf:"bytes,2,rep,name=detections,json=https://cicd-sensor.github.io/detections,proto3" json:"detections,omitempty"`
-	Domains       []string               `protobuf:"bytes,3,rep,name=domains,json=https://cicd-sensor.github.io/domains,proto3" json:"domains,omitempty"`
-	Result        *string                `protobuf:"bytes,4,opt,name=result,json=https://cicd-sensor.github.io/result,proto3,oneof" json:"result,omitempty"`
-	Job           *JobContext            `protobuf:"bytes,5,opt,name=job,json=https://cicd-sensor.github.io/job,proto3" json:"job,omitempty"`
+	Detections    []*RuleHitSummary      `protobuf:"bytes,2,rep,name=detections,json=https://cicd-sensor.github.io/runtime_trace/detections/v1alpha1,proto3" json:"detections,omitempty"`
+	Domains       []string               `protobuf:"bytes,3,rep,name=domains,json=https://cicd-sensor.github.io/runtime_trace/domains/v1alpha1,proto3" json:"domains,omitempty"`
+	Result        *string                `protobuf:"bytes,4,opt,name=result,json=https://cicd-sensor.github.io/runtime_trace/result/v1alpha1,proto3,oneof" json:"result,omitempty"`
+	Job           *JobContext            `protobuf:"bytes,5,opt,name=job,json=https://cicd-sensor.github.io/runtime_trace/job/v1alpha1,proto3" json:"job,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MonitorLog) Reset() {
 	*x = MonitorLog{}
-	mi := &file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[1]
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -102,7 +166,7 @@ func (x *MonitorLog) String() string {
 func (*MonitorLog) ProtoMessage() {}
 
 func (x *MonitorLog) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[1]
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -115,7 +179,7 @@ func (x *MonitorLog) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MonitorLog.ProtoReflect.Descriptor instead.
 func (*MonitorLog) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescGZIP(), []int{1}
+	return file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *MonitorLog) GetNetwork() []string {
@@ -185,7 +249,7 @@ type JobContext struct {
 
 func (x *JobContext) Reset() {
 	*x = JobContext{}
-	mi := &file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[2]
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -197,7 +261,7 @@ func (x *JobContext) String() string {
 func (*JobContext) ProtoMessage() {}
 
 func (x *JobContext) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[2]
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -210,7 +274,7 @@ func (x *JobContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobContext.ProtoReflect.Descriptor instead.
 func (*JobContext) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescGZIP(), []int{2}
+	return file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *JobContext) GetProvider() string {
@@ -363,7 +427,7 @@ type RuleHitSummary struct {
 
 func (x *RuleHitSummary) Reset() {
 	*x = RuleHitSummary{}
-	mi := &file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[3]
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -375,7 +439,7 @@ func (x *RuleHitSummary) String() string {
 func (*RuleHitSummary) ProtoMessage() {}
 
 func (x *RuleHitSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[3]
+	mi := &file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -388,7 +452,7 @@ func (x *RuleHitSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleHitSummary.ProtoReflect.Descriptor instead.
 func (*RuleHitSummary) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescGZIP(), []int{3}
+	return file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RuleHitSummary) GetRulesetId() string {
@@ -426,23 +490,29 @@ func (x *RuleHitSummary) GetCount() uint32 {
 	return 0
 }
 
-var File_cicd_sensor_attestation_v1alpha1_predicate_proto protoreflect.FileDescriptor
+var File_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto protoreflect.FileDescriptor
 
-const file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDesc = "" +
+const file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDesc = "" +
 	"\n" +
-	"0cicd_sensor/attestation/v1alpha1/predicate.proto\x12 cicd_sensor.attestation.v1alpha1\x1a\x1bbuf/validate/validate.proto\"Z\n" +
+	">cicd_sensor/attestation/v1alpha1/runtime_trace_predicate.proto\x12 cicd_sensor.attestation.v1alpha1\x1a\x1bbuf/validate/validate.proto\"\xa2\x01\n" +
 	"\tPredicate\x12M\n" +
 	"\vmonitor_log\x18\x01 \x01(\v2,.cicd_sensor.attestation.v1alpha1.MonitorLogR\n" +
-	"monitorLog\"\x97\x03\n" +
+	"monitorLog\x12F\n" +
+	"\bmetadata\x18\x02 \x01(\v2*.cicd_sensor.attestation.v1alpha1.MetadataR\bmetadata\"\x95\x01\n" +
+	"\bMetadata\x12-\n" +
+	"\x10build_started_on\x18\x01 \x01(\tH\x00R\x0ebuildStartedOn\x88\x01\x01\x12/\n" +
+	"\x11build_finished_on\x18\x02 \x01(\tH\x01R\x0fbuildFinishedOn\x88\x01\x01B\x13\n" +
+	"\x11_build_started_onB\x14\n" +
+	"\x12_build_finished_on\"\xf4\x03\n" +
 	"\n" +
 	"MonitorLog\x12\x18\n" +
-	"\anetwork\x18\x01 \x03(\tR\anetwork\x12n\n" +
+	"\anetwork\x18\x01 \x03(\tR\anetwork\x12\x85\x01\n" +
 	"\n" +
-	"detections\x18\x02 \x03(\v20.cicd_sensor.attestation.v1alpha1.RuleHitSummaryR(https://cicd-sensor.github.io/detections\x126\n" +
-	"\adomains\x18\x03 \x03(\tR%https://cicd-sensor.github.io/domains\x12^\n" +
+	"detections\x18\x02 \x03(\v20.cicd_sensor.attestation.v1alpha1.RuleHitSummaryR?https://cicd-sensor.github.io/runtime_trace/detections/v1alpha1\x12M\n" +
+	"\adomains\x18\x03 \x03(\tR<https://cicd-sensor.github.io/runtime_trace/domains/v1alpha1\x12u\n" +
 	"\x06result\x18\x04 \x01(\tB#\xbaH r\x1eR\x06passedR\bdetectedR\n" +
-	"terminatedH\x00R$https://cicd-sensor.github.io/result\x88\x01\x01\x12\\\n" +
-	"\x03job\x18\x05 \x01(\v2,.cicd_sensor.attestation.v1alpha1.JobContextR!https://cicd-sensor.github.io/jobB\t\n" +
+	"terminatedH\x00R;https://cicd-sensor.github.io/runtime_trace/result/v1alpha1\x88\x01\x01\x12s\n" +
+	"\x03job\x18\x05 \x01(\v2,.cicd_sensor.attestation.v1alpha1.JobContextR8https://cicd-sensor.github.io/runtime_trace/job/v1alpha1B\t\n" +
 	"\a_result\"\xe8\x05\n" +
 	"\n" +
 	"JobContext\x12\x1a\n" +
@@ -485,61 +555,64 @@ const file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDesc = "" +
 	"\b_rule_idB\x13\n" +
 	"\x11_ruleset_revisionB\t\n" +
 	"\a_actionB\b\n" +
-	"\x06_countB\xbc\x02\n" +
-	"$com.cicd_sensor.attestation.v1alpha1B\x0ePredicateProtoP\x01Zfgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/attestation/v1alpha1;attestationv1alpha1\xa2\x02\x03CAX\xaa\x02\x1fCicdSensor.Attestation.V1alpha1\xca\x02\x1fCicdSensor\\Attestation\\V1alpha1\xe2\x02+CicdSensor\\Attestation\\V1alpha1\\GPBMetadata\xea\x02!CicdSensor::Attestation::V1alpha1b\x06proto3"
+	"\x06_countB\xc8\x02\n" +
+	"$com.cicd_sensor.attestation.v1alpha1B\x1aRuntimeTracePredicateProtoP\x01Zfgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/attestation/v1alpha1;attestationv1alpha1\xa2\x02\x03CAX\xaa\x02\x1fCicdSensor.Attestation.V1alpha1\xca\x02\x1fCicdSensor\\Attestation\\V1alpha1\xe2\x02+CicdSensor\\Attestation\\V1alpha1\\GPBMetadata\xea\x02!CicdSensor::Attestation::V1alpha1b\x06proto3"
 
 var (
-	file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescOnce sync.Once
-	file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescData []byte
+	file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescOnce sync.Once
+	file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescData []byte
 )
 
-func file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescGZIP() []byte {
-	file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescOnce.Do(func() {
-		file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDesc), len(file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDesc)))
+func file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescGZIP() []byte {
+	file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescOnce.Do(func() {
+		file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDesc), len(file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDesc)))
 	})
-	return file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDescData
+	return file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDescData
 }
 
-var file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_cicd_sensor_attestation_v1alpha1_predicate_proto_goTypes = []any{
+var file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_goTypes = []any{
 	(*Predicate)(nil),      // 0: cicd_sensor.attestation.v1alpha1.Predicate
-	(*MonitorLog)(nil),     // 1: cicd_sensor.attestation.v1alpha1.MonitorLog
-	(*JobContext)(nil),     // 2: cicd_sensor.attestation.v1alpha1.JobContext
-	(*RuleHitSummary)(nil), // 3: cicd_sensor.attestation.v1alpha1.RuleHitSummary
+	(*Metadata)(nil),       // 1: cicd_sensor.attestation.v1alpha1.Metadata
+	(*MonitorLog)(nil),     // 2: cicd_sensor.attestation.v1alpha1.MonitorLog
+	(*JobContext)(nil),     // 3: cicd_sensor.attestation.v1alpha1.JobContext
+	(*RuleHitSummary)(nil), // 4: cicd_sensor.attestation.v1alpha1.RuleHitSummary
 }
-var file_cicd_sensor_attestation_v1alpha1_predicate_proto_depIdxs = []int32{
-	1, // 0: cicd_sensor.attestation.v1alpha1.Predicate.monitor_log:type_name -> cicd_sensor.attestation.v1alpha1.MonitorLog
-	3, // 1: cicd_sensor.attestation.v1alpha1.MonitorLog.detections:type_name -> cicd_sensor.attestation.v1alpha1.RuleHitSummary
-	2, // 2: cicd_sensor.attestation.v1alpha1.MonitorLog.job:type_name -> cicd_sensor.attestation.v1alpha1.JobContext
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+var file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_depIdxs = []int32{
+	2, // 0: cicd_sensor.attestation.v1alpha1.Predicate.monitor_log:type_name -> cicd_sensor.attestation.v1alpha1.MonitorLog
+	1, // 1: cicd_sensor.attestation.v1alpha1.Predicate.metadata:type_name -> cicd_sensor.attestation.v1alpha1.Metadata
+	4, // 2: cicd_sensor.attestation.v1alpha1.MonitorLog.detections:type_name -> cicd_sensor.attestation.v1alpha1.RuleHitSummary
+	3, // 3: cicd_sensor.attestation.v1alpha1.MonitorLog.job:type_name -> cicd_sensor.attestation.v1alpha1.JobContext
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
-func init() { file_cicd_sensor_attestation_v1alpha1_predicate_proto_init() }
-func file_cicd_sensor_attestation_v1alpha1_predicate_proto_init() {
-	if File_cicd_sensor_attestation_v1alpha1_predicate_proto != nil {
+func init() { file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_init() }
+func file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_init() {
+	if File_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto != nil {
 		return
 	}
-	file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[1].OneofWrappers = []any{}
-	file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes[3].OneofWrappers = []any{}
+	file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[1].OneofWrappers = []any{}
+	file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[2].OneofWrappers = []any{}
+	file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDesc), len(file_cicd_sensor_attestation_v1alpha1_predicate_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDesc), len(file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_cicd_sensor_attestation_v1alpha1_predicate_proto_goTypes,
-		DependencyIndexes: file_cicd_sensor_attestation_v1alpha1_predicate_proto_depIdxs,
-		MessageInfos:      file_cicd_sensor_attestation_v1alpha1_predicate_proto_msgTypes,
+		GoTypes:           file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_goTypes,
+		DependencyIndexes: file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_depIdxs,
+		MessageInfos:      file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_msgTypes,
 	}.Build()
-	File_cicd_sensor_attestation_v1alpha1_predicate_proto = out.File
-	file_cicd_sensor_attestation_v1alpha1_predicate_proto_goTypes = nil
-	file_cicd_sensor_attestation_v1alpha1_predicate_proto_depIdxs = nil
+	File_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto = out.File
+	file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_goTypes = nil
+	file_cicd_sensor_attestation_v1alpha1_runtime_trace_predicate_proto_depIdxs = nil
 }

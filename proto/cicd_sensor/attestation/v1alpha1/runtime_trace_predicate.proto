@@ -9,6 +9,16 @@ import "buf/validate/validate.proto";
 // actions/attest), not by cicd-sensor.
 message Predicate {
   MonitorLog monitor_log = 1 [json_name = "monitorLog"];
+  Metadata metadata = 2 [json_name = "metadata"];
+}
+
+// Metadata mirrors runtime-trace v0.1 predicate-level metadata. Timestamps
+// are RFC 3339 strings. buildStartedOn is the job start observed by the
+// agent; buildFinishedOn is the moment the report document was finalized,
+// which is the end of the monitoring window.
+message Metadata {
+  optional string build_started_on = 1 [json_name = "buildStartedOn"];
+  optional string build_finished_on = 2 [json_name = "buildFinishedOn"];
 }
 
 // MonitorLog mirrors runtime-trace v0.1 monitorLog. Standard runtime-trace
@@ -21,10 +31,10 @@ message Predicate {
 // feedback. Stable schemas will live under a separate `v1` package.
 message MonitorLog {
   repeated string network = 1 [json_name = "network"];
-  repeated RuleHitSummary detections = 2 [json_name = "https://cicd-sensor.github.io/detections"];
-  repeated string domains = 3 [json_name = "https://cicd-sensor.github.io/domains"];
-  optional string result = 4 [json_name = "https://cicd-sensor.github.io/result", (buf.validate.field).string = {in: ["passed", "detected", "terminated"]}];
-  JobContext job = 5 [json_name = "https://cicd-sensor.github.io/job"];
+  repeated RuleHitSummary detections = 2 [json_name = "https://cicd-sensor.github.io/runtime_trace/detections/v1alpha1"];
+  repeated string domains = 3 [json_name = "https://cicd-sensor.github.io/runtime_trace/domains/v1alpha1"];
+  optional string result = 4 [json_name = "https://cicd-sensor.github.io/runtime_trace/result/v1alpha1", (buf.validate.field).string = {in: ["passed", "detected", "terminated"]}];
+  JobContext job = 5 [json_name = "https://cicd-sensor.github.io/runtime_trace/job/v1alpha1"];
 }
 
 // JobContext is the attestation-side job identity + metadata. Defined here

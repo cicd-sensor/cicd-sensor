@@ -1,11 +1,13 @@
 package report
 
 // Renders the in-toto runtime-trace v0.1 predicate. Wire schema is in
-// proto/cicd_sensor/attestation/v1alpha1/predicate.proto (source of truth).
+// proto/cicd_sensor/attestation/v1alpha1/runtime_trace_predicate.proto
+// (source of truth).
 
 import (
 	"io"
 	"slices"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -27,7 +29,22 @@ func AttestationPredicate(log resultdoc.JobEventSummaryForReport) *attestationv1
 			Result:     proto.String(log.ResultSummary.Result),
 			Job:        protoconv.ToAttestationJob(log.JobIdentity, log.Metadata),
 		},
+		Metadata: metadataProto(log.StartedAt, log.GeneratedAt),
 	}
+}
+
+func metadataProto(startedAt, generatedAt time.Time) *attestationv1alpha1.Metadata {
+	if startedAt.IsZero() && generatedAt.IsZero() {
+		return nil
+	}
+	m := &attestationv1alpha1.Metadata{}
+	if !startedAt.IsZero() {
+		m.BuildStartedOn = proto.String(startedAt.UTC().Format(time.RFC3339Nano))
+	}
+	if !generatedAt.IsZero() {
+		m.BuildFinishedOn = proto.String(generatedAt.UTC().Format(time.RFC3339Nano))
+	}
+	return m
 }
 
 // Drops collect/unknown actions: predicate records policy outcomes only.

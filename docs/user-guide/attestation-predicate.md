@@ -19,7 +19,7 @@ The cicd-sensor action creates `predicate.json` in its post step, so a later ste
 The predicate is intended to make CI/CD runtime behavior reviewable after the job finishes.
 It summarizes the runtime evidence that is useful for build, release, and deploy verification.
 
-The wire schema is defined in [`proto/cicd_sensor/attestation/v1alpha1/predicate.proto`](https://github.com/cicd-sensor/cicd-sensor/tree/main/proto/cicd_sensor/attestation/v1alpha1/predicate.proto) — that file is the source of truth. The `v1alpha1` package marks it as pre-stable; breaking changes are expected before it graduates to `v1`.
+The wire schema is defined in [`proto/cicd_sensor/attestation/v1alpha1/runtime_trace_predicate.proto`](https://github.com/cicd-sensor/cicd-sensor/tree/main/proto/cicd_sensor/attestation/v1alpha1/runtime_trace_predicate.proto) — that file is the source of truth. The `v1alpha1` package marks it as pre-stable; breaking changes are expected before it graduates to `v1`.
 
 ## Example predicate
 
@@ -34,7 +34,7 @@ The actual predicate may contain more network addresses, domains, and rule hits.
       "140.82.112.3",
       "151.101.0.223"
     ],
-    "https://cicd-sensor.github.io/detections": [
+    "https://cicd-sensor.github.io/runtime_trace/detections/v1alpha1": [
       {
         "ruleset_id": "cicd-sensor/baseline",
         "rule_id": "block_curl_to_unknown_host",
@@ -50,13 +50,13 @@ The actual predicate may contain more network addresses, domains, and rule hits.
         "count": 12
       }
     ],
-    "https://cicd-sensor.github.io/domains": [
+    "https://cicd-sensor.github.io/runtime_trace/domains/v1alpha1": [
       "github.com",
       "registry.npmjs.org",
       "testevent.cicd-sensor.com"
     ],
-    "https://cicd-sensor.github.io/result": "terminated",
-    "https://cicd-sensor.github.io/job": {
+    "https://cicd-sensor.github.io/runtime_trace/result/v1alpha1": "terminated",
+    "https://cicd-sensor.github.io/runtime_trace/job/v1alpha1": {
       "provider": "github",
       "provider_host": "github.com",
       "project_path": "rung/cicd-sensor-demo",
@@ -69,8 +69,11 @@ The actual predicate may contain more network addresses, domains, and rule hits.
       "github_run_attempt": "1",
       "github_runner_tracking_id": "github_75639fba-cf1e-412d-a71d-0b08d01bb13a",
       "github_workflow": "cicd-sensor Demo"
-    },
-    "https://cicd-sensor.github.io/runner-type": "machine"
+    }
+  },
+  "metadata": {
+    "buildStartedOn": "2026-04-30T12:00:00Z",
+    "buildFinishedOn": "2026-04-30T12:05:00Z"
   }
 }
 ```
@@ -78,10 +81,13 @@ The actual predicate may contain more network addresses, domains, and rule hits.
 The important parts are:
 
 - `network`: unique remote IP addresses observed during the job.
-- `https://cicd-sensor.github.io/domains`: unique domain names resolved during the job.
-- `https://cicd-sensor.github.io/detections`: rule hits aggregated per rule. Each entry carries `ruleset_id`, `rule_id`, `ruleset_revision`, `action`, and `count`. Includes both `detect` and `terminate` actions; `collect` is excluded. For per-event detail (process tree, argv, payload) see the [`detection` log](logging.md).
-- `https://cicd-sensor.github.io/result`: final job result (`passed` / `detected` / `terminated`).
-- `https://cicd-sensor.github.io/job`: provider, repository / project, commit, trigger, actor, and provider-specific run / job / workflow identifiers (in-toto runtime-trace standard extension shape, shared with the log envelope's `job`).
+- `https://cicd-sensor.github.io/runtime_trace/domains/v1alpha1`: unique domain names resolved during the job.
+- `https://cicd-sensor.github.io/runtime_trace/detections/v1alpha1`: rule hits aggregated per rule. Each entry carries `ruleset_id`, `rule_id`, `ruleset_revision`, `action`, and `count`. Includes both `detect` and `terminate` actions; `collect` is excluded. For per-event detail (process tree, argv, payload) see the [`detection` log](logging.md).
+- `https://cicd-sensor.github.io/runtime_trace/result/v1alpha1`: final job result (`passed` / `detected` / `terminated`).
+- `https://cicd-sensor.github.io/runtime_trace/job/v1alpha1`: provider, repository / project, commit, trigger, actor, and provider-specific run / job / workflow identifiers (in-toto runtime-trace standard extension shape, shared with the log envelope's `job`).
+- `metadata.buildStartedOn` / `metadata.buildFinishedOn`: RFC 3339 timestamps for the monitored window. `buildStartedOn` is when the agent began observing the job; `buildFinishedOn` is when the report document was finalized (end of monitoring window).
+
+The `runtime_trace/` segment namespaces these extensions to the in-toto runtime-trace predicate, leaving room for cicd-sensor extensions to other predicate types (e.g. a future `test_result/...`) without colliding. The trailing `/v1alpha1` tracks each extension's schema version independently, so a breaking change to one key bumps only that key and leaves the others stable.
 
 The URI keys are cicd-sensor extension fields.
 Generic in-toto consumers can ignore unknown extension fields while preserving the evidence for cicd-sensor-aware consumers.

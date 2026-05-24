@@ -50,14 +50,20 @@ type jobWire struct {
 	GitHubWorkflowRef string `json:"github_workflow_ref,omitempty"`
 }
 
+type metadataWire struct {
+	BuildStartedOn  string `json:"buildStartedOn,omitempty"`
+	BuildFinishedOn string `json:"buildFinishedOn,omitempty"`
+}
+
 type attestationWire struct {
 	MonitorLog struct {
 		Network    []string      `json:"network"`
-		Detections []ruleHitWire `json:"https://cicd-sensor.github.io/detections"`
-		Domains    []string      `json:"https://cicd-sensor.github.io/domains"`
-		Result     string        `json:"https://cicd-sensor.github.io/result"`
-		Job        jobWire       `json:"https://cicd-sensor.github.io/job"`
+		Detections []ruleHitWire `json:"https://cicd-sensor.github.io/runtime_trace/detections/v1alpha1"`
+		Domains    []string      `json:"https://cicd-sensor.github.io/runtime_trace/domains/v1alpha1"`
+		Result     string        `json:"https://cicd-sensor.github.io/runtime_trace/result/v1alpha1"`
+		Job        jobWire       `json:"https://cicd-sensor.github.io/runtime_trace/job/v1alpha1"`
 	} `json:"monitorLog"`
+	Metadata metadataWire `json:"metadata"`
 }
 
 // minimalLogForIdentity builds a minimal JobEventSummaryForReport so tests can
@@ -86,10 +92,10 @@ func TestRenderAttestation_HappyPath(t *testing.T) {
 
 	for _, key := range []string{
 		`"network"`,
-		`"https://cicd-sensor.github.io/detections"`,
-		`"https://cicd-sensor.github.io/domains"`,
-		`"https://cicd-sensor.github.io/result"`,
-		`"https://cicd-sensor.github.io/job"`,
+		`"https://cicd-sensor.github.io/runtime_trace/detections/v1alpha1"`,
+		`"https://cicd-sensor.github.io/runtime_trace/domains/v1alpha1"`,
+		`"https://cicd-sensor.github.io/runtime_trace/result/v1alpha1"`,
+		`"https://cicd-sensor.github.io/runtime_trace/job/v1alpha1"`,
 	} {
 		if !strings.Contains(got, key) {
 			t.Fatalf("missing fragment %q in output:\n%s", key, got)
@@ -98,6 +104,12 @@ func TestRenderAttestation_HappyPath(t *testing.T) {
 	wire := renderAttestationJSON(t, log)
 	if wire.MonitorLog.Result != "detected" {
 		t.Errorf("result: got %q, want %q", wire.MonitorLog.Result, "detected")
+	}
+	if got, want := wire.Metadata.BuildStartedOn, "2026-04-30T12:00:00Z"; got != want {
+		t.Errorf("metadata.buildStartedOn: got %q, want %q", got, want)
+	}
+	if got, want := wire.Metadata.BuildFinishedOn, "2026-04-30T12:05:00Z"; got != want {
+		t.Errorf("metadata.buildFinishedOn: got %q, want %q", got, want)
 	}
 	if len(wire.MonitorLog.Detections) != 1 {
 		t.Fatalf("detections: got %d, want 1", len(wire.MonitorLog.Detections))
