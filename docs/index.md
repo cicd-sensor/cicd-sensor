@@ -57,7 +57,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: cicd-sensor/cicd-sensor-action@483cff492ff759c7dee226e9d44bdba2d2380825 # v0.0.23
+      - uses: cicd-sensor/cicd-sensor-action@e02b263ab3e3be401d9a390bc810681a37ed9d6f # v0.0.26
 ```
 
 See [GitHub-hosted runner](user-guide/github-hosted.md) for details.
