@@ -107,14 +107,8 @@ jobs:
       # cicd-sensor-attestation artifact (containing predicate.json)
       # at job end, which the downstream sign-tarballs and image
       # jobs sign with actions/attest as a runtime-trace attestation.
-      #
-      # TEMPORARILY DISABLED for the schema-rename release:
-      # the published action (v0.0.10) downloads cicd-sensor v0.0.13,
-      # whose old event_kind/runner_kind schema no longer parses the new
-      # baseline rules. Re-enable after cicd-sensor-action ships a release
-      # built against this commit (v0.0.14+) and Renovate bumps the pin.
-      # - name: Start cicd-sensor (self-monitoring)
-      #   uses: cicd-sensor/cicd-sensor-action@752d3dfc5a6ed789d34626f31b22b1e1068f1ace # v0.0.10
+      - name: Start cicd-sensor (self-monitoring)
+        uses: cicd-sensor/cicd-sensor-action@752d3dfc5a6ed789d34626f31b22b1e1068f1ace # v0.0.10
 
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -214,12 +208,11 @@ jobs:
           name: release-sbom
           path: dist
 
-      # Disabled with the self-monitor step in the build job.
-      # - name: Download cicd-sensor runtime-trace predicate
-      #   uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      #   with:
-      #     name: cicd-sensor-attestation
-      #     path: trace
+      - name: Download cicd-sensor runtime-trace predicate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cicd-sensor-attestation
+          path: trace
 
       - name: Generate checksums
         run: |
@@ -249,13 +242,12 @@ jobs:
         with:
           subject-checksums: dist/checksums.txt
 
-      # Disabled with the self-monitor step in the build job.
-      # - name: Attest runtime-trace (cicd-sensor)
-      #   uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
-      #   with:
-      #     subject-checksums: dist/checksums.txt
-      #     predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
-      #     predicate-path: trace/predicate.json
+      - name: Attest runtime-trace (cicd-sensor)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-checksums: dist/checksums.txt
+          predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
+          predicate-path: trace/predicate.json
 
       - name: Upload signed release assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -300,12 +292,11 @@ jobs:
           name: release-sbom
           path: dist
 
-      # Disabled with the self-monitor step in the build job.
-      # - name: Download cicd-sensor runtime-trace predicate
-      #   uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      #   with:
-      #     name: cicd-sensor-attestation
-      #     path: trace
+      - name: Download cicd-sensor runtime-trace predicate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cicd-sensor-attestation
+          path: trace
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -372,16 +363,15 @@ jobs:
           push-to-registry: true
           create-storage-record: true
 
-      # Disabled with the self-monitor step in the build job.
-      # - name: Attest runtime-trace (image)
-      #   uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
-      #   with:
-      #     subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
-      #     subject-digest: ${{ steps.build_and_push.outputs.digest }}
-      #     predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
-      #     predicate-path: trace/predicate.json
-      #     push-to-registry: true
-      #     create-storage-record: false
+      - name: Attest runtime-trace (image)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
+          subject-digest: ${{ steps.build_and_push.outputs.digest }}
+          predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
+          predicate-path: trace/predicate.json
+          push-to-registry: true
+          create-storage-record: false
 
   finalize:
     name: Tag and publish GitHub Release
