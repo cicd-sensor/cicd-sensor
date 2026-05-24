@@ -46,8 +46,10 @@ type htmlHit struct {
 	RuleID          string                    `json:"rule_id"`
 	RulesetRevision string                    `json:"ruleset_revision,omitempty"`
 	RuleName        string                    `json:"rule_name,omitempty"`
+	RuleDescription string                    `json:"rule_description,omitempty"`
 	RuleType        string                    `json:"rule_type,omitempty"`
 	RuleCondition   string                    `json:"rule_condition,omitempty"`
+	RuleTags        map[string]string         `json:"rule_tags,omitempty"`
 	Action          string                    `json:"action"`
 	EventType       string                    `json:"event_type,omitempty"`
 	Process         *resultdoc.ProcessSummary `json:"process,omitempty"`
@@ -82,8 +84,10 @@ func htmlReportFrom(log *resultdoc.JobEventSummaryForReport) htmlReport {
 				RuleID:          h.RuleID,
 				RulesetRevision: h.RulesetRevision,
 				RuleName:        h.RuleName,
+				RuleDescription: h.RuleDescription,
 				RuleType:        h.RuleType,
 				RuleCondition:   h.RuleCondition,
+				RuleTags:        h.RuleTags,
 				Action:          h.Action,
 				EventType:       string(e.EventType),
 				Process:         e.Process,

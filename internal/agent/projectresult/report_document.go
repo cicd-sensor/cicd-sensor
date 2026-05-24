@@ -25,9 +25,11 @@ func BuildJobEventSummaryForReport(in ReportDocumentInput) resultdoc.JobEventSum
 	ruleDetails := make(map[rule.RuleIdentity]ruleDetail, len(in.ResolvedRules.Rules))
 	for _, resolved := range in.ResolvedRules.Rules {
 		ruleDetails[resolved.Identity()] = ruleDetail{
-			name:      resolved.Rule.RuleName,
-			ruleType:  resultRuleType(resolved.Rule.Type),
-			condition: resolved.Rule.Condition,
+			name:        resolved.Rule.RuleName,
+			description: resolved.Rule.Description,
+			ruleType:    resultRuleType(resolved.Rule.Type),
+			condition:   resolved.Rule.Condition,
+			tags:        resolved.Rule.Tags,
 		}
 	}
 
@@ -50,8 +52,10 @@ func BuildJobEventSummaryForReport(in ReportDocumentInput) resultdoc.JobEventSum
 			RuleID:          hit.RuleID,
 			RulesetRevision: hit.RulesetRevision,
 			RuleName:        detail.name,
+			RuleDescription: detail.description,
 			RuleType:        detail.ruleType,
 			RuleCondition:   detail.condition,
+			RuleTags:        detail.tags,
 			Action:          hit.Action,
 			HitCount:        hit.HitCount,
 			MaxAlerts:       hit.MaxAlerts,
@@ -80,9 +84,11 @@ func BuildJobEventSummaryForReport(in ReportDocumentInput) resultdoc.JobEventSum
 }
 
 type ruleDetail struct {
-	name      string
-	ruleType  string
-	condition string
+	name        string
+	description string
+	ruleType    string
+	condition   string
+	tags        map[string]string
 }
 
 func resultRuleType(ruleType string) string {

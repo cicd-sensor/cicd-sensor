@@ -88,16 +88,18 @@ type NetworkConnection struct {
 // HitCount is the total firing count (including events suppressed by max_alerts).
 // AlertEvents holds the retained events (len ≤ MaxAlerts).
 type HitRecord struct {
-	RulesetID       string       `json:"ruleset_id"`
-	RuleID          string       `json:"rule_id"`
-	RulesetRevision string       `json:"ruleset_revision,omitempty"`
-	RuleName        string       `json:"rule_name,omitempty"`
-	RuleType        string       `json:"rule_type,omitempty"`
-	RuleCondition   string       `json:"rule_condition,omitempty"`
-	Action          string       `json:"action"`
-	HitCount        int64        `json:"hit_count"`
-	MaxAlerts       int          `json:"max_alerts,omitempty"`
-	AlertEvents     []AlertEvent `json:"alert_events,omitempty"`
+	RulesetID       string            `json:"ruleset_id"`
+	RuleID          string            `json:"rule_id"`
+	RulesetRevision string            `json:"ruleset_revision,omitempty"`
+	RuleName        string            `json:"rule_name,omitempty"`
+	RuleDescription string            `json:"rule_description,omitempty"`
+	RuleType        string            `json:"rule_type,omitempty"`
+	RuleCondition   string            `json:"rule_condition,omitempty"`
+	RuleTags        map[string]string `json:"rule_tags,omitempty"`
+	Action          string            `json:"action"`
+	HitCount        int64             `json:"hit_count"`
+	MaxAlerts       int               `json:"max_alerts,omitempty"`
+	AlertEvents     []AlertEvent      `json:"alert_events,omitempty"`
 }
 
 type AlertEvent struct {

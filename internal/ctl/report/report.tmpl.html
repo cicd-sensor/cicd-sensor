@@ -745,6 +745,17 @@ body {
 .tag.kind-domain { background: var(--green-fade); color: var(--green-deep); }
 .tag.type-correlation { background: #ece1f7; color: #5a30a3; }
 .tag.type { background: transparent; color: var(--ink-3); border: 1px solid var(--rule); }
+/* user-defined rule_tags — neutral, unobtrusive */
+.tag.meta {
+  background: #fff;
+  color: var(--ink-3);
+  border: 1px solid var(--rule);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.tag.meta .k { color: var(--ink-2); }
+.tag.meta .sep { color: var(--ink-3); padding: 0 1px; }
 
 .cell-payload {
   font-family: var(--mono);
@@ -1115,12 +1126,27 @@ body {
     row('timestamp', codeVal(h.timestamp));
     row('ruleset', codeVal(h.ruleset_id));
     row('rule_id', codeVal(h.rule_id));
+    if (h.rule_description) {
+      row('description', codeVal(h.rule_description));
+    }
     row('rule_type', codeVal(h.rule_type));
     row('action', codeVal(h.action));
     row('event_type', codeVal(h.event_type));
     if (h.rule_condition) {
       var isCorr = h.rule_type === 'correlation';
       row('rule_condition', el('div', { class: 'detail-value' }, ruleCondNode(h.rule_condition, isCorr)));
+    }
+    if (h.rule_tags && Object.keys(h.rule_tags).length) {
+      var tagsList = el('div', { class: 'detail-value' });
+      Object.keys(h.rule_tags).sort().forEach(function (k) {
+        if (tagsList.childNodes.length) tagsList.append(document.createTextNode(' '));
+        tagsList.append(el('span', { class: 'tag meta' },
+          el('span', { class: 'k', text: k }),
+          el('span', { class: 'sep', text: ':' }),
+          document.createTextNode(String(h.rule_tags[k]))
+        ));
+      });
+      row('rule_tags', tagsList);
     }
     if (h.payload && Object.keys(h.payload).length) {
       var pg = el('div', { class: 'payload-grid' });
@@ -1171,7 +1197,10 @@ body {
 
   function searchableHit(h) {
     var p = h.process || {};
-    var parts = [h.rule_name, h.ruleset_id, h.rule_id, h.rule_type, h.action, h.event_type, h.rule_condition];
+    var parts = [h.rule_name, h.rule_description, h.ruleset_id, h.rule_id, h.rule_type, h.action, h.event_type, h.rule_condition];
+    if (h.rule_tags) {
+      Object.keys(h.rule_tags).forEach(function (k) { parts.push(k + ':' + h.rule_tags[k]); });
+    }
     if (h.payload) {
       Object.keys(h.payload).forEach(function (k) {
         var v = h.payload[k];
