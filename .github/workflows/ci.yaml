@@ -6,12 +6,14 @@ name: CI
     paths-ignore:
       - README.md
       - docs/**
+      - rules/**
   push:
     branches:
       - main
     paths-ignore:
       - README.md
       - docs/**
+      - rules/**
   # Allow release-sensor (and other workflows) to reuse this as a gate.
   workflow_call:
 
