@@ -16,6 +16,10 @@ import (
 
 func TestEvaluateEvent_TerminateKillsEventProcessIntegration(t *testing.T) {
 	cmd := exec.Command("sleep", "30")
+	// Real CI runners launch each step in its own pgid (setsid). Mirror that
+	// here so SIGINT-to-pgid in terminateProcess hits only the test target,
+	// not the test process itself.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start sleep: %v", err)
 	}
