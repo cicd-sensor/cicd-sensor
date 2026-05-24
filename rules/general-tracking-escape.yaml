@@ -1,0 +1,17 @@
+rule_sets:
+  - ruleset_id: cicd_sensor_baseline/general_tracking_escape
+    rules:
+      - rule_id: supplychain_docker_upstream_socket_access
+        rule_name: "Supply-chain: real Docker upstream socket access"
+        description: |
+          Terminates direct access to docker-upstream.sock, the real Docker
+          daemon socket behind cicd-sensor's Docker proxy. This is blocked
+          because reaching the upstream Docker socket can create containers
+          outside the tracked job lineage. Review the connecting process and
+          inspect any container activity that occurred before termination.
+        event_type: unix_socket_connect
+        condition: |
+          path.endsWith("/docker-upstream.sock")
+        action: terminate
+        tags:
+          category: tracking-escape
