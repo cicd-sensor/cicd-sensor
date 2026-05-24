@@ -28,15 +28,15 @@ type recordingDetectionOutput struct {
 	payload [][]byte
 }
 
-func (s *recordingDetectionOutput) Entries(t *testing.T) []*logv1.JobDetectionLogEntry {
+func (s *recordingDetectionOutput) Entries(t *testing.T) []*logv1.DetectionLogEntry {
 	t.Helper()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	out := make([]*logv1.JobDetectionLogEntry, 0, len(s.payload))
+	out := make([]*logv1.DetectionLogEntry, 0, len(s.payload))
 	for _, payload := range s.payload {
-		entry := &logv1.JobDetectionLogEntry{}
+		entry := &logv1.DetectionLogEntry{}
 		if err := protojson.Unmarshal(payload, entry); err != nil {
 			t.Fatalf("unmarshal detection entry: %v", err)
 		}
@@ -49,7 +49,7 @@ func attachRecordingDetectionOutput(t *testing.T, scope *jobscope.JobScopeState,
 	t.Helper()
 	scope.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
-		scope.Kind,
+		scope.Type,
 		func(_ context.Context, batch managerclient.LogBatch) error {
 			msg, err := managerclient.BuildCollectorIngestLogBatch(batch)
 			if err != nil {
@@ -63,11 +63,11 @@ func attachRecordingDetectionOutput(t *testing.T, scope *jobscope.JobScopeState,
 	)
 }
 
-func attachRecordingRuntimeTelemetryOutput(t *testing.T, scope *jobscope.JobScopeState, recorder *recordingRuntimeTelemetryOutput) {
+func attachRecordingRuntimeEventOutput(t *testing.T, scope *jobscope.JobScopeState, recorder *recordingRuntimeEventOutput) {
 	t.Helper()
-	scope.ManagerJobLogsForTesting().AttachRuntimeTelemetryRecorderForTesting(
+	scope.ManagerJobLogsForTesting().AttachRuntimeEventRecorderForTesting(
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
-		scope.Kind,
+		scope.Type,
 		func(_ context.Context, batch managerclient.LogBatch) error {
 			msg, err := managerclient.BuildCollectorIngestLogBatch(batch)
 			if err != nil {
@@ -120,19 +120,19 @@ func TestEvaluateEvent_RoutesByActionAndScope(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "detect",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "collect",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `protocol == "tcp"`,
 				Action:    rule.RuleActionCollect,
 			},
 			{
 				RuleID:    "terminate",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionTerminate,
 			},
@@ -157,7 +157,7 @@ func TestEvaluateEvent_RoutesByActionAndScope(t *testing.T) {
 	}
 }
 
-func TestEvaluateEvent_ExceptionsAndKindsSkipHits(t *testing.T) {
+func TestEvaluateEvent_ExceptionsAndTypesSkipHits(t *testing.T) {
 	t.Parallel()
 
 	hostScope := jobscope.NewHost()
@@ -166,14 +166,14 @@ func TestEvaluateEvent_ExceptionsAndKindsSkipHits(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:     "with-exception",
-				EventKind:  jobevent.NetworkConnect,
+				EventType:  jobevent.NetworkConnect,
 				Condition:  `remote_ip == "example.com"`,
 				Exceptions: `protocol == "tcp"`,
 				Action:     rule.RuleActionDetect,
 			},
 			{
-				RuleID:    "kind-mismatch",
-				EventKind: jobevent.FileOpen,
+				RuleID:    "type-mismatch",
+				EventType: jobevent.FileOpen,
 				Condition: `path.contains(".env")`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -210,7 +210,7 @@ func TestEvaluateEvent_ModifierAddedExceptionSuppressesHit(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "with-added-exception",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -234,7 +234,7 @@ func TestEvaluateEvent_ModifierAddedExceptionSuppressesHit(t *testing.T) {
 	}
 }
 
-func TestEvaluateEvent_FileKindHits(t *testing.T) {
+func TestEvaluateEvent_FileTypeHits(t *testing.T) {
 	t.Parallel()
 
 	hostScope := jobscope.NewHost()
@@ -243,7 +243,7 @@ func TestEvaluateEvent_FileKindHits(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "open-dotenv",
-				EventKind: jobevent.FileOpen,
+				EventType: jobevent.FileOpen,
 				Condition: `path.endsWith(".env")`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -272,7 +272,7 @@ func TestEvaluateEvent_EmitsDetectionLog(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "detect",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -290,8 +290,8 @@ func TestEvaluateEvent_EmitsDetectionLog(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("detection entries: got %d, want 1", len(entries))
 	}
-	if entries[0].GetScope() != string(jobcontext.ScopeKindHost) {
-		t.Fatalf("scope: got %q, want %q", entries[0].GetScope(), string(jobcontext.ScopeKindHost))
+	if entries[0].GetScope() != string(jobcontext.ScopeTypeHost) {
+		t.Fatalf("scope: got %q, want %q", entries[0].GetScope(), string(jobcontext.ScopeTypeHost))
 	}
 	if detectionRuleRef(entries[0]) != "host-set/detect" {
 		t.Fatalf("rule_id: got %q, want %q", detectionRuleRef(entries[0]), "host-set/detect")
@@ -313,7 +313,7 @@ func TestEvaluateEvent_ScopeFieldHostProject(t *testing.T) {
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "host-rule",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `protocol == "tcp"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -326,7 +326,7 @@ func TestEvaluateEvent_ScopeFieldHostProject(t *testing.T) {
 		RulesetID: "project-set",
 		Rules: []rule.Rule{{
 			RuleID:    "project-rule",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -340,10 +340,10 @@ func TestEvaluateEvent_ScopeFieldHostProject(t *testing.T) {
 
 	hostEntries := hostStream.Entries(t)
 	projectEntries := projectStream.Entries(t)
-	if len(hostEntries) != 1 || hostEntries[0].GetScope() != string(jobcontext.ScopeKindHost) {
+	if len(hostEntries) != 1 || hostEntries[0].GetScope() != string(jobcontext.ScopeTypeHost) {
 		t.Fatalf("host entries: got %#v", hostEntries)
 	}
-	if len(projectEntries) != 1 || projectEntries[0].GetScope() != string(jobcontext.ScopeKindProject) {
+	if len(projectEntries) != 1 || projectEntries[0].GetScope() != string(jobcontext.ScopeTypeProject) {
 		t.Fatalf("project entries: got %#v", projectEntries)
 	}
 }
@@ -358,7 +358,7 @@ func TestEvaluateEvent_CollectHitEmitsDetectionLog(t *testing.T) {
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "collect",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `protocol == "tcp"`,
 			Action:    rule.RuleActionCollect,
 		}},
@@ -378,17 +378,17 @@ func TestEvaluateEvent_CollectHitEmitsDetectionLog(t *testing.T) {
 	}
 }
 
-func TestEvaluateEvent_EmitsRuntimeTelemetryForAllEvents(t *testing.T) {
+func TestEvaluateEvent_EmitsRuntimeEventForAllEvents(t *testing.T) {
 	t.Parallel()
 
-	stream := &recordingRuntimeTelemetryOutput{}
+	stream := &recordingRuntimeEventOutput{}
 	hostScope := jobscope.NewHost()
-	attachRecordingRuntimeTelemetryOutput(t, hostScope, stream)
+	attachRecordingRuntimeEventOutput(t, hostScope, stream)
 	hostScope.RuleSets = []rule.RuleSet{{
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "detect",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "not-matching.example"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -403,27 +403,27 @@ func TestEvaluateEvent_EmitsRuntimeTelemetryForAllEvents(t *testing.T) {
 
 	entries := stream.Entries(t)
 	if len(entries) != 1 {
-		t.Fatalf("runtime telemetry entries: got %d, want 1", len(entries))
+		t.Fatalf("runtime event entries: got %d, want 1", len(entries))
 	}
-	if entries[0].GetScope() != string(jobcontext.ScopeKindHost) {
-		t.Fatalf("scope: got %q, want %q", entries[0].GetScope(), string(jobcontext.ScopeKindHost))
+	if entries[0].GetScope() != string(jobcontext.ScopeTypeHost) {
+		t.Fatalf("scope: got %q, want %q", entries[0].GetScope(), string(jobcontext.ScopeTypeHost))
 	}
 	if entries[0].GetEvent().GetId() == "" {
 		t.Fatal("event id missing")
 	}
 }
 
-func TestEvaluateEvent_TelemetryDoesNotEmbedRuleHits(t *testing.T) {
+func TestEvaluateEvent_RuntimeEventDoesNotEmbedRuleHits(t *testing.T) {
 	t.Parallel()
 
-	stream := &recordingRuntimeTelemetryOutput{}
+	stream := &recordingRuntimeEventOutput{}
 	hostScope := jobscope.NewHost()
-	attachRecordingRuntimeTelemetryOutput(t, hostScope, stream)
+	attachRecordingRuntimeEventOutput(t, hostScope, stream)
 	hostScope.RuleSets = []rule.RuleSet{{
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "detect",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -436,26 +436,26 @@ func TestEvaluateEvent_TelemetryDoesNotEmbedRuleHits(t *testing.T) {
 
 	entries := stream.Entries(t)
 	if len(entries) != 1 {
-		t.Fatalf("runtime telemetry entries: got %d, want 1", len(entries))
+		t.Fatalf("runtime event entries: got %d, want 1", len(entries))
 	}
 	if entries[0].GetEvent().GetId() == "" {
 		t.Fatal("event id missing")
 	}
 }
 
-func TestEvaluateEvent_TelemetryScopeFieldHostProject(t *testing.T) {
+func TestEvaluateEvent_RuntimeEventScopeFieldHostProject(t *testing.T) {
 	t.Parallel()
 
-	hostStream := &recordingRuntimeTelemetryOutput{}
-	projectStream := &recordingRuntimeTelemetryOutput{}
+	hostStream := &recordingRuntimeEventOutput{}
+	projectStream := &recordingRuntimeEventOutput{}
 
 	hostScope := jobscope.NewHost()
-	attachRecordingRuntimeTelemetryOutput(t, hostScope, hostStream)
+	attachRecordingRuntimeEventOutput(t, hostScope, hostStream)
 	hostScope.RuleSets = []rule.RuleSet{{
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "host-rule",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `protocol == "tcp"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -463,12 +463,12 @@ func TestEvaluateEvent_TelemetryScopeFieldHostProject(t *testing.T) {
 	hostScope.ResolveRules(jobcontext.JobIdentity{})
 
 	projectScope := jobscope.NewProject()
-	attachRecordingRuntimeTelemetryOutput(t, projectScope, projectStream)
+	attachRecordingRuntimeEventOutput(t, projectScope, projectStream)
 	projectScope.RuleSets = []rule.RuleSet{{
 		RulesetID: "project-set",
 		Rules: []rule.Rule{{
 			RuleID:    "project-rule",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -482,10 +482,10 @@ func TestEvaluateEvent_TelemetryScopeFieldHostProject(t *testing.T) {
 
 	hostEntries := hostStream.Entries(t)
 	projectEntries := projectStream.Entries(t)
-	if len(hostEntries) != 1 || hostEntries[0].GetScope() != string(jobcontext.ScopeKindHost) {
+	if len(hostEntries) != 1 || hostEntries[0].GetScope() != string(jobcontext.ScopeTypeHost) {
 		t.Fatalf("host entries: got %#v", hostEntries)
 	}
-	if len(projectEntries) != 1 || projectEntries[0].GetScope() != string(jobcontext.ScopeKindProject) {
+	if len(projectEntries) != 1 || projectEntries[0].GetScope() != string(jobcontext.ScopeTypeProject) {
 		t.Fatalf("project entries: got %#v", projectEntries)
 	}
 }
@@ -502,13 +502,13 @@ func TestEvaluateEvent_RuntimeErrorWarnsAndContinues(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "runtime-error",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `list.domains.startsWith("x")`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "good",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -548,7 +548,7 @@ func TestEvaluateEvent_ExceptionRuntimeErrorDoesNotSuppressHit(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "with-bad-exception",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -600,7 +600,7 @@ func TestEvaluateEvent_ExceptionShortCircuitsBeforeLaterRuntimeError(t *testing.
 		Rules: []rule.Rule{
 			{
 				RuleID:     "with-base-and-added-exception",
-				EventKind:  jobevent.NetworkConnect,
+				EventType:  jobevent.NetworkConnect,
 				Condition:  `remote_ip == "example.com"`,
 				Exceptions: `process_name == "curl"`,
 				Action:     rule.RuleActionDetect,
@@ -640,13 +640,13 @@ func TestEvaluateEvent_MultipleMatchingRulesProduceMultipleHits(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "match-remote",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "match-process",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `protocol == "tcp"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -687,7 +687,7 @@ func TestJob_EventWorkerEvaluatesRulesAndFeedsOutputs(t *testing.T) {
 			{
 				RuleID:    "curl-egress",
 				RuleName:  "Curl Egress",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "registry.npmjs.org" && protocol == "tcp"`,
 				Action:    rule.RuleActionDetect,
 				Tags: map[string]string{
@@ -738,7 +738,7 @@ func TestJob_EventWorkerRoutesHostAndProjectHitsIndependently(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "host-rule",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `protocol == "tcp"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -755,7 +755,7 @@ func TestJob_EventWorkerRoutesHostAndProjectHitsIndependently(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "project-rule",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -790,7 +790,7 @@ func TestJob_EventWorkerRoutesHostAndProjectHitsIndependently(t *testing.T) {
 
 func testFileOpenEvent(path string) jobevent.EventRecord {
 	return jobevent.EventRecord{
-		EventKind: jobevent.FileOpen,
+		EventType: jobevent.FileOpen,
 		Timestamp: time.Date(2026, 4, 16, 1, 2, 3, 4, time.UTC),
 		Payload: map[string]any{
 			"path": path,
@@ -803,26 +803,26 @@ func testFileOpenEvent(path string) jobevent.EventRecord {
 	}
 }
 
-// TestEvaluateEvent_FileMutationKindsEndToEnd locks the event payload →
-// CEL eval pipeline for the three RFC 0002 §2 event kinds. Each case
+// TestEvaluateEvent_FileMutationTypesEndToEnd locks the event payload →
+// CEL eval pipeline for the three RFC 0002 §2 event types. Each case
 // mirrors what event_file.go emits, so input projection regressions
 // surface as missing or unwanted hits.
-func TestEvaluateEvent_FileMutationKindsEndToEnd(t *testing.T) {
+func TestEvaluateEvent_FileMutationTypesEndToEnd(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name          string
-		ruleEventKind jobevent.Kind
+		ruleEventType jobevent.Type
 		ruleCondition string
 		event         jobevent.EventRecord
 		wantHitDetect int
 	}{
 		{
 			name:          "file_remove_unlink_secret",
-			ruleEventKind: jobevent.FileRemove,
+			ruleEventType: jobevent.FileRemove,
 			ruleCondition: `!is_folder && path == "/etc/shadow"`,
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileRemove,
+				EventType: jobevent.FileRemove,
 				Payload: map[string]any{
 					"path":      "/etc/shadow",
 					"is_folder": false,
@@ -834,10 +834,10 @@ func TestEvaluateEvent_FileMutationKindsEndToEnd(t *testing.T) {
 		},
 		{
 			name:          "file_remove_rmdir_skipped_by_is_folder_guard",
-			ruleEventKind: jobevent.FileRemove,
+			ruleEventType: jobevent.FileRemove,
 			ruleCondition: `!is_folder && path == "/var/log/journal"`,
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileRemove,
+				EventType: jobevent.FileRemove,
 				Payload: map[string]any{
 					"path":      "/var/log/journal",
 					"is_folder": true,
@@ -849,10 +849,10 @@ func TestEvaluateEvent_FileMutationKindsEndToEnd(t *testing.T) {
 		},
 		{
 			name:          "file_move_into_run_emits_both_paths",
-			ruleEventKind: jobevent.FileMove,
+			ruleEventType: jobevent.FileMove,
 			ruleCondition: `from_path.startsWith("/tmp/") && to_path.startsWith("/run/")`,
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileMove,
+				EventType: jobevent.FileMove,
 				Payload: map[string]any{
 					"from_path": "/tmp/payload.bin",
 					"to_path":   "/run/init",
@@ -864,10 +864,10 @@ func TestEvaluateEvent_FileMutationKindsEndToEnd(t *testing.T) {
 		},
 		{
 			name:          "file_link_symlink_into_local_bin",
-			ruleEventKind: jobevent.FileLink,
+			ruleEventType: jobevent.FileLink,
 			ruleCondition: `is_symlink && created_path.startsWith("/usr/local/bin/") && existing_path.startsWith("/tmp/")`,
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileLink,
+				EventType: jobevent.FileLink,
 				Payload: map[string]any{
 					"created_path":  "/usr/local/bin/curl",
 					"existing_path": "/tmp/wrap",
@@ -881,10 +881,10 @@ func TestEvaluateEvent_FileMutationKindsEndToEnd(t *testing.T) {
 		},
 		{
 			name:          "file_link_hardlink_to_shadow",
-			ruleEventKind: jobevent.FileLink,
+			ruleEventType: jobevent.FileLink,
 			ruleCondition: `is_hardlink && existing_path == "/etc/shadow" && process.exec_path.endsWith("/ln")`,
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileLink,
+				EventType: jobevent.FileLink,
 				Payload: map[string]any{
 					"created_path":  "/tmp/copy",
 					"existing_path": "/etc/shadow",
@@ -907,7 +907,7 @@ func TestEvaluateEvent_FileMutationKindsEndToEnd(t *testing.T) {
 				RulesetID: "host-set",
 				Rules: []rule.Rule{{
 					RuleID:    "r1",
-					EventKind: tt.ruleEventKind,
+					EventType: tt.ruleEventType,
 					Condition: tt.ruleCondition,
 					Action:    rule.RuleActionDetect,
 				}},

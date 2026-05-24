@@ -74,7 +74,7 @@ rule_sets:
   - ruleset_id: "global-set"
     rules:
       - rule_id: "detect_bash"
-        event_kind: "process_exec"
+        event_type: "process_exec"
         condition: 'process_name == "bash"'
         action: "detect"
 `,
@@ -89,7 +89,7 @@ sinks:
     type: gcs
     uri: gs://test-bucket
 logs:
-  job_result_log:
+  summary_log:
     sink: test-sink
 `,
 			wantRuleSets: 2,
@@ -163,9 +163,9 @@ bind:
 			if len(tt.ruleFiles) > 0 {
 				rulesPath = writeManagerRuleBundle(t, dir, tt.ruleFiles)
 			}
-			if startupCfg.Logs["job_result_log"].Sink != "" {
+			if startupCfg.Logs["summary_log"].Sink != "" {
 				config.OutputSettings = &managerv1.OutputSettings{
-					JobResultLog: &managerv1.OutputSetting{
+					SummaryLog: &managerv1.OutputSetting{
 						Enabled:              true,
 						FlushThresholdBytes:  1,
 						FlushIntervalSeconds: 1,
@@ -181,7 +181,7 @@ bind:
 						Revision:  "v20260519-001",
 						Rules: []rule.Rule{{
 							RuleID:    "baseline_detect",
-							EventKind: "process_exec",
+							EventType: "process_exec",
 							Condition: `process_name == "true"`,
 							Action:    rule.RuleActionDetect,
 						}},
@@ -228,12 +228,12 @@ bind:
 			if resp.Msg.GetConfig().GetDefaultMaxAlertsPerRule() != tt.wantDefault {
 				t.Fatalf("default_max_alerts_per_rule: got %d, want %d", resp.Msg.GetConfig().GetDefaultMaxAlertsPerRule(), tt.wantDefault)
 			}
-			hasManager := resp.Msg.GetConfig().GetOutputSettings().GetJobResultLog().GetEnabled()
+			hasManager := resp.Msg.GetConfig().GetOutputSettings().GetSummaryLog().GetEnabled()
 			if hasManager != tt.wantManager {
 				t.Fatalf("manager output: got %v, want %v", hasManager, tt.wantManager)
 			}
 			if tt.wantManager {
-				assertJobResultOutputSettings(t, resp.Msg.GetConfig().GetOutputSettings())
+				assertSummaryOutputSettings(t, resp.Msg.GetConfig().GetOutputSettings())
 			} else if got := resp.Msg.GetConfig().GetOutputSettings(); got != nil {
 				t.Fatalf("output_settings: got %+v, want nil when output is disabled", got)
 			}
@@ -249,7 +249,7 @@ func TestConfigService_FetchConfig_PrependsBaselineRules(t *testing.T) {
 				Revision:  "v20260519-001",
 				Rules: []rule.Rule{{
 					RuleID:    "baseline_detect",
-					EventKind: "process_exec",
+					EventType: "process_exec",
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -264,7 +264,7 @@ rule_sets:
   - ruleset_id: "manual-set"
     rules:
       - rule_id: "manual_detect"
-        event_kind: "process_exec"
+        event_type: "process_exec"
         condition: 'process_name == "sh"'
         action: "detect"
 `,
@@ -341,7 +341,7 @@ rule_sets:
   - ruleset_id: "initial-set"
     rules:
       - rule_id: "initial_detect"
-        event_kind: "process_exec"
+        event_type: "process_exec"
         condition: 'process_name == "bash"'
         action: "detect"
 `,
@@ -375,7 +375,7 @@ rule_sets:
   - ruleset_id: "updated-set"
     rules:
       - rule_id: "updated_detect"
-        event_kind: "process_exec"
+        event_type: "process_exec"
         condition: 'process_name == "sh"'
         action: "detect"
 `), 0o644); err != nil {
@@ -447,25 +447,25 @@ func assertRuleSetIDAt(t *testing.T, sources []*managerv1.RuleSource, index int,
 	}
 }
 
-func assertJobResultOutputSettings(t *testing.T, got *managerv1.OutputSettings) {
+func assertSummaryOutputSettings(t *testing.T, got *managerv1.OutputSettings) {
 	t.Helper()
 	if got == nil {
 		t.Fatal("output_settings: got nil")
 	}
-	if got.GetJobDetectionLog().GetEnabled() ||
-		got.GetJobDetectionLog().GetFlushThresholdBytes() != 0 ||
-		got.GetJobDetectionLog().GetFlushIntervalSeconds() != 0 {
-		t.Fatalf("job_detection_log output setting: got %+v", got.GetJobDetectionLog())
+	if got.GetDetectionLog().GetEnabled() ||
+		got.GetDetectionLog().GetFlushThresholdBytes() != 0 ||
+		got.GetDetectionLog().GetFlushIntervalSeconds() != 0 {
+		t.Fatalf("detection_log output setting: got %+v", got.GetDetectionLog())
 	}
-	if got.GetJobRuntimeTelemetryLog().GetEnabled() ||
-		got.GetJobRuntimeTelemetryLog().GetFlushThresholdBytes() != 0 ||
-		got.GetJobRuntimeTelemetryLog().GetFlushIntervalSeconds() != 0 {
-		t.Fatalf("job_runtime_telemetry_log output setting: got %+v", got.GetJobRuntimeTelemetryLog())
+	if got.GetRuntimeEventLog().GetEnabled() ||
+		got.GetRuntimeEventLog().GetFlushThresholdBytes() != 0 ||
+		got.GetRuntimeEventLog().GetFlushIntervalSeconds() != 0 {
+		t.Fatalf("runtime_event_log output setting: got %+v", got.GetRuntimeEventLog())
 	}
-	if !got.GetJobResultLog().GetEnabled() ||
-		got.GetJobResultLog().GetFlushThresholdBytes() != 1 ||
-		got.GetJobResultLog().GetFlushIntervalSeconds() != 1 {
-		t.Fatalf("job_result_log output setting: got %+v", got.GetJobResultLog())
+	if !got.GetSummaryLog().GetEnabled() ||
+		got.GetSummaryLog().GetFlushThresholdBytes() != 1 ||
+		got.GetSummaryLog().GetFlushIntervalSeconds() != 1 {
+		t.Fatalf("summary_log output setting: got %+v", got.GetSummaryLog())
 	}
 }
 

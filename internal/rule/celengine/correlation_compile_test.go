@@ -52,7 +52,7 @@ func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -90,7 +90,7 @@ func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -110,7 +110,7 @@ func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -130,7 +130,7 @@ func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -150,7 +150,7 @@ func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -170,7 +170,7 @@ func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -202,7 +202,7 @@ func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -225,7 +225,7 @@ func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -267,13 +267,13 @@ func TestCompileCorrelationCanonicalizesDotAndBracketReferences(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "suspicious_bin_exec",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process.exec_path.endsWith("/curl")`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "credential_file_open",
-				EventKind: jobevent.FileOpen,
+				EventType: jobevent.FileOpen,
 				Condition: `path.endsWith(".env")`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -359,19 +359,19 @@ func TestCompileCorrelationAllowsPresenceBitSum(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "a",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "a.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "b",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "b.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "c",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "c.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -435,19 +435,19 @@ func TestCompileCorrelationAllowsSubtraction(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "a",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "a.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "b",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "b.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "noise",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "noise.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -511,7 +511,7 @@ func TestCompileCorrelationAllowsNegate(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "a",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "a.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -544,13 +544,13 @@ func TestCompileCorrelationRejectsDisallowedArithmetic(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "a",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "a.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "b",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "b.example.com"`,
 				Action:    rule.RuleActionDetect,
 			},

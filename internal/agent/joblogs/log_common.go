@@ -16,8 +16,8 @@ var logJSONMarshal = protojson.MarshalOptions{EmitDefaultValues: false}
 type ScopeLogContext struct {
 	Identity       jobcontext.JobIdentity
 	Metadata       jobcontext.JobMetadata
-	RunnerKind     string
-	Scope          jobcontext.ScopeKind
+	RunnerType     string
+	Scope          jobcontext.ScopeType
 	ConfigRevision string
 }
 

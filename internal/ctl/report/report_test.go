@@ -32,7 +32,7 @@ func sampleResultLog() resultdoc.JobEventSummaryForReport {
 			"github.com", "acme/example", "123", "build", "1", "runner-1",
 		),
 		Metadata:       jobcontext.JobMetadata{},
-		RunnerKind:     "machine",
+		RunnerType:     "machine",
 		StartedAt:      time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
 		GeneratedAt:    time.Date(2026, 4, 30, 12, 5, 0, 0, time.UTC),
 		FinalizeReason: "shutdown",
@@ -95,7 +95,7 @@ func TestRender_HappyPath(t *testing.T) {
 			RuleCondition: `process.exec_path.endsWith("/curl") &&
 remote_ip == "1.1.1.1"`,
 			Action:    "detect",
-			EventKind: "network_connect",
+			EventType: "network_connect",
 			Process: &resultdoc.ProcessSummary{
 				PID:      42,
 				ExecPath: "/usr/bin/curl",
@@ -133,7 +133,7 @@ remote_ip == "1.1.1.1"`,
 		embeddedJSONFragment(`"rule_type":"event"`),
 		`process.exec_path.endsWith(\\\"/curl\\\")`,
 		`remote_ip == \\\"1.1.1.1\\\"`,
-		embeddedJSONFragment(`"event_kind":"network_connect"`),
+		embeddedJSONFragment(`"event_type":"network_connect"`),
 		embeddedJSONFragment(`"action":"detect"`),
 		embeddedJSONFragment(`"/usr/bin/curl"`),
 		embeddedJSONFragment(`"1.1.1.1"`),
@@ -175,7 +175,7 @@ func TestRender_CorrelationHitShowsRuleMetadataForDetail(t *testing.T) {
 			RuleType:      "correlation",
 			RuleCondition: "rule.first.total_count >= 1 && rule.second.total_count >= 1",
 			Action:        "detect",
-			EventKind:     "network_connect",
+			EventType:     "network_connect",
 		}},
 	}
 
@@ -185,10 +185,10 @@ func TestRender_CorrelationHitShowsRuleMetadataForDetail(t *testing.T) {
 		embeddedJSONFragment(`"rule_condition":`),
 		"rule.first.total_count",
 		"rule.second.total_count",
-		embeddedJSONFragment(`"event_kind":"network_connect"`),
-		"kindLabel = isCorr ? 'correlation'",
+		embeddedJSONFragment(`"event_type":"network_connect"`),
+		"typeLabel = isCorr ? 'correlation'",
 		"ruleCondNode(h.rule_condition, true)",
-		"row('event_kind', codeVal(h.event_kind))",
+		"row('event_type', codeVal(h.event_type))",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("expected %q in HTML output", want)
@@ -425,7 +425,7 @@ func TestRender_EscapesUntrustedReportData(t *testing.T) {
 			RuleID:    `rule</script>`,
 			RuleName:  `name<img src=x onerror=alert(1)>`,
 			Action:    "detect",
-			EventKind: "process_exec",
+			EventType: "process_exec",
 			Process: &resultdoc.ProcessSummary{
 				PID:      100,
 				ExecPath: `/tmp/evil"><script>alert(1)</script>`,

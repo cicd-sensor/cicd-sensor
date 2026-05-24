@@ -7,7 +7,7 @@ rule_sets:
   - ruleset_id: acme/process
     rules:
       - rule_id: shell_download
-        event_kind: process_exec
+        event_type: process_exec
         condition: |
           process.exec_path.endsWith("/bash") &&
           process.argv.exists(arg, arg == "-c") &&
@@ -70,7 +70,7 @@ rule_sets:
         - /.docker/config.json
     rules:
       - rule_id: credential_file_read
-        event_kind: file_open
+        event_type: file_open
         condition: |
           is_read &&
           list.credential_paths.exists(s, path.endsWith(s))

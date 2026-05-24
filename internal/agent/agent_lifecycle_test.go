@@ -28,8 +28,8 @@ func TestNewAgentDefaultsNilLogger(t *testing.T) {
 	if a.provider != jobcontext.ProviderGitHub {
 		t.Fatalf("provider: got %q, want %q", a.provider, jobcontext.ProviderGitHub)
 	}
-	if a.runnerKind != "machine" {
-		t.Fatalf("runner kind: got %q, want machine", a.runnerKind)
+	if a.runnerType != "machine" {
+		t.Fatalf("runner type: got %q, want machine", a.runnerType)
 	}
 }
 

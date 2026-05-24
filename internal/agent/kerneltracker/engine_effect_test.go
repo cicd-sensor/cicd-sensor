@@ -65,7 +65,7 @@ func TestRunEngineEffects_RecordsDroppedEvents(t *testing.T) {
 	if !ok {
 		t.Fatal("event channel missing")
 	}
-	channel <- jobevent.EventRecord{EventKind: jobevent.FileOpen}
+	channel <- jobevent.EventRecord{EventType: jobevent.FileOpen}
 
 	engine := &KernelTracker{
 		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -75,7 +75,7 @@ func TestRunEngineEffects_RecordsDroppedEvents(t *testing.T) {
 	engine.runEngineEffects(context.Background(), []engineEffect{emitEventRecord{
 		JobID: jobID,
 		Record: jobevent.EventRecord{
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 		},
 	}})
 

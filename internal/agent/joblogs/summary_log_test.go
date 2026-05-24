@@ -8,16 +8,16 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
 
-func TestMarshalJobResultLogEntryBuildsFinalSummary(t *testing.T) {
+func TestMarshalSummaryLogEntryBuildsFinalSummary(t *testing.T) {
 	t.Parallel()
 
-	payload, err := MarshalJobResultLogEntry(JobResultLogInput{
+	payload, err := MarshalSummaryLogEntry(SummaryLogInput{
 		ScopeLogContext: testScopeLogContext(),
 		RuleModifiers: []rule.RuleModifier{
 			{ModifierID: "mod-a", Revision: "mod-rev"},
@@ -89,12 +89,12 @@ func TestMarshalJobResultLogEntryBuildsFinalSummary(t *testing.T) {
 		FinalizedAt:    testLogTime(),
 	})
 	if err != nil {
-		t.Fatalf("marshal job result log: %v", err)
+		t.Fatalf("marshal summary log: %v", err)
 	}
 
-	var got logv1.JobResultLogEntry
+	var got logv1.SummaryLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
-		t.Fatalf("unmarshal job result log: %v", err)
+		t.Fatalf("unmarshal summary log: %v", err)
 	}
 	if got.GetTimestamp().AsTime() != testLogTime() {
 		t.Fatalf("timestamp: got %s, want %s", got.GetTimestamp().AsTime(), testLogTime())
@@ -144,12 +144,12 @@ func TestMarshalJobResultLogEntryBuildsFinalSummary(t *testing.T) {
 	}
 }
 
-func TestMarshalJobResultLogEntryEmitsExplicitZeroCounters(t *testing.T) {
+func TestMarshalSummaryLogEntryEmitsExplicitZeroCounters(t *testing.T) {
 	t.Parallel()
 
-	payload, err := MarshalJobResultLogEntry(JobResultLogInput{ScopeLogContext: testScopeLogContext()})
+	payload, err := MarshalSummaryLogEntry(SummaryLogInput{ScopeLogContext: testScopeLogContext()})
 	if err != nil {
-		t.Fatalf("marshal job result log: %v", err)
+		t.Fatalf("marshal summary log: %v", err)
 	}
 	raw := string(payload)
 	if !strings.Contains(raw, `"events_total":0`) {
@@ -160,19 +160,19 @@ func TestMarshalJobResultLogEntryEmitsExplicitZeroCounters(t *testing.T) {
 	}
 }
 
-func TestMarshalJobResultLogEntryStampsLogTypeAndVersions(t *testing.T) {
+func TestMarshalSummaryLogEntryStampsLogTypeAndVersions(t *testing.T) {
 	t.Parallel()
 
-	payload, err := MarshalJobResultLogEntry(JobResultLogInput{ScopeLogContext: testScopeLogContext()})
+	payload, err := MarshalSummaryLogEntry(SummaryLogInput{ScopeLogContext: testScopeLogContext()})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var got logv1.JobResultLogEntry
+	var got logv1.SummaryLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.GetLogType() != string(logkind.JobResult) {
-		t.Errorf("log_type: got %q, want %q", got.GetLogType(), string(logkind.JobResult))
+	if got.GetLogType() != string(logtype.Summary) {
+		t.Errorf("log_type: got %q, want %q", got.GetLogType(), string(logtype.Summary))
 	}
 	if got.GetSchemaVersion() != "v1" {
 		t.Errorf("schema_version: got %q, want %q", got.GetSchemaVersion(), "v1")
@@ -182,12 +182,12 @@ func TestMarshalJobResultLogEntryStampsLogTypeAndVersions(t *testing.T) {
 	}
 }
 
-func TestMarshalJobResultLogEntryComputesDuration(t *testing.T) {
+func TestMarshalSummaryLogEntryComputesDuration(t *testing.T) {
 	t.Parallel()
 
 	start := time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)
 	end := start.Add(5 * time.Minute)
-	payload, err := MarshalJobResultLogEntry(JobResultLogInput{
+	payload, err := MarshalSummaryLogEntry(SummaryLogInput{
 		ScopeLogContext: testScopeLogContext(),
 		StartedAt:       start,
 		FinalizedAt:     end,
@@ -195,7 +195,7 @@ func TestMarshalJobResultLogEntryComputesDuration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var got logv1.JobResultLogEntry
+	var got logv1.SummaryLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -210,10 +210,10 @@ func TestMarshalJobResultLogEntryComputesDuration(t *testing.T) {
 	}
 }
 
-func TestMarshalJobResultLogEntryOmitsLifecycleWhenStartedAtZero(t *testing.T) {
+func TestMarshalSummaryLogEntryOmitsLifecycleWhenStartedAtZero(t *testing.T) {
 	t.Parallel()
 
-	payload, err := MarshalJobResultLogEntry(JobResultLogInput{
+	payload, err := MarshalSummaryLogEntry(SummaryLogInput{
 		ScopeLogContext: testScopeLogContext(),
 		FinalizedAt:     time.Date(2026, 5, 23, 10, 5, 0, 0, time.UTC),
 	})
@@ -229,33 +229,33 @@ func TestMarshalJobResultLogEntryOmitsLifecycleWhenStartedAtZero(t *testing.T) {
 	}
 }
 
-func TestMarshalJobResultLogEntryConfigRevisionAbsentSentinel(t *testing.T) {
+func TestMarshalSummaryLogEntryConfigRevisionAbsentSentinel(t *testing.T) {
 	t.Parallel()
 
 	scope := testScopeLogContext()
 	scope.ConfigRevision = ""
-	payload, err := MarshalJobResultLogEntry(JobResultLogInput{ScopeLogContext: scope})
+	payload, err := MarshalSummaryLogEntry(SummaryLogInput{ScopeLogContext: scope})
 	if err != nil {
-		t.Fatalf("marshal job result log: %v", err)
+		t.Fatalf("marshal summary log: %v", err)
 	}
 	if !strings.Contains(string(payload), `"config_revision":"(none)"`) {
 		t.Fatalf("config_revision: want explicit %q sentinel in JSON, got %s", AbsentSentinel, payload)
 	}
 }
 
-func TestMarshalJobResultLogEntryDefaultsFinalizedAt(t *testing.T) {
+func TestMarshalSummaryLogEntryDefaultsFinalizedAt(t *testing.T) {
 	t.Parallel()
 
 	before := time.Now().Add(-time.Second)
-	payload, err := MarshalJobResultLogEntry(JobResultLogInput{ScopeLogContext: testScopeLogContext()})
+	payload, err := MarshalSummaryLogEntry(SummaryLogInput{ScopeLogContext: testScopeLogContext()})
 	if err != nil {
-		t.Fatalf("marshal job result log: %v", err)
+		t.Fatalf("marshal summary log: %v", err)
 	}
 	after := time.Now().Add(time.Second)
 
-	var got logv1.JobResultLogEntry
+	var got logv1.SummaryLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
-		t.Fatalf("unmarshal job result log: %v", err)
+		t.Fatalf("unmarshal summary log: %v", err)
 	}
 	timestamp := got.GetTimestamp().AsTime()
 	if timestamp.Before(before) || timestamp.After(after) {

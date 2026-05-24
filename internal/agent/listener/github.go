@@ -36,7 +36,7 @@ func (l *Listener) handleGitHubHostStart(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, err = l.jobRegistry.ApplyGitHubHostStart(r.Context(), identity, metadata, l.runnerKind, rootPID, l.hostManagerConn, l.hostManagerClient)
+	_, err = l.jobRegistry.ApplyGitHubHostStart(r.Context(), identity, metadata, l.runnerType, rootPID, l.hostManagerConn, l.hostManagerClient)
 	if err != nil {
 		l.writeStartError(w, r, "host_start_failed", err)
 		return
@@ -93,7 +93,7 @@ func (l *Listener) handleGitHubProjectStart(w http.ResponseWriter, r *http.Reque
 		r.Context(),
 		identity,
 		metadata,
-		l.runnerKind,
+		l.runnerType,
 		peerPID,
 		req.DefaultMaxAlertsPerRule,
 		req.RuleSources,
@@ -220,7 +220,7 @@ func (l *Listener) handleGitHubProjectResult(w http.ResponseWriter, r *http.Requ
 			"limit_bytes", projectResultMaxBytes,
 		)
 		l.writeError(w, r, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("job_result_log exceeds %d-byte limit", projectResultMaxBytes))
+			fmt.Sprintf("summary_log exceeds %d-byte limit", projectResultMaxBytes))
 		return
 	}
 

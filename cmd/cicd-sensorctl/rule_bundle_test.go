@@ -27,7 +27,7 @@ rule_sets:
   - ruleset_id: set-a
     rules:
       - rule_id: detect_bash
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: detect
 `)
@@ -36,7 +36,7 @@ rule_sets:
   - ruleset_id: set-c
     rules:
       - rule_id: detect_tcp
-        event_kind: network_connect
+        event_type: network_connect
         condition: protocol == "tcp"
         action: collect
 `)
@@ -94,7 +94,7 @@ rule_sets:
   - ruleset_id: set-valid
     rules:
       - rule_id: detect_bash
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: detect
 `)
@@ -108,7 +108,7 @@ rule_sets:
   - ruleset_id: set-a
     rules:
       - rule_id: detect_bash
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: detect
 `)

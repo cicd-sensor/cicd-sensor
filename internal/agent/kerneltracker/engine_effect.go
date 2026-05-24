@@ -111,7 +111,7 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 					engine.logger.WarnContext(ctx, "bpf_event_channel_drop",
 						"job_id", value.JobID,
 						"count", dropped,
-						"event_kind", value.Record.EventKind,
+						"event_type", value.Record.EventType,
 					)
 				}
 			}

@@ -9,8 +9,8 @@ The first decision is the runner environment you want to protect.
 | Runner environment | Start here | What you get |
 | --- | --- | --- |
 | GitHub-hosted runner | [GitHub-hosted runner](github-hosted.md) | Graphical report and runtime-trace attestation predicate. Log delivery is also available when using the manager. |
-| GitHub Actions self-hosted | [Self-hosted Machine install](self-hosted-install.md), [GitHub Actions self-hosted](github-self-hosted.md), [Manager](manager.md) | Job Result Log, Detection Log, Runtime Telemetry Log, and graphical report |
-| GitLab CI/CD self-hosted | [Self-hosted Machine install](self-hosted-install.md), [GitLab CI/CD self-hosted](gitlab-ci.md), [Manager](manager.md) | Job Result Log, Detection Log, and Runtime Telemetry Log |
+| GitHub Actions self-hosted | [Self-hosted Machine install](self-hosted-install.md), [GitHub Actions self-hosted](github-self-hosted.md), [Manager](manager.md) | Summary Log, Detection Log, Runtime Event Log, and graphical report |
+| GitLab CI/CD self-hosted | [Self-hosted Machine install](self-hosted-install.md), [GitLab CI/CD self-hosted](gitlab-ci.md), [Manager](manager.md) | Summary Log, Detection Log, and Runtime Event Log |
 | Rule author / SIRT | [Rules](rules.md) | Detection, collection, and correlation rules for CI/CD runtime events |
 | Log consumer / SIEM integration | [Logging](logging.md) | Log format delivered by the manager |
 
@@ -34,7 +34,7 @@ flowchart LR
     class ACTION,AGENT cicdSensor
 ```
 
-When a manager is configured, GitHub-hosted runners can also deliver Job Result Logs, Detection Logs, and Runtime Telemetry Logs to cloud-side outputs.
+When a manager is configured, GitHub-hosted runners can also deliver Summary Logs, Detection Logs, and Runtime Event Logs to cloud-side outputs.
 The job can still produce report and attestation artifacts.
 
 ### Self-hosted runner with Manager
@@ -49,7 +49,7 @@ flowchart LR
     SIEM["SIEM"]
 
     MANAGER -->|"Config / Rules"| AGENT
-    AGENT -->|"Job Result / Detection / Telemetry Logs"| MANAGER
+    AGENT -->|"Summary / Detection / Runtime Event Logs"| MANAGER
     MANAGER -->|"Store / Stream"| CLOUD
     CLOUD --> SIEM
 

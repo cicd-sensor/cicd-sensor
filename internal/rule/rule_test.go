@@ -19,7 +19,7 @@ func TestValidateRuleSet(t *testing.T) {
 			set: rule.RuleSet{
 				RulesetID: "test-set",
 				Rules: []rule.Rule{
-					{RuleID: "r1", EventKind: jobevent.ProcessExec, Condition: `process_name == "bash"`, Action: rule.RuleActionDetect},
+					{RuleID: "r1", EventType: jobevent.ProcessExec, Condition: `process_name == "bash"`, Action: rule.RuleActionDetect},
 				},
 			},
 		},
@@ -32,7 +32,7 @@ func TestValidateRuleSet(t *testing.T) {
 			name: "missing rule_id",
 			set: rule.RuleSet{
 				RulesetID: "s",
-				Rules:     []rule.Rule{{EventKind: jobevent.FileOpen, Condition: `path.contains(".env")`, Action: rule.RuleActionDetect}},
+				Rules:     []rule.Rule{{EventType: jobevent.FileOpen, Condition: `path.contains(".env")`, Action: rule.RuleActionDetect}},
 			},
 			wantErr: "rule_id is required",
 		},
@@ -40,7 +40,7 @@ func TestValidateRuleSet(t *testing.T) {
 			name: "missing condition",
 			set: rule.RuleSet{
 				RulesetID: "s",
-				Rules:     []rule.Rule{{RuleID: "r1", EventKind: jobevent.FileOpen, Action: rule.RuleActionDetect}},
+				Rules:     []rule.Rule{{RuleID: "r1", EventType: jobevent.FileOpen, Action: rule.RuleActionDetect}},
 			},
 			wantErr: "condition is required",
 		},
@@ -48,7 +48,7 @@ func TestValidateRuleSet(t *testing.T) {
 			name: "negative max_alerts",
 			set: rule.RuleSet{
 				RulesetID: "s",
-				Rules:     []rule.Rule{{RuleID: "r1", EventKind: jobevent.FileOpen, Condition: `path.contains(".env")`, Action: rule.RuleActionDetect, MaxAlerts: -1}},
+				Rules:     []rule.Rule{{RuleID: "r1", EventType: jobevent.FileOpen, Condition: `path.contains(".env")`, Action: rule.RuleActionDetect, MaxAlerts: -1}},
 			},
 			wantErr: "max_alerts must be non-negative",
 		},
@@ -56,19 +56,19 @@ func TestValidateRuleSet(t *testing.T) {
 			name: "max_alerts above ceiling is allowed and falls back later",
 			set: rule.RuleSet{
 				RulesetID: "s",
-				Rules:     []rule.Rule{{RuleID: "r1", EventKind: jobevent.FileOpen, Condition: `path.contains(".env")`, Action: rule.RuleActionDetect, MaxAlerts: rule.MaxAlertsHardCeiling + 1}},
+				Rules:     []rule.Rule{{RuleID: "r1", EventType: jobevent.FileOpen, Condition: `path.contains(".env")`, Action: rule.RuleActionDetect, MaxAlerts: rule.MaxAlertsHardCeiling + 1}},
 			},
 		},
 		{
-			name: "missing event_kind on single-event rule",
+			name: "missing event_type on single-event rule",
 			set: rule.RuleSet{
 				RulesetID: "s",
 				Rules:     []rule.Rule{{RuleID: "r1", Condition: `process_name == "bash"`, Action: rule.RuleActionDetect}},
 			},
-			wantErr: "event_kind is required",
+			wantErr: "event_type is required",
 		},
 		{
-			name: "correlation rule may omit event_kind",
+			name: "correlation rule may omit event_type",
 			set: rule.RuleSet{
 				RulesetID: "s",
 				Rules: []rule.Rule{{
@@ -83,7 +83,7 @@ func TestValidateRuleSet(t *testing.T) {
 			name: "invalid action",
 			set: rule.RuleSet{
 				RulesetID: "s",
-				Rules:     []rule.Rule{{RuleID: "r1", EventKind: jobevent.ProcessExec, Condition: `process_name == "bash"`, Action: rule.RuleAction("alert")}},
+				Rules:     []rule.Rule{{RuleID: "r1", EventType: jobevent.ProcessExec, Condition: `process_name == "bash"`, Action: rule.RuleAction("alert")}},
 			},
 			wantErr: "action must be detect, terminate, or collect",
 		},
@@ -92,8 +92,8 @@ func TestValidateRuleSet(t *testing.T) {
 			set: rule.RuleSet{
 				RulesetID: "s",
 				Rules: []rule.Rule{
-					{RuleID: "r1", EventKind: jobevent.ProcessExec, Condition: `process_name == "bash"`, Action: rule.RuleActionDetect},
-					{RuleID: "r1", EventKind: jobevent.ProcessExec, Condition: `process_name == "curl"`, Action: rule.RuleActionTerminate},
+					{RuleID: "r1", EventType: jobevent.ProcessExec, Condition: `process_name == "bash"`, Action: rule.RuleActionDetect},
+					{RuleID: "r1", EventType: jobevent.ProcessExec, Condition: `process_name == "curl"`, Action: rule.RuleActionTerminate},
 				},
 			},
 			wantErr: `duplicate rule_id "r1"`,
@@ -104,7 +104,7 @@ func TestValidateRuleSet(t *testing.T) {
 				RulesetID: "s",
 				Rules: []rule.Rule{{
 					RuleID:    "r1",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 					Target: rule.RuleTarget{
@@ -120,7 +120,7 @@ func TestValidateRuleSet(t *testing.T) {
 				RulesetID: "s",
 				Rules: []rule.Rule{{
 					RuleID:    "r1",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 					Target:    rule.RuleTarget{Include: []rule.RuleTargetMatcher{}},
@@ -134,7 +134,7 @@ func TestValidateRuleSet(t *testing.T) {
 				RulesetID: "s",
 				Rules: []rule.Rule{{
 					RuleID:    "r1",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 					Target:    rule.RuleTarget{Exclude: []rule.RuleTargetMatcher{{}}},
@@ -148,7 +148,7 @@ func TestValidateRuleSet(t *testing.T) {
 				RulesetID: "s",
 				Rules: []rule.Rule{{
 					RuleID:    "r1",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 					Target:    rule.RuleTarget{Exclude: []rule.RuleTargetMatcher{}},
@@ -185,7 +185,7 @@ func TestIsResolvedRuleContentEqual(t *testing.T) {
 		RulesetID:       "set-a",
 		Rule: rule.Rule{
 			RuleID:    "r1",
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 			Condition: `process_name == "bash"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -267,7 +267,7 @@ func TestValidateRuleSet_RejectsInvalidRuleID(t *testing.T) {
 				RulesetID: "test-set",
 				Rules: []rule.Rule{{
 					RuleID:    tc.ruleID,
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				}},

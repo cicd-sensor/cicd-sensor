@@ -18,7 +18,7 @@ func TestBuildCollectorIngestLogBatch_CompressesJSONLAndPreservesFlushAt(t *test
 	batch, err := BuildCollectorIngestLogBatch(LogBatch{
 		Identity: identity,
 		Scope:    managerv1.Scope_SCOPE_HOST,
-		Kind:     managerv1.LogKind_LOG_KIND_JOB_DETECTION,
+		Type:     managerv1.LogType_LOG_TYPE_DETECTION,
 		Records:  [][]byte{[]byte(`{"rule_id":"a"}`), []byte(`{"rule_id":"b"}`)},
 		FlushAt:  flushAt,
 	})
@@ -31,8 +31,8 @@ func TestBuildCollectorIngestLogBatch_CompressesJSONLAndPreservesFlushAt(t *test
 	if got := batch.GetScope(); got != managerv1.Scope_SCOPE_HOST {
 		t.Fatalf("scope: got %v, want %v", got, managerv1.Scope_SCOPE_HOST)
 	}
-	if got := batch.GetLogKind(); got != managerv1.LogKind_LOG_KIND_JOB_DETECTION {
-		t.Fatalf("log_kind: got %v, want %v", got, managerv1.LogKind_LOG_KIND_JOB_DETECTION)
+	if got := batch.GetLogType(); got != managerv1.LogType_LOG_TYPE_DETECTION {
+		t.Fatalf("log_type: got %v, want %v", got, managerv1.LogType_LOG_TYPE_DETECTION)
 	}
 	if got := batch.GetJobIdentity(); got.GetProviderHost() != identity.ProviderHost ||
 		got.GetProjectPath() != identity.ProjectPath ||
@@ -79,7 +79,7 @@ func TestBuildCollectorIngestLogBatch_RecordBoundaries(t *testing.T) {
 			batch, err := BuildCollectorIngestLogBatch(LogBatch{
 				Identity: jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
 				Scope:    managerv1.Scope_SCOPE_PROJECT,
-				Kind:     managerv1.LogKind_LOG_KIND_JOB_RESULT,
+				Type:     managerv1.LogType_LOG_TYPE_SUMMARY,
 				Records:  tt.records,
 				FlushAt:  time.Now(),
 			})
@@ -104,7 +104,7 @@ func TestBuildCollectorIngestLogBatch_GitLabIdentity(t *testing.T) {
 	batch, err := BuildCollectorIngestLogBatch(LogBatch{
 		Identity: identity,
 		Scope:    managerv1.Scope_SCOPE_PROJECT,
-		Kind:     managerv1.LogKind_LOG_KIND_JOB_RESULT,
+		Type:     managerv1.LogType_LOG_TYPE_SUMMARY,
 		Records:  [][]byte{[]byte(`{"ok":true}`)},
 		FlushAt:  time.Now(),
 	})

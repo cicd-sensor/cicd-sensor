@@ -39,7 +39,7 @@ func TestGitHubJobHealth_RequiresPeerPID(t *testing.T) {
 		Logger:                slog.New(slog.NewTextHandler(io.Discard, nil)),
 		JobRegistry:           registry,
 		HostManagerConnection: managerclient.Connection{},
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitHub,
 	})
 
@@ -67,7 +67,7 @@ func TestGitHubHostEnd_RequiresPeerPIDBeforeFinalizing(t *testing.T) {
 		Logger:                slog.New(slog.NewTextHandler(io.Discard, nil)),
 		JobRegistry:           registry,
 		HostManagerConnection: managerclient.Connection{},
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitHub,
 	})
 
@@ -205,7 +205,7 @@ func setupGitHubStagingListener(t *testing.T) (*http.Client, *jobregistry.JobReg
 		JobRegistry:           registry,
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitHub,
 	})
 

@@ -17,9 +17,9 @@ type ManagerJobLogs struct {
 	connection managerclient.Connection
 	sendBatch  func(context.Context, managerclient.LogBatch) error
 
-	detection        *managerOutput
-	runtimeTelemetry *managerOutput
-	jobResultLog     *managerOutput
+	detection    *managerOutput
+	runtimeEvent *managerOutput
+	summaryLog   *managerOutput
 }
 
 // ManagerJobLogsConfig carries the inputs needed to start manager job logs.
@@ -27,7 +27,7 @@ type ManagerJobLogsConfig struct {
 	Logger         *slog.Logger
 	Connection     managerclient.Connection
 	Identity       jobcontext.JobIdentity
-	Kind           jobcontext.ScopeKind
+	Type           jobcontext.ScopeType
 	OutputSettings *managerv1.OutputSettings
 }
 
@@ -37,7 +37,7 @@ func NewManagerJobLogs(cfg ManagerJobLogsConfig) ManagerJobLogs {
 		logger:     cfg.Logger,
 		connection: cfg.Connection,
 	}
-	logs.start(cfg.Identity, cfg.Kind, cfg.OutputSettings)
+	logs.start(cfg.Identity, cfg.Type, cfg.OutputSettings)
 	return logs
 }
 
@@ -51,28 +51,28 @@ func NewForTesting(logger *slog.Logger, sendBatch func(context.Context, managerc
 
 // HasWorkersForTesting reports whether any manager log worker is active.
 func (o *ManagerJobLogs) HasWorkersForTesting() bool {
-	return o != nil && (o.detection != nil || o.runtimeTelemetry != nil || o.jobResultLog != nil)
+	return o != nil && (o.detection != nil || o.runtimeEvent != nil || o.summaryLog != nil)
 }
 
-func newManagerJobLogsWithSender(logger *slog.Logger, sendBatch func(context.Context, managerclient.LogBatch) error, identity jobcontext.JobIdentity, kind jobcontext.ScopeKind, settings *managerv1.OutputSettings) ManagerJobLogs {
+func newManagerJobLogsWithSender(logger *slog.Logger, sendBatch func(context.Context, managerclient.LogBatch) error, identity jobcontext.JobIdentity, scopeType jobcontext.ScopeType, settings *managerv1.OutputSettings) ManagerJobLogs {
 	logs := ManagerJobLogs{
 		logger:    logger,
 		sendBatch: sendBatch,
 	}
-	logs.start(identity, kind, settings)
+	logs.start(identity, scopeType, settings)
 	return logs
 }
 
-func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, kind jobcontext.ScopeKind, settings *managerv1.OutputSettings) {
+func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcontext.ScopeType, settings *managerv1.OutputSettings) {
 	if settings == nil {
 		return
 	}
-	detection := settings.GetJobDetectionLog()
-	runtimeTelemetry := settings.GetJobRuntimeTelemetryLog()
-	jobResult := settings.GetJobResultLog()
+	detection := settings.GetDetectionLog()
+	runtimeEvent := settings.GetRuntimeEventLog()
+	summary := settings.GetSummaryLog()
 	if !detection.GetEnabled() &&
-		!runtimeTelemetry.GetEnabled() &&
-		!jobResult.GetEnabled() {
+		!runtimeEvent.GetEnabled() &&
+		!summary.GetEnabled() {
 		return
 	}
 
@@ -86,29 +86,29 @@ func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, kind jobcontext.
 			o.logger,
 			sendBatch,
 			identity,
-			kind,
-			managerv1.LogKind_LOG_KIND_JOB_DETECTION,
+			scopeType,
+			managerv1.LogType_LOG_TYPE_DETECTION,
 			detection,
 		)
 	}
-	if runtimeTelemetry.GetEnabled() {
-		o.runtimeTelemetry = newManagerOutput(
+	if runtimeEvent.GetEnabled() {
+		o.runtimeEvent = newManagerOutput(
 			o.logger,
 			sendBatch,
 			identity,
-			kind,
-			managerv1.LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY,
-			runtimeTelemetry,
+			scopeType,
+			managerv1.LogType_LOG_TYPE_RUNTIME_EVENT,
+			runtimeEvent,
 		)
 	}
-	if jobResult.GetEnabled() {
-		o.jobResultLog = newManagerOutput(
+	if summary.GetEnabled() {
+		o.summaryLog = newManagerOutput(
 			o.logger,
 			sendBatch,
 			identity,
-			kind,
-			managerv1.LogKind_LOG_KIND_JOB_RESULT,
-			jobResult,
+			scopeType,
+			managerv1.LogType_LOG_TYPE_SUMMARY,
+			summary,
 		)
 	}
 }
@@ -134,46 +134,46 @@ func (o *ManagerJobLogs) WriteDetectionPayload(ctx context.Context, payload []by
 	return o.detection.Emit(ctx, payload)
 }
 
-// WriteRuntimeTelemetryPayload enqueues one runtime telemetry log entry.
-func (o *ManagerJobLogs) WriteRuntimeTelemetryPayload(ctx context.Context, payload []byte) error {
-	if o.runtimeTelemetry == nil {
+// WriteRuntimeEventPayload enqueues one runtime event log entry.
+func (o *ManagerJobLogs) WriteRuntimeEventPayload(ctx context.Context, payload []byte) error {
+	if o.runtimeEvent == nil {
 		return nil
 	}
-	return o.runtimeTelemetry.Emit(ctx, payload)
+	return o.runtimeEvent.Emit(ctx, payload)
 }
 
-// EmitAndCloseJobResultLog writes the final job_result_log payload.
-func (o *ManagerJobLogs) EmitAndCloseJobResultLog(ctx context.Context, payload []byte) error {
-	if o.jobResultLog == nil {
+// EmitAndCloseSummaryLog writes the final summary_log payload.
+func (o *ManagerJobLogs) EmitAndCloseSummaryLog(ctx context.Context, payload []byte) error {
+	if o.summaryLog == nil {
 		return nil
 	}
-	return o.jobResultLog.EmitAndClose(ctx, payload)
+	return o.summaryLog.EmitAndClose(ctx, payload)
 }
 
-// HasJobResultLog reports whether a job_result_log destination is configured.
-func (o *ManagerJobLogs) HasJobResultLog() bool {
-	return o != nil && o.jobResultLog != nil
+// HasSummaryLog reports whether a summary_log destination is configured.
+func (o *ManagerJobLogs) HasSummaryLog() bool {
+	return o != nil && o.summaryLog != nil
 }
 
 // DroppedLogRecords returns the number of streaming records dropped because
 // the manager output backlog was full. Close-after-emit errors are not drops.
-func (o *ManagerJobLogs) DroppedLogRecords(kind managerv1.LogKind) uint64 {
+func (o *ManagerJobLogs) DroppedLogRecords(logType managerv1.LogType) uint64 {
 	if o == nil {
 		return 0
 	}
-	switch kind {
-	case managerv1.LogKind_LOG_KIND_JOB_DETECTION:
+	switch logType {
+	case managerv1.LogType_LOG_TYPE_DETECTION:
 		return o.detection.droppedCount()
-	case managerv1.LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY:
-		return o.runtimeTelemetry.droppedCount()
-	case managerv1.LogKind_LOG_KIND_JOB_RESULT:
-		return o.jobResultLog.droppedCount()
+	case managerv1.LogType_LOG_TYPE_RUNTIME_EVENT:
+		return o.runtimeEvent.droppedCount()
+	case managerv1.LogType_LOG_TYPE_SUMMARY:
+		return o.summaryLog.droppedCount()
 	default:
 		return 0
 	}
 }
 
-// FinalizeStreamingLogs closes detection and runtime telemetry logs.
+// FinalizeStreamingLogs closes detection and runtime event logs.
 func (o *ManagerJobLogs) FinalizeStreamingLogs(ctx context.Context) error {
 	var errs []error
 	if o.detection != nil {
@@ -181,8 +181,8 @@ func (o *ManagerJobLogs) FinalizeStreamingLogs(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 	}
-	if o.runtimeTelemetry != nil {
-		if err := o.runtimeTelemetry.Close(ctx); err != nil {
+	if o.runtimeEvent != nil {
+		if err := o.runtimeEvent.Close(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}

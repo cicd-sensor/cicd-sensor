@@ -28,7 +28,7 @@ func TestListener_SecondServeReturnsAlreadyRunning(t *testing.T) {
 		JobRegistry:           jr1,
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitHub,
 	})
 	errCh1 := make(chan error, 1)
@@ -59,7 +59,7 @@ func TestListener_SecondServeReturnsAlreadyRunning(t *testing.T) {
 		JobRegistry:           jr2,
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitHub,
 	})
 	if err := l2.Serve(ctx2); !errors.Is(err, listener.ErrAlreadyRunning) {
@@ -93,7 +93,7 @@ func TestListener_RemovesStaleSocketBeforeServe(t *testing.T) {
 		JobRegistry:           registry,
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitHub,
 	})
 
@@ -135,7 +135,7 @@ func TestListener_CreatesWorldConnectableSocket(t *testing.T) {
 		JobRegistry:           registry,
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitHub,
 	})
 
@@ -186,7 +186,7 @@ func TestListener_RegularFileSocketPathReturnsError(t *testing.T) {
 		JobRegistry:           registry,
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitHub,
 	})
 	if err := l.Serve(ctx); err == nil {

@@ -3,28 +3,28 @@ package sink
 import (
 	"testing"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 )
 
 func TestPubSubFlushPolicy(t *testing.T) {
 	tests := []struct {
 		name    string
-		logKind logkind.LogKind
+		logKind logtype.LogType
 		want    FlushPolicy
 	}{
 		{
 			name:    "detection is immediate",
-			logKind: logkind.JobDetection,
+			logKind: logtype.Detection,
 			want:    FlushPolicy{FlushThresholdBytes: 1, FlushIntervalSeconds: 1},
 		},
 		{
-			name:    "telemetry batches briefly",
-			logKind: logkind.JobRuntimeTelemetry,
+			name:    "runtime event batches briefly",
+			logKind: logtype.RuntimeEvent,
 			want:    FlushPolicy{FlushThresholdBytes: 256 * 1024, FlushIntervalSeconds: 5},
 		},
 		{
 			name:    "result is immediate",
-			logKind: logkind.JobResult,
+			logKind: logtype.Summary,
 			want:    FlushPolicy{FlushThresholdBytes: 1, FlushIntervalSeconds: 1},
 		},
 	}

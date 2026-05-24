@@ -9,7 +9,7 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 )
 
 type gcsSink struct {
@@ -23,8 +23,8 @@ const (
 	gcsImmediateFlushSeconds = 1
 
 	// Uncompressed JSONL threshold; see s3.go for the sizing rationale.
-	gcsRuntimeTelemetryFlushBytes   = 128 * 1024 * 1024
-	gcsRuntimeTelemetryFlushSeconds = 60
+	gcsRuntimeEventFlushBytes   = 128 * 1024 * 1024
+	gcsRuntimeEventFlushSeconds = 60
 )
 
 // NewGCS creates a GCS-backed Sink using Google Application Default
@@ -80,12 +80,12 @@ func (s *gcsSink) Name() string {
 	return formatObjectURI("gs", s.bucket, s.prefix)
 }
 
-func (s *gcsSink) FlushPolicy(logKind logkind.LogKind) FlushPolicy {
+func (s *gcsSink) FlushPolicy(logKind logtype.LogType) FlushPolicy {
 	switch logKind {
-	case logkind.JobRuntimeTelemetry:
+	case logtype.RuntimeEvent:
 		return FlushPolicy{
-			FlushThresholdBytes:  gcsRuntimeTelemetryFlushBytes,
-			FlushIntervalSeconds: gcsRuntimeTelemetryFlushSeconds,
+			FlushThresholdBytes:  gcsRuntimeEventFlushBytes,
+			FlushIntervalSeconds: gcsRuntimeEventFlushSeconds,
 		}
 	default:
 		return FlushPolicy{

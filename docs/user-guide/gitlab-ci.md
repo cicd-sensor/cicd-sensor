@@ -34,7 +34,7 @@ flowchart LR
     PROXY --> DOCKER
     PROXY -->|"staging request"| AGENT
     MANAGER -->|"Config / Rules"| AGENT
-    AGENT -->|"Job Result / Detection / Telemetry Logs"| MANAGER
+    AGENT -->|"Summary / Detection / Runtime Event Logs"| MANAGER
     MANAGER --> CLOUD
 
     classDef cicdSensor fill:#ecfdf5,stroke:#0f766e,color:#134e4a,stroke-width:1.5px;
@@ -57,8 +57,8 @@ Using repository-local `.cicd-sensor/config.yaml` and `.cicd-sensor/rules/` is n
 
 For GitLab CI/CD, the runner host sends these logs to the manager.
 
-- Job Result Log.
+- Summary Log.
 - Detection Log.
-- Runtime Telemetry Log.
+- Runtime Event Log.
 
 See [Manager](manager.md) for details.

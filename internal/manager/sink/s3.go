@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 )
 
 type s3Sink struct {
@@ -27,11 +27,11 @@ const (
 	s3ImmediateFlushSeconds = 1
 
 	// Uncompressed JSONL threshold. Gzip on the agent typically shrinks
-	// runtime telemetry ~25-30x, so 128 MiB lands around 4-5 MB per S3
+	// runtime event ~25-30x, so 128 MiB lands around 4-5 MB per S3
 	// object — large enough to keep the bucket listing readable while
 	// staying well under managerMaxRequestBytes (16 MiB compressed).
-	s3RuntimeTelemetryFlushBytes   = 128 * 1024 * 1024
-	s3RuntimeTelemetryFlushSeconds = 60
+	s3RuntimeEventFlushBytes   = 128 * 1024 * 1024
+	s3RuntimeEventFlushSeconds = 60
 )
 
 // NewS3 creates an S3-backed Sink using the AWS default credential chain.
@@ -87,12 +87,12 @@ func (s *s3Sink) Name() string {
 	return formatObjectURI("s3", s.bucket, s.prefix)
 }
 
-func (s *s3Sink) FlushPolicy(logKind logkind.LogKind) FlushPolicy {
+func (s *s3Sink) FlushPolicy(logKind logtype.LogType) FlushPolicy {
 	switch logKind {
-	case logkind.JobRuntimeTelemetry:
+	case logtype.RuntimeEvent:
 		return FlushPolicy{
-			FlushThresholdBytes:  s3RuntimeTelemetryFlushBytes,
-			FlushIntervalSeconds: s3RuntimeTelemetryFlushSeconds,
+			FlushThresholdBytes:  s3RuntimeEventFlushBytes,
+			FlushIntervalSeconds: s3RuntimeEventFlushSeconds,
 		}
 	default:
 		return FlushPolicy{

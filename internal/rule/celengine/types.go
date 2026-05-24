@@ -19,7 +19,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 )
 
-// CELProcess is exposed as the `process` variable on every event kind.
+// CELProcess is exposed as the `process` variable on every event type.
 // The pre-boxed *Val caches turn per-rule field reads into pointer
 // loads instead of nativeToValue (allocating types.String/Int/...) calls.
 type CELProcess struct {

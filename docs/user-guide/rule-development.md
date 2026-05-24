@@ -7,7 +7,7 @@ rule_sets:
   - ruleset_id: acme/process
     rules:
       - rule_id: curl_exec
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/curl")
         action: collect
 ```
@@ -67,7 +67,7 @@ cicd-sensorctl rule validate .cicd-sensor/rules/
 ## Inspect runtime behavior on GitHub-hosted runners
 
 When iterating on rules on a GitHub-hosted runner in standalone mode, set `enable-debug: true` on the action.
-This starts the agent in debug mode and uploads a debug artifact that includes the Runtime Telemetry Log, so you can see exactly which events your rules observe without setting up a manager.
+This starts the agent in debug mode and uploads a debug artifact that includes the Runtime Event Log, so you can see exactly which events your rules observe without setting up a manager.
 
 ```yaml
     steps:

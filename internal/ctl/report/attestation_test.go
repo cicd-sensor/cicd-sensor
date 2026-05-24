@@ -38,7 +38,7 @@ type attestationWire struct {
 		Summary      resultdoc.ResultSummary `json:"https://cicd-sensor.github.io/summary"`
 		JobIdentity  jobcontext.JobIdentity  `json:"https://cicd-sensor.github.io/job-identity"`
 		Metadata     jobcontext.JobMetadata  `json:"https://cicd-sensor.github.io/metadata"`
-		RunnerKind   string                  `json:"https://cicd-sensor.github.io/runner-kind"`
+		RunnerType   string                  `json:"https://cicd-sensor.github.io/runner-type"`
 	} `json:"monitorLog"`
 }
 
@@ -74,7 +74,7 @@ func TestRenderAttestation_HappyPath(t *testing.T) {
 		`"https://cicd-sensor.github.io/summary"`,
 		`"https://cicd-sensor.github.io/job-identity"`,
 		`"https://cicd-sensor.github.io/metadata"`,
-		`"https://cicd-sensor.github.io/runner-kind"`,
+		`"https://cicd-sensor.github.io/runner-type"`,
 		`"result": "detected"`,
 		`"machine"`,
 		`"hits_count": 1`,
@@ -220,7 +220,7 @@ func TestAttestationPredicate_PreservesHitRecordFields(t *testing.T) {
 		RuleType:      "correlation",
 		RuleCondition: "first && second",
 		Action:        "detect",
-		EventKind:     "process_exec",
+		EventType:     "process_exec",
 		Process: &resultdoc.ProcessSummary{
 			PID:      99,
 			ExecPath: "/usr/bin/curl",
@@ -248,8 +248,8 @@ func TestAttestationPredicate_PreservesHitRecordFields(t *testing.T) {
 	if d.RuleCondition != hit.RuleCondition {
 		t.Errorf("rule_condition not preserved: %q", d.RuleCondition)
 	}
-	if d.EventKind != hit.EventKind {
-		t.Errorf("event_kind not preserved: %q", d.EventKind)
+	if d.EventType != hit.EventType {
+		t.Errorf("event_type not preserved: %q", d.EventType)
 	}
 	if d.Process == nil || d.Process.ExecPath != hit.Process.ExecPath {
 		t.Fatalf("process not preserved: %#v", d.Process)
@@ -310,30 +310,30 @@ func TestAttestationPredicate_DomainsDedupAndSort(t *testing.T) {
 	}
 }
 
-func TestAttestationPredicate_OmitsEmptyRunnerKind(t *testing.T) {
+func TestAttestationPredicate_OmitsEmptyRunnerType(t *testing.T) {
 	t.Parallel()
 
 	log := minimalLogForIdentity()
-	log.RunnerKind = ""
+	log.RunnerType = ""
 
 	var buf bytes.Buffer
 	if err := report.RenderAttestation(&buf, &log); err != nil {
 		t.Fatalf("RenderAttestation: %v", err)
 	}
-	if strings.Contains(buf.String(), `"https://cicd-sensor.github.io/runner-kind"`) {
-		t.Fatalf("runner-kind key should be omitted when empty:\n%s", buf.String())
+	if strings.Contains(buf.String(), `"https://cicd-sensor.github.io/runner-type"`) {
+		t.Fatalf("runner-type key should be omitted when empty:\n%s", buf.String())
 	}
 }
 
-func TestAttestationPredicate_KeepsRunnerKindWhenSet(t *testing.T) {
+func TestAttestationPredicate_KeepsRunnerTypeWhenSet(t *testing.T) {
 	t.Parallel()
 
 	log := minimalLogForIdentity()
-	log.RunnerKind = "kubernetes"
+	log.RunnerType = "kubernetes"
 
 	got := renderAttestationJSON(t, log)
-	if got.MonitorLog.RunnerKind != "kubernetes" {
-		t.Fatalf("runner-kind: got %q, want %q", got.MonitorLog.RunnerKind, "kubernetes")
+	if got.MonitorLog.RunnerType != "kubernetes" {
+		t.Fatalf("runner-type: got %q, want %q", got.MonitorLog.RunnerType, "kubernetes")
 	}
 }
 

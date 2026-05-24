@@ -8,14 +8,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
 
-type JobResultLogInput struct {
+type SummaryLogInput struct {
 	ScopeLogContext
 	RuleModifiers  []rule.RuleModifier
 	ResolvedRules  rule.ResolvedRules
@@ -25,7 +25,7 @@ type JobResultLogInput struct {
 	FinalizedAt    time.Time
 }
 
-func MarshalJobResultLogEntry(in JobResultLogInput) ([]byte, error) {
+func MarshalSummaryLogEntry(in SummaryLogInput) ([]byte, error) {
 	finalizedAt := in.FinalizedAt
 	if finalizedAt.IsZero() {
 		finalizedAt = time.Now()
@@ -38,15 +38,15 @@ func MarshalJobResultLogEntry(in JobResultLogInput) ([]byte, error) {
 		secs := int64(finalizedAt.Sub(in.StartedAt).Seconds())
 		durationS = proto.Int64(secs)
 	}
-	message := &logv1.JobResultLogEntry{
+	message := &logv1.SummaryLogEntry{
 		Timestamp:       timestamppb.New(finalizedAt.UTC()),
-		LogType:         proto.String(string(logkind.JobResult)),
-		SchemaVersion:   proto.String(logkind.JobResultSchemaVersion),
+		LogType:         proto.String(string(logtype.Summary)),
+		SchemaVersion:   proto.String(logtype.SummarySchemaVersion),
 		AgentVersion:    proto.String(version.Current),
 		LogId:           proto.String(newLogID()),
-		Job:             protoconv.ToJobLogContext(in.Identity, in.Metadata),
+		Job:             protoconv.ToLogContext(in.Identity, in.Metadata),
 		Scope:           proto.String(string(in.Scope)),
-		RunnerKind:      proto.String(in.RunnerKind),
+		RunnerType:      proto.String(in.RunnerType),
 		ConfigRevision:  proto.String(configRevisionOrAbsent(in.ConfigRevision)),
 		Rulesets:        rulesetUseProtos(in.ResolvedRules.Rules),
 		RuleModifiers:   ruleModifierUseProtos(in.RuleModifiers),

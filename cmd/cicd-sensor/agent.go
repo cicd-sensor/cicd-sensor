@@ -63,7 +63,7 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output(), "  --provider github|gitlab")
 		fmt.Fprintln(fs.Output(), "        CI provider this host runs.")
 		fmt.Fprintln(fs.Output(), "  --runner machine|kubernetes")
-		fmt.Fprintln(fs.Output(), "        Runner kind.")
+		fmt.Fprintln(fs.Output(), "        Runner type.")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintf(fs.Output(), "  --socket PATH\n        Agent control socket path. (default %q)\n", defaultSocketPath)
@@ -76,7 +76,7 @@ func runAgentStart(args []string) {
 	}
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
 	fs.StringVar(&provider, "provider", "", "CI provider this host runs (github or gitlab).")
-	fs.StringVar(&runner, "runner", "", "Runner kind (machine or kubernetes).")
+	fs.StringVar(&runner, "runner", "", "Runner type (machine or kubernetes).")
 	fs.StringVar(&managerURL, "manager-url", "", "Host scope manager URL.")
 	fs.StringVar(&managerTokenFilePath, "manager-token-file", "", "Path to a file containing the host scope manager bearer token. Overrides CICD_SENSOR_MANAGER_TOKEN.")
 	fs.DurationVar(&shutdownGrace, "shutdown-grace", 8*time.Second, "Best-effort drain window used after SIGTERM.")

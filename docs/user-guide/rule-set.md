@@ -11,7 +11,7 @@ rule_sets:
     rules:
       - rule_id: curl_exec
         rule_name: "curl executed"
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/curl")
         action: detect
         tags:
@@ -41,11 +41,11 @@ Use `rule_name` for the display name.
 ## Rule types
 
 Normal rules evaluate runtime events directly.
-Set `event_kind` and `condition`; when an event matches the condition, the configured `action` is emitted.
+Set `event_type` and `condition`; when an event matches the condition, the configured `action` is emitted.
 
 ```yaml
 - rule_id: curl_exec
-  event_kind: process_exec
+  event_type: process_exec
   condition: process.exec_path.endsWith("/curl")
   action: detect
 ```
@@ -68,7 +68,7 @@ See [Correlation](rule-correlation.md) for details.
 | --- | --- | --- |
 | `rule_id` | yes | ID unique within the RuleSet |
 | `rule_name` | no | Display name shown in reports and logs |
-| `event_kind` | yes | Event kind to evaluate, such as `process_exec`, `network_connect`, or `file_open` |
+| `event_type` | yes | Event type to evaluate, such as `process_exec`, `network_connect`, or `file_open` |
 | `condition` | yes | CEL expression that returns bool |
 | `action` | yes | `detect`, `collect`, or `terminate` |
 | `tags` | no | Metadata such as severity or category |

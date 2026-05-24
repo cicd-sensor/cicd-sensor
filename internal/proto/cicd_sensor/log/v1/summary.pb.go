@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: cicd_sensor/log/v1/result.proto
+// source: cicd_sensor/log/v1/summary.proto
 
 package logv1
 
@@ -23,17 +23,17 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type JobResultLogEntry struct {
+type SummaryLogEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	LogType       *string                `protobuf:"bytes,2,opt,name=log_type,proto3,oneof" json:"log_type,omitempty"`
 	SchemaVersion *string                `protobuf:"bytes,3,opt,name=schema_version,proto3,oneof" json:"schema_version,omitempty"`
 	AgentVersion  *string                `protobuf:"bytes,4,opt,name=agent_version,proto3,oneof" json:"agent_version,omitempty"`
-	// UUIDv7 for this result log row.
+	// UUIDv7 for this summary log row.
 	LogId           *string                `protobuf:"bytes,5,opt,name=log_id,proto3,oneof" json:"log_id,omitempty"`
-	Job             *JobLogContext         `protobuf:"bytes,6,opt,name=job,proto3" json:"job,omitempty"`
+	Job             *LogContext            `protobuf:"bytes,6,opt,name=job,proto3" json:"job,omitempty"`
 	Scope           *string                `protobuf:"bytes,7,opt,name=scope,proto3,oneof" json:"scope,omitempty"`
-	RunnerKind      *string                `protobuf:"bytes,8,opt,name=runner_kind,proto3,oneof" json:"runner_kind,omitempty"`
+	RunnerType      *string                `protobuf:"bytes,8,opt,name=runner_type,proto3,oneof" json:"runner_type,omitempty"`
 	ConfigRevision  *string                `protobuf:"bytes,9,opt,name=config_revision,proto3,oneof" json:"config_revision,omitempty"`
 	Rulesets        []*RulesetUse          `protobuf:"bytes,10,rep,name=rulesets,proto3" json:"rulesets,omitempty"`
 	RuleModifiers   []*RuleModifierUse     `protobuf:"bytes,11,rep,name=rule_modifiers,proto3" json:"rule_modifiers,omitempty"`
@@ -50,21 +50,21 @@ type JobResultLogEntry struct {
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *JobResultLogEntry) Reset() {
-	*x = JobResultLogEntry{}
-	mi := &file_cicd_sensor_log_v1_result_proto_msgTypes[0]
+func (x *SummaryLogEntry) Reset() {
+	*x = SummaryLogEntry{}
+	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *JobResultLogEntry) String() string {
+func (x *SummaryLogEntry) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*JobResultLogEntry) ProtoMessage() {}
+func (*SummaryLogEntry) ProtoMessage() {}
 
-func (x *JobResultLogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_result_proto_msgTypes[0]
+func (x *SummaryLogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -75,145 +75,145 @@ func (x *JobResultLogEntry) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use JobResultLogEntry.ProtoReflect.Descriptor instead.
-func (*JobResultLogEntry) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_result_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use SummaryLogEntry.ProtoReflect.Descriptor instead.
+func (*SummaryLogEntry) Descriptor() ([]byte, []int) {
+	return file_cicd_sensor_log_v1_summary_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *JobResultLogEntry) GetTimestamp() *timestamppb.Timestamp {
+func (x *SummaryLogEntry) GetTimestamp() *timestamppb.Timestamp {
 	if x != nil {
 		return x.Timestamp
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetLogType() string {
+func (x *SummaryLogEntry) GetLogType() string {
 	if x != nil && x.LogType != nil {
 		return *x.LogType
 	}
 	return ""
 }
 
-func (x *JobResultLogEntry) GetSchemaVersion() string {
+func (x *SummaryLogEntry) GetSchemaVersion() string {
 	if x != nil && x.SchemaVersion != nil {
 		return *x.SchemaVersion
 	}
 	return ""
 }
 
-func (x *JobResultLogEntry) GetAgentVersion() string {
+func (x *SummaryLogEntry) GetAgentVersion() string {
 	if x != nil && x.AgentVersion != nil {
 		return *x.AgentVersion
 	}
 	return ""
 }
 
-func (x *JobResultLogEntry) GetLogId() string {
+func (x *SummaryLogEntry) GetLogId() string {
 	if x != nil && x.LogId != nil {
 		return *x.LogId
 	}
 	return ""
 }
 
-func (x *JobResultLogEntry) GetJob() *JobLogContext {
+func (x *SummaryLogEntry) GetJob() *LogContext {
 	if x != nil {
 		return x.Job
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetScope() string {
+func (x *SummaryLogEntry) GetScope() string {
 	if x != nil && x.Scope != nil {
 		return *x.Scope
 	}
 	return ""
 }
 
-func (x *JobResultLogEntry) GetRunnerKind() string {
-	if x != nil && x.RunnerKind != nil {
-		return *x.RunnerKind
+func (x *SummaryLogEntry) GetRunnerType() string {
+	if x != nil && x.RunnerType != nil {
+		return *x.RunnerType
 	}
 	return ""
 }
 
-func (x *JobResultLogEntry) GetConfigRevision() string {
+func (x *SummaryLogEntry) GetConfigRevision() string {
 	if x != nil && x.ConfigRevision != nil {
 		return *x.ConfigRevision
 	}
 	return ""
 }
 
-func (x *JobResultLogEntry) GetRulesets() []*RulesetUse {
+func (x *SummaryLogEntry) GetRulesets() []*RulesetUse {
 	if x != nil {
 		return x.Rulesets
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetRuleModifiers() []*RuleModifierUse {
+func (x *SummaryLogEntry) GetRuleModifiers() []*RuleModifierUse {
 	if x != nil {
 		return x.RuleModifiers
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetNetworkConnects() []string {
+func (x *SummaryLogEntry) GetNetworkConnects() []string {
 	if x != nil {
 		return x.NetworkConnects
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetDomains() []string {
+func (x *SummaryLogEntry) GetDomains() []string {
 	if x != nil {
 		return x.Domains
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetDetections() []*DetectedRuleSummary {
+func (x *SummaryLogEntry) GetDetections() []*DetectedRuleSummary {
 	if x != nil {
 		return x.Detections
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetEventsTotal() uint32 {
+func (x *SummaryLogEntry) GetEventsTotal() uint32 {
 	if x != nil && x.EventsTotal != nil {
 		return *x.EventsTotal
 	}
 	return 0
 }
 
-func (x *JobResultLogEntry) GetEventsDropped() uint32 {
+func (x *SummaryLogEntry) GetEventsDropped() uint32 {
 	if x != nil && x.EventsDropped != nil {
 		return *x.EventsDropped
 	}
 	return 0
 }
 
-func (x *JobResultLogEntry) GetStartTime() *timestamppb.Timestamp {
+func (x *SummaryLogEntry) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.StartTime
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetEndTime() *timestamppb.Timestamp {
+func (x *SummaryLogEntry) GetEndTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.EndTime
 	}
 	return nil
 }
 
-func (x *JobResultLogEntry) GetDurationS() int64 {
+func (x *SummaryLogEntry) GetDurationS() int64 {
 	if x != nil && x.DurationS != nil {
 		return *x.DurationS
 	}
 	return 0
 }
 
-func (x *JobResultLogEntry) GetFinalizeReason() string {
+func (x *SummaryLogEntry) GetFinalizeReason() string {
 	if x != nil && x.FinalizeReason != nil {
 		return *x.FinalizeReason
 	}
@@ -230,7 +230,7 @@ type RulesetUse struct {
 
 func (x *RulesetUse) Reset() {
 	*x = RulesetUse{}
-	mi := &file_cicd_sensor_log_v1_result_proto_msgTypes[1]
+	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -242,7 +242,7 @@ func (x *RulesetUse) String() string {
 func (*RulesetUse) ProtoMessage() {}
 
 func (x *RulesetUse) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_result_proto_msgTypes[1]
+	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -255,7 +255,7 @@ func (x *RulesetUse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RulesetUse.ProtoReflect.Descriptor instead.
 func (*RulesetUse) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_result_proto_rawDescGZIP(), []int{1}
+	return file_cicd_sensor_log_v1_summary_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *RulesetUse) GetRulesetId() string {
@@ -282,7 +282,7 @@ type RuleModifierUse struct {
 
 func (x *RuleModifierUse) Reset() {
 	*x = RuleModifierUse{}
-	mi := &file_cicd_sensor_log_v1_result_proto_msgTypes[2]
+	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -294,7 +294,7 @@ func (x *RuleModifierUse) String() string {
 func (*RuleModifierUse) ProtoMessage() {}
 
 func (x *RuleModifierUse) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_result_proto_msgTypes[2]
+	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -307,7 +307,7 @@ func (x *RuleModifierUse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleModifierUse.ProtoReflect.Descriptor instead.
 func (*RuleModifierUse) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_result_proto_rawDescGZIP(), []int{2}
+	return file_cicd_sensor_log_v1_summary_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RuleModifierUse) GetModifierId() string {
@@ -337,7 +337,7 @@ type DetectedRuleSummary struct {
 
 func (x *DetectedRuleSummary) Reset() {
 	*x = DetectedRuleSummary{}
-	mi := &file_cicd_sensor_log_v1_result_proto_msgTypes[3]
+	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -349,7 +349,7 @@ func (x *DetectedRuleSummary) String() string {
 func (*DetectedRuleSummary) ProtoMessage() {}
 
 func (x *DetectedRuleSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_result_proto_msgTypes[3]
+	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -362,7 +362,7 @@ func (x *DetectedRuleSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DetectedRuleSummary.ProtoReflect.Descriptor instead.
 func (*DetectedRuleSummary) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_result_proto_rawDescGZIP(), []int{3}
+	return file_cicd_sensor_log_v1_summary_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DetectedRuleSummary) GetRulesetId() string {
@@ -400,21 +400,21 @@ func (x *DetectedRuleSummary) GetCount() uint32 {
 	return 0
 }
 
-var File_cicd_sensor_log_v1_result_proto protoreflect.FileDescriptor
+var File_cicd_sensor_log_v1_summary_proto protoreflect.FileDescriptor
 
-const file_cicd_sensor_log_v1_result_proto_rawDesc = "" +
+const file_cicd_sensor_log_v1_summary_proto_rawDesc = "" +
 	"\n" +
-	"\x1fcicd_sensor/log/v1/result.proto\x12\x12cicd_sensor.log.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fcicd_sensor/log/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfc\b\n" +
-	"\x11JobResultLogEntry\x128\n" +
+	" cicd_sensor/log/v1/summary.proto\x12\x12cicd_sensor.log.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fcicd_sensor/log/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf7\b\n" +
+	"\x0fSummaryLogEntry\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x1f\n" +
 	"\blog_type\x18\x02 \x01(\tH\x00R\blog_type\x88\x01\x01\x126\n" +
 	"\x0eschema_version\x18\x03 \x01(\tB\t\xbaH\x06r\x04\n" +
 	"\x02v1H\x01R\x0eschema_version\x88\x01\x01\x12)\n" +
 	"\ragent_version\x18\x04 \x01(\tH\x02R\ragent_version\x88\x01\x01\x12\x1b\n" +
-	"\x06log_id\x18\x05 \x01(\tH\x03R\x06log_id\x88\x01\x01\x123\n" +
-	"\x03job\x18\x06 \x01(\v2!.cicd_sensor.log.v1.JobLogContextR\x03job\x12\x19\n" +
+	"\x06log_id\x18\x05 \x01(\tH\x03R\x06log_id\x88\x01\x01\x120\n" +
+	"\x03job\x18\x06 \x01(\v2\x1e.cicd_sensor.log.v1.LogContextR\x03job\x12\x19\n" +
 	"\x05scope\x18\a \x01(\tH\x04R\x05scope\x88\x01\x01\x12%\n" +
-	"\vrunner_kind\x18\b \x01(\tH\x05R\vrunner_kind\x88\x01\x01\x12-\n" +
+	"\vrunner_type\x18\b \x01(\tH\x05R\vrunner_type\x88\x01\x01\x12-\n" +
 	"\x0fconfig_revision\x18\t \x01(\tH\x06R\x0fconfig_revision\x88\x01\x01\x12:\n" +
 	"\brulesets\x18\n" +
 	" \x03(\v2\x1e.cicd_sensor.log.v1.RulesetUseR\brulesets\x12K\n" +
@@ -440,7 +440,7 @@ const file_cicd_sensor_log_v1_result_proto_rawDesc = "" +
 	"\x0e_agent_versionB\t\n" +
 	"\a_log_idB\b\n" +
 	"\x06_scopeB\x0e\n" +
-	"\f_runner_kindB\x12\n" +
+	"\f_runner_typeB\x12\n" +
 	"\x10_config_revisionB\x0f\n" +
 	"\r_events_totalB\x11\n" +
 	"\x0f_events_droppedB\r\n" +
@@ -472,38 +472,38 @@ const file_cicd_sensor_log_v1_result_proto_rawDesc = "" +
 	"\b_rule_idB\x13\n" +
 	"\x11_ruleset_revisionB\t\n" +
 	"\a_actionB\b\n" +
-	"\x06_countB\xd7\x01\n" +
-	"\x16com.cicd_sensor.log.v1B\vResultProtoP\x01ZJgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1;logv1\xa2\x02\x03CLX\xaa\x02\x11CicdSensor.Log.V1\xca\x02\x11CicdSensor\\Log\\V1\xe2\x02\x1dCicdSensor\\Log\\V1\\GPBMetadata\xea\x02\x13CicdSensor::Log::V1b\x06proto3"
+	"\x06_countB\xd8\x01\n" +
+	"\x16com.cicd_sensor.log.v1B\fSummaryProtoP\x01ZJgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1;logv1\xa2\x02\x03CLX\xaa\x02\x11CicdSensor.Log.V1\xca\x02\x11CicdSensor\\Log\\V1\xe2\x02\x1dCicdSensor\\Log\\V1\\GPBMetadata\xea\x02\x13CicdSensor::Log::V1b\x06proto3"
 
 var (
-	file_cicd_sensor_log_v1_result_proto_rawDescOnce sync.Once
-	file_cicd_sensor_log_v1_result_proto_rawDescData []byte
+	file_cicd_sensor_log_v1_summary_proto_rawDescOnce sync.Once
+	file_cicd_sensor_log_v1_summary_proto_rawDescData []byte
 )
 
-func file_cicd_sensor_log_v1_result_proto_rawDescGZIP() []byte {
-	file_cicd_sensor_log_v1_result_proto_rawDescOnce.Do(func() {
-		file_cicd_sensor_log_v1_result_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1_result_proto_rawDesc), len(file_cicd_sensor_log_v1_result_proto_rawDesc)))
+func file_cicd_sensor_log_v1_summary_proto_rawDescGZIP() []byte {
+	file_cicd_sensor_log_v1_summary_proto_rawDescOnce.Do(func() {
+		file_cicd_sensor_log_v1_summary_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1_summary_proto_rawDesc), len(file_cicd_sensor_log_v1_summary_proto_rawDesc)))
 	})
-	return file_cicd_sensor_log_v1_result_proto_rawDescData
+	return file_cicd_sensor_log_v1_summary_proto_rawDescData
 }
 
-var file_cicd_sensor_log_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_cicd_sensor_log_v1_result_proto_goTypes = []any{
-	(*JobResultLogEntry)(nil),     // 0: cicd_sensor.log.v1.JobResultLogEntry
+var file_cicd_sensor_log_v1_summary_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_cicd_sensor_log_v1_summary_proto_goTypes = []any{
+	(*SummaryLogEntry)(nil),       // 0: cicd_sensor.log.v1.SummaryLogEntry
 	(*RulesetUse)(nil),            // 1: cicd_sensor.log.v1.RulesetUse
 	(*RuleModifierUse)(nil),       // 2: cicd_sensor.log.v1.RuleModifierUse
 	(*DetectedRuleSummary)(nil),   // 3: cicd_sensor.log.v1.DetectedRuleSummary
 	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
-	(*JobLogContext)(nil),         // 5: cicd_sensor.log.v1.JobLogContext
+	(*LogContext)(nil),            // 5: cicd_sensor.log.v1.LogContext
 }
-var file_cicd_sensor_log_v1_result_proto_depIdxs = []int32{
-	4, // 0: cicd_sensor.log.v1.JobResultLogEntry.timestamp:type_name -> google.protobuf.Timestamp
-	5, // 1: cicd_sensor.log.v1.JobResultLogEntry.job:type_name -> cicd_sensor.log.v1.JobLogContext
-	1, // 2: cicd_sensor.log.v1.JobResultLogEntry.rulesets:type_name -> cicd_sensor.log.v1.RulesetUse
-	2, // 3: cicd_sensor.log.v1.JobResultLogEntry.rule_modifiers:type_name -> cicd_sensor.log.v1.RuleModifierUse
-	3, // 4: cicd_sensor.log.v1.JobResultLogEntry.detections:type_name -> cicd_sensor.log.v1.DetectedRuleSummary
-	4, // 5: cicd_sensor.log.v1.JobResultLogEntry.start_time:type_name -> google.protobuf.Timestamp
-	4, // 6: cicd_sensor.log.v1.JobResultLogEntry.end_time:type_name -> google.protobuf.Timestamp
+var file_cicd_sensor_log_v1_summary_proto_depIdxs = []int32{
+	4, // 0: cicd_sensor.log.v1.SummaryLogEntry.timestamp:type_name -> google.protobuf.Timestamp
+	5, // 1: cicd_sensor.log.v1.SummaryLogEntry.job:type_name -> cicd_sensor.log.v1.LogContext
+	1, // 2: cicd_sensor.log.v1.SummaryLogEntry.rulesets:type_name -> cicd_sensor.log.v1.RulesetUse
+	2, // 3: cicd_sensor.log.v1.SummaryLogEntry.rule_modifiers:type_name -> cicd_sensor.log.v1.RuleModifierUse
+	3, // 4: cicd_sensor.log.v1.SummaryLogEntry.detections:type_name -> cicd_sensor.log.v1.DetectedRuleSummary
+	4, // 5: cicd_sensor.log.v1.SummaryLogEntry.start_time:type_name -> google.protobuf.Timestamp
+	4, // 6: cicd_sensor.log.v1.SummaryLogEntry.end_time:type_name -> google.protobuf.Timestamp
 	7, // [7:7] is the sub-list for method output_type
 	7, // [7:7] is the sub-list for method input_type
 	7, // [7:7] is the sub-list for extension type_name
@@ -511,31 +511,31 @@ var file_cicd_sensor_log_v1_result_proto_depIdxs = []int32{
 	0, // [0:7] is the sub-list for field type_name
 }
 
-func init() { file_cicd_sensor_log_v1_result_proto_init() }
-func file_cicd_sensor_log_v1_result_proto_init() {
-	if File_cicd_sensor_log_v1_result_proto != nil {
+func init() { file_cicd_sensor_log_v1_summary_proto_init() }
+func file_cicd_sensor_log_v1_summary_proto_init() {
+	if File_cicd_sensor_log_v1_summary_proto != nil {
 		return
 	}
 	file_cicd_sensor_log_v1_common_proto_init()
-	file_cicd_sensor_log_v1_result_proto_msgTypes[0].OneofWrappers = []any{}
-	file_cicd_sensor_log_v1_result_proto_msgTypes[1].OneofWrappers = []any{}
-	file_cicd_sensor_log_v1_result_proto_msgTypes[2].OneofWrappers = []any{}
-	file_cicd_sensor_log_v1_result_proto_msgTypes[3].OneofWrappers = []any{}
+	file_cicd_sensor_log_v1_summary_proto_msgTypes[0].OneofWrappers = []any{}
+	file_cicd_sensor_log_v1_summary_proto_msgTypes[1].OneofWrappers = []any{}
+	file_cicd_sensor_log_v1_summary_proto_msgTypes[2].OneofWrappers = []any{}
+	file_cicd_sensor_log_v1_summary_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1_result_proto_rawDesc), len(file_cicd_sensor_log_v1_result_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1_summary_proto_rawDesc), len(file_cicd_sensor_log_v1_summary_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_cicd_sensor_log_v1_result_proto_goTypes,
-		DependencyIndexes: file_cicd_sensor_log_v1_result_proto_depIdxs,
-		MessageInfos:      file_cicd_sensor_log_v1_result_proto_msgTypes,
+		GoTypes:           file_cicd_sensor_log_v1_summary_proto_goTypes,
+		DependencyIndexes: file_cicd_sensor_log_v1_summary_proto_depIdxs,
+		MessageInfos:      file_cicd_sensor_log_v1_summary_proto_msgTypes,
 	}.Build()
-	File_cicd_sensor_log_v1_result_proto = out.File
-	file_cicd_sensor_log_v1_result_proto_goTypes = nil
-	file_cicd_sensor_log_v1_result_proto_depIdxs = nil
+	File_cicd_sensor_log_v1_summary_proto = out.File
+	file_cicd_sensor_log_v1_summary_proto_goTypes = nil
+	file_cicd_sensor_log_v1_summary_proto_depIdxs = nil
 }

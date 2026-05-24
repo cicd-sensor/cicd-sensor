@@ -2,7 +2,7 @@ rule_sets:
   - ruleset_id: set-high-cost
     rules:
       - rule_id: nested_contains
-        event_kind: process_exec
+        event_type: process_exec
         # Literal-arg .contains() bypasses the specialized .exists rewrite,
         # so an ancestors × argv scan stays charged in the static cost
         # estimate. The many ORed contains pushes it well above the

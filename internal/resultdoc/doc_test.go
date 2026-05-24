@@ -9,13 +9,13 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 )
 
-func TestJobEventSummaryForReport_KeepsRunnerKindOutsideMetadata(t *testing.T) {
+func TestJobEventSummaryForReport_KeepsRunnerTypeOutsideMetadata(t *testing.T) {
 	doc := resultdoc.JobEventSummaryForReport{
 		JobIdentity: jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
 		Metadata: jobcontext.JobMetadata{
 			CommitSHA: "abc123",
 		},
-		RunnerKind:     "machine",
+		RunnerType:     "machine",
 		StartedAt:      time.Unix(0, 0).UTC(),
 		GeneratedAt:    time.Unix(1, 0).UTC(),
 		FinalizeReason: "shutdown",
@@ -34,15 +34,15 @@ func TestJobEventSummaryForReport_KeepsRunnerKindOutsideMetadata(t *testing.T) {
 	if _, ok := raw["metadata"]; !ok {
 		t.Fatal("metadata missing")
 	}
-	if got, ok := raw["runner_kind"]; !ok || got != "machine" {
-		t.Fatalf("runner_kind: got %v, present=%v", got, ok)
+	if got, ok := raw["runner_type"]; !ok || got != "machine" {
+		t.Fatalf("runner_type: got %v, present=%v", got, ok)
 	}
 	metadata, ok := raw["metadata"].(map[string]any)
 	if !ok {
 		t.Fatalf("metadata shape: got %#v", raw["metadata"])
 	}
-	if _, ok := metadata["runner_kind"]; ok {
-		t.Fatal("metadata.runner_kind should not be emitted")
+	if _, ok := metadata["runner_type"]; ok {
+		t.Fatal("metadata.runner_type should not be emitted")
 	}
 	if _, ok := raw["build_environment"]; ok {
 		t.Fatal("build_environment should not be emitted")

@@ -32,7 +32,7 @@ func assertProtoEventProcessSanitized(t *testing.T, event *logv1.EventRecord) {
 func eventWithSecretArgv() jobevent.EventRecord {
 	return jobevent.EventRecord{
 		ID:        "event-1",
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Timestamp: testLogTime(),
 		Process: jobevent.ProcessSummary{
 			PID:      100,
@@ -62,8 +62,8 @@ func testScopeLogContext() ScopeLogContext {
 	return ScopeLogContext{
 		Identity:       jobcontext.GitHubJobIdentity("github.com", "acme/project", "123", "test", "1", "runner"),
 		Metadata:       jobcontext.JobMetadata{},
-		RunnerKind:     "machine",
-		Scope:          jobcontext.ScopeKindProject,
+		RunnerType:     "machine",
+		Scope:          jobcontext.ScopeTypeProject,
 		ConfigRevision: "config-rev",
 	}
 }

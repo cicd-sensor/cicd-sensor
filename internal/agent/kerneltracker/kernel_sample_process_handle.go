@@ -67,7 +67,7 @@ func handleExecSample(state *jobTrackingState, sample execSample) []engineEffect
 	// exec_path / argv are not duplicated here; rules read them via the
 	// top-level Process field (process.exec_path / process.argv).
 	record := jobevent.EventRecord{
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   process,
 		Payload: map[string]any{

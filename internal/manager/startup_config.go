@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"go.yaml.in/yaml/v4"
 )
@@ -179,6 +179,6 @@ func validateLogs(logs LogsConfig, sinks SinksConfig) error {
 }
 
 func knownOutputKind(logName string) bool {
-	_, ok := logkind.Parse(logName)
+	_, ok := logtype.Parse(logName)
 	return ok
 }

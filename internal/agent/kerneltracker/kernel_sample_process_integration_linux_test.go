@@ -147,8 +147,8 @@ func TestLinuxKernelSampleExecFlow(t *testing.T) {
 		if !ok {
 			t.Fatalf("effects[0] = %#v, want emitEventRecord", effects[0])
 		}
-		if emit.Record.EventKind != jobevent.ProcessExec {
-			t.Fatalf("event kind = %q, want %q", emit.Record.EventKind, jobevent.ProcessExec)
+		if emit.Record.EventType != jobevent.ProcessExec {
+			t.Fatalf("event type = %q, want %q", emit.Record.EventType, jobevent.ProcessExec)
 		}
 		if emit.Record.Process.PID != execInput.Identity.PID {
 			t.Fatalf("process pid = %d, want %d", emit.Record.Process.PID, execInput.Identity.PID)

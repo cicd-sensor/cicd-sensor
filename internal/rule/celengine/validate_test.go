@@ -16,31 +16,31 @@ func TestEnvCompileRejectsDisallowedConstructs(t *testing.T) {
 	}
 
 	tests := []struct {
-		name   string
-		kind   jobevent.Kind
-		source string
+		name      string
+		eventType jobevent.Type
+		source    string
 	}{
-		{name: "matches", kind: jobevent.ProcessExec, source: `process.exec_path.matches("/bin/bash")`},
-		{name: "add", kind: jobevent.ProcessExec, source: `"a" + "b" == "ab"`},
-		{name: "subtract", kind: jobevent.ProcessExec, source: `1 - 1 == 0`},
-		{name: "multiply", kind: jobevent.ProcessExec, source: `2 * 3 == 6`},
-		{name: "divide", kind: jobevent.ProcessExec, source: `8 / 2 == 4`},
-		{name: "modulo", kind: jobevent.ProcessExec, source: `7 % 2 == 1`},
-		{name: "size", kind: jobevent.ProcessExec, source: `size(process.argv) > 0`},
-		{name: "index", kind: jobevent.ProcessExec, source: `process.argv[0] == "bash"`},
-		{name: "has_macro", kind: jobevent.NetworkConnect, source: `has(remote_ip)`},
-		{name: "all_macro", kind: jobevent.ProcessExec, source: `process.argv.all(arg, arg != "")`},
-		{name: "filter_macro", kind: jobevent.ProcessExec, source: `process.argv.filter(arg, arg.contains("x")) == process.argv`},
-		{name: "map_macro", kind: jobevent.ProcessExec, source: `process.argv.map(arg, arg) == process.argv`},
-		{name: "unknown_file_variable", kind: jobevent.FileOpen, source: `remote_ip == "example.com"`},
-		{name: "invalid_cidr", kind: jobevent.NetworkConnect, source: `inIpRange(remote_ip, "not-a-cidr")`},
+		{name: "matches", eventType: jobevent.ProcessExec, source: `process.exec_path.matches("/bin/bash")`},
+		{name: "add", eventType: jobevent.ProcessExec, source: `"a" + "b" == "ab"`},
+		{name: "subtract", eventType: jobevent.ProcessExec, source: `1 - 1 == 0`},
+		{name: "multiply", eventType: jobevent.ProcessExec, source: `2 * 3 == 6`},
+		{name: "divide", eventType: jobevent.ProcessExec, source: `8 / 2 == 4`},
+		{name: "modulo", eventType: jobevent.ProcessExec, source: `7 % 2 == 1`},
+		{name: "size", eventType: jobevent.ProcessExec, source: `size(process.argv) > 0`},
+		{name: "index", eventType: jobevent.ProcessExec, source: `process.argv[0] == "bash"`},
+		{name: "has_macro", eventType: jobevent.NetworkConnect, source: `has(remote_ip)`},
+		{name: "all_macro", eventType: jobevent.ProcessExec, source: `process.argv.all(arg, arg != "")`},
+		{name: "filter_macro", eventType: jobevent.ProcessExec, source: `process.argv.filter(arg, arg.contains("x")) == process.argv`},
+		{name: "map_macro", eventType: jobevent.ProcessExec, source: `process.argv.map(arg, arg) == process.argv`},
+		{name: "unknown_file_variable", eventType: jobevent.FileOpen, source: `remote_ip == "example.com"`},
+		{name: "invalid_cidr", eventType: jobevent.NetworkConnect, source: `inIpRange(remote_ip, "not-a-cidr")`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := env.Compile("rule-1", tt.kind, tt.source, nil); err == nil {
+			if _, err := env.Compile("rule-1", tt.eventType, tt.source, nil); err == nil {
 				t.Fatal("expected compile error")
 			}
 		})

@@ -42,7 +42,7 @@ func handleNetConnectV4Sample(state *jobTrackingState, sample netConnectV4Sample
 	}
 
 	record := jobevent.EventRecord{
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{
@@ -70,7 +70,7 @@ func handleNetConnectV6Sample(state *jobTrackingState, sample netConnectV6Sample
 
 	remoteIP, family := remoteIPAndFamily(sample.RemoteIPv6[:])
 	record := jobevent.EventRecord{
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{

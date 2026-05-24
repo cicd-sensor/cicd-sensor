@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type JobLogContext struct {
+type LogContext struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Provider     string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
 	ProviderHost string                 `protobuf:"bytes,2,opt,name=provider_host,proto3" json:"provider_host,omitempty"`
@@ -48,20 +48,20 @@ type JobLogContext struct {
 	sizeCache          protoimpl.SizeCache
 }
 
-func (x *JobLogContext) Reset() {
-	*x = JobLogContext{}
+func (x *LogContext) Reset() {
+	*x = LogContext{}
 	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *JobLogContext) String() string {
+func (x *LogContext) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*JobLogContext) ProtoMessage() {}
+func (*LogContext) ProtoMessage() {}
 
-func (x *JobLogContext) ProtoReflect() protoreflect.Message {
+func (x *LogContext) ProtoReflect() protoreflect.Message {
 	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -73,138 +73,138 @@ func (x *JobLogContext) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use JobLogContext.ProtoReflect.Descriptor instead.
-func (*JobLogContext) Descriptor() ([]byte, []int) {
+// Deprecated: Use LogContext.ProtoReflect.Descriptor instead.
+func (*LogContext) Descriptor() ([]byte, []int) {
 	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *JobLogContext) GetProvider() string {
+func (x *LogContext) GetProvider() string {
 	if x != nil {
 		return x.Provider
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetProviderHost() string {
+func (x *LogContext) GetProviderHost() string {
 	if x != nil {
 		return x.ProviderHost
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetProjectPath() string {
+func (x *LogContext) GetProjectPath() string {
 	if x != nil {
 		return x.ProjectPath
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetJobLink() string {
+func (x *LogContext) GetJobLink() string {
 	if x != nil {
 		return x.JobLink
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetCommitSha() string {
+func (x *LogContext) GetCommitSha() string {
 	if x != nil {
 		return x.CommitSha
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetRefName() string {
+func (x *LogContext) GetRefName() string {
 	if x != nil {
 		return x.RefName
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetTrigger() string {
+func (x *LogContext) GetTrigger() string {
 	if x != nil {
 		return x.Trigger
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetActorId() string {
+func (x *LogContext) GetActorId() string {
 	if x != nil {
 		return x.ActorId
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetActorName() string {
+func (x *LogContext) GetActorName() string {
 	if x != nil {
 		return x.ActorName
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGithubRunId() string {
+func (x *LogContext) GetGithubRunId() string {
 	if x != nil {
 		return x.GithubRunId
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGithubJob() string {
+func (x *LogContext) GetGithubJob() string {
 	if x != nil {
 		return x.GithubJob
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGithubRunAttempt() string {
+func (x *LogContext) GetGithubRunAttempt() string {
 	if x != nil {
 		return x.GithubRunAttempt
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGithubRunnerTrackingId() string {
+func (x *LogContext) GetGithubRunnerTrackingId() string {
 	if x != nil {
 		return x.GithubRunnerTrackingId
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGithubWorkflowRef() string {
+func (x *LogContext) GetGithubWorkflowRef() string {
 	if x != nil {
 		return x.GithubWorkflowRef
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGithubWorkflowSha() string {
+func (x *LogContext) GetGithubWorkflowSha() string {
 	if x != nil {
 		return x.GithubWorkflowSha
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGithubWorkflow() string {
+func (x *LogContext) GetGithubWorkflow() string {
 	if x != nil {
 		return x.GithubWorkflow
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGitlabJobId() string {
+func (x *LogContext) GetGitlabJobId() string {
 	if x != nil {
 		return x.GitlabJobId
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGitlabJobName() string {
+func (x *LogContext) GetGitlabJobName() string {
 	if x != nil {
 		return x.GitlabJobName
 	}
 	return ""
 }
 
-func (x *JobLogContext) GetGitlabConfigRefUri() string {
+func (x *LogContext) GetGitlabConfigRefUri() string {
 	if x != nil {
 		return x.GitlabConfigRefUri
 	}
@@ -213,9 +213,9 @@ func (x *JobLogContext) GetGitlabConfigRefUri() string {
 
 type EventRecord struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// UUIDv7 shared by telemetry and detection rows derived from this event.
+	// UUIDv7 shared by runtime-event and detection rows derived from this event.
 	Id                string                    `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Kind              string                    `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Type              string                    `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	Tags              []string                  `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`
 	Process           *ProcessSummary           `protobuf:"bytes,4,opt,name=process,proto3" json:"process,omitempty"`
 	ProcessExec       *ProcessExecPayload       `protobuf:"bytes,10,opt,name=process_exec,proto3" json:"process_exec,omitempty"`
@@ -267,9 +267,9 @@ func (x *EventRecord) GetId() string {
 	return ""
 }
 
-func (x *EventRecord) GetKind() string {
+func (x *EventRecord) GetType() string {
 	if x != nil {
-		return x.Kind
+		return x.Type
 	}
 	return ""
 }
@@ -932,8 +932,9 @@ var File_cicd_sensor_log_v1_common_proto protoreflect.FileDescriptor
 
 const file_cicd_sensor_log_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x1fcicd_sensor/log/v1/common.proto\x12\x12cicd_sensor.log.v1\"\xeb\x05\n" +
-	"\rJobLogContext\x12\x1a\n" +
+	"\x1fcicd_sensor/log/v1/common.proto\x12\x12cicd_sensor.log.v1\"\xe8\x05\n" +
+	"\n" +
+	"LogContext\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12$\n" +
 	"\rprovider_host\x18\x02 \x01(\tR\rprovider_host\x12\"\n" +
 	"\fproject_path\x18\x03 \x01(\tR\fproject_path\x12\x1a\n" +
@@ -962,7 +963,7 @@ const file_cicd_sensor_log_v1_common_proto_rawDesc = "" +
 	"\x15gitlab_config_ref_uri\x18\x13 \x01(\tR\x15gitlab_config_ref_uri\"\xd1\x05\n" +
 	"\vEventRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
 	"\x04tags\x18\x03 \x03(\tR\x04tags\x12<\n" +
 	"\aprocess\x18\x04 \x01(\v2\".cicd_sensor.log.v1.ProcessSummaryR\aprocess\x12J\n" +
 	"\fprocess_exec\x18\n" +
@@ -1030,7 +1031,7 @@ func file_cicd_sensor_log_v1_common_proto_rawDescGZIP() []byte {
 
 var file_cicd_sensor_log_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_cicd_sensor_log_v1_common_proto_goTypes = []any{
-	(*JobLogContext)(nil),            // 0: cicd_sensor.log.v1.JobLogContext
+	(*LogContext)(nil),               // 0: cicd_sensor.log.v1.LogContext
 	(*EventRecord)(nil),              // 1: cicd_sensor.log.v1.EventRecord
 	(*ProcessSummary)(nil),           // 2: cicd_sensor.log.v1.ProcessSummary
 	(*AncestorProcess)(nil),          // 3: cicd_sensor.log.v1.AncestorProcess

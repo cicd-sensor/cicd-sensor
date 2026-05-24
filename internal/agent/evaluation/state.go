@@ -17,7 +17,7 @@ var (
 
 // EvaluationState is the immutable compiled rule bundle used on the event hot path.
 type EvaluationState struct {
-	RulesByKind  map[jobevent.Kind][]celengine.CompiledRule
+	RulesByType  map[jobevent.Type][]celengine.CompiledRule
 	Correlations []celengine.CompiledCorrelation
 }
 
@@ -29,7 +29,7 @@ func NewEvaluationState(host, project *rule.ResolvedRules) *EvaluationState {
 
 	entries := mergeEvaluationRules(host, project)
 	out := &EvaluationState{
-		RulesByKind: make(map[jobevent.Kind][]celengine.CompiledRule),
+		RulesByType: make(map[jobevent.Type][]celengine.CompiledRule),
 	}
 	if len(entries) == 0 {
 		return out
@@ -44,7 +44,7 @@ func NewEvaluationState(host, project *rule.ResolvedRules) *EvaluationState {
 			continue
 		}
 
-		condition, err := env.Compile(entry.rule.CanonicalRuleID.String(), entry.rule.Rule.EventKind, entry.rule.Rule.Condition, entry.rule.PredefinedLists)
+		condition, err := env.Compile(entry.rule.CanonicalRuleID.String(), entry.rule.Rule.EventType, entry.rule.Rule.Condition, entry.rule.PredefinedLists)
 		if err != nil {
 			appendCompileWarningForEntry(entry, err.Error(), host, project)
 			continue
@@ -61,7 +61,7 @@ func NewEvaluationState(host, project *rule.ResolvedRules) *EvaluationState {
 			continue
 		}
 
-		out.RulesByKind[entry.rule.Rule.EventKind] = append(out.RulesByKind[entry.rule.Rule.EventKind], celengine.CompiledRule{
+		out.RulesByType[entry.rule.Rule.EventType] = append(out.RulesByType[entry.rule.Rule.EventType], celengine.CompiledRule{
 			CanonicalRuleID:        entry.rule.CanonicalRuleID,
 			Identity:               entry.rule.Identity(),
 			HostRulesetRevision:    entry.hostRulesetRevision,

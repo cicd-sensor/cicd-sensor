@@ -31,7 +31,7 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 					Rules: []rule.Rule{
 						{
 							RuleID:    "detect-1",
-							EventKind: jobevent.ProcessExec,
+							EventType: jobevent.ProcessExec,
 							Condition: `process_name == "bash"`,
 							Action:    rule.RuleActionDetect,
 						},
@@ -43,9 +43,9 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 					ConfigRevision:          "sha256:test",
 					DefaultMaxAlertsPerRule: 17,
 					OutputSettings: &managerv1.OutputSettings{
-						JobResultLog:           &managerv1.OutputSetting{Enabled: true},
-						JobDetectionLog:        &managerv1.OutputSetting{Enabled: true},
-						JobRuntimeTelemetryLog: &managerv1.OutputSetting{Enabled: true},
+						SummaryLog:      &managerv1.OutputSetting{Enabled: true},
+						DetectionLog:    &managerv1.OutputSetting{Enabled: true},
+						RuntimeEventLog: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -57,7 +57,7 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 
 	client := mustManagerClient(t, server.URL)
 	result, err := client.FetchConfig(context.Background(), &managerv1.FetchConfigRequest{
-		RunnerKind: "machine",
+		RunnerType: "machine",
 		JobIdentity: &managerv1.JobIdentity{
 			Provider:               "github",
 			ProviderHost:           "github.com",
@@ -78,9 +78,9 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 		t.Fatalf("default_max_alerts_per_rule: got %d, want 17", result.DefaultMaxAlertsPerRule)
 	}
 	if result.OutputSettings == nil ||
-		!result.OutputSettings.GetJobResultLog().GetEnabled() ||
-		!result.OutputSettings.GetJobDetectionLog().GetEnabled() ||
-		!result.OutputSettings.GetJobRuntimeTelemetryLog().GetEnabled() {
+		!result.OutputSettings.GetSummaryLog().GetEnabled() ||
+		!result.OutputSettings.GetDetectionLog().GetEnabled() ||
+		!result.OutputSettings.GetRuntimeEventLog().GetEnabled() {
 		t.Fatalf("output_settings: got %+v, want all enabled", result.OutputSettings)
 	}
 	if len(result.RuleSources) != 1 {
@@ -90,8 +90,8 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 	if len(ruleSets) != 1 {
 		t.Fatalf("rule_sources[0].rule_sets: got %d, want 1", len(ruleSets))
 	}
-	if got := ruleSets[0].Rules[0].EventKind; got != jobevent.ProcessExec {
-		t.Fatalf("event_kind: got %q, want %q", got, jobevent.ProcessExec)
+	if got := ruleSets[0].Rules[0].EventType; got != jobevent.ProcessExec {
+		t.Fatalf("event_type: got %q, want %q", got, jobevent.ProcessExec)
 	}
 	if got := ruleSets[0].Rules[0].Action; got != rule.RuleActionDetect {
 		t.Fatalf("action: got %q, want %q", got, rule.RuleActionDetect)
@@ -119,7 +119,7 @@ func TestManagerClient_FetchConfig_PreservesOutputSettingPolicy(t *testing.T) {
 					return connect.NewResponse(&managerv1.FetchConfigResponse{
 						Config: &managerv1.ServedConfig{
 							OutputSettings: &managerv1.OutputSettings{
-								JobDetectionLog: tt.in,
+								DetectionLog: tt.in,
 							},
 						},
 					}), nil
@@ -148,17 +148,17 @@ func TestManagerClient_FetchConfig_PreservesOutputSettingPolicy(t *testing.T) {
 				t.Fatal("output_settings: got nil")
 			}
 			if tt.in == nil {
-				if settings.GetJobDetectionLog() != nil {
-					t.Fatalf("job_detection_log: got %+v, want nil", settings.GetJobDetectionLog())
+				if settings.GetDetectionLog() != nil {
+					t.Fatalf("detection_log: got %+v, want nil", settings.GetDetectionLog())
 				}
 				return
 			}
-			if settings.GetJobDetectionLog() == nil {
-				t.Fatal("job_detection_log: got nil, want explicit zero policy")
+			if settings.GetDetectionLog() == nil {
+				t.Fatal("detection_log: got nil, want explicit zero policy")
 			}
-			if settings.GetJobDetectionLog().GetFlushThresholdBytes() != 0 ||
-				settings.GetJobDetectionLog().GetFlushIntervalSeconds() != 0 {
-				t.Fatalf("job_detection_log: got %+v, want all-zero policy", settings.GetJobDetectionLog())
+			if settings.GetDetectionLog().GetFlushThresholdBytes() != 0 ||
+				settings.GetDetectionLog().GetFlushIntervalSeconds() != 0 {
+				t.Fatalf("detection_log: got %+v, want all-zero policy", settings.GetDetectionLog())
 			}
 		})
 	}
@@ -175,7 +175,7 @@ func TestManagerClient_FetchConfig_ServerError(t *testing.T) {
 
 	client := mustManagerClient(t, server.URL)
 	_, err := client.FetchConfig(context.Background(), &managerv1.FetchConfigRequest{
-		RunnerKind: "machine",
+		RunnerType: "machine",
 		JobIdentity: &managerv1.JobIdentity{
 			Provider:     "gitlab",
 			ProviderHost: "gitlab.com",
@@ -198,7 +198,7 @@ func TestManagerClient_FetchConfig_ServerError(t *testing.T) {
 func TestManagerClient_FetchConfig_Unreachable(t *testing.T) {
 	client := mustManagerClient(t, "http://127.0.0.1:1")
 	_, err := client.FetchConfig(context.Background(), &managerv1.FetchConfigRequest{
-		RunnerKind: "machine",
+		RunnerType: "machine",
 		JobIdentity: &managerv1.JobIdentity{
 			Provider:     "gitlab",
 			ProviderHost: "gitlab.com",

@@ -151,11 +151,11 @@ func runProjectResult(args []string) {
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintf(fs.Output(), "  --socket PATH\n        Agent control socket path. (default %q)\n", defaultSocketPath)
 		fmt.Fprintln(fs.Output(), "  --output-file FILE")
-		fmt.Fprintln(fs.Output(), "        File to write the job_result_log JSON to. Writes to stdout when empty.")
+		fmt.Fprintln(fs.Output(), "        File to write the summary_log JSON to. Writes to stdout when empty.")
 	}
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
 	registerJobIdentityFlags(fs, &identity)
-	fs.StringVar(&outputFile, "output-file", "", "File to write the job_result_log JSON to (stdout when empty).")
+	fs.StringVar(&outputFile, "output-file", "", "File to write the summary_log JSON to (stdout when empty).")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}

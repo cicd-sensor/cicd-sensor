@@ -15,12 +15,12 @@ service CollectorService {
   rpc IngestLog(IngestLogRequest) returns (IngestLogResponse);
 }
 
-// LogKind identifies the JSONL log encoded in an ingest batch.
-enum LogKind {
-  LOG_KIND_UNSPECIFIED = 0;
-  LOG_KIND_JOB_DETECTION = 1;
-  LOG_KIND_JOB_RUNTIME_TELEMETRY = 2;
-  LOG_KIND_JOB_RESULT = 3;
+// LogType identifies the JSONL log encoded in an ingest batch.
+enum LogType {
+  LOG_TYPE_UNSPECIFIED = 0;
+  LOG_TYPE_DETECTION = 1;
+  LOG_TYPE_RUNTIME_EVENT = 2;
+  LOG_TYPE_SUMMARY = 3;
 }
 
 // Scope identifies which ownership scope produced an ingest batch.
@@ -34,7 +34,7 @@ enum Scope {
 message IngestLogBatch {
   JobIdentity job_identity = 1;
   Scope scope = 2;
-  LogKind log_kind = 3;
+  LogType log_type = 3;
   // compressed_jsonl is gzip-compressed JSONL. The manager writes these bytes
   // verbatim and only checks the gzip magic bytes.
   bytes compressed_jsonl = 4;

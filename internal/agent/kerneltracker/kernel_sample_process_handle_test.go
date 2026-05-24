@@ -537,8 +537,8 @@ func TestTransitionProcessSubsystem_Exec_EmitsEventRecord(t *testing.T) {
 	if emit.JobID != jobID {
 		t.Fatalf("emit job id = %q, want %q", emit.JobID, jobID)
 	}
-	if emit.Record.EventKind != jobevent.ProcessExec {
-		t.Fatalf("event kind = %q, want %q", emit.Record.EventKind, jobevent.ProcessExec)
+	if emit.Record.EventType != jobevent.ProcessExec {
+		t.Fatalf("event type = %q, want %q", emit.Record.EventType, jobevent.ProcessExec)
 	}
 	if emit.Record.Process.PID != identity.PID {
 		t.Fatalf("process pid = %d, want %d", emit.Record.Process.PID, identity.PID)

@@ -26,56 +26,56 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// LogKind identifies the JSONL log encoded in an ingest batch.
-type LogKind int32
+// LogType identifies the JSONL log encoded in an ingest batch.
+type LogType int32
 
 const (
-	LogKind_LOG_KIND_UNSPECIFIED           LogKind = 0
-	LogKind_LOG_KIND_JOB_DETECTION         LogKind = 1
-	LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY LogKind = 2
-	LogKind_LOG_KIND_JOB_RESULT            LogKind = 3
+	LogType_LOG_TYPE_UNSPECIFIED   LogType = 0
+	LogType_LOG_TYPE_DETECTION     LogType = 1
+	LogType_LOG_TYPE_RUNTIME_EVENT LogType = 2
+	LogType_LOG_TYPE_SUMMARY       LogType = 3
 )
 
-// Enum value maps for LogKind.
+// Enum value maps for LogType.
 var (
-	LogKind_name = map[int32]string{
-		0: "LOG_KIND_UNSPECIFIED",
-		1: "LOG_KIND_JOB_DETECTION",
-		2: "LOG_KIND_JOB_RUNTIME_TELEMETRY",
-		3: "LOG_KIND_JOB_RESULT",
+	LogType_name = map[int32]string{
+		0: "LOG_TYPE_UNSPECIFIED",
+		1: "LOG_TYPE_DETECTION",
+		2: "LOG_TYPE_RUNTIME_EVENT",
+		3: "LOG_TYPE_SUMMARY",
 	}
-	LogKind_value = map[string]int32{
-		"LOG_KIND_UNSPECIFIED":           0,
-		"LOG_KIND_JOB_DETECTION":         1,
-		"LOG_KIND_JOB_RUNTIME_TELEMETRY": 2,
-		"LOG_KIND_JOB_RESULT":            3,
+	LogType_value = map[string]int32{
+		"LOG_TYPE_UNSPECIFIED":   0,
+		"LOG_TYPE_DETECTION":     1,
+		"LOG_TYPE_RUNTIME_EVENT": 2,
+		"LOG_TYPE_SUMMARY":       3,
 	}
 )
 
-func (x LogKind) Enum() *LogKind {
-	p := new(LogKind)
+func (x LogType) Enum() *LogType {
+	p := new(LogType)
 	*p = x
 	return p
 }
 
-func (x LogKind) String() string {
+func (x LogType) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (LogKind) Descriptor() protoreflect.EnumDescriptor {
+func (LogType) Descriptor() protoreflect.EnumDescriptor {
 	return file_cicd_sensor_manager_v1_collector_proto_enumTypes[0].Descriptor()
 }
 
-func (LogKind) Type() protoreflect.EnumType {
+func (LogType) Type() protoreflect.EnumType {
 	return &file_cicd_sensor_manager_v1_collector_proto_enumTypes[0]
 }
 
-func (x LogKind) Number() protoreflect.EnumNumber {
+func (x LogType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use LogKind.Descriptor instead.
-func (LogKind) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use LogType.Descriptor instead.
+func (LogType) EnumDescriptor() ([]byte, []int) {
 	return file_cicd_sensor_manager_v1_collector_proto_rawDescGZIP(), []int{0}
 }
 
@@ -134,7 +134,7 @@ type IngestLogBatch struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	JobIdentity *JobIdentity           `protobuf:"bytes,1,opt,name=job_identity,json=jobIdentity,proto3" json:"job_identity,omitempty"`
 	Scope       Scope                  `protobuf:"varint,2,opt,name=scope,proto3,enum=cicd_sensor.manager.v1.Scope" json:"scope,omitempty"`
-	LogKind     LogKind                `protobuf:"varint,3,opt,name=log_kind,json=logKind,proto3,enum=cicd_sensor.manager.v1.LogKind" json:"log_kind,omitempty"`
+	LogType     LogType                `protobuf:"varint,3,opt,name=log_type,json=logType,proto3,enum=cicd_sensor.manager.v1.LogType" json:"log_type,omitempty"`
 	// compressed_jsonl is gzip-compressed JSONL. The manager writes these bytes
 	// verbatim and only checks the gzip magic bytes.
 	CompressedJsonl []byte `protobuf:"bytes,4,opt,name=compressed_jsonl,json=compressedJsonl,proto3" json:"compressed_jsonl,omitempty"`
@@ -193,11 +193,11 @@ func (x *IngestLogBatch) GetScope() Scope {
 	return Scope_SCOPE_UNSPECIFIED
 }
 
-func (x *IngestLogBatch) GetLogKind() LogKind {
+func (x *IngestLogBatch) GetLogType() LogType {
 	if x != nil {
-		return x.LogKind
+		return x.LogType
 	}
-	return LogKind_LOG_KIND_UNSPECIFIED
+	return LogType_LOG_TYPE_UNSPECIFIED
 }
 
 func (x *IngestLogBatch) GetCompressedJsonl() []byte {
@@ -320,19 +320,19 @@ const file_cicd_sensor_manager_v1_collector_proto_rawDesc = "" +
 	"\x0eIngestLogBatch\x12F\n" +
 	"\fjob_identity\x18\x01 \x01(\v2#.cicd_sensor.manager.v1.JobIdentityR\vjobIdentity\x123\n" +
 	"\x05scope\x18\x02 \x01(\x0e2\x1d.cicd_sensor.manager.v1.ScopeR\x05scope\x12:\n" +
-	"\blog_kind\x18\x03 \x01(\x0e2\x1f.cicd_sensor.manager.v1.LogKindR\alogKind\x12)\n" +
+	"\blog_type\x18\x03 \x01(\x0e2\x1f.cicd_sensor.manager.v1.LogTypeR\alogType\x12)\n" +
 	"\x10compressed_jsonl\x18\x04 \x01(\fR\x0fcompressedJsonl\x125\n" +
 	"\bflush_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aflushAt\"P\n" +
 	"\x10IngestLogRequest\x12<\n" +
 	"\x05batch\x18\x01 \x01(\v2&.cicd_sensor.manager.v1.IngestLogBatchR\x05batch\"c\n" +
 	"\x11IngestLogResponse\x12)\n" +
 	"\x10received_batches\x18\x01 \x01(\x04R\x0freceivedBatches\x12#\n" +
-	"\rbytes_written\x18\x02 \x01(\x04R\fbytesWritten*|\n" +
-	"\aLogKind\x12\x18\n" +
-	"\x14LOG_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16LOG_KIND_JOB_DETECTION\x10\x01\x12\"\n" +
-	"\x1eLOG_KIND_JOB_RUNTIME_TELEMETRY\x10\x02\x12\x17\n" +
-	"\x13LOG_KIND_JOB_RESULT\x10\x03*A\n" +
+	"\rbytes_written\x18\x02 \x01(\x04R\fbytesWritten*m\n" +
+	"\aLogType\x12\x18\n" +
+	"\x14LOG_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12LOG_TYPE_DETECTION\x10\x01\x12\x1a\n" +
+	"\x16LOG_TYPE_RUNTIME_EVENT\x10\x02\x12\x14\n" +
+	"\x10LOG_TYPE_SUMMARY\x10\x03*A\n" +
 	"\x05Scope\x12\x15\n" +
 	"\x11SCOPE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -357,7 +357,7 @@ func file_cicd_sensor_manager_v1_collector_proto_rawDescGZIP() []byte {
 var file_cicd_sensor_manager_v1_collector_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_cicd_sensor_manager_v1_collector_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_cicd_sensor_manager_v1_collector_proto_goTypes = []any{
-	(LogKind)(0),                  // 0: cicd_sensor.manager.v1.LogKind
+	(LogType)(0),                  // 0: cicd_sensor.manager.v1.LogType
 	(Scope)(0),                    // 1: cicd_sensor.manager.v1.Scope
 	(*IngestLogBatch)(nil),        // 2: cicd_sensor.manager.v1.IngestLogBatch
 	(*IngestLogRequest)(nil),      // 3: cicd_sensor.manager.v1.IngestLogRequest
@@ -368,7 +368,7 @@ var file_cicd_sensor_manager_v1_collector_proto_goTypes = []any{
 var file_cicd_sensor_manager_v1_collector_proto_depIdxs = []int32{
 	5, // 0: cicd_sensor.manager.v1.IngestLogBatch.job_identity:type_name -> cicd_sensor.manager.v1.JobIdentity
 	1, // 1: cicd_sensor.manager.v1.IngestLogBatch.scope:type_name -> cicd_sensor.manager.v1.Scope
-	0, // 2: cicd_sensor.manager.v1.IngestLogBatch.log_kind:type_name -> cicd_sensor.manager.v1.LogKind
+	0, // 2: cicd_sensor.manager.v1.IngestLogBatch.log_type:type_name -> cicd_sensor.manager.v1.LogType
 	6, // 3: cicd_sensor.manager.v1.IngestLogBatch.flush_at:type_name -> google.protobuf.Timestamp
 	2, // 4: cicd_sensor.manager.v1.IngestLogRequest.batch:type_name -> cicd_sensor.manager.v1.IngestLogBatch
 	3, // 5: cicd_sensor.manager.v1.CollectorService.IngestLog:input_type -> cicd_sensor.manager.v1.IngestLogRequest

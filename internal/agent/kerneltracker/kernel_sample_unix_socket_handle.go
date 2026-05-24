@@ -94,7 +94,7 @@ func handleUnixSocketConnectSample(state *jobTrackingState, sample unixSocketCon
 	}
 
 	record := jobevent.EventRecord{
-		EventKind: jobevent.UnixSocketConnect,
+		EventType: jobevent.UnixSocketConnect,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{

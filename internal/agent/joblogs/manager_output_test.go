@@ -231,7 +231,7 @@ func TestManagerOutput_StreamEmitReturnsBacklogFull(t *testing.T) {
 		sendBatch: poster.sendBatch,
 		identity:  jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
 		scope:     managerv1.Scope_SCOPE_HOST,
-		kind:      managerv1.LogKind_LOG_KIND_JOB_DETECTION,
+		logType:   managerv1.LogType_LOG_TYPE_DETECTION,
 		setting:   &managerv1.OutputSetting{FlushThresholdBytes: 1},
 	}).run(out.requests, out.done)
 
@@ -264,8 +264,8 @@ func testManagerOutput(sendBatch func(context.Context, managerclient.LogBatch) e
 		testLogger,
 		sendBatch,
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
-		jobcontext.ScopeKindHost,
-		managerv1.LogKind_LOG_KIND_JOB_DETECTION,
+		jobcontext.ScopeTypeHost,
+		managerv1.LogType_LOG_TYPE_DETECTION,
 		setting,
 	)
 }

@@ -42,7 +42,7 @@
       "rule_id": "curl-egress",
       "rule_name": "curl egress",
       "action": "detect",
-      "event_kind": "network_connect",
+      "event_type": "network_connect",
       "process": {
         "identity": {"pid": 42, "start_boottime": 1000},
         "exec_path": "/usr/bin/curl",
@@ -59,7 +59,7 @@
       "rule_id": "curl-egress",
       "rule_name": "curl egress",
       "action": "detect",
-      "event_kind": "network_connect",
+      "event_type": "network_connect",
       "process": {
         "identity": {"pid": 43},
         "exec_path": "/usr/bin/curl",
@@ -76,7 +76,7 @@
       "rule_id": "exec-shell",
       "rule_name": "shell spawn",
       "action": "terminate",
-      "event_kind": "process_exec",
+      "event_type": "process_exec",
       "process": {
         "identity": {"pid": 99},
         "exec_path": "/bin/sh",
@@ -93,7 +93,7 @@
       "rule_id": "sensitive-file",
       "rule_name": "secret read",
       "action": "detect",
-      "event_kind": "file_open",
+      "event_type": "file_open",
       "process": {
         "identity": {"pid": 105},
         "exec_path": "/usr/bin/cat",

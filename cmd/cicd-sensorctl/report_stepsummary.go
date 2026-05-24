@@ -122,14 +122,14 @@ func runReportStepSummary(_ context.Context, args []string, stdin io.Reader, std
 		}
 	}
 
-	var resultLog resultdoc.JobEventSummaryForReport
+	var summaryLog resultdoc.JobEventSummaryForReport
 	if len(bytes.TrimSpace(input)) > 0 {
-		if err := json.Unmarshal(input, &resultLog); err != nil {
-			return 1, fmt.Errorf("decode job_result_log: %w", err)
+		if err := json.Unmarshal(input, &summaryLog); err != nil {
+			return 1, fmt.Errorf("decode summary_log: %w", err)
 		}
 	}
 
-	body, err := renderStepSummaryMarkdown(resultLog, opts)
+	body, err := renderStepSummaryMarkdown(summaryLog, opts)
 	if err != nil {
 		return 1, err
 	}
@@ -147,7 +147,7 @@ func parseReportStepSummaryArgs(args []string, stderr io.Writer) (reportStepSumm
 		fmt.Fprintln(fs.Output(), "usage: cicd-sensorctl report stepsummary [flags]")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Input:")
-		fmt.Fprintln(fs.Output(), "  Reads job_result_log JSON from stdin when available.")
+		fmt.Fprintln(fs.Output(), "  Reads summary_log JSON from stdin when available.")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintln(fs.Output(), "  --html-url URL")
@@ -173,7 +173,7 @@ func parseReportStepSummaryArgs(args []string, stderr io.Writer) (reportStepSumm
 	return opts, nil
 }
 
-func renderStepSummaryMarkdown(resultLog resultdoc.JobEventSummaryForReport, opts reportStepSummaryOptions) ([]byte, error) {
+func renderStepSummaryMarkdown(summaryLog resultdoc.JobEventSummaryForReport, opts reportStepSummaryOptions) ([]byte, error) {
 	htmlURL, err := trustedStepSummaryURL(opts.htmlURL)
 	if err != nil {
 		return nil, fmt.Errorf("html-url: %w", err)
@@ -187,9 +187,9 @@ func renderStepSummaryMarkdown(resultLog resultdoc.JobEventSummaryForReport, opt
 	if opts.healthFailed {
 		verdict = "health_failed"
 	} else {
-		switch resultLog.ResultSummary.Result {
+		switch summaryLog.ResultSummary.Result {
 		case resultdoc.ResultNoAlert, resultdoc.ResultDetected, resultdoc.ResultTerminated:
-			verdict = resultLog.ResultSummary.Result
+			verdict = summaryLog.ResultSummary.Result
 		}
 	}
 
@@ -202,10 +202,10 @@ func renderStepSummaryMarkdown(resultLog resultdoc.JobEventSummaryForReport, opt
 		HealthFailed: opts.healthFailed,
 	}
 	if !opts.healthFailed {
-		view.RuleHits = topStepSummaryRuleHits(resultLog.Hits, stepSummaryTopN)
-		view.Domains = topStepSummaryDomains(resultLog.DomainObservations, stepSummaryTopN)
-		view.Networks = topStepSummaryNetworks(resultLog.NetworkConnections, stepSummaryTopN)
-		view.TotalEvents = len(resultLog.Hits) + len(resultLog.DomainObservations) + len(resultLog.NetworkConnections)
+		view.RuleHits = topStepSummaryRuleHits(summaryLog.Hits, stepSummaryTopN)
+		view.Domains = topStepSummaryDomains(summaryLog.DomainObservations, stepSummaryTopN)
+		view.Networks = topStepSummaryNetworks(summaryLog.NetworkConnections, stepSummaryTopN)
+		view.TotalEvents = len(summaryLog.Hits) + len(summaryLog.DomainObservations) + len(summaryLog.NetworkConnections)
 		if htmlURL != "" && view.TotalEvents > 0 {
 			view.TimelineURL = htmlURL + "#hits"
 		}

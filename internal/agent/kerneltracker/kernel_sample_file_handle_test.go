@@ -31,8 +31,8 @@ func TestHandleFileOpen_EmitsPayloadAndTruncatedTag(t *testing.T) {
 	if !ok {
 		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
 	}
-	if emit.Record.EventKind != jobevent.FileOpen {
-		t.Fatalf("kind = %q, want %q", emit.Record.EventKind, jobevent.FileOpen)
+	if emit.Record.EventType != jobevent.FileOpen {
+		t.Fatalf("kind = %q, want %q", emit.Record.EventType, jobevent.FileOpen)
 	}
 	if got, _ := emit.Record.Payload["path"].(string); got != "/tmp/very-long-path" {
 		t.Fatalf("payload[path] = %q, want /tmp/very-long-path", got)
@@ -72,8 +72,8 @@ func TestHandleFileRemove_EmitsPayload(t *testing.T) {
 	if !ok {
 		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
 	}
-	if emit.Record.EventKind != jobevent.FileRemove {
-		t.Fatalf("kind = %q, want %q", emit.Record.EventKind, jobevent.FileRemove)
+	if emit.Record.EventType != jobevent.FileRemove {
+		t.Fatalf("kind = %q, want %q", emit.Record.EventType, jobevent.FileRemove)
 	}
 	if got, _ := emit.Record.Payload["path"].(string); got != "/etc/shadow" {
 		t.Fatalf("payload[path] = %q, want /etc/shadow", got)

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 )
 
 // ErrThrottled marks provider throttling that should be surfaced to agents as
@@ -24,7 +24,7 @@ const (
 	ScopeProject Scope = "project"
 )
 
-// FlushPolicy tells the agent how to batch one log kind before sending it to
+// FlushPolicy tells the agent how to batch one log type before sending it to
 // the manager. It is manager-owned policy, not operator YAML.
 type FlushPolicy struct {
 	FlushThresholdBytes  uint32
@@ -35,7 +35,7 @@ type FlushPolicy struct {
 // Sinks decide how to route it: object storage builds a deterministic key,
 // while Pub/Sub publishes the body with attributes.
 type IngestLogBatch struct {
-	LogKind    logkind.LogKind
+	LogType    logtype.LogType
 	Identity   jobcontext.JobIdentity
 	Scope      Scope
 	FlushAt    time.Time
@@ -55,6 +55,6 @@ type Sink interface {
 	Name() string
 
 	// FlushPolicy returns the agent-side batching policy preferred by this
-	// destination for one log kind.
-	FlushPolicy(logKind logkind.LogKind) FlushPolicy
+	// destination for one log type.
+	FlushPolicy(logKind logtype.LogType) FlushPolicy
 }

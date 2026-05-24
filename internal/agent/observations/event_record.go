@@ -12,7 +12,7 @@ func (s *State) RecordEvent(event jobevent.EventRecord) {
 	}
 	s.counters.EventsTotal.Add(1)
 
-	switch event.EventKind {
+	switch event.EventType {
 	case jobevent.Domain:
 		domain, _ := event.Payload["domain"].(string)
 		if domain == "" {

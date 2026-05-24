@@ -11,7 +11,7 @@ func celInputEventFromRecord(event jobevent.EventRecord) celengine.CELInputEvent
 		Process: celProcessFromSummary(event.Process),
 	}
 
-	switch event.EventKind {
+	switch event.EventType {
 	case jobevent.ProcessExec:
 		input.IsMemfd = payloadBool(event.Payload, "is_memfd")
 	case jobevent.NetworkConnect:

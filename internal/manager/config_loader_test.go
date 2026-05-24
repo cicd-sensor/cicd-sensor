@@ -21,7 +21,7 @@ rule_sets:
   - ruleset_id: "global-set"
     rules:
       - rule_id: "detect_bash"
-        event_kind: "process_exec"
+        event_type: "process_exec"
         condition: 'process_name == "bash"'
         action: "detect"
 ---

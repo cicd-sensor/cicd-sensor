@@ -25,13 +25,13 @@ func TestCompileSetReportsBadRuleConditions(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "good",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip in list.domains`,
 				Action:    rule.RuleActionDetect,
 			},
 			{
 				RuleID:    "bad",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip.matches(".*")`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -59,7 +59,7 @@ func TestCompileSetReportsBadExceptions(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:     "bad_exception",
-				EventKind:  jobevent.ProcessExec,
+				EventType:  jobevent.ProcessExec,
 				Condition:  `process.exec_path.endsWith("/bash")`,
 				Exceptions: `process.argv[0] == "bash"`,
 				Action:     rule.RuleActionDetect,
@@ -94,7 +94,7 @@ func TestCompileSetReportsUndefinedPredefinedList(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "missing_list",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `list.missing.exists(v, process.exec_path.endsWith(v))`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -122,7 +122,7 @@ func TestCompileSetCompilesValidCorrelationRules(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:    "single",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Condition: `remote_ip == "example.com"`,
 				Action:    rule.RuleActionDetect,
 			},
@@ -184,7 +184,7 @@ func TestCompileSetReportsBadCorrelationRules(t *testing.T) {
 				Rules: []rule.Rule{
 					{
 						RuleID:    "single",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionDetect,
 					},
@@ -226,7 +226,7 @@ func TestCompileSetSkipsWhitespaceOnlyExceptions(t *testing.T) {
 		Rules: []rule.Rule{
 			{
 				RuleID:     "valid",
-				EventKind:  jobevent.ProcessExec,
+				EventType:  jobevent.ProcessExec,
 				Condition:  `process.exec_path.endsWith("/bash")`,
 				Exceptions: " \n\t ",
 				Action:     rule.RuleActionDetect,

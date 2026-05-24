@@ -26,8 +26,8 @@ func newManagerOutput(
 	logger *slog.Logger,
 	sendBatch func(context.Context, managerclient.LogBatch) error,
 	identity jobcontext.JobIdentity,
-	scope jobcontext.ScopeKind,
-	kind managerv1.LogKind,
+	scope jobcontext.ScopeType,
+	logType managerv1.LogType,
 	setting *managerv1.OutputSetting,
 ) *managerOutput {
 	if sendBatch == nil {
@@ -38,7 +38,7 @@ func newManagerOutput(
 		sendBatch: sendBatch,
 		identity:  identity,
 		scope:     protoconv.ToProtoScope(scope),
-		kind:      kind,
+		logType:   logType,
 		setting:   setting,
 		now:       time.Now,
 	})

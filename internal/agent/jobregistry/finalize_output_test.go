@@ -47,15 +47,15 @@ func TestJobFinalizeAfterEventWorkerFlushesAllJobLogs(t *testing.T) {
 	job, eventCh := newTestJob(identity, metadata, testEventChannelSize)
 	scope := jobscope.NewHost()
 	logs := joblogs.NewForTesting(testLogger, poster.sendBatch)
-	logs.AttachDetectionRecorderForTesting(identity, scope.Kind, poster.sendBatch)
-	logs.AttachRuntimeTelemetryRecorderForTesting(identity, scope.Kind, poster.sendBatch)
-	logs.AttachJobResultRecorderForTesting(identity, scope.Kind, poster.sendBatch)
+	logs.AttachDetectionRecorderForTesting(identity, scope.Type, poster.sendBatch)
+	logs.AttachRuntimeEventRecorderForTesting(identity, scope.Type, poster.sendBatch)
+	logs.AttachSummaryRecorderForTesting(identity, scope.Type, poster.sendBatch)
 	scope.SetManagerJobLogs(logs)
 	scope.RuleSets = []rule.RuleSet{{
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "curl-egress",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "registry.npmjs.org" && protocol == "tcp"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -71,7 +71,7 @@ func TestJobFinalizeAfterEventWorkerFlushesAllJobLogs(t *testing.T) {
 	})
 	// In production KernelTracker.RemoveJob closes this channel. Closing it here
 	// pins the post-BPF boundary: finalize waits for the event worker to drain
-	// before flushing streaming logs and emitting job_result_log.
+	// before flushing streaming logs and emitting summary_log.
 	close(eventCh)
 
 	jr := New(testLogger)
@@ -84,56 +84,56 @@ func TestJobFinalizeAfterEventWorkerFlushesAllJobLogs(t *testing.T) {
 	if len(batches) != 3 {
 		t.Fatalf("sent batches: got %d, want 3", len(batches))
 	}
-	gotKinds := make(map[managerv1.LogKind]*managerv1.IngestLogBatch, len(batches))
+	gotTypes := make(map[managerv1.LogType]*managerv1.IngestLogBatch, len(batches))
 	for _, batch := range batches {
-		gotKinds[batch.LogKind] = batch
+		gotTypes[batch.LogType] = batch
 	}
-	for _, kind := range []managerv1.LogKind{
-		managerv1.LogKind_LOG_KIND_JOB_DETECTION,
-		managerv1.LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY,
-		managerv1.LogKind_LOG_KIND_JOB_RESULT,
+	for _, logType := range []managerv1.LogType{
+		managerv1.LogType_LOG_TYPE_DETECTION,
+		managerv1.LogType_LOG_TYPE_RUNTIME_EVENT,
+		managerv1.LogType_LOG_TYPE_SUMMARY,
 	} {
-		if gotKinds[kind] == nil {
-			t.Fatalf("missing log kind %s in batches %#v", kind, gotKinds)
+		if gotTypes[logType] == nil {
+			t.Fatalf("missing log type %s in batches %#v", logType, gotTypes)
 		}
 	}
 
-	resultRecords := decodeManagerBatchRecords(t, gotKinds[managerv1.LogKind_LOG_KIND_JOB_RESULT])
-	if len(resultRecords) != 1 {
-		t.Fatalf("job_result_log records: got %d, want 1", len(resultRecords))
+	summaryRecords := decodeManagerBatchRecords(t, gotTypes[managerv1.LogType_LOG_TYPE_SUMMARY])
+	if len(summaryRecords) != 1 {
+		t.Fatalf("summary_log records: got %d, want 1", len(summaryRecords))
 	}
-	var resultLog logv1.JobResultLogEntry
-	if err := protojson.Unmarshal(resultRecords[0], &resultLog); err != nil {
-		t.Fatalf("unmarshal job_result_log: %v", err)
+	var summaryLog logv1.SummaryLogEntry
+	if err := protojson.Unmarshal(summaryRecords[0], &summaryLog); err != nil {
+		t.Fatalf("unmarshal summary_log: %v", err)
 	}
-	if got := len(resultLog.GetDetections()); got != 1 {
+	if got := len(summaryLog.GetDetections()); got != 1 {
 		t.Fatalf("detections: got %d, want 1", got)
 	}
-	if resultLog.GetDetections()[0].GetRuleId() != "curl-egress" {
-		t.Fatalf("detection rule_id: got %q, want curl-egress", resultLog.GetDetections()[0].GetRuleId())
+	if summaryLog.GetDetections()[0].GetRuleId() != "curl-egress" {
+		t.Fatalf("detection rule_id: got %q, want curl-egress", summaryLog.GetDetections()[0].GetRuleId())
 	}
-	if resultLog.GetFinalizeReason() != string(kerneltracker.EndShutdown) {
-		t.Fatalf("finalize_reason: got %q, want %q", resultLog.GetFinalizeReason(), kerneltracker.EndShutdown)
+	if summaryLog.GetFinalizeReason() != string(kerneltracker.EndShutdown) {
+		t.Fatalf("finalize_reason: got %q, want %q", summaryLog.GetFinalizeReason(), kerneltracker.EndShutdown)
 	}
-	if resultLog.GetEventsTotal() != 1 || resultLog.GetEventsDropped() != 0 {
-		t.Fatalf("event counters: total=%d dropped=%d, want 1/0", resultLog.GetEventsTotal(), resultLog.GetEventsDropped())
+	if summaryLog.GetEventsTotal() != 1 || summaryLog.GetEventsDropped() != 0 {
+		t.Fatalf("event counters: total=%d dropped=%d, want 1/0", summaryLog.GetEventsTotal(), summaryLog.GetEventsDropped())
 	}
 
-	detectionRecords := decodeManagerBatchRecords(t, gotKinds[managerv1.LogKind_LOG_KIND_JOB_DETECTION])
-	runtimeRecords := decodeManagerBatchRecords(t, gotKinds[managerv1.LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY])
+	detectionRecords := decodeManagerBatchRecords(t, gotTypes[managerv1.LogType_LOG_TYPE_DETECTION])
+	runtimeRecords := decodeManagerBatchRecords(t, gotTypes[managerv1.LogType_LOG_TYPE_RUNTIME_EVENT])
 	if len(detectionRecords) != 1 || len(runtimeRecords) != 1 {
 		t.Fatalf("streaming records: detection=%d runtime=%d, want 1/1", len(detectionRecords), len(runtimeRecords))
 	}
-	var detectionLog logv1.JobDetectionLogEntry
+	var detectionLog logv1.DetectionLogEntry
 	if err := protojson.Unmarshal(detectionRecords[0], &detectionLog); err != nil {
 		t.Fatalf("unmarshal detection log: %v", err)
 	}
-	var runtimeLog logv1.JobRuntimeTelemetryLogEntry
+	var runtimeLog logv1.RuntimeEventLogEntry
 	if err := protojson.Unmarshal(runtimeRecords[0], &runtimeLog); err != nil {
-		t.Fatalf("unmarshal runtime telemetry log: %v", err)
+		t.Fatalf("unmarshal runtime event log: %v", err)
 	}
-	if detectionLog.GetLogId() == "" || runtimeLog.GetLogId() == "" || resultLog.GetLogId() == "" {
-		t.Fatalf("log_id missing: detection=%q runtime=%q result=%q", detectionLog.GetLogId(), runtimeLog.GetLogId(), resultLog.GetLogId())
+	if detectionLog.GetLogId() == "" || runtimeLog.GetLogId() == "" || summaryLog.GetLogId() == "" {
+		t.Fatalf("log_id missing: detection=%q runtime=%q result=%q", detectionLog.GetLogId(), runtimeLog.GetLogId(), summaryLog.GetLogId())
 	}
 	if detectionLog.GetEvent().GetId() == "" {
 		t.Fatal("event id missing from detection log")
@@ -153,7 +153,7 @@ func TestFinalizeTakenJob_EmitsProjectResultWhenHostResultFails(t *testing.T) {
 	var mu sync.Mutex
 	var sent []managerclient.LogBatch
 	send := func(_ context.Context, batch managerclient.LogBatch) error {
-		if batch.Kind == managerv1.LogKind_LOG_KIND_JOB_RESULT && batch.Scope == managerv1.Scope_SCOPE_HOST {
+		if batch.Type == managerv1.LogType_LOG_TYPE_SUMMARY && batch.Scope == managerv1.Scope_SCOPE_HOST {
 			return hostErr
 		}
 		mu.Lock()
@@ -168,7 +168,7 @@ func TestFinalizeTakenJob_EmitsProjectResultWhenHostResultFails(t *testing.T) {
 
 	hostScope := jobscope.NewHost()
 	hostLogs := joblogs.NewForTesting(testLogger, send)
-	hostLogs.AttachJobResultRecorderForTesting(identity, hostScope.Kind, send)
+	hostLogs.AttachSummaryRecorderForTesting(identity, hostScope.Type, send)
 	hostScope.SetManagerJobLogs(hostLogs)
 	hostScope.ResolveRules(identity)
 	if err := job.SetHostScope(testCtx, hostScope); err != nil {
@@ -177,7 +177,7 @@ func TestFinalizeTakenJob_EmitsProjectResultWhenHostResultFails(t *testing.T) {
 
 	projectScope := jobscope.NewProject()
 	projectLogs := joblogs.NewForTesting(testLogger, send)
-	projectLogs.AttachJobResultRecorderForTesting(identity, projectScope.Kind, send)
+	projectLogs.AttachSummaryRecorderForTesting(identity, projectScope.Type, send)
 	projectScope.SetManagerJobLogs(projectLogs)
 	projectScope.ResolveRules(identity)
 	if err := job.SetProjectScope(testCtx, projectScope); err != nil {
@@ -195,8 +195,8 @@ func TestFinalizeTakenJob_EmitsProjectResultWhenHostResultFails(t *testing.T) {
 	if len(sent) != 1 {
 		t.Fatalf("sent batches after host failure: got %d, want 1", len(sent))
 	}
-	if sent[0].Kind != managerv1.LogKind_LOG_KIND_JOB_RESULT || sent[0].Scope != managerv1.Scope_SCOPE_PROJECT {
-		t.Fatalf("sent batch: kind=%s scope=%s, want project result", sent[0].Kind, sent[0].Scope)
+	if sent[0].Type != managerv1.LogType_LOG_TYPE_SUMMARY || sent[0].Scope != managerv1.Scope_SCOPE_PROJECT {
+		t.Fatalf("sent batch: type=%s scope=%s, want project result", sent[0].Type, sent[0].Scope)
 	}
 }
 

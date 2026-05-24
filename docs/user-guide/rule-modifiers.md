@@ -20,7 +20,7 @@ rule_modifiers:
       process.argv.exists(arg, arg == "https://internal.example.com/health")
 ```
 
-`modifier_id` identifies which modifier was applied in the Job Result Log.
+`modifier_id` identifies which modifier was applied in the Summary Log.
 
 ## Target rules
 

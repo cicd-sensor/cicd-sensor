@@ -18,7 +18,7 @@ func TestBuildJobEventSummaryForReportSanitizesRetainedEvent(t *testing.T) {
 	doc := BuildJobEventSummaryForReport(ReportDocumentInput{
 		Identity:       jobcontext.GitHubJobIdentity("github.com", "acme/project", "123", "test", "1", "runner"),
 		Metadata:       jobcontext.JobMetadata{},
-		RunnerKind:     "machine",
+		RunnerType:     "machine",
 		StartedAt:      testLogTime().Add(-time.Minute),
 		GeneratedAt:    testLogTime(),
 		FinalizeReason: "test",
@@ -46,8 +46,8 @@ func TestBuildJobEventSummaryForReportSanitizesRetainedEvent(t *testing.T) {
 	if got, want := doc.Hits[0].Process.Ancestors[0].Argv[2], "<redacted>"; got != want {
 		t.Fatalf("report ancestor argv: got %q, want %q", got, want)
 	}
-	if got, want := doc.RunnerKind, "machine"; got != want {
-		t.Fatalf("runner kind: got %q, want %q", got, want)
+	if got, want := doc.RunnerType, "machine"; got != want {
+		t.Fatalf("runner type: got %q, want %q", got, want)
 	}
 }
 
@@ -286,8 +286,8 @@ func TestBuildJobEventSummaryForReportIncludesCorrelationRuleMetadata(t *testing
 	if hit.RuleCondition != "rule.first.total_count >= 1 && rule.second.total_count >= 1" {
 		t.Fatalf("rule_condition: got %q", hit.RuleCondition)
 	}
-	if hit.EventKind != jobevent.ProcessExec {
-		t.Fatalf("event_kind: got %q, want evidence event kind", hit.EventKind)
+	if hit.EventType != jobevent.ProcessExec {
+		t.Fatalf("event_type: got %q, want evidence event type", hit.EventType)
 	}
 }
 
@@ -350,7 +350,7 @@ func TestBuildJobEventSummaryForReportEmitsEmptySlices(t *testing.T) {
 func eventWithSecretArgv() jobevent.EventRecord {
 	return jobevent.EventRecord{
 		ID:        "event-1",
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Timestamp: testLogTime(),
 		Process: jobevent.ProcessSummary{
 			PID:           100,

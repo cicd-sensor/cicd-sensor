@@ -13,7 +13,7 @@ This section explains how to understand the baseline, tune it, and write custom 
 | --- | --- |
 | [Baseline Rules](baseline-rules.md) | Standard rules shipped and updated by cicd-sensor |
 | [RuleSet](rule-set.md) | Basic rule files, actions, targets, and `max_alerts` |
-| [Event kinds](rule-event-kinds.md) | Fields and examples for event kinds such as `process_exec`, `network_connect`, and `file_open` |
+| [Event types](rule-event-types.md) | Fields and examples for event types such as `process_exec`, `network_connect`, and `file_open` |
 | [CEL conditions](rule-cel-conditions.md) | Examples for conditions, strings, lists, ancestors, and IP ranges |
 | [Correlation](rule-correlation.md) | Detections that combine multiple rule hits |
 | [Rule modifiers](rule-modifiers.md) | Tuning existing rules with action overrides, exceptions, target excludes, and disable flags |
@@ -27,7 +27,7 @@ rule_sets:
     rules:
       - rule_id: curl_exec
         rule_name: "curl executed"
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/curl")
         action: detect
 ```

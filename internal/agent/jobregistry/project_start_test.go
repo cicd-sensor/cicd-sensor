@@ -46,7 +46,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_AppliesProjectRules(t *testing.T) {
 			RulesetID: "project",
 			Rules: []rule.Rule{{
 				RuleID:    "project_exec",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process_name == "bash"`,
 				Action:    rule.RuleActionDetect,
 			}},
@@ -81,7 +81,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_ManagerConfigIgnoresLocalProjectInp
 				RulesetID: "managed-project",
 				Rules: []rule.Rule{{
 					RuleID:    "managed_exec",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -90,7 +90,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_ManagerConfigIgnoresLocalProjectInp
 				Config: &managerv1.ServedConfig{
 					DefaultMaxAlertsPerRule: 29,
 					OutputSettings: &managerv1.OutputSettings{
-						JobResultLog: &managerv1.OutputSetting{Enabled: true},
+						SummaryLog: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -109,7 +109,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_ManagerConfigIgnoresLocalProjectInp
 			RulesetID: "local-project",
 			Rules: []rule.Rule{{
 				RuleID:    "local_exec",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process_name == "sh"`,
 				Action:    rule.RuleActionDetect,
 			}},

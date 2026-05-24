@@ -29,8 +29,8 @@ func ValidateRuleSet(s *RuleSet) error {
 		if strings.TrimSpace(r.Condition) == "" {
 			errs = append(errs, fmt.Errorf("rules[%d]: condition is required", i))
 		}
-		if r.Type != "correlation" && r.EventKind == "" {
-			errs = append(errs, fmt.Errorf("rules[%d]: event_kind is required", i))
+		if r.Type != "correlation" && r.EventType == "" {
+			errs = append(errs, fmt.Errorf("rules[%d]: event_type is required", i))
 		}
 		if r.Action == "" {
 			errs = append(errs, fmt.Errorf("rules[%d]: action is required", i))

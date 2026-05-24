@@ -8,7 +8,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink"
 	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
 )
@@ -25,7 +25,7 @@ var errNoCollectorSinks = errors.New("collector sinks are not configured")
 // OutputRouter owns the manager sinks selected by manager.yaml log routing.
 type OutputRouter struct {
 	logger  *slog.Logger
-	perKind map[logkind.LogKind]sink.Sink
+	perKind map[logtype.LogType]sink.Sink
 	sinks   []sink.Sink
 
 	sleep  func(context.Context, time.Duration) error
@@ -55,14 +55,14 @@ func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, l
 		createdSinks = append(createdSinks, dst)
 	}
 
-	perKind := make(map[logkind.LogKind]sink.Sink, len(logs))
+	perKind := make(map[logtype.LogType]sink.Sink, len(logs))
 	for logName, logOutput := range logs {
-		logKind, ok := logkind.Parse(logName)
+		logKind, ok := logtype.Parse(logName)
 		if !ok {
 			if closeErr := closeSinks(createdSinks); closeErr != nil {
-				return nil, fmt.Errorf("unknown log kind %q (cleanup: %v)", logName, closeErr)
+				return nil, fmt.Errorf("unknown log type %q (cleanup: %v)", logName, closeErr)
 			}
-			return nil, fmt.Errorf("unknown log kind %q", logName)
+			return nil, fmt.Errorf("unknown log type %q", logName)
 		}
 		dst, ok := namedSinks[logOutput.Sink]
 		if !ok {
@@ -107,13 +107,13 @@ func (r *OutputRouter) OutputSettings() *managerv1.OutputSettings {
 		return nil
 	}
 	return &managerv1.OutputSettings{
-		JobDetectionLog:        r.outputSetting(logkind.JobDetection),
-		JobRuntimeTelemetryLog: r.outputSetting(logkind.JobRuntimeTelemetry),
-		JobResultLog:           r.outputSetting(logkind.JobResult),
+		DetectionLog:    r.outputSetting(logtype.Detection),
+		RuntimeEventLog: r.outputSetting(logtype.RuntimeEvent),
+		SummaryLog:      r.outputSetting(logtype.Summary),
 	}
 }
 
-func (r *OutputRouter) outputSetting(logKind logkind.LogKind) *managerv1.OutputSetting {
+func (r *OutputRouter) outputSetting(logKind logtype.LogType) *managerv1.OutputSetting {
 	dst := r.perKind[logKind]
 	if dst == nil {
 		return &managerv1.OutputSetting{}
@@ -126,12 +126,12 @@ func (r *OutputRouter) outputSetting(logKind logkind.LogKind) *managerv1.OutputS
 	}
 }
 
-// Write sends one validated batch to the sink configured for its log kind.
+// Write sends one validated batch to the sink configured for its log type.
 func (r *OutputRouter) Write(ctx context.Context, batch sink.IngestLogBatch) error {
 	if r == nil {
 		return errNoCollectorSinks
 	}
-	dst := r.perKind[batch.LogKind]
+	dst := r.perKind[batch.LogType]
 	if dst == nil {
 		return errNoCollectorSinks
 	}

@@ -31,7 +31,7 @@ func (l *Listener) handleGitLabHostStart(w http.ResponseWriter, r *http.Request)
 	}
 	metadata := req.Metadata
 
-	if _, err := l.jobRegistry.ApplyGitLabHostStart(r.Context(), identity, metadata, l.runnerKind, l.hostManagerConn, l.hostManagerClient); err != nil {
+	if _, err := l.jobRegistry.ApplyGitLabHostStart(r.Context(), identity, metadata, l.runnerType, l.hostManagerConn, l.hostManagerClient); err != nil {
 		l.writeStartError(w, r, "gitlab_host_start_failed", err)
 		return
 	}

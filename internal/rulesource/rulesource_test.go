@@ -43,7 +43,7 @@ rule_sets:
   - ruleset_id: set-1
     rules:
       - rule_id: detect_bash
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: detect
 `,
@@ -89,7 +89,7 @@ rule_sets:
   - ruleset_id: set-1
     rules:
       - rule_id: detect_bash
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: detect
 ---
@@ -120,7 +120,7 @@ rule_sets:
   - ruleset_id: managed
     rules:
       - rule_id: detect_bash
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: detect
 ---
@@ -172,13 +172,13 @@ rule_sets:
   - ruleset_id: set-1
     rules:
       - rule_id: detect_bash
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: detect
   - ruleset_id: set-2
     rules:
       - rule_id: detect_sh
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/sh")
         action: detect
 ---
@@ -186,7 +186,7 @@ rule_sets:
   - ruleset_id: set-3
     rules:
       - rule_id: detect_zsh
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/zsh")
         action: detect
 `), 0o644); err != nil {

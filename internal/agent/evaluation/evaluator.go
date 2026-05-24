@@ -28,7 +28,7 @@ func EvaluateEvent(
 	event jobevent.EventRecord,
 	identity jobcontext.JobIdentity,
 	metadata jobcontext.JobMetadata,
-	runnerKind string,
+	runnerType string,
 	host *jobscope.JobScopeState,
 	project *jobscope.JobScopeState,
 	logger *slog.Logger,
@@ -44,7 +44,7 @@ func EvaluateEvent(
 	activation.Reset(celInputEventFromRecord(event))
 	anyHit := false
 
-	for _, compiled := range eval.RulesByKind[event.EventKind] {
+	for _, compiled := range eval.RulesByType[event.EventType] {
 		if compiled.CompiledCondition == nil {
 			continue
 		}
@@ -102,26 +102,26 @@ func EvaluateEvent(
 
 		if compiled.FeedHost && host != nil {
 			recordedHit := recordHit(host, compiled.HostRulesetRevision, hit, event)
-			host.WriteDetectionLogForHit(ctx, identity, metadata, runnerKind, recordedHit, event, logger)
+			host.WriteDetectionLogForHit(ctx, identity, metadata, runnerType, recordedHit, event, logger)
 		}
 		if compiled.FeedProject && project != nil {
 			recordedHit := recordHit(project, compiled.ProjectRulesetRevision, hit, event)
-			project.WriteDetectionLogForHit(ctx, identity, metadata, runnerKind, recordedHit, event, logger)
+			project.WriteDetectionLogForHit(ctx, identity, metadata, runnerType, recordedHit, event, logger)
 		}
 		anyHit = true
 	}
 
 	if anyHit {
-		evaluateCorrelations(ctx, eval, event, identity, metadata, runnerKind, host, project, logger)
+		evaluateCorrelations(ctx, eval, event, identity, metadata, runnerType, host, project, logger)
 	}
 
 	if host != nil {
 		host.Observations.RecordEvent(event)
-		host.WriteRuntimeTelemetryLog(ctx, identity, metadata, runnerKind, event, logger)
+		host.WriteRuntimeEventLog(ctx, identity, metadata, runnerType, event, logger)
 	}
 	if project != nil {
 		project.Observations.RecordEvent(event)
-		project.WriteRuntimeTelemetryLog(ctx, identity, metadata, runnerKind, event, logger)
+		project.WriteRuntimeEventLog(ctx, identity, metadata, runnerType, event, logger)
 	}
 }
 
@@ -144,7 +144,7 @@ func evaluateCorrelations(
 	event jobevent.EventRecord,
 	identity jobcontext.JobIdentity,
 	metadata jobcontext.JobMetadata,
-	runnerKind string,
+	runnerType string,
 	host *jobscope.JobScopeState,
 	project *jobscope.JobScopeState,
 	logger *slog.Logger,
@@ -177,7 +177,7 @@ func evaluateCorrelations(
 					terminateProcess(ctx, event, logger)
 				}
 				recordedHit := recordHit(host, correlation.HostRulesetRevision, hit, event)
-				host.WriteDetectionLogForHit(ctx, identity, metadata, runnerKind, recordedHit, event, logger)
+				host.WriteDetectionLogForHit(ctx, identity, metadata, runnerType, recordedHit, event, logger)
 			}
 		}
 
@@ -200,7 +200,7 @@ func evaluateCorrelations(
 					terminateProcess(ctx, event, logger)
 				}
 				recordedHit := recordHit(project, correlation.ProjectRulesetRevision, hit, event)
-				project.WriteDetectionLogForHit(ctx, identity, metadata, runnerKind, recordedHit, event, logger)
+				project.WriteDetectionLogForHit(ctx, identity, metadata, runnerType, recordedHit, event, logger)
 			}
 		}
 	}

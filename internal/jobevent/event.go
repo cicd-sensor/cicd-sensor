@@ -4,17 +4,17 @@ import (
 	"time"
 )
 
-type Kind string
+type Type string
 
 const (
-	ProcessExec       Kind = "process_exec"
-	NetworkConnect    Kind = "network_connect"
-	UnixSocketConnect Kind = "unix_socket_connect"
-	FileOpen          Kind = "file_open"
-	FileRemove        Kind = "file_remove"
-	FileMove          Kind = "file_move"
-	FileLink          Kind = "file_link"
-	Domain            Kind = "domain"
+	ProcessExec       Type = "process_exec"
+	NetworkConnect    Type = "network_connect"
+	UnixSocketConnect Type = "unix_socket_connect"
+	FileOpen          Type = "file_open"
+	FileRemove        Type = "file_remove"
+	FileMove          Type = "file_move"
+	FileLink          Type = "file_link"
+	Domain            Type = "domain"
 )
 
 // AncestorProcess is one captured ancestor in newest-first lineage order.
@@ -35,7 +35,7 @@ type ProcessSummary struct {
 // EventRecord is the per-job rule evaluation input emitted by KernelTracker.
 type EventRecord struct {
 	ID        string            `json:"id,omitempty"`
-	EventKind Kind              `json:"event_kind"`
+	EventType Type              `json:"event_type"`
 	Timestamp time.Time         `json:"timestamp"`
 	Payload   map[string]any    `json:"payload,omitempty"`
 	Process   ProcessSummary    `json:"process"`

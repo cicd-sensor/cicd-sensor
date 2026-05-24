@@ -17,10 +17,10 @@ func TestStartJobLogsAddsManagerDestination(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	settings := &managerv1.OutputSettings{
-		JobDetectionLog: &managerv1.OutputSetting{Enabled: true},
+		DetectionLog: &managerv1.OutputSetting{Enabled: true},
 	}
 
-	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeKindHost, settings)
+	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeTypeHost, settings)
 	if conn.detection == nil {
 		t.Fatal("expected manager detection output")
 	}
@@ -35,12 +35,12 @@ func TestStartJobLogsAddsManagerDestination(t *testing.T) {
 	}
 }
 
-func TestStartJobLogsIgnoresDisabledKind(t *testing.T) {
+func TestStartJobLogsIgnoresDisabledType(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
 	settings := &managerv1.OutputSettings{}
 
-	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeKindHost, settings)
+	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeTypeHost, settings)
 	if conn.detection != nil {
 		t.Fatalf("manager output added for disabled log: %T", conn.detection)
 	}
@@ -51,12 +51,12 @@ func TestStartJobLogsDoesNotCreateSenderWithoutEnabledLogs(t *testing.T) {
 		Logger:         testLogger,
 		Connection:     managerclient.Connection{BaseURL: "http://127.0.0.1:1", Token: "sk_csensor_testtoken"},
 		Identity:       jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
-		Kind:           jobcontext.ScopeKindHost,
+		Type:           jobcontext.ScopeTypeHost,
 		OutputSettings: &managerv1.OutputSettings{},
 	})
 
 	if conn.sendBatch != nil {
-		t.Fatal("manager sender created even though no log kind is enabled")
+		t.Fatal("manager sender created even though no log type is enabled")
 	}
 }
 
@@ -65,9 +65,9 @@ func TestStartJobLogsDoesNotCreateSenderWithoutManagerCredentials(t *testing.T) 
 		Logger:     testLogger,
 		Connection: managerclient.Connection{},
 		Identity:   jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
-		Kind:       jobcontext.ScopeKindHost,
+		Type:       jobcontext.ScopeTypeHost,
 		OutputSettings: &managerv1.OutputSettings{
-			JobDetectionLog: &managerv1.OutputSetting{Enabled: true},
+			DetectionLog: &managerv1.OutputSetting{Enabled: true},
 		},
 	})
 
@@ -85,9 +85,9 @@ func TestNewForTestingUsesInjectedSender(t *testing.T) {
 
 	conn.start(
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
-		jobcontext.ScopeKindHost,
+		jobcontext.ScopeTypeHost,
 		&managerv1.OutputSettings{
-			JobDetectionLog: &managerv1.OutputSetting{Enabled: true},
+			DetectionLog: &managerv1.OutputSetting{Enabled: true},
 		},
 	)
 	if conn.detection == nil {
@@ -104,74 +104,74 @@ func TestNewForTestingUsesInjectedSender(t *testing.T) {
 	}
 }
 
-func TestManagerJobLogsNoOpWhenLogKindsAreNotConfigured(t *testing.T) {
+func TestManagerJobLogsNoOpWhenLogTypesAreNotConfigured(t *testing.T) {
 	var conn ManagerJobLogs
 
 	if err := conn.WriteDetectionPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("detection write without output: %v", err)
 	}
-	if err := conn.WriteRuntimeTelemetryPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
-		t.Fatalf("runtime telemetry write without output: %v", err)
+	if err := conn.WriteRuntimeEventPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
+		t.Fatalf("runtime event write without output: %v", err)
 	}
-	if err := conn.EmitAndCloseJobResultLog(context.Background(), []byte(`{"final":true}`)); err != nil {
-		t.Fatalf("job result write without output: %v", err)
+	if err := conn.EmitAndCloseSummaryLog(context.Background(), []byte(`{"final":true}`)); err != nil {
+		t.Fatalf("summary write without output: %v", err)
 	}
-	if conn.HasJobResultLog() {
-		t.Fatal("job_result_log reported configured on zero ManagerJobLogs")
+	if conn.HasSummaryLog() {
+		t.Fatal("summary_log reported configured on zero ManagerJobLogs")
 	}
-	if got := conn.DroppedLogRecords(managerv1.LogKind_LOG_KIND_JOB_DETECTION); got != 0 {
+	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_DETECTION); got != 0 {
 		t.Fatalf("dropped records on zero ManagerJobLogs: got %d, want 0", got)
 	}
-	if got := conn.DroppedLogRecords(managerv1.LogKind_LOG_KIND_UNSPECIFIED); got != 0 {
-		t.Fatalf("dropped records for unknown kind: got %d, want 0", got)
+	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_UNSPECIFIED); got != 0 {
+		t.Fatalf("dropped records for unknown log type: got %d, want 0", got)
 	}
 	if err := conn.FinalizeStreamingLogs(context.Background()); err != nil {
 		t.Fatalf("finalize zero ManagerJobLogs: %v", err)
 	}
 }
 
-func TestStartJobLogsUsesOneWorkerPerKind(t *testing.T) {
+func TestStartJobLogsUsesOneWorkerPerType(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	settings := &managerv1.OutputSettings{
-		JobDetectionLog:        &managerv1.OutputSetting{Enabled: true},
-		JobRuntimeTelemetryLog: &managerv1.OutputSetting{Enabled: true},
-		JobResultLog:           &managerv1.OutputSetting{Enabled: true},
+		DetectionLog:    &managerv1.OutputSetting{Enabled: true},
+		RuntimeEventLog: &managerv1.OutputSetting{Enabled: true},
+		SummaryLog:      &managerv1.OutputSetting{Enabled: true},
 	}
 
-	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeKindHost, settings)
-	if conn.detection == nil || conn.runtimeTelemetry == nil || conn.jobResultLog == nil {
-		t.Fatal("expected detection, runtime telemetry, and job_result_log workers")
+	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeTypeHost, settings)
+	if conn.detection == nil || conn.runtimeEvent == nil || conn.summaryLog == nil {
+		t.Fatal("expected detection, runtime event, and summary_log workers")
 	}
-	if conn.detection.requests == conn.runtimeTelemetry.requests {
-		t.Fatal("detection and runtime telemetry must use separate workers")
+	if conn.detection.requests == conn.runtimeEvent.requests {
+		t.Fatal("detection and runtime event must use separate workers")
 	}
-	if conn.detection.requests == conn.jobResultLog.requests {
-		t.Fatal("detection and job_result_log must use separate workers")
+	if conn.detection.requests == conn.summaryLog.requests {
+		t.Fatal("detection and summary_log must use separate workers")
 	}
 }
 
-func TestManagerJobLogsEmitAndCloseJobResultLog(t *testing.T) {
+func TestManagerJobLogsEmitAndCloseSummaryLog(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch,
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
-		jobcontext.ScopeKindProject,
+		jobcontext.ScopeTypeProject,
 		&managerv1.OutputSettings{
-			JobResultLog: &managerv1.OutputSetting{Enabled: true},
+			SummaryLog: &managerv1.OutputSetting{Enabled: true},
 		},
 	)
 
-	if !conn.HasJobResultLog() {
-		t.Fatal("expected job_result_log to be configured")
+	if !conn.HasSummaryLog() {
+		t.Fatal("expected summary_log to be configured")
 	}
-	if err := conn.EmitAndCloseJobResultLog(context.Background(), []byte(`{"final":true}`)); err != nil {
-		t.Fatalf("emit job result log: %v", err)
+	if err := conn.EmitAndCloseSummaryLog(context.Background(), []byte(`{"final":true}`)); err != nil {
+		t.Fatalf("emit summary log: %v", err)
 	}
 	if got := poster.count(); got != 1 {
 		t.Fatalf("sent batches: got %d, want 1", got)
 	}
-	if got := conn.DroppedLogRecords(managerv1.LogKind_LOG_KIND_JOB_RESULT); got != 0 {
-		t.Fatalf("job result drops: got %d, want 0", got)
+	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_SUMMARY); got != 0 {
+		t.Fatalf("summary drops: got %d, want 0", got)
 	}
 }
 
@@ -179,10 +179,10 @@ func TestManagerJobLogsRejectsStreamingWritesAfterFinalize(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch,
 		jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
-		jobcontext.ScopeKindHost,
+		jobcontext.ScopeTypeHost,
 		&managerv1.OutputSettings{
-			JobDetectionLog:        &managerv1.OutputSetting{Enabled: true},
-			JobRuntimeTelemetryLog: &managerv1.OutputSetting{Enabled: true},
+			DetectionLog:    &managerv1.OutputSetting{Enabled: true},
+			RuntimeEventLog: &managerv1.OutputSetting{Enabled: true},
 		},
 	)
 
@@ -192,10 +192,10 @@ func TestManagerJobLogsRejectsStreamingWritesAfterFinalize(t *testing.T) {
 	if err := conn.WriteDetectionPayload(context.Background(), []byte(`{"late":true}`)); err != errManagerOutputClosed {
 		t.Fatalf("late detection write: got %v, want %v", err, errManagerOutputClosed)
 	}
-	if err := conn.WriteRuntimeTelemetryPayload(context.Background(), []byte(`{"late":true}`)); err != errManagerOutputClosed {
-		t.Fatalf("late runtime telemetry write: got %v, want %v", err, errManagerOutputClosed)
+	if err := conn.WriteRuntimeEventPayload(context.Background(), []byte(`{"late":true}`)); err != errManagerOutputClosed {
+		t.Fatalf("late runtime event write: got %v, want %v", err, errManagerOutputClosed)
 	}
-	if got := conn.DroppedLogRecords(managerv1.LogKind_LOG_KIND_JOB_DETECTION); got != 0 {
+	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_DETECTION); got != 0 {
 		t.Fatalf("closed detection writes counted as drops: got %d, want 0", got)
 	}
 }
@@ -205,14 +205,14 @@ func TestAttachRecordersForTesting(t *testing.T) {
 	var conn ManagerJobLogs
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 
-	conn.AttachDetectionRecorderForTesting(identity, jobcontext.ScopeKindProject, poster.sendBatch)
-	conn.AttachRuntimeTelemetryRecorderForTesting(identity, jobcontext.ScopeKindProject, poster.sendBatch)
+	conn.AttachDetectionRecorderForTesting(identity, jobcontext.ScopeTypeProject, poster.sendBatch)
+	conn.AttachRuntimeEventRecorderForTesting(identity, jobcontext.ScopeTypeProject, poster.sendBatch)
 
-	if err := conn.WriteDetectionPayload(context.Background(), []byte(`{"kind":"detection"}`)); err != nil {
+	if err := conn.WriteDetectionPayload(context.Background(), []byte(`{"type":"detection"}`)); err != nil {
 		t.Fatalf("write detection: %v", err)
 	}
-	if err := conn.WriteRuntimeTelemetryPayload(context.Background(), []byte(`{"kind":"telemetry"}`)); err != nil {
-		t.Fatalf("write runtime telemetry: %v", err)
+	if err := conn.WriteRuntimeEventPayload(context.Background(), []byte(`{"type":"runtime_event"}`)); err != nil {
+		t.Fatalf("write runtime event: %v", err)
 	}
 	if err := conn.FinalizeStreamingLogs(context.Background()); err != nil {
 		t.Fatalf("finalize streaming: %v", err)

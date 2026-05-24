@@ -20,7 +20,7 @@ func TestEvaluateEvent_TriggersCorrelationAfterSingleHit(t *testing.T) {
 	hostScope := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -53,13 +53,13 @@ func TestEvaluateEvent_CorrelationThresholdAcrossReferencedRules(t *testing.T) {
 	hostScope := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "x",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
 		{
 			RuleID:    "y",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `protocol == "tcp"`,
 			Action:    rule.RuleActionCollect,
 		},
@@ -118,13 +118,13 @@ func TestEvaluateEvent_CorrelationAcceptsDotAndBracketSyntax(t *testing.T) {
 			hostScope := newCorrelationScope("host-set", []rule.Rule{
 				{
 					RuleID:    "suspicious_bin_exec",
-					EventKind: jobevent.NetworkConnect,
+					EventType: jobevent.NetworkConnect,
 					Condition: `protocol == "tcp"`,
 					Action:    rule.RuleActionDetect,
 				},
 				{
 					RuleID:    "credential_file_open",
-					EventKind: jobevent.NetworkConnect,
+					EventType: jobevent.NetworkConnect,
 					Condition: `remote_ip == "example.com"`,
 					Action:    rule.RuleActionDetect,
 				},
@@ -164,7 +164,7 @@ func TestEvaluateEvent_CorrelationCollectActionFeedsCollectBucket(t *testing.T) 
 	hostScope := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -195,7 +195,7 @@ func TestEvaluateEvent_Correlations_EmitsDetectionLog(t *testing.T) {
 	hostScope := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -217,7 +217,7 @@ func TestEvaluateEvent_Correlations_EmitsDetectionLog(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("detection entries: got %d, want 3", len(entries))
 	}
-	corrIdx := slices.IndexFunc(entries, func(entry *logv1.JobDetectionLogEntry) bool {
+	corrIdx := slices.IndexFunc(entries, func(entry *logv1.DetectionLogEntry) bool {
 		return detectionRuleRef(entry) == "host-set/corr"
 	})
 	if corrIdx < 0 {
@@ -228,7 +228,7 @@ func TestEvaluateEvent_Correlations_EmitsDetectionLog(t *testing.T) {
 	}
 }
 
-func detectionRuleIDs(entries []*logv1.JobDetectionLogEntry) []string {
+func detectionRuleIDs(entries []*logv1.DetectionLogEntry) []string {
 	ruleIDs := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		ruleIDs = append(ruleIDs, detectionRuleRef(entry))
@@ -236,7 +236,7 @@ func detectionRuleIDs(entries []*logv1.JobDetectionLogEntry) []string {
 	return ruleIDs
 }
 
-func detectionRuleIDCount(entries []*logv1.JobDetectionLogEntry, ruleID string) int {
+func detectionRuleIDCount(entries []*logv1.DetectionLogEntry, ruleID string) int {
 	count := 0
 	for _, entry := range entries {
 		if detectionRuleRef(entry) == ruleID {
@@ -250,7 +250,7 @@ func summaryRuleRef(hit observations.HitSummary) string {
 	return hit.RulesetID + "/" + hit.RuleID
 }
 
-func detectionRuleRef(entry *logv1.JobDetectionLogEntry) string {
+func detectionRuleRef(entry *logv1.DetectionLogEntry) string {
 	return entry.GetRulesetId() + "/" + entry.GetRuleId()
 }
 
@@ -258,14 +258,14 @@ func hitRecordRuleRef(entry resultdoc.HitRecord) string {
 	return entry.RulesetID + "/" + entry.RuleID
 }
 
-func TestEvaluateEvent_Correlations_TelemetryOmitsHits(t *testing.T) {
+func TestEvaluateEvent_Correlations_RuntimeEventOmitsHits(t *testing.T) {
 	t.Parallel()
 
-	stream := &recordingRuntimeTelemetryOutput{}
+	stream := &recordingRuntimeEventOutput{}
 	hostScope := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -276,7 +276,7 @@ func TestEvaluateEvent_Correlations_TelemetryOmitsHits(t *testing.T) {
 			Action:    rule.RuleActionTerminate,
 		},
 	})
-	attachRecordingRuntimeTelemetryOutput(t, hostScope, stream)
+	attachRecordingRuntimeEventOutput(t, hostScope, stream)
 
 	eval := evaluation.NewEvaluationState(scopeResolvedRules(hostScope), scopeResolvedRules(nil))
 	evaluateTestRules(testCtx, eval, testDispatchEvent("/usr/bin/curl", "example.com", 443), hostScope, nil, testLogger)
@@ -284,7 +284,7 @@ func TestEvaluateEvent_Correlations_TelemetryOmitsHits(t *testing.T) {
 
 	entries := stream.Entries(t)
 	if len(entries) != 1 {
-		t.Fatalf("runtime telemetry entries: got %d, want 1", len(entries))
+		t.Fatalf("runtime event entries: got %d, want 1", len(entries))
 	}
 	if entries[0].GetEvent().GetId() == "" {
 		t.Fatal("event id missing")
@@ -297,7 +297,7 @@ func TestEvaluateEvent_TriggersMultipleCorrelationsFromOneEvent(t *testing.T) {
 	hostScope := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -333,13 +333,13 @@ func TestEvaluateEvent_CorrelationFiresOncePerScope(t *testing.T) {
 	hostScope := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
 		{
 			RuleID:    "unrelated",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "other.example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -378,7 +378,7 @@ func TestEvaluateEvent_CorrelationFeedsHostAndProjectScopes(t *testing.T) {
 	hostScope := newCorrelationScope("shared-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -392,7 +392,7 @@ func TestEvaluateEvent_CorrelationFeedsHostAndProjectScopes(t *testing.T) {
 	projectScope := newProjectScopeWithRules("shared-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -425,7 +425,7 @@ func TestEvaluateEvent_CorrelationAggregatesIdentityCollisionHits(t *testing.T) 
 				CanonicalRuleID: "shared-set/x",
 				Rule: rule.Rule{
 					RuleID:    "x",
-					EventKind: jobevent.NetworkConnect,
+					EventType: jobevent.NetworkConnect,
 					Condition: `remote_ip == "example.com"`,
 					Action:    rule.RuleActionDetect,
 				},
@@ -435,7 +435,7 @@ func TestEvaluateEvent_CorrelationAggregatesIdentityCollisionHits(t *testing.T) 
 				CanonicalRuleID: "shared-set/x",
 				Rule: rule.Rule{
 					RuleID:    "x",
-					EventKind: jobevent.NetworkConnect,
+					EventType: jobevent.NetworkConnect,
 					Condition: `protocol == "tcp"`,
 					Action:    rule.RuleActionCollect,
 				},

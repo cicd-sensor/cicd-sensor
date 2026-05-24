@@ -46,7 +46,7 @@ func CompileSet(env *celengine.Env, set rule.RuleSet) []CompileError {
 			continue
 		}
 
-		if _, err := env.Compile(canonicalRuleID.String(), candidate.EventKind, candidate.Condition, predefinedLists); err != nil {
+		if _, err := env.Compile(canonicalRuleID.String(), candidate.EventType, candidate.Condition, predefinedLists); err != nil {
 			compileErrors = append(compileErrors, CompileError{
 				Identity: identity,
 				Reason:   err.Error(),
@@ -58,7 +58,7 @@ func CompileSet(env *celengine.Env, set rule.RuleSet) []CompileError {
 		if strings.TrimSpace(candidate.Exceptions) == "" {
 			continue
 		}
-		if _, err := env.Compile(canonicalRuleID.String(), candidate.EventKind, candidate.Exceptions, predefinedLists); err != nil {
+		if _, err := env.Compile(canonicalRuleID.String(), candidate.EventType, candidate.Exceptions, predefinedLists); err != nil {
 			compileErrors = append(compileErrors, CompileError{
 				Identity: identity,
 				Reason:   err.Error(),

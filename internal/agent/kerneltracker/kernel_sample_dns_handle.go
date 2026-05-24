@@ -61,7 +61,7 @@ func handleDNSSample(state *jobTrackingState, sample dnsSample) []engineEffect {
 	}
 
 	record := jobevent.EventRecord{
-		EventKind: jobevent.Domain,
+		EventType: jobevent.Domain,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{

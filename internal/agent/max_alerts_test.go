@@ -21,7 +21,7 @@ func TestEvaluateEvent_MaxAlertsCapsDetectionEmission(t *testing.T) {
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "detect",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 			MaxAlerts: 2,
@@ -71,7 +71,7 @@ func TestEvaluateEvent_MaxAlertsUsesScopeDefault(t *testing.T) {
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "detect",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -103,7 +103,7 @@ func TestEvaluateEvent_TerminateBypassesMaxAlerts(t *testing.T) {
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "terminate",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionTerminate,
 			MaxAlerts: 1,

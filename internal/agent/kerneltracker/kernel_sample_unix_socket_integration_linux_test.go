@@ -75,7 +75,7 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 
 		waitForEventRecord(t, eventCh, 5*time.Second, "unix_socket_connect absolute",
 			func(record jobevent.EventRecord) bool {
-				if record.EventKind != jobevent.UnixSocketConnect {
+				if record.EventType != jobevent.UnixSocketConnect {
 					return false
 				}
 				path, _ := record.Payload["path"].(string)
@@ -105,7 +105,7 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 
 		waitForEventRecord(t, eventCh, 5*time.Second, "unix_socket_connect abstract",
 			func(record jobevent.EventRecord) bool {
-				if record.EventKind != jobevent.UnixSocketConnect {
+				if record.EventType != jobevent.UnixSocketConnect {
 					return false
 				}
 				path, _ := record.Payload["path"].(string)
@@ -139,7 +139,7 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 		// so match by basename suffix and log what we actually saw.
 		waitForEventRecord(t, eventCh, 5*time.Second, "unix_socket_connect relative",
 			func(record jobevent.EventRecord) bool {
-				if record.EventKind != jobevent.UnixSocketConnect {
+				if record.EventType != jobevent.UnixSocketConnect {
 					return false
 				}
 				path, _ := record.Payload["path"].(string)
@@ -161,7 +161,7 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 
 		waitForEventRecord(t, eventCh, 5*time.Second, "docker-upstream.sock bypass",
 			func(record jobevent.EventRecord) bool {
-				if record.EventKind != jobevent.UnixSocketConnect {
+				if record.EventType != jobevent.UnixSocketConnect {
 					return false
 				}
 				path, _ := record.Payload["path"].(string)

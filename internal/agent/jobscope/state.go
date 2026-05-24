@@ -14,15 +14,15 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
-// ErrScopeKindMismatch reports that an operation received a scope of the
-// wrong kind (host where project was expected, or vice versa).
-var ErrScopeKindMismatch = errors.New("scope kind mismatch")
+// ErrScopeTypeMismatch reports that an operation received a scope of the
+// wrong type (host where project was expected, or vice versa).
+var ErrScopeTypeMismatch = errors.New("scope type mismatch")
 
 // JobScopeState holds the configuration and runtime state for one scope.
 // Dispatch-path methods tolerate nil receivers; direct state access assumes
 // NewHost or NewProject constructed the value.
 type JobScopeState struct {
-	Kind           jobcontext.ScopeKind
+	Type           jobcontext.ScopeType
 	RuleSets       []rule.RuleSet
 	RuleModifiers  []rule.RuleModifier
 	ConfigRevision string
@@ -52,14 +52,14 @@ type ManagerConfig struct {
 
 func NewHost() *JobScopeState {
 	return &JobScopeState{
-		Kind:         jobcontext.ScopeKindHost,
+		Type:         jobcontext.ScopeTypeHost,
 		Observations: observations.NewState(),
 	}
 }
 
 func NewProject() *JobScopeState {
 	return &JobScopeState{
-		Kind:         jobcontext.ScopeKindProject,
+		Type:         jobcontext.ScopeTypeProject,
 		Observations: observations.NewState(),
 	}
 }

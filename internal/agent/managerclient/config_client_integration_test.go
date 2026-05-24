@@ -40,7 +40,7 @@ rule_sets:
       - rule_id: "detect_bash"
         rule_name: "Shell executed"
         description: "Detects shell execution in CI jobs."
-        event_kind: "process_exec"
+        event_type: "process_exec"
         condition: 'list.shell_basenames.exists(b, process.exec_path.endsWith(b))'
         action: "detect"
         max_alerts: 5
@@ -58,9 +58,9 @@ rule_modifiers:
 		ConfigRevision:          "sha256:config",
 		DefaultMaxAlertsPerRule: 23,
 		OutputSettings: &managerv1.OutputSettings{
-			JobResultLog:           &managerv1.OutputSetting{Enabled: true},
-			JobDetectionLog:        &managerv1.OutputSetting{Enabled: true},
-			JobRuntimeTelemetryLog: &managerv1.OutputSetting{Enabled: true},
+			SummaryLog:      &managerv1.OutputSetting{Enabled: true},
+			DetectionLog:    &managerv1.OutputSetting{Enabled: true},
+			RuntimeEventLog: &managerv1.OutputSetting{Enabled: true},
 		},
 	}
 
@@ -74,7 +74,7 @@ rule_modifiers:
 	}
 
 	req := &managerv1.FetchConfigRequest{
-		RunnerKind: "machine",
+		RunnerType: "machine",
 		JobIdentity: &managerv1.JobIdentity{
 			Provider:               "github",
 			ProviderHost:           "github.com",
@@ -107,15 +107,15 @@ rule_modifiers:
 	if got := ruleSets[0].Rules[0].RuleID; got != "detect_bash" {
 		t.Fatalf("rule_id: got %q, want detect_bash", got)
 	}
-	if got := ruleSets[0].Rules[0].EventKind; got != jobevent.ProcessExec {
-		t.Fatalf("event_kind: got %q, want %q", got, jobevent.ProcessExec)
+	if got := ruleSets[0].Rules[0].EventType; got != jobevent.ProcessExec {
+		t.Fatalf("event_type: got %q, want %q", got, jobevent.ProcessExec)
 	}
 	ruleModifiers := result.RuleSources[1].RuleModifiers
 	if len(ruleModifiers) != 1 {
 		t.Fatalf("rule_sources[1].rule_modifiers: got %d, want 1", len(ruleModifiers))
 	}
-	if !result.OutputSettings.GetJobResultLog().GetEnabled() {
-		t.Fatal("output_settings.job_result_log.enabled: got false, want true")
+	if !result.OutputSettings.GetSummaryLog().GetEnabled() {
+		t.Fatal("output_settings.summary_log.enabled: got false, want true")
 	}
 
 	// Downstream: ApplyManagerConfig must resolve the delivered rules.
@@ -135,7 +135,7 @@ rule_modifiers:
 	if !resolvedRulesContain(scope, "detect_bash") {
 		t.Fatalf("resolved rules do not contain detect_bash")
 	}
-	if !scope.OutputSettings.GetJobResultLog().GetEnabled() {
+	if !scope.OutputSettings.GetSummaryLog().GetEnabled() {
 		t.Fatal("expected scope to store output settings from manager response")
 	}
 }

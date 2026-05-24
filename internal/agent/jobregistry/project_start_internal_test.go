@@ -20,7 +20,7 @@ func TestBuildProjectScopeFromLocalConfigCanAddBaselineFallback(t *testing.T) {
 			RulesetID: "baseline",
 			Rules: []rule.Rule{{
 				RuleID:    "baseline_exec",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process_name == "bash"`,
 				Action:    rule.RuleActionDetect,
 			}},
@@ -32,7 +32,7 @@ func TestBuildProjectScopeFromLocalConfigCanAddBaselineFallback(t *testing.T) {
 			RulesetID: "project",
 			Rules: []rule.Rule{{
 				RuleID:    "project_exec",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process_name == "go"`,
 				Action:    rule.RuleActionDetect,
 			}},
@@ -60,7 +60,7 @@ func TestBuildProjectScopeFromLocalConfigKeepsBaselineFirst(t *testing.T) {
 			RulesetID: "shared",
 			Rules: []rule.Rule{{
 				RuleID:    "duplicate",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process_name == "baseline"`,
 				Action:    rule.RuleActionDetect,
 			}},
@@ -72,7 +72,7 @@ func TestBuildProjectScopeFromLocalConfigKeepsBaselineFirst(t *testing.T) {
 			RulesetID: "shared",
 			Rules: []rule.Rule{{
 				RuleID:    "duplicate",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process_name == "project"`,
 				Action:    rule.RuleActionDetect,
 			}},

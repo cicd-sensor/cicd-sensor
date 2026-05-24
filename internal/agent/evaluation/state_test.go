@@ -18,7 +18,7 @@ func TestNewEvaluationState(t *testing.T) {
 		return rule.Rule{
 			RuleID:    ruleID,
 			Condition: `process.exec_path.endsWith("/bash")`,
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 			Action:    rule.RuleAction(action),
 		}
 	}
@@ -42,7 +42,7 @@ func TestNewEvaluationState(t *testing.T) {
 			wantRules: 1,
 			verify: func(t *testing.T, got *EvaluationState) {
 				t.Helper()
-				cr := got.RulesByKind[jobevent.ProcessExec][0]
+				cr := got.RulesByType[jobevent.ProcessExec][0]
 				if cr.CanonicalRuleID != "host-set/r1" {
 					t.Fatalf("canonical rule ID: got %q, want %q", cr.CanonicalRuleID, "host-set/r1")
 				}
@@ -62,7 +62,7 @@ func TestNewEvaluationState(t *testing.T) {
 			wantRules: 1,
 			verify: func(t *testing.T, got *EvaluationState) {
 				t.Helper()
-				cr := got.RulesByKind[jobevent.ProcessExec][0]
+				cr := got.RulesByType[jobevent.ProcessExec][0]
 				if cr.CanonicalRuleID != "project-set/r1" {
 					t.Fatalf("canonical rule ID: got %q, want %q", cr.CanonicalRuleID, "project-set/r1")
 				}
@@ -86,7 +86,7 @@ func TestNewEvaluationState(t *testing.T) {
 			}
 
 			totalRules := 0
-			for _, rules := range got.RulesByKind {
+			for _, rules := range got.RulesByType {
 				totalRules += len(rules)
 			}
 			if totalRules != tt.wantRules {
@@ -106,7 +106,7 @@ func TestNewEvaluationState_DoesNotMutateExistingSummaryOnProjectAdd(t *testing.
 	hostScope := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -120,7 +120,7 @@ func TestNewEvaluationState_DoesNotMutateExistingSummaryOnProjectAdd(t *testing.
 	projectScope := newProjectScopeWithRules("host-set", []rule.Rule{
 		{
 			RuleID:    "other",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "mirror.example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -167,12 +167,12 @@ func TestNewEvaluationState_SharedRuleEnvSupportsParallelBuilds(t *testing.T) {
 				ResolvedRules: resolvedRules("host-set", rule.Rule{
 					RuleID:    "r1",
 					Condition: `process.exec_path.endsWith("/bash")`,
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Action:    rule.RuleActionDetect,
 				}),
 			}
 			got := NewEvaluationState(scopeResolvedRules(host), scopeResolvedRules(nil))
-			if got == nil || len(got.RulesByKind[jobevent.ProcessExec]) != 1 {
+			if got == nil || len(got.RulesByType[jobevent.ProcessExec]) != 1 {
 				t.Errorf("compiled rules: got %#v, want one process_exec rule", got)
 			}
 		}()

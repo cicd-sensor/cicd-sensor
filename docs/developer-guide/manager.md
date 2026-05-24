@@ -73,8 +73,8 @@ The Manager holds the rule bundle, but it does not evaluate runtime events.
 
 ## Log ingest and outputs
 
-Agents send Job Result Logs, Detection Logs, and Runtime Telemetry Logs to `CollectorService.IngestLog` as gzip-compressed JSONL batches.
-The Manager delivers them to sinks such as S3, GCS, or Pub/Sub according to the routing policy for each log kind.
+Agents send Summary Logs, Detection Logs, and Runtime Event Logs to `CollectorService.IngestLog` as gzip-compressed JSONL batches.
+The Manager delivers them to sinks such as S3, GCS, or Pub/Sub according to the routing policy for each log type.
 
 The Manager treats the log batch as the delivery unit.
 It does not interpret runtime events or evaluate detections.

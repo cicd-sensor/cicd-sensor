@@ -11,7 +11,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 )
 
-// runReportHTML reads a job_result_log JSON document (from stdin or the
+// runReportHTML reads a summary_log JSON document (from stdin or the
 // given file) and writes a single self-contained HTML report to stdout
 // (or --output-file).
 func runReportHTML(_ context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
@@ -28,13 +28,13 @@ func runReportHTML(_ context.Context, args []string, stdin io.Reader, stdout, st
 		return 1, fmt.Errorf("read input: %w", err)
 	}
 
-	var resultLog resultdoc.JobEventSummaryForReport
-	if err := json.Unmarshal(input, &resultLog); err != nil {
-		return 1, fmt.Errorf("decode job_result_log: %w", err)
+	var summaryLog resultdoc.JobEventSummaryForReport
+	if err := json.Unmarshal(input, &summaryLog); err != nil {
+		return 1, fmt.Errorf("decode summary_log: %w", err)
 	}
 
 	var buf bytes.Buffer
-	if err := report.Render(&buf, &resultLog); err != nil {
+	if err := report.Render(&buf, &summaryLog); err != nil {
 		return 1, fmt.Errorf("render html: %w", err)
 	}
 

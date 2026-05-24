@@ -49,7 +49,7 @@ func TestCollectorServiceClient_SendLogBatchAddsAuthHeader(t *testing.T) {
 	client := NewCollectorServiceClient(testCollectorServiceLogger, server.Client(), Connection{BaseURL: server.URL, Token: testOutputManagerToken})
 	if err := client.SendLogBatch(context.Background(), LogBatch{
 		Scope:   managerv1.Scope_SCOPE_HOST,
-		Kind:    managerv1.LogKind_LOG_KIND_JOB_DETECTION,
+		Type:    managerv1.LogType_LOG_TYPE_DETECTION,
 		Records: [][]byte{[]byte(`{"ok":true}`)},
 		FlushAt: time.Now(),
 	}); err != nil {
@@ -67,7 +67,7 @@ func TestCollectorServiceClient_SendLogBatchRejectsEmptyBatchBeforeRequest(t *te
 	client := &CollectorServiceClient{client: svc, token: testOutputManagerToken}
 	err := client.SendLogBatch(context.Background(), LogBatch{
 		Scope: managerv1.Scope_SCOPE_HOST,
-		Kind:  managerv1.LogKind_LOG_KIND_JOB_DETECTION,
+		Type:  managerv1.LogType_LOG_TYPE_DETECTION,
 	})
 	if err == nil || !strings.Contains(err.Error(), "no records") {
 		t.Fatalf("error: got %v, want no records", err)

@@ -43,7 +43,7 @@ type Listener struct {
 	socketPath        string
 	hostManagerConn   managerclient.Connection
 	hostManagerClient jobregistry.ManagerConfigFetcher
-	runnerKind        string
+	runnerType        string
 	provider          jobcontext.Provider
 	server            *http.Server
 }
@@ -56,7 +56,7 @@ type Config struct {
 	SocketPath            string
 	HostManagerConnection managerclient.Connection
 	HostManagerClient     jobregistry.ManagerConfigFetcher
-	RunnerKind            string
+	RunnerType            string
 	Provider              jobcontext.Provider
 }
 
@@ -72,7 +72,7 @@ func New(cfg Config) *Listener {
 		socketPath:        cfg.SocketPath,
 		hostManagerConn:   cfg.HostManagerConnection,
 		hostManagerClient: cfg.HostManagerClient,
-		runnerKind:        cfg.RunnerKind,
+		runnerType:        cfg.RunnerType,
 		provider:          cfg.Provider,
 	}
 	mux := http.NewServeMux()

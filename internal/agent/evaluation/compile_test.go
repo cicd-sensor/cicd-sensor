@@ -34,7 +34,7 @@ func TestNewEvaluationState_CorrelationCompileFailuresBecomeWarnings(t *testing.
 			rules: []rule.Rule{
 				{
 					RuleID:    "single",
-					EventKind: jobevent.NetworkConnect,
+					EventType: jobevent.NetworkConnect,
 					Condition: `remote_ip == "example.com"`,
 					Action:    rule.RuleActionDetect,
 				},
@@ -69,7 +69,7 @@ func TestNewEvaluationState_CorrelationCompileFailuresBecomeWarnings(t *testing.
 			rules: []rule.Rule{
 				{
 					RuleID:    "single",
-					EventKind: jobevent.NetworkConnect,
+					EventType: jobevent.NetworkConnect,
 					Condition: `remote_ip == "example.com"`,
 					Action:    rule.RuleActionDetect,
 				},
@@ -97,7 +97,7 @@ func TestNewEvaluationState_CorrelationCompileFailuresBecomeWarnings(t *testing.
 			rules: []rule.Rule{
 				{
 					RuleID:    "single",
-					EventKind: jobevent.NetworkConnect,
+					EventType: jobevent.NetworkConnect,
 					Condition: `remote_ip == "example.com"`,
 					Action:    rule.RuleActionDetect,
 				},
@@ -138,7 +138,7 @@ func TestNewEvaluationState_CorrelationCompileFailuresBecomeWarnings(t *testing.
 			if tt.wantWarnings > 0 {
 				warning := hostScope.ResolvedRules.Warnings[0]
 				if warning.Kind != "compile_error" {
-					t.Fatalf("warning kind: got %q, want %q", warning.Kind, "compile_error")
+					t.Fatalf("warning type: got %q, want %q", warning.Kind, "compile_error")
 				}
 			}
 		})
@@ -153,7 +153,7 @@ func TestNewEvaluationState_InvalidAddedExceptionSkipsRule(t *testing.T) {
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -171,7 +171,7 @@ func TestNewEvaluationState_InvalidAddedExceptionSkipsRule(t *testing.T) {
 	}
 
 	totalRules := 0
-	for _, rules := range got.RulesByKind {
+	for _, rules := range got.RulesByType {
 		totalRules += len(rules)
 	}
 	if totalRules != 0 {
@@ -181,7 +181,7 @@ func TestNewEvaluationState_InvalidAddedExceptionSkipsRule(t *testing.T) {
 		t.Fatalf("warnings: got %d, want 1", len(hostScope.ResolvedRules.Warnings))
 	}
 	if hostScope.ResolvedRules.Warnings[0].Kind != "compile_error" {
-		t.Fatalf("warning kind: got %q, want %q", hostScope.ResolvedRules.Warnings[0].Kind, "compile_error")
+		t.Fatalf("warning type: got %q, want %q", hostScope.ResolvedRules.Warnings[0].Kind, "compile_error")
 	}
 }
 
@@ -193,7 +193,7 @@ func TestNewEvaluationState_CompilesBaseAndAddedExceptionsSeparately(t *testing.
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:     "single",
-			EventKind:  jobevent.NetworkConnect,
+			EventType:  jobevent.NetworkConnect,
 			Condition:  `remote_ip == "example.com"`,
 			Exceptions: `protocol == "tcp"`,
 			Action:     rule.RuleActionDetect,
@@ -214,7 +214,7 @@ func TestNewEvaluationState_CompilesBaseAndAddedExceptionsSeparately(t *testing.
 	hostScope.ResolveRules(jobcontext.JobIdentity{})
 
 	got := NewEvaluationState(scopeResolvedRules(hostScope), scopeResolvedRules(nil))
-	compiled := got.RulesByKind[jobevent.NetworkConnect]
+	compiled := got.RulesByType[jobevent.NetworkConnect]
 	if len(compiled) != 1 {
 		t.Fatalf("compiled rule count: got %d, want 1", len(compiled))
 	}

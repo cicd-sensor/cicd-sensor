@@ -14,7 +14,7 @@ func compileRuleExceptions(env *celengine.Env, resolved rule.ResolvedRule) ([]ce
 	// resolved is scope-local after rule.Merge. Shared host/project entries
 	// reach here only when their exception clauses are content-equivalent.
 	if strings.TrimSpace(resolved.Rule.Exceptions) != "" {
-		prog, err := env.Compile(resolved.CanonicalRuleID.String(), resolved.Rule.EventKind, resolved.Rule.Exceptions, resolved.PredefinedLists)
+		prog, err := env.Compile(resolved.CanonicalRuleID.String(), resolved.Rule.EventType, resolved.Rule.Exceptions, resolved.PredefinedLists)
 		if err != nil {
 			return nil, fmt.Errorf("compile base exception %q: %w", resolved.Rule.Exceptions, err)
 		}
@@ -25,7 +25,7 @@ func compileRuleExceptions(env *celengine.Env, resolved rule.ResolvedRule) ([]ce
 	}
 
 	for _, clause := range resolved.ExceptionClauses {
-		prog, err := env.Compile(resolved.CanonicalRuleID.String(), resolved.Rule.EventKind, clause.Source, resolved.PredefinedLists)
+		prog, err := env.Compile(resolved.CanonicalRuleID.String(), resolved.Rule.EventType, clause.Source, resolved.PredefinedLists)
 		if err != nil {
 			if clause.ModifierIdentity != "" {
 				return nil, fmt.Errorf("compile exception clause from modifier %q %q: %w", clause.ModifierIdentity, clause.Source, err)

@@ -17,7 +17,7 @@ func (jr *JobRegistry) ApplyGitHubProjectStart(
 	ctx context.Context,
 	identity jobcontext.JobIdentity,
 	metadata jobcontext.JobMetadata,
-	runnerKind string,
+	runnerType string,
 	peerPID int32,
 	projectDefaultMaxAlertsPerRule int,
 	projectRuleSources []rulesource.LoadedRules,
@@ -29,14 +29,14 @@ func (jr *JobRegistry) ApplyGitHubProjectStart(
 	// hosted project-only flows use different Job/BPF state.
 	reservation := jr.reserveJobStart(identity)
 	if reservation.existing != nil {
-		return jr.attachGitHubProjectScopeToExistingJob(ctx, reservation.existing, identity, metadata, runnerKind, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, debugEnabled)
+		return jr.attachGitHubProjectScopeToExistingJob(ctx, reservation.existing, identity, metadata, runnerType, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, debugEnabled)
 	}
 	if reservation.inFlight() {
 		return nil, ErrJobAlreadyRegistered
 	}
 	defer reservation.done()
 
-	return jr.startGitHubProjectOnlyJob(ctx, identity, metadata, runnerKind, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, debugEnabled)
+	return jr.startGitHubProjectOnlyJob(ctx, identity, metadata, runnerType, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, debugEnabled)
 }
 
 func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
@@ -44,7 +44,7 @@ func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
 	existing *job.Job,
 	identity jobcontext.JobIdentity,
 	metadata jobcontext.JobMetadata,
-	runnerKind string,
+	runnerType string,
 	peerPID int32,
 	projectDefaultMaxAlertsPerRule int,
 	projectRuleSources []rulesource.LoadedRules,
@@ -63,7 +63,7 @@ func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
 	var projectScope *jobscope.JobScopeState
 	var err error
 	if projectManagerClient != nil {
-		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, identity, metadata, runnerKind, projectManagerConnection, projectManagerClient)
+		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, identity, metadata, runnerType, projectManagerConnection, projectManagerClient)
 	} else {
 		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, identity, projectDefaultMaxAlertsPerRule, projectRuleSources)
 	}
@@ -82,7 +82,7 @@ func (jr *JobRegistry) startGitHubProjectOnlyJob(
 	ctx context.Context,
 	identity jobcontext.JobIdentity,
 	metadata jobcontext.JobMetadata,
-	runnerKind string,
+	runnerType string,
 	peerPID int32,
 	projectDefaultMaxAlertsPerRule int,
 	projectRuleSources []rulesource.LoadedRules,
@@ -93,7 +93,7 @@ func (jr *JobRegistry) startGitHubProjectOnlyJob(
 	var projectScope *jobscope.JobScopeState
 	var err error
 	if projectManagerClient != nil {
-		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, identity, metadata, runnerKind, projectManagerConnection, projectManagerClient)
+		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, identity, metadata, runnerType, projectManagerConnection, projectManagerClient)
 	} else {
 		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, identity, projectDefaultMaxAlertsPerRule, projectRuleSources)
 	}
@@ -103,7 +103,7 @@ func (jr *JobRegistry) startGitHubProjectOnlyJob(
 	jr.attachDebugOutput(ctx, projectScope, debugEnabled)
 
 	// Hosted Actions without host/start create the Job runtime here.
-	job, err := jr.registerJobRuntime(ctx, identity, metadata, runnerKind)
+	job, err := jr.registerJobRuntime(ctx, identity, metadata, runnerType)
 	if err != nil {
 		return nil, err
 	}
@@ -137,9 +137,9 @@ func (jr *JobRegistry) attachDebugOutput(ctx context.Context, scope *jobscope.Jo
 }
 
 // buildProjectScopeFromManagerConfig builds a resolved project scope from manager config.
-func (jr *JobRegistry) buildProjectScopeFromManagerConfig(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, projectManagerConnection managerclient.Connection, projectManagerClient ManagerConfigFetcher) (*jobscope.JobScopeState, error) {
+func (jr *JobRegistry) buildProjectScopeFromManagerConfig(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, projectManagerConnection managerclient.Connection, projectManagerClient ManagerConfigFetcher) (*jobscope.JobScopeState, error) {
 	projectScope := jobscope.NewProject()
-	managerConfig, err := jr.fetchManagerConfig(ctx, identity, metadata, runnerKind, projectManagerClient, "project_manager_config_fetched")
+	managerConfig, err := jr.fetchManagerConfig(ctx, identity, metadata, runnerType, projectManagerClient, "project_manager_config_fetched")
 	if err != nil {
 		return nil, err
 	}

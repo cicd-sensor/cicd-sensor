@@ -3,7 +3,7 @@
 On GitHub-hosted runners, add `cicd-sensor/cicd-sensor-action` to the workflow to start monitoring.
 
 With the default settings, the cicd-sensor action starts the agent before your workload, records job runtime activity, and uploads the HTML report and runtime-trace attestation predicate as artifacts after the job.
-Optional inputs can enable centralized configuration through cicd-sensor Manager, cloud delivery for Job Result Log / Detection Log / Runtime Telemetry Log, and debug bundle uploads that include Runtime Telemetry Log output.
+Optional inputs can enable centralized configuration through cicd-sensor Manager, cloud delivery for Summary Log / Detection Log / Runtime Event Log, and debug bundle uploads that include Runtime Event Log output.
 
 ## Usage
 
@@ -92,13 +92,13 @@ rule_sets:
     rules:
       - rule_id: curl_exec
         rule_name: "curl executed"
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/curl")
         action: detect
 ```
 
 This emits a Detection Log entry when `curl` is executed during the job.
-See [RuleSet](rule-set.md), [Event kinds](rule-event-kinds.md), [CEL conditions](rule-cel-conditions.md), [Correlation](rule-correlation.md), and [Rule modifiers](rule-modifiers.md) for the full rule syntax.
+See [RuleSet](rule-set.md), [Event types](rule-event-types.md), [CEL conditions](rule-cel-conditions.md), [Correlation](rule-correlation.md), and [Rule modifiers](rule-modifiers.md) for the full rule syntax.
 
 The action can be placed as the first step so it can monitor the whole job.
 It is fine to place it before `actions/checkout`.
@@ -111,7 +111,7 @@ cicd-sensorctl rule validate .cicd-sensor/rules
 
 ## Manager delivery
 
-Use cicd-sensor Manager when you want to send Job Result Logs, Detection Logs, and Runtime Telemetry Logs from GitHub-hosted runners to cloud-side outputs.
+Use cicd-sensor Manager when you want to send Summary Logs, Detection Logs, and Runtime Event Logs from GitHub-hosted runners to cloud-side outputs.
 In this mode, the cicd-sensor Agent can still generate the HTML report and attestation artifact as job artifacts.
 
 Important: when `manager-url` is set, repository-local `.cicd-sensor/config.yaml` and `.cicd-sensor/rules/` are not used.

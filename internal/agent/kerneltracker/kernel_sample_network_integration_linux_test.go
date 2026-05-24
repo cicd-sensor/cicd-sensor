@@ -57,7 +57,7 @@ func TestLinuxKernelSampleNetworkConnectV4EndToEnd(t *testing.T) {
 	_, _ = net.DialTimeout("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(closedPort)), 100*time.Millisecond)
 
 	waitForEventRecord(t, eventCh, 5*time.Second, "network_connect", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.NetworkConnect {
+		if record.EventType != jobevent.NetworkConnect {
 			return false
 		}
 
@@ -109,7 +109,7 @@ func TestLinuxKernelSampleNetworkConnectV4UDPEndToEnd(t *testing.T) {
 	}
 
 	waitForEventRecord(t, eventCh, 5*time.Second, "network_connect_udp4", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.NetworkConnect {
+		if record.EventType != jobevent.NetworkConnect {
 			return false
 		}
 
@@ -167,7 +167,7 @@ func TestLinuxKernelSampleNetworkConnectZeroPortIsIgnored(t *testing.T) {
 			}
 
 			assertNoEventRecord(t, eventCh, 300*time.Millisecond, func(record jobevent.EventRecord) bool {
-				if record.EventKind != jobevent.NetworkConnect {
+				if record.EventType != jobevent.NetworkConnect {
 					return false
 				}
 				remotePort, _ := record.Payload["remote_port"].(int)
@@ -221,7 +221,7 @@ func TestLinuxKernelSampleNetworkConnectV6EndToEnd(t *testing.T) {
 	_, _ = net.DialTimeout("tcp6", net.JoinHostPort("::1", strconv.Itoa(closedPort)), 100*time.Millisecond)
 
 	waitForEventRecord(t, eventCh, 5*time.Second, "network_connect_ipv6", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.NetworkConnect {
+		if record.EventType != jobevent.NetworkConnect {
 			return false
 		}
 
@@ -275,7 +275,7 @@ func TestLinuxKernelSampleNetworkConnectV6UDPEndToEnd(t *testing.T) {
 			}
 
 			waitForEventRecord(t, eventCh, 5*time.Second, "network_connect_udp6", func(record jobevent.EventRecord) bool {
-				if record.EventKind != jobevent.NetworkConnect {
+				if record.EventType != jobevent.NetworkConnect {
 					return false
 				}
 

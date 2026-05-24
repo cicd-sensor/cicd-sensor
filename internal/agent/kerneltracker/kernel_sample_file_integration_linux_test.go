@@ -53,7 +53,7 @@ func TestLinuxKernelSampleFileOpenEndToEnd(t *testing.T) {
 	}
 
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_open write", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileOpen {
+		if record.EventType != jobevent.FileOpen {
 			return false
 		}
 		gotPath, _ := record.Payload["path"].(string)
@@ -68,7 +68,7 @@ func TestLinuxKernelSampleFileOpenEndToEnd(t *testing.T) {
 	_ = file.Close()
 
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_open read", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileOpen {
+		if record.EventType != jobevent.FileOpen {
 			return false
 		}
 		gotPath, _ := record.Payload["path"].(string)
@@ -89,7 +89,7 @@ func TestLinuxKernelSampleFileOpenEndToEnd(t *testing.T) {
 	_ = appendReadFile.Close()
 
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_open append read-only", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileOpen {
+		if record.EventType != jobevent.FileOpen {
 			return false
 		}
 		gotPath, _ := record.Payload["path"].(string)
@@ -149,7 +149,7 @@ func TestLinuxKernelSampleFileOpenLongPathIsTruncated(t *testing.T) {
 	_ = file.Close()
 
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_open long path read", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileOpen {
+		if record.EventType != jobevent.FileOpen {
 			return false
 		}
 		isRead, _ := record.Payload["is_read"].(bool)
@@ -218,7 +218,7 @@ func TestLinuxKernelSampleFileRemoveEndToEnd(t *testing.T) {
 	// within this test so suffix-match still proves the hook fired for
 	// the right inode. See program.c around handle_security_inode_unlink.
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_remove unlink", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileRemove {
+		if record.EventType != jobevent.FileRemove {
 			return false
 		}
 		path, _ := record.Payload["path"].(string)
@@ -231,7 +231,7 @@ func TestLinuxKernelSampleFileRemoveEndToEnd(t *testing.T) {
 		t.Fatalf("Remove(dir): %v", err)
 	}
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_remove rmdir", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileRemove {
+		if record.EventType != jobevent.FileRemove {
 			return false
 		}
 		path, _ := record.Payload["path"].(string)
@@ -285,7 +285,7 @@ func TestLinuxKernelSampleFileMoveEndToEnd(t *testing.T) {
 
 	// See file_remove unlink comment for the suffix-match rationale.
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_move rename", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileMove {
+		if record.EventType != jobevent.FileMove {
 			return false
 		}
 		from, _ := record.Payload["from_path"].(string)
@@ -341,7 +341,7 @@ func TestLinuxKernelSampleFileLinkEndToEnd(t *testing.T) {
 		t.Fatalf("Link: %v", err)
 	}
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_link hardlink", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileLink {
+		if record.EventType != jobevent.FileLink {
 			return false
 		}
 		created, _ := record.Payload["created_path"].(string)
@@ -357,7 +357,7 @@ func TestLinuxKernelSampleFileLinkEndToEnd(t *testing.T) {
 		t.Fatalf("Symlink: %v", err)
 	}
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_link symlink absolute", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileLink {
+		if record.EventType != jobevent.FileLink {
 			return false
 		}
 		created, _ := record.Payload["created_path"].(string)
@@ -374,7 +374,7 @@ func TestLinuxKernelSampleFileLinkEndToEnd(t *testing.T) {
 		t.Fatalf("Symlink relative: %v", err)
 	}
 	waitForEventRecord(t, eventCh, 5*time.Second, "file_link symlink relative resolved", func(record jobevent.EventRecord) bool {
-		if record.EventKind != jobevent.FileLink {
+		if record.EventType != jobevent.FileLink {
 			return false
 		}
 		created, _ := record.Payload["created_path"].(string)

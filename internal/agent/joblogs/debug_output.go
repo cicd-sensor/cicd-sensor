@@ -12,11 +12,11 @@ import (
 	"sync"
 )
 
-const DebugRuntimeTelemetryLogFilename = "job_runtime_telemetry_log.json.gz"
+const DebugRuntimeEventLogFilename = "runtime_event_log.json.gz"
 const GitHubActionsDebugOutputDir = "/home/runner/work/_temp/cicd_sensor_debug"
 
 // DebugOutput writes local best-effort debug artifacts for hosted standalone
-// jobs. Runtime telemetry is written as one gzip stream and closed when the
+// jobs. Runtime event log is written as one gzip stream and closed when the
 // action requests the project result.
 type DebugOutput struct {
 	mu     sync.Mutex
@@ -51,9 +51,9 @@ func newDebugOutput(logger *slog.Logger, dir string) (*DebugOutput, error) {
 		return nil, fmt.Errorf("open debug output root %s: %w", dir, err)
 	}
 	defer root.Close()
-	file, err := root.OpenFile(DebugRuntimeTelemetryLogFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	file, err := root.OpenFile(DebugRuntimeEventLogFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", filepath.Join(dir, DebugRuntimeTelemetryLogFilename), err)
+		return nil, fmt.Errorf("open %s: %w", filepath.Join(dir, DebugRuntimeEventLogFilename), err)
 	}
 	bufw := bufio.NewWriterSize(file, 256*1024)
 	return &DebugOutput{
@@ -65,14 +65,14 @@ func newDebugOutput(logger *slog.Logger, dir string) (*DebugOutput, error) {
 	}, nil
 }
 
-func (o *DebugOutput) WriteRuntimeTelemetryPayload(ctx context.Context, payload []byte) error {
+func (o *DebugOutput) WriteRuntimeEventPayload(ctx context.Context, payload []byte) error {
 	if o == nil || len(payload) == 0 {
 		return nil
 	}
-	if err := o.writeRuntimeTelemetryPayload(payload); err != nil {
+	if err := o.writeRuntimeEventPayload(payload); err != nil {
 		if o.logger != nil {
-			o.logger.WarnContext(ctx, "debug_runtime_telemetry_write_failed",
-				"path", filepath.Join(o.dir, DebugRuntimeTelemetryLogFilename),
+			o.logger.WarnContext(ctx, "debug_runtime_event_write_failed",
+				"path", filepath.Join(o.dir, DebugRuntimeEventLogFilename),
 				"error", err,
 			)
 		}
@@ -81,7 +81,7 @@ func (o *DebugOutput) WriteRuntimeTelemetryPayload(ctx context.Context, payload 
 	return nil
 }
 
-func (o *DebugOutput) writeRuntimeTelemetryPayload(payload []byte) error {
+func (o *DebugOutput) writeRuntimeEventPayload(payload []byte) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 

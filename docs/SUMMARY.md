@@ -13,7 +13,7 @@
 - [Rules](user-guide/rules.md)
   - [Baseline Rules](user-guide/baseline-rules.md)
   - [RuleSet](user-guide/rule-set.md)
-  - [Event kinds](user-guide/rule-event-kinds.md)
+  - [Event types](user-guide/rule-event-types.md)
   - [CEL conditions](user-guide/rule-cel-conditions.md)
   - [Correlation](user-guide/rule-correlation.md)
   - [Rule modifiers](user-guide/rule-modifiers.md)

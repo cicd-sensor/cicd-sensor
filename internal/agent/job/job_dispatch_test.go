@@ -24,7 +24,7 @@ func TestJob_EventWorkerProcessesReceivedEvent(t *testing.T) {
 		ExecPath: "/usr/bin/curl",
 	}
 	connectEvent := jobevent.EventRecord{
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Timestamp: time.Date(2026, 4, 16, 1, 2, 3, 4, time.UTC),
 		Payload: map[string]any{
 			"remote_ip":   "example.com",
@@ -34,7 +34,7 @@ func TestJob_EventWorkerProcessesReceivedEvent(t *testing.T) {
 		Process: process,
 	}
 	domainEvent := jobevent.EventRecord{
-		EventKind: jobevent.Domain,
+		EventType: jobevent.Domain,
 		Timestamp: time.Date(2026, 4, 16, 1, 2, 3, 5, time.UTC),
 		Payload: map[string]any{
 			"domain": "example.com",
@@ -155,10 +155,10 @@ func TestJob_SetHostScope_RejectsProjectScope(t *testing.T) {
 		t.Fatal("expected SetHostScope to reject a project scope")
 	}
 	if job.HostScope() != nil {
-		t.Fatal("expected host scope to remain unset after kind mismatch")
+		t.Fatal("expected host scope to remain unset after type mismatch")
 	}
-	if !errors.Is(err, jobscope.ErrScopeKindMismatch) {
-		t.Fatalf("error: got %v, want %v", err, jobscope.ErrScopeKindMismatch)
+	if !errors.Is(err, jobscope.ErrScopeTypeMismatch) {
+		t.Fatalf("error: got %v, want %v", err, jobscope.ErrScopeTypeMismatch)
 	}
 }
 
@@ -186,10 +186,10 @@ func TestJob_SetProjectScope_RejectsHostScope(t *testing.T) {
 		t.Fatal("expected SetProjectScope to reject a host scope")
 	}
 	if job.ProjectScope() != nil {
-		t.Fatal("expected project scope to remain unset after kind mismatch")
+		t.Fatal("expected project scope to remain unset after type mismatch")
 	}
-	if !errors.Is(err, jobscope.ErrScopeKindMismatch) {
-		t.Fatalf("error: got %v, want %v", err, jobscope.ErrScopeKindMismatch)
+	if !errors.Is(err, jobscope.ErrScopeTypeMismatch) {
+		t.Fatalf("error: got %v, want %v", err, jobscope.ErrScopeTypeMismatch)
 	}
 }
 
@@ -277,7 +277,7 @@ func newProjectRuleScope(setIdentity, ruleID, remoteHost string) *jobscope.JobSc
 		RulesetID: setIdentity,
 		Rules: []rule.Rule{{
 			RuleID:    ruleID,
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "` + remoteHost + `"`,
 			Action:    rule.RuleActionDetect,
 		}},
@@ -375,7 +375,7 @@ func finishTestJob(job *Job, eventCh chan jobevent.EventRecord) {
 
 func testDispatchEvent(execPath, host string, port int64) jobevent.EventRecord {
 	return jobevent.EventRecord{
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Timestamp: time.Date(2026, 4, 16, 1, 2, 3, 4, time.UTC),
 		Payload: map[string]any{
 			"remote_ip":   host,

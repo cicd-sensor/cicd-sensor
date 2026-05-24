@@ -743,7 +743,7 @@ body {
 .tag.kind-network_connect { background: var(--red-fade); color: var(--red); }
 .tag.kind-unix_socket_connect { background: var(--blue-fade); color: var(--blue); }
 .tag.kind-domain { background: var(--green-fade); color: var(--green-deep); }
-.tag.kind-correlation { background: #ece1f7; color: #5a30a3; }
+.tag.type-correlation { background: #ece1f7; color: #5a30a3; }
 .tag.type { background: transparent; color: var(--ink-3); border: 1px solid var(--rule); }
 
 .cell-payload {
@@ -1116,7 +1116,7 @@ body {
     row('rule_id', codeVal(h.rule_id));
     row('rule_type', codeVal(h.rule_type));
     row('action', codeVal(h.action));
-    row('event_kind', codeVal(h.event_kind));
+    row('event_type', codeVal(h.event_type));
     if (h.rule_condition) {
       var isCorr = h.rule_type === 'correlation';
       row('rule_condition', el('div', { class: 'detail-value' }, ruleCondNode(h.rule_condition, isCorr)));
@@ -1170,7 +1170,7 @@ body {
 
   function searchableHit(h) {
     var p = h.process || {};
-    var parts = [h.rule_name, h.ruleset_id, h.rule_id, h.rule_type, h.action, h.event_kind, h.rule_condition];
+    var parts = [h.rule_name, h.ruleset_id, h.rule_id, h.rule_type, h.action, h.event_type, h.rule_condition];
     if (h.payload) {
       Object.keys(h.payload).forEach(function (k) {
         var v = h.payload[k];
@@ -1325,7 +1325,7 @@ body {
     ['file_open', 'network_connect', 'unix_socket_connect', 'domain', 'correlation'].forEach(function (k) {
       var n = k === 'correlation'
         ? hits.filter(function (h) { return h.rule_type === 'correlation'; }).length
-        : hits.filter(function (h) { return h.event_kind === k && h.rule_type !== 'correlation'; }).length;
+        : hits.filter(function (h) { return h.event_type === k && h.rule_type !== 'correlation'; }).length;
       kindFilter.append(filterRow('kind', k, k, k, n));
     });
 
@@ -1344,7 +1344,7 @@ body {
       ctxRow('workflow_sha', meta.workflow_sha),
       ctxRow('trigger', meta.trigger),
       ctxRow('actor', meta.actor),
-      ctxRow('runner', d.runner_kind),
+      ctxRow('runner', d.runner_type),
       ctxRow('job', identity.github_job),
       ctxRow('run id', identity.github_run_id ? (identity.github_run_id + ' · attempt ' + identity.github_run_attempt) : ''),
       ctxRow('runner id', identity.github_runner_tracking_id),
@@ -1432,15 +1432,15 @@ body {
       var isCorr = h.rule_type === 'correlation';
 
       // Rule cell
-      var kindLabel = isCorr ? 'correlation' : (h.event_kind || '');
-      var kindClass = isCorr ? 'kind-correlation' : ('kind-' + (h.event_kind || 'other'));
+      var typeLabel = isCorr ? 'correlation' : (h.event_type || '');
+      var typeClass = isCorr ? 'type-correlation' : ('type-' + (h.event_type || 'other'));
       var ruleCell = el('td', { class: 'cell-rule' },
         el('div', { class: 'name', text: h.rule_name || '' }),
         el('div', { class: 'id', text: (h.ruleset_id || '') + ' / ' + (h.rule_id || '') }),
         el('div', { class: 'tags' },
           el('span', { class: 'tag ' + (h.action || ''), text: h.action || '' }),
           document.createTextNode(' '),
-          el('span', { class: 'tag ' + kindClass, text: kindLabel })
+          el('span', { class: 'tag ' + typeClass, text: typeLabel })
         )
       );
 
@@ -1463,13 +1463,13 @@ body {
 
       var procCell = el('td', { class: 'cell-proc' }, procCompact(h.process || {}));
 
-      var dataKind = isCorr ? 'correlation' : (h.event_kind || '');
+      var dataType = isCorr ? 'correlation' : (h.event_type || '');
       var hitRow = el('tr', {
         class: 'hit',
         attrs: {
           'data-hit': String(idx),
           'data-action': h.action || '',
-          'data-kind': dataKind,
+          'data-kind': dataType,
           'data-ruleset': h.ruleset_id || '',
           'data-search': searchableHit(h)
         }

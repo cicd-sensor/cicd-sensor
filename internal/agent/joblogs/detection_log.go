@@ -8,7 +8,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
@@ -36,15 +36,15 @@ func MarshalDetectionLogEntry(in DetectionLogInput) ([]byte, error) {
 	if timestamp.IsZero() {
 		timestamp = time.Now()
 	}
-	message := &logv1.JobDetectionLogEntry{
+	message := &logv1.DetectionLogEntry{
 		Timestamp:           timestamppb.New(timestamp.UTC()),
-		LogType:             proto.String(string(logkind.JobDetection)),
-		SchemaVersion:       proto.String(logkind.JobDetectionSchemaVersion),
+		LogType:             proto.String(string(logtype.Detection)),
+		SchemaVersion:       proto.String(logtype.DetectionSchemaVersion),
 		AgentVersion:        proto.String(version.Current),
 		LogId:               proto.String(newLogID()),
-		Job:                 protoconv.ToJobLogContext(in.Identity, in.Metadata),
+		Job:                 protoconv.ToLogContext(in.Identity, in.Metadata),
 		Scope:               proto.String(string(in.Scope)),
-		RunnerKind:          proto.String(in.RunnerKind),
+		RunnerType:          proto.String(in.RunnerType),
 		RulesetId:           proto.String(in.Hit.Identity.RulesetID),
 		RuleId:              proto.String(in.Hit.Identity.RuleID),
 		RulesetRevision:     proto.String(rulesetRevision),

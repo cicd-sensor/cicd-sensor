@@ -16,7 +16,7 @@ import (
 type LogBatch struct {
 	Identity jobcontext.JobIdentity
 	Scope    managerv1.Scope
-	Kind     managerv1.LogKind
+	Type     managerv1.LogType
 	Records  [][]byte
 	FlushAt  time.Time
 }
@@ -54,7 +54,7 @@ func BuildCollectorIngestLogBatch(batch LogBatch) (*managerv1.IngestLogBatch, er
 	return &managerv1.IngestLogBatch{
 		JobIdentity:     protoconv.ToProtoJobIdentity(batch.Identity),
 		Scope:           batch.Scope,
-		LogKind:         batch.Kind,
+		LogType:         batch.Type,
 		CompressedJsonl: compressed.Bytes(),
 		FlushAt:         timestamppb.New(batch.FlushAt.UTC()),
 	}, nil

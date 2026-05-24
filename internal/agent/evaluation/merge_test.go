@@ -15,7 +15,7 @@ func TestNewEvaluationState_SharedRulesDedupesAndUnionsScopes(t *testing.T) {
 		ResolvedRules: resolvedRules("shared-set", rule.Rule{
 			RuleID:    "r1",
 			Condition: `process.exec_path.endsWith("/bash")`,
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 			Action:    rule.RuleActionDetect,
 		}),
 	}
@@ -23,13 +23,13 @@ func TestNewEvaluationState_SharedRulesDedupesAndUnionsScopes(t *testing.T) {
 		ResolvedRules: resolvedRules("shared-set", rule.Rule{
 			RuleID:    "r1",
 			Condition: `process.exec_path.endsWith("/bash")`,
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 			Action:    rule.RuleActionDetect,
 		}),
 	}
 
 	got := NewEvaluationState(scopeResolvedRules(host), scopeResolvedRules(project))
-	rules := got.RulesByKind[jobevent.ProcessExec]
+	rules := got.RulesByType[jobevent.ProcessExec]
 	if len(rules) != 1 {
 		t.Fatalf("rule count: got %d, want 1", len(rules))
 	}
@@ -45,7 +45,7 @@ func TestNewEvaluationState_SharedRuleDifferentContentKeepsScopeVariants(t *test
 		ResolvedRules: resolvedRules("shared-set", rule.Rule{
 			RuleID:    "r1",
 			Condition: `process.exec_path.endsWith("/bash")`,
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 			Action:    rule.RuleActionTerminate,
 		}),
 	}
@@ -53,13 +53,13 @@ func TestNewEvaluationState_SharedRuleDifferentContentKeepsScopeVariants(t *test
 		ResolvedRules: resolvedRules("shared-set", rule.Rule{
 			RuleID:    "r1",
 			Condition: `process.exec_path.endsWith("/bash")`,
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 			Action:    rule.RuleActionDetect,
 		}),
 	}
 
 	got := NewEvaluationState(scopeResolvedRules(host), scopeResolvedRules(project))
-	rules := got.RulesByKind[jobevent.ProcessExec]
+	rules := got.RulesByType[jobevent.ProcessExec]
 	if len(rules) != 2 {
 		t.Fatalf("rule count: got %d, want 2", len(rules))
 	}
@@ -83,7 +83,7 @@ func TestNewEvaluationState_PredefinedListsParticipateInContentEquality(t *testi
 	ruleWithList := rule.Rule{
 		RuleID:    "r1",
 		Condition: `list.shells.exists(b, process.exec_path.endsWith(b))`,
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Action:    rule.RuleActionDetect,
 	}
 	host := &jobscope.JobScopeState{
@@ -110,7 +110,7 @@ func TestNewEvaluationState_PredefinedListsParticipateInContentEquality(t *testi
 	}
 
 	got := NewEvaluationState(scopeResolvedRules(host), scopeResolvedRules(project))
-	if gotRules := len(got.RulesByKind[jobevent.ProcessExec]); gotRules != 2 {
+	if gotRules := len(got.RulesByType[jobevent.ProcessExec]); gotRules != 2 {
 		t.Fatalf("rule count: got %d, want 2", gotRules)
 	}
 }
@@ -124,7 +124,7 @@ func TestNewEvaluationState_DifferentResolvedMaxAlertsKeepSeparateEntries(t *tes
 				CanonicalRuleID: "shared-set/r1",
 				Rule: rule.Rule{
 					RuleID:    "r1",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process.exec_path.endsWith("/bash")`,
 					Action:    rule.RuleActionDetect,
 					MaxAlerts: 2,
@@ -139,7 +139,7 @@ func TestNewEvaluationState_DifferentResolvedMaxAlertsKeepSeparateEntries(t *tes
 				CanonicalRuleID: "shared-set/r1",
 				Rule: rule.Rule{
 					RuleID:    "r1",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process.exec_path.endsWith("/bash")`,
 					Action:    rule.RuleActionDetect,
 					MaxAlerts: 5,
@@ -150,7 +150,7 @@ func TestNewEvaluationState_DifferentResolvedMaxAlertsKeepSeparateEntries(t *tes
 	}
 
 	got := NewEvaluationState(scopeResolvedRules(host), scopeResolvedRules(project))
-	rules := got.RulesByKind[jobevent.ProcessExec]
+	rules := got.RulesByType[jobevent.ProcessExec]
 	if len(rules) != 2 {
 		t.Fatalf("rule count: got %d, want 2", len(rules))
 	}
@@ -174,7 +174,7 @@ func TestNewEvaluationState_DifferentExceptionClausesKeepSeparateEntries(t *test
 	baseRule := rule.Rule{
 		RuleID:    "r1",
 		Condition: `process.exec_path.endsWith("/bash")`,
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Action:    rule.RuleActionDetect,
 	}
 	hostRule := baseRule
@@ -190,7 +190,7 @@ func TestNewEvaluationState_DifferentExceptionClausesKeepSeparateEntries(t *test
 	}
 
 	got := NewEvaluationState(scopeResolvedRules(host), scopeResolvedRules(project))
-	rules := got.RulesByKind[jobevent.ProcessExec]
+	rules := got.RulesByType[jobevent.ProcessExec]
 	if len(rules) != 2 {
 		t.Fatalf("rule count: got %d, want 2", len(rules))
 	}
@@ -214,7 +214,7 @@ func TestNewEvaluationState_CorrelationSameContentDedupesAndUnionsScopes(t *test
 	rules := []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},
@@ -250,7 +250,7 @@ func TestNewEvaluationState_CorrelationDifferentContentKeepsScopeVariants(t *tes
 
 	baseRule := rule.Rule{
 		RuleID:    "single",
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Condition: `remote_ip == "example.com"`,
 		Action:    rule.RuleActionDetect,
 	}

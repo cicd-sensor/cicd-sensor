@@ -16,7 +16,7 @@ func TestLogEventRecord_PayloadsAndTags(t *testing.T) {
 			name: "network connect",
 			event: jobevent.EventRecord{
 				ID:        "event-1",
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Tags:      map[string]string{"a": "1", "b": "2"},
 				Payload: map[string]any{
 					"remote_ip":   "1.2.3.4",
@@ -30,7 +30,7 @@ func TestLogEventRecord_PayloadsAndTags(t *testing.T) {
 			name: "domain",
 			event: jobevent.EventRecord{
 				ID:        "event-2",
-				EventKind: jobevent.Domain,
+				EventType: jobevent.Domain,
 				Payload: map[string]any{
 					"domain": "example.com",
 					"source": "dns",
@@ -42,10 +42,10 @@ func TestLogEventRecord_PayloadsAndTags(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := logEventRecord(tt.event)
-			if got.Id != tt.event.ID || got.Kind != string(tt.event.EventKind) {
+			if got.Id != tt.event.ID || got.Type != string(tt.event.EventType) {
 				t.Fatalf("event identity mismatch: %+v", got)
 			}
-			switch tt.event.EventKind {
+			switch tt.event.EventType {
 			case jobevent.NetworkConnect:
 				if got.NetworkConnect == nil ||
 					got.NetworkConnect.RemoteIp != "1.2.3.4" ||

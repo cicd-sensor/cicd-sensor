@@ -9,7 +9,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
-func TestToJobLogContext_GitHub(t *testing.T) {
+func TestToLogContext_GitHub(t *testing.T) {
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "25624771295", "build", "2", "runner-1")
 	metadata := jobcontext.JobMetadata{
 		CommitSHA:         "abc123",
@@ -22,7 +22,7 @@ func TestToJobLogContext_GitHub(t *testing.T) {
 		GitHubWorkflow:    "CI",
 	}
 
-	got := ToJobLogContext(identity, metadata)
+	got := ToLogContext(identity, metadata)
 	if got.Provider != "github" ||
 		got.ProviderHost != "github.com" ||
 		got.ProjectPath != "acme/example" ||
@@ -44,9 +44,9 @@ func TestToJobLogContext_GitHub(t *testing.T) {
 }
 
 // JSON marshal output must not leak gitlab_* keys into a GitHub job log.
-func TestToJobLogContext_GitHubJSONOmitsGitLabFields(t *testing.T) {
+func TestToLogContext_GitHubJSONOmitsGitLabFields(t *testing.T) {
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "25624771295", "build", "2", "runner-1")
-	ctx := ToJobLogContext(identity, jobcontext.JobMetadata{CommitSHA: "abc"})
+	ctx := ToLogContext(identity, jobcontext.JobMetadata{CommitSHA: "abc"})
 	data, err := (protojson.MarshalOptions{EmitDefaultValues: false}).Marshal(ctx)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -62,7 +62,7 @@ func TestToJobLogContext_GitHubJSONOmitsGitLabFields(t *testing.T) {
 	}
 }
 
-func TestToJobLogContext_GitLab(t *testing.T) {
+func TestToLogContext_GitLab(t *testing.T) {
 	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "14274377073")
 	metadata := jobcontext.JobMetadata{
 		CommitSHA:          "abc",
@@ -73,7 +73,7 @@ func TestToJobLogContext_GitLab(t *testing.T) {
 		GitLabJobName:      "jirojiro-smoke",
 		GitLabConfigRefURI: "gitlab.com/group/project//.gitlab-ci.yml@refs/heads/main",
 	}
-	got := ToJobLogContext(identity, metadata)
+	got := ToLogContext(identity, metadata)
 	if got.Provider != "gitlab" ||
 		got.GitlabJobId != "14274377073" ||
 		got.GitlabJobName != "jirojiro-smoke" ||
@@ -85,9 +85,9 @@ func TestToJobLogContext_GitLab(t *testing.T) {
 }
 
 // JSON marshal output must not leak github_* keys into a GitLab job log.
-func TestToJobLogContext_GitLabJSONOmitsGitHubFields(t *testing.T) {
+func TestToLogContext_GitLabJSONOmitsGitHubFields(t *testing.T) {
 	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "14274377073")
-	ctx := ToJobLogContext(identity, jobcontext.JobMetadata{CommitSHA: "abc"})
+	ctx := ToLogContext(identity, jobcontext.JobMetadata{CommitSHA: "abc"})
 	data, err := (protojson.MarshalOptions{EmitDefaultValues: false}).Marshal(ctx)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -103,7 +103,7 @@ func TestToJobLogContext_GitLabJSONOmitsGitHubFields(t *testing.T) {
 	}
 }
 
-func TestToJobLogContext_EmptyJobLink(t *testing.T) {
+func TestToLogContext_EmptyJobLink(t *testing.T) {
 	tests := []struct {
 		name     string
 		identity jobcontext.JobIdentity
@@ -151,7 +151,7 @@ func TestToJobLogContext_EmptyJobLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ToJobLogContext(tt.identity, jobcontext.JobMetadata{}).JobLink; got != "" {
+			if got := ToLogContext(tt.identity, jobcontext.JobMetadata{}).JobLink; got != "" {
 				t.Fatalf("job link: got %q, want empty", got)
 			}
 		})

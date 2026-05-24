@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink"
 	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
 	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
@@ -40,7 +40,7 @@ func (h *collectorServiceHandler) IngestLog(ctx context.Context, req *connect.Re
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	// Identity, scope, log kind, and flush time become sink routing data.
+	// Identity, scope, log type, and flush time become sink routing data.
 	// Reject unstable values before any sink observes the batch.
 	identity := protoconv.FromProtoJobIdentity(msg.JobIdentity)
 	if err := identity.Validate(); err != nil {
@@ -49,7 +49,7 @@ func (h *collectorServiceHandler) IngestLog(ctx context.Context, req *connect.Re
 	if err := validateFlushAt(msg.FlushAt); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	logKind, err := outputLogKind(msg.LogKind)
+	logType, err := outputLogType(msg.LogType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -59,7 +59,7 @@ func (h *collectorServiceHandler) IngestLog(ctx context.Context, req *connect.Re
 	}
 
 	batch := sink.IngestLogBatch{
-		LogKind:    logKind,
+		LogType:    logType,
 		Identity:   identity,
 		Scope:      scope,
 		FlushAt:    msg.FlushAt.AsTime().UTC(),
@@ -69,7 +69,7 @@ func (h *collectorServiceHandler) IngestLog(ctx context.Context, req *connect.Re
 
 	if h.server.logger != nil {
 		h.server.logger.InfoContext(ctx, "manager_ingest_received_batch",
-			"log_kind", batch.LogKind,
+			"log_type", batch.LogType,
 			"scope", scope,
 			"flush_at", batch.FlushAt,
 			"bytes", len(batch.Body),
@@ -122,17 +122,17 @@ func validateFlushAt(ts *timestamppb.Timestamp) error {
 	return nil
 }
 
-// outputLogKind maps the wire enum to the stable log kind used by sinks.
-func outputLogKind(kind managerv1.LogKind) (logkind.LogKind, error) {
-	switch kind {
-	case managerv1.LogKind_LOG_KIND_JOB_DETECTION:
-		return logkind.JobDetection, nil
-	case managerv1.LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY:
-		return logkind.JobRuntimeTelemetry, nil
-	case managerv1.LogKind_LOG_KIND_JOB_RESULT:
-		return logkind.JobResult, nil
+// outputLogType maps the wire enum to the stable log type used by sinks.
+func outputLogType(logType managerv1.LogType) (logtype.LogType, error) {
+	switch logType {
+	case managerv1.LogType_LOG_TYPE_DETECTION:
+		return logtype.Detection, nil
+	case managerv1.LogType_LOG_TYPE_RUNTIME_EVENT:
+		return logtype.RuntimeEvent, nil
+	case managerv1.LogType_LOG_TYPE_SUMMARY:
+		return logtype.Summary, nil
 	default:
-		return "", fmt.Errorf("unsupported log_kind: %s", kind.String())
+		return "", fmt.Errorf("unsupported log_type: %s", logType.String())
 	}
 }
 

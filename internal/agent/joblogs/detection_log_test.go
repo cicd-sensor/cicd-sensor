@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
@@ -22,7 +22,7 @@ func TestMarshalDetectionLogEntrySanitizesEventProcess(t *testing.T) {
 		t.Fatalf("marshal detection log: %v", err)
 	}
 
-	var got logv1.JobDetectionLogEntry
+	var got logv1.DetectionLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal detection log: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestMarshalDetectionLogEntryPopulatesRuleFields(t *testing.T) {
 		t.Fatalf("marshal detection log: %v", err)
 	}
 
-	var got logv1.JobDetectionLogEntry
+	var got logv1.DetectionLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal detection log: %v", err)
 	}
@@ -90,12 +90,12 @@ func TestMarshalDetectionLogEntryStampsLogTypeAndVersions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var got logv1.JobDetectionLogEntry
+	var got logv1.DetectionLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.GetLogType() != string(logkind.JobDetection) {
-		t.Errorf("log_type: got %q, want %q", got.GetLogType(), string(logkind.JobDetection))
+	if got.GetLogType() != string(logtype.Detection) {
+		t.Errorf("log_type: got %q, want %q", got.GetLogType(), string(logtype.Detection))
 	}
 	if got.GetSchemaVersion() != "v1" {
 		t.Errorf("schema_version: got %q, want %q", got.GetSchemaVersion(), "v1")

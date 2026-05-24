@@ -14,10 +14,10 @@ func testSet(id string, rules ...rule.Rule) rule.RuleSet {
 	}
 }
 
-func testRule(id string, kind jobevent.Kind, action rule.RuleAction) rule.Rule {
+func testRule(id string, eventType jobevent.Type, action rule.RuleAction) rule.Rule {
 	return rule.Rule{
 		RuleID:    id,
-		EventKind: kind,
+		EventType: eventType,
 		Condition: `process_name == "bash"`,
 		Action:    action,
 	}
@@ -86,7 +86,7 @@ func TestMerge_CanonicalRuleIDCollision_DifferentContent_WarnsAndKeepsFirst(t *t
 		t.Fatalf("warnings: got %d, want 1", len(got.Warnings))
 	}
 	if got.Warnings[0].Kind != "duplicate_identity_diff_content" {
-		t.Fatalf("warning kind: got %q", got.Warnings[0].Kind)
+		t.Fatalf("warning type: got %q", got.Warnings[0].Kind)
 	}
 	if got.Warnings[0].Identity != (rule.RuleIdentity{RulesetID: "s1", RuleID: "r1"}) {
 		t.Fatalf("warning identity: got %#v", got.Warnings[0].Identity)
@@ -189,7 +189,7 @@ func TestMerge_InvalidEmptyOverrideActionIsSkippedWithWarning(t *testing.T) {
 		t.Fatalf("warnings: got %d, want 1", len(got.Warnings))
 	}
 	if got.Warnings[0].Kind != "invalid_modifier_skipped" {
-		t.Fatalf("warning kind: got %q, want %q", got.Warnings[0].Kind, "invalid_modifier_skipped")
+		t.Fatalf("warning type: got %q, want %q", got.Warnings[0].Kind, "invalid_modifier_skipped")
 	}
 }
 
@@ -224,7 +224,7 @@ func TestMerge_InvalidModifierIsSkippedWithWarning(t *testing.T) {
 		t.Fatalf("warnings: got %d, want 1", len(got.Warnings))
 	}
 	if got.Warnings[0].Kind != "invalid_modifier_skipped" {
-		t.Fatalf("warning kind: got %q, want %q", got.Warnings[0].Kind, "invalid_modifier_skipped")
+		t.Fatalf("warning type: got %q, want %q", got.Warnings[0].Kind, "invalid_modifier_skipped")
 	}
 	if got.Warnings[0].EntryLabel != "local/bad-max-alerts" {
 		t.Fatalf("entry_label: got %q", got.Warnings[0].EntryLabel)
@@ -240,7 +240,7 @@ func TestMerge_ModifierMaxAlertsAndExceptions(t *testing.T) {
 			testSet("s1",
 				rule.Rule{
 					RuleID:     "r1",
-					EventKind:  jobevent.NetworkConnect,
+					EventType:  jobevent.NetworkConnect,
 					Condition:  `remote_ip == "evil.com"`,
 					Exceptions: `remote_ip == "allow.example.com"`,
 					Action:     rule.RuleActionDetect,
@@ -279,7 +279,7 @@ func TestMerge_ModifierAddsTargetExclude(t *testing.T) {
 		RuleSets: []rule.RuleSet{
 			testSet("s1", rule.Rule{
 				RuleID:    "r1",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process_name == "bash"`,
 				Action:    rule.RuleActionDetect,
 				Target: rule.RuleTarget{
@@ -546,7 +546,7 @@ func TestMerge_TargetFilter(t *testing.T) {
 				RuleSets: []rule.RuleSet{
 					testSet("s1", rule.Rule{
 						RuleID:    "r1",
-						EventKind: jobevent.ProcessExec,
+						EventType: jobevent.ProcessExec,
 						Condition: `process_name == "bash"`,
 						Action:    rule.RuleActionDetect,
 						Target:    tt.target,
@@ -597,7 +597,7 @@ func TestMerge_FallsBackToDefaultWhenResolvedMaxAlertsOutOfRange(t *testing.T) {
 		t.Fatalf("warnings: got %d, want 1", len(got.Warnings))
 	}
 	if got.Warnings[0].Kind != "max_alerts_out_of_range" {
-		t.Fatalf("warning kind: got %q, want %q", got.Warnings[0].Kind, "max_alerts_out_of_range")
+		t.Fatalf("warning type: got %q, want %q", got.Warnings[0].Kind, "max_alerts_out_of_range")
 	}
 	if got.Warnings[0].Identity != (rule.RuleIdentity{RulesetID: "s1", RuleID: "r1"}) {
 		t.Fatalf("warning identity: got %#v", got.Warnings[0].Identity)
@@ -610,7 +610,7 @@ func TestMerge_ModifierExceptionClausesPreserveOrder(t *testing.T) {
 			testSet("s1",
 				rule.Rule{
 					RuleID:     "r1",
-					EventKind:  jobevent.NetworkConnect,
+					EventType:  jobevent.NetworkConnect,
 					Condition:  `remote_ip == "evil.com"`,
 					Exceptions: `remote_ip == "allow.example.com"`,
 					Action:     rule.RuleActionDetect,
@@ -649,14 +649,14 @@ func TestMerge_PredefinedListsParticipateInContentEquality(t *testing.T) {
 				RulesetID: "s1",
 				Lists:     map[string][]string{"domains": {"evil.com"}},
 				Rules: []rule.Rule{
-					{RuleID: "r1", EventKind: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
+					{RuleID: "r1", EventType: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
 				},
 			},
 			{
 				RulesetID: "s1",
 				Lists:     map[string][]string{"domains": {"safe.com"}},
 				Rules: []rule.Rule{
-					{RuleID: "r1", EventKind: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
+					{RuleID: "r1", EventType: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
 				},
 			},
 		},
@@ -675,7 +675,7 @@ func TestMerge_PredefinedListsParticipateInContentEquality(t *testing.T) {
 func TestMerge_RuleTargetParticipatesInContentEquality(t *testing.T) {
 	left := rule.Rule{
 		RuleID:    "r1",
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Condition: `remote_ip in list.domains`,
 		Action:    rule.RuleActionDetect,
 		Target: rule.RuleTarget{
@@ -705,14 +705,14 @@ func TestMerge_RuleTargetParticipatesInContentEquality(t *testing.T) {
 		t.Fatalf("warnings: got %d, want 1", len(got.Warnings))
 	}
 	if got.Warnings[0].Kind != "duplicate_identity_diff_content" {
-		t.Fatalf("warning kind: got %q, want duplicate_identity_diff_content", got.Warnings[0].Kind)
+		t.Fatalf("warning type: got %q, want duplicate_identity_diff_content", got.Warnings[0].Kind)
 	}
 }
 
 func TestMerge_RuleTagsParticipateInContentEquality(t *testing.T) {
 	left := rule.Rule{
 		RuleID:    "r1",
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Condition: `remote_ip in list.domains`,
 		Action:    rule.RuleActionDetect,
 		Tags:      map[string]string{"severity": "low"},
@@ -736,7 +736,7 @@ func TestMerge_RuleTagsParticipateInContentEquality(t *testing.T) {
 		t.Fatalf("warnings: got %d, want 1", len(got.Warnings))
 	}
 	if got.Warnings[0].Kind != "duplicate_identity_diff_content" {
-		t.Fatalf("warning kind: got %q, want duplicate_identity_diff_content", got.Warnings[0].Kind)
+		t.Fatalf("warning type: got %q, want duplicate_identity_diff_content", got.Warnings[0].Kind)
 	}
 }
 
@@ -749,7 +749,7 @@ func TestMerge_PredefinedListsDifferentKeyCountWarns(t *testing.T) {
 					"domains": {"evil.com"},
 				},
 				Rules: []rule.Rule{
-					{RuleID: "r1", EventKind: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
+					{RuleID: "r1", EventType: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
 				},
 			},
 			{
@@ -759,7 +759,7 @@ func TestMerge_PredefinedListsDifferentKeyCountWarns(t *testing.T) {
 					"paths":   {"/etc/passwd"},
 				},
 				Rules: []rule.Rule{
-					{RuleID: "r1", EventKind: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
+					{RuleID: "r1", EventType: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
 				},
 			},
 		},
@@ -784,7 +784,7 @@ func TestMerge_PredefinedListsSliceOrderParticipatesInContentEquality(t *testing
 					"domains": {"evil.com", "safe.com"},
 				},
 				Rules: []rule.Rule{
-					{RuleID: "r1", EventKind: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
+					{RuleID: "r1", EventType: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
 				},
 			},
 			{
@@ -793,7 +793,7 @@ func TestMerge_PredefinedListsSliceOrderParticipatesInContentEquality(t *testing
 					"domains": {"safe.com", "evil.com"},
 				},
 				Rules: []rule.Rule{
-					{RuleID: "r1", EventKind: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
+					{RuleID: "r1", EventType: jobevent.NetworkConnect, Condition: `remote_ip in list.domains`, Action: rule.RuleActionDetect},
 				},
 			},
 		},

@@ -1,6 +1,6 @@
 // Package celengine wires cel-go into cicd-sensor's rule evaluator.
 //
-// Architecture (one cel.Env per rule kind, shared TypeProvider):
+// Architecture (one cel.Env per event type, shared TypeProvider):
 //
 //	NewEnv  ── builds two cel.Env values, sharing one *provider:
 //	  • base         single-event rules (process_exec, file_open, ...);
@@ -63,7 +63,7 @@ import (
 // not perform comprehension/macro expansion so AST rewrites in
 // correlation_compile.go can replace `rule.X` refs with canonical IDs.
 //
-// Env is safe for concurrent Compile / EnvForKind use. Per-rule evaluation
+// Env is safe for concurrent Compile / EnvForType use. Per-rule evaluation
 // state lives in *EventActivation and is goroutine-local; see input.go.
 type Env struct {
 	base        *cel.Env
@@ -173,8 +173,8 @@ func NewEnv() (*Env, error) {
 
 // Compile runs the single-event compilation pipeline. The phases are:
 //
-//  1. EnvForKind: extend the base env with the variables available for
-//     the requested event kind (e.g. is_memfd for ProcessExec, remote_ip
+//  1. EnvForType: extend the base env with the variables available for
+//     the requested event type (e.g. is_memfd for ProcessExec, remote_ip
 //     for NetworkConnect).
 //  2. env.Compile: parse + type-check. Macros (only specializedExistsMacro)
 //     run during parse, so the resulting AST may already contain
@@ -194,8 +194,8 @@ func NewEnv() (*Env, error) {
 // Returning *CompiledProgram instead of cel.Program lets callers carry the
 // rule id and source string for diagnostics without re-wrapping at every
 // callsite.
-func (e *Env) Compile(ruleID string, kind jobevent.Kind, source string, lists rule.PredefinedLists) (*CompiledProgram, error) {
-	env, err := e.EnvForKind(kind)
+func (e *Env) Compile(ruleID string, eventType jobevent.Type, source string, lists rule.PredefinedLists) (*CompiledProgram, error) {
+	env, err := e.EnvForType(eventType)
 	if err != nil {
 		return nil, err
 	}
@@ -232,20 +232,20 @@ func (e *Env) finalizeProgram(env *cel.Env, ast *cel.Ast, ruleID, source string)
 	}, nil
 }
 
-// EnvForKind returns a kind-specific cel.Env extended with the variables
-// available for the given event kind. Exposed so sibling packages
+// EnvForType returns a type-specific cel.Env extended with the variables
+// available for the given event type. Exposed so sibling packages
 // can compile expressions against the same variable schema
 // without rebuilding the base env.
-func (e *Env) EnvForKind(kind jobevent.Kind) (*cel.Env, error) {
+func (e *Env) EnvForType(eventType jobevent.Type) (*cel.Env, error) {
 	var opts []cel.EnvOption
 
-	// `process` is exposed across all event kinds: file_open and network
+	// `process` is exposed across all event types: file_open and network
 	// events also carry the originating process snapshot for lineage rules.
 	opts = append(opts,
 		cel.Variable("process", cel.ObjectType(celProcessTypeName)),
 	)
 
-	switch kind {
+	switch eventType {
 	case jobevent.ProcessExec:
 		// is_memfd flags strict memfd-backed exec. Ordinary tmpfs binaries
 		// stay false; lineage and binary path use the common `process` value.
@@ -258,7 +258,7 @@ func (e *Env) EnvForKind(kind jobevent.Kind) (*cel.Env, error) {
 		// an IPv4 destination via IPv4-mapped IPv6 surface as
 		// family == "ipv4" + remote_ip in dotted-quad form, so dual-stack
 		// happy-eyeballs is hidden from rule writers. AF_UNIX connects
-		// surface through a separate event_kind (unix_socket_connect),
+		// surface through a separate event_type (unix_socket_connect),
 		// not here.
 		opts = append(opts,
 			cel.Variable("remote_ip", cel.StringType),
@@ -321,7 +321,7 @@ func (e *Env) EnvForKind(kind jobevent.Kind) (*cel.Env, error) {
 			cel.Variable("source", cel.StringType),
 		)
 	default:
-		return nil, fmt.Errorf("unsupported event kind %q", kind)
+		return nil, fmt.Errorf("unsupported event type %q", eventType)
 	}
 
 	env, err := e.base.Extend(opts...)

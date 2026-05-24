@@ -32,7 +32,7 @@ Sigstore brought us cryptographic proof of *where* and *how* an artifact was bui
 **That is the gap. [cicd-sensor](https://github.com/cicd-sensor/cicd-sensor) is built to close it** — using eBPF inside the CI/CD Pipeline to make runtime visible, detect attacks while they happen, and preserve the evidence teams need to respond.
 
 - **Developers — OSS or commercial — should be able to see what their own pipelines actually do, and prove it later** — observing process, network, and file activity across build, release, deploy, and cloud infrastructure management, and proving it with a verifiable attestation predicate.
-- **Security teams — defending against supply chain attacks — need tools built for the runtime** — real-time detection plus the runtime logs they actually need, like Job Result, Detection, and Runtime Telemetry, giving CI/CD the detection, incident response, and forensics environment it has been missing.
+- **Security teams — defending against supply chain attacks — need tools built for the runtime** — real-time detection plus the runtime logs they actually need, like Summary, Detection, and Runtime Event Logs, giving CI/CD the detection, incident response, and forensics environment it has been missing.
 
 <style>
   .coal .creator-callout,
@@ -73,7 +73,7 @@ For self-hosted runner fleets or GitLab CI/CD, choose a deployment path from the
 - **eBPF-powered observability**: observes process execution, network connections, and file access at the kernel level.
 - **Continuously updated detection baseline**: fetches baseline rules for CI/CD runtime detection, with local and managed rule layers for organization-specific needs.
 - **Correlation detection**: lets baseline and custom rules combine signals, such as credential access plus suspicious execution, instead of relying only on single events.
-- **Runtime security logs**: provides Job Result Logs, Detection Logs, and Runtime Telemetry Logs for real-time detection, triage, incident response, and forensics.
+- **Runtime security logs**: provides Summary Logs, Detection Logs, and Runtime Event Logs for real-time detection, triage, incident response, and forensics.
 - **Runtime report and attestation**: generates a graphical report and an in-toto compatible runtime-trace attestation predicate so teams can review and verify CI/CD runtime activity.
 - **Centralized management**: cicd-sensor Manager distributes policy, config, and output routing across runner fleets.
 

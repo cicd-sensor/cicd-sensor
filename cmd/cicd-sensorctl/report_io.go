@@ -21,7 +21,7 @@ func parseReportIOArgs(command string, args []string, stderr io.Writer, outputLa
 		fmt.Fprintf(fs.Output(), "usage: cicd-sensorctl %s [flags]\n", command)
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Input:")
-		fmt.Fprintln(fs.Output(), "  Reads job_result_log JSON from stdin.")
+		fmt.Fprintln(fs.Output(), "  Reads summary_log JSON from stdin.")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintln(fs.Output(), "  --output-file FILE")

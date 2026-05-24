@@ -88,7 +88,7 @@ var benchEventTime = time.Date(2026, 5, 18, 0, 0, 0, 0, time.UTC)
 
 func fileOpenBenchEvent() jobevent.EventRecord {
 	return jobevent.EventRecord{
-		EventKind: jobevent.FileOpen,
+		EventType: jobevent.FileOpen,
 		Timestamp: benchEventTime,
 		Process: jobevent.ProcessSummary{
 			PID:      4242,
@@ -107,7 +107,7 @@ func fileOpenBenchEvent() jobevent.EventRecord {
 
 func processExecBenchEvent() jobevent.EventRecord {
 	return jobevent.EventRecord{
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Timestamp: benchEventTime,
 		Process: jobevent.ProcessSummary{
 			PID:      4242,
@@ -123,7 +123,7 @@ func processExecBenchEvent() jobevent.EventRecord {
 
 func domainBenchEvent() jobevent.EventRecord {
 	return jobevent.EventRecord{
-		EventKind: jobevent.Domain,
+		EventType: jobevent.Domain,
 		Timestamp: benchEventTime,
 		Process: jobevent.ProcessSummary{
 			PID:      4242,
@@ -139,7 +139,7 @@ func domainBenchEvent() jobevent.EventRecord {
 
 func unixSocketConnectBenchEvent() jobevent.EventRecord {
 	return jobevent.EventRecord{
-		EventKind: jobevent.UnixSocketConnect,
+		EventType: jobevent.UnixSocketConnect,
 		Timestamp: benchEventTime,
 		Process: jobevent.ProcessSummary{
 			PID:      4242,

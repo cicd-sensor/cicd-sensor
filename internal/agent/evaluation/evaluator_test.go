@@ -26,7 +26,7 @@ var testEvalIdentity = jobcontext.GitHubJobIdentity("github.com", "acme/example"
 
 type recordingEvaluationBatches struct {
 	mu      sync.Mutex
-	records map[managerv1.LogKind][][]byte
+	records map[managerv1.LogType][][]byte
 }
 
 func (r *recordingEvaluationBatches) sendBatch(_ context.Context, batch managerclient.LogBatch) error {
@@ -34,27 +34,27 @@ func (r *recordingEvaluationBatches) sendBatch(_ context.Context, batch managerc
 	defer r.mu.Unlock()
 
 	if r.records == nil {
-		r.records = make(map[managerv1.LogKind][][]byte)
+		r.records = make(map[managerv1.LogType][][]byte)
 	}
 	for _, record := range batch.Records {
 		if len(record) == 0 {
 			continue
 		}
-		r.records[batch.Kind] = append(r.records[batch.Kind], append([]byte(nil), record...))
+		r.records[batch.Type] = append(r.records[batch.Type], append([]byte(nil), record...))
 	}
 	return nil
 }
 
-func (r *recordingEvaluationBatches) detectionEntries(t *testing.T) []*logv1.JobDetectionLogEntry {
+func (r *recordingEvaluationBatches) detectionEntries(t *testing.T) []*logv1.DetectionLogEntry {
 	t.Helper()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	records := r.records[managerv1.LogKind_LOG_KIND_JOB_DETECTION]
-	out := make([]*logv1.JobDetectionLogEntry, 0, len(records))
+	records := r.records[managerv1.LogType_LOG_TYPE_DETECTION]
+	out := make([]*logv1.DetectionLogEntry, 0, len(records))
 	for _, record := range records {
-		entry := &logv1.JobDetectionLogEntry{}
+		entry := &logv1.DetectionLogEntry{}
 		if err := protojson.Unmarshal(record, entry); err != nil {
 			t.Fatalf("unmarshal detection log record: %v", err)
 		}
@@ -63,18 +63,18 @@ func (r *recordingEvaluationBatches) detectionEntries(t *testing.T) []*logv1.Job
 	return out
 }
 
-func (r *recordingEvaluationBatches) runtimeTelemetryEntries(t *testing.T) []*logv1.JobRuntimeTelemetryLogEntry {
+func (r *recordingEvaluationBatches) runtimeEventEntries(t *testing.T) []*logv1.RuntimeEventLogEntry {
 	t.Helper()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	records := r.records[managerv1.LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY]
-	out := make([]*logv1.JobRuntimeTelemetryLogEntry, 0, len(records))
+	records := r.records[managerv1.LogType_LOG_TYPE_RUNTIME_EVENT]
+	out := make([]*logv1.RuntimeEventLogEntry, 0, len(records))
 	for _, record := range records {
-		entry := &logv1.JobRuntimeTelemetryLogEntry{}
+		entry := &logv1.RuntimeEventLogEntry{}
 		if err := protojson.Unmarshal(record, entry); err != nil {
-			t.Fatalf("unmarshal runtime telemetry log record: %v", err)
+			t.Fatalf("unmarshal runtime event log record: %v", err)
 		}
 		out = append(out, entry)
 	}
@@ -86,7 +86,7 @@ func TestEvaluateEvent_RecordRegularRuleHitForFedScopes(t *testing.T) {
 
 	rules := []rule.Rule{{
 		RuleID:    "detect_curl",
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Condition: `remote_ip == "example.com"`,
 		Action:    rule.RuleActionDetect,
 	}}
@@ -105,18 +105,18 @@ func TestEvaluateEvent_RecordRegularRuleHitForFedScopes(t *testing.T) {
 	}
 }
 
-func TestEvaluateEvent_GeneratedEventIDIsSharedByDetectionAndTelemetryLogs(t *testing.T) {
+func TestEvaluateEvent_GeneratedEventIDIsSharedByDetectionAndRuntimeEventLogs(t *testing.T) {
 	t.Parallel()
 
 	recorder := &recordingEvaluationBatches{}
 	host := newCorrelationScope("host-set", []rule.Rule{{
 		RuleID:    "detect_curl",
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Condition: `remote_ip == "example.com"`,
 		Action:    rule.RuleActionDetect,
 	}})
-	host.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testEvalIdentity, host.Kind, recorder.sendBatch)
-	host.ManagerJobLogsForTesting().AttachRuntimeTelemetryRecorderForTesting(testEvalIdentity, host.Kind, recorder.sendBatch)
+	host.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testEvalIdentity, host.Type, recorder.sendBatch)
+	host.ManagerJobLogsForTesting().AttachRuntimeEventRecorderForTesting(testEvalIdentity, host.Type, recorder.sendBatch)
 	eval := NewEvaluationState(scopeResolvedRules(host), scopeResolvedRules(nil))
 
 	EvaluateEvent(testCtx, eval, testDispatchEvent("/usr/bin/curl", "example.com", 443), testEvalIdentity, jobcontext.JobMetadata{}, "machine", host, nil, testLogger, testActivation())
@@ -128,16 +128,16 @@ func TestEvaluateEvent_GeneratedEventIDIsSharedByDetectionAndTelemetryLogs(t *te
 	if len(detections) != 1 {
 		t.Fatalf("detection entries: got %d, want 1", len(detections))
 	}
-	telemetry := recorder.runtimeTelemetryEntries(t)
-	if len(telemetry) != 1 {
-		t.Fatalf("runtime telemetry entries: got %d, want 1", len(telemetry))
+	events := recorder.runtimeEventEntries(t)
+	if len(events) != 1 {
+		t.Fatalf("runtime event entries: got %d, want 1", len(events))
 	}
 	detectionEventID := detections[0].GetEvent().GetId()
 	if detectionEventID == "" {
 		t.Fatal("detection event id is empty")
 	}
-	if got := telemetry[0].GetEvent().GetId(); got != detectionEventID {
-		t.Fatalf("runtime telemetry event id: got %q, want %q", got, detectionEventID)
+	if got := events[0].GetEvent().GetId(); got != detectionEventID {
+		t.Fatalf("runtime event event id: got %q, want %q", got, detectionEventID)
 	}
 }
 
@@ -147,7 +147,7 @@ func TestEvaluateEvent_CorrelationFiresOncePerScope(t *testing.T) {
 	host := newCorrelationScope("host-set", []rule.Rule{
 		{
 			RuleID:    "single",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionDetect,
 		},

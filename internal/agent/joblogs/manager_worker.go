@@ -18,7 +18,7 @@ type managerWorkerConfig struct {
 	sendBatch func(context.Context, managerclient.LogBatch) error
 	identity  jobcontext.JobIdentity
 	scope     managerv1.Scope
-	kind      managerv1.LogKind
+	logType   managerv1.LogType
 	setting   *managerv1.OutputSetting
 	now       func() time.Time
 }
@@ -28,7 +28,7 @@ type managerWorker struct {
 	sendBatch func(context.Context, managerclient.LogBatch) error
 	identity  jobcontext.JobIdentity
 	scope     managerv1.Scope
-	kind      managerv1.LogKind
+	logType   managerv1.LogType
 	setting   *managerv1.OutputSetting
 	now       func() time.Time
 }
@@ -49,7 +49,7 @@ func newManagerWorker(cfg managerWorkerConfig) *managerWorker {
 		sendBatch: cfg.sendBatch,
 		identity:  cfg.identity,
 		scope:     cfg.scope,
-		kind:      cfg.kind,
+		logType:   cfg.logType,
 		setting:   cfg.setting,
 		now:       cfg.now,
 	}
@@ -102,7 +102,7 @@ func (w *managerWorker) run(requests <-chan managerOutputRequest, done chan<- st
 		bufferedBytes += recordBytes(record)
 	}
 	// Flush keeps the buffered slice until SendLogBatch accepts the batch so a
-	// transient manager-side failure does not silently drop runtime telemetry.
+	// transient manager-side failure does not silently drop runtime event.
 	flush := func(ctx context.Context) error {
 		stopTimer()
 		if len(records) == 0 {
@@ -119,7 +119,7 @@ func (w *managerWorker) run(requests <-chan managerOutputRequest, done chan<- st
 	logFlushError := func(ctx context.Context, err error) {
 		if err != nil && w.logger != nil {
 			w.logger.ErrorContext(ctx, "agent_ingest_send_failed",
-				"log_kind", w.kind.String(),
+				"log_type", w.logType.String(),
 				"scope", w.scope.String(),
 				"error", err,
 			)
@@ -150,7 +150,7 @@ func (w *managerWorker) run(requests <-chan managerOutputRequest, done chan<- st
 				logFlushError(req.ctx, flush(req.ctx))
 			}
 			appendRecord(req.payload)
-			// Size threshold keeps manager-bound telemetry batches bounded.
+			// Size threshold keeps manager-bound runtime event batches bounded.
 			if flushThresholdBytes > 0 && bufferedBytes >= flushThresholdBytes {
 				logFlushError(req.ctx, flush(req.ctx))
 				continue
@@ -167,7 +167,7 @@ func (w *managerWorker) sendBatchToManager(ctx context.Context, records [][]byte
 	return w.sendBatch(ctx, managerclient.LogBatch{
 		Identity: w.identity,
 		Scope:    w.scope,
-		Kind:     w.kind,
+		Type:     w.logType,
 		Records:  records,
 		FlushAt:  flushAt,
 	})

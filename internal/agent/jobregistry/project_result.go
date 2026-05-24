@@ -27,7 +27,7 @@ func (jr *JobRegistry) RequestGitHubProjectResult(ctx context.Context, identity 
 	logEntry := projectScope.BuildJobEventSummaryForReport(jobscope.ReportInputs{
 		Identity:   j.Identity(),
 		Metadata:   j.Metadata(),
-		RunnerKind: j.RunnerKind(),
+		RunnerType: j.RunnerType(),
 		StartedAt:  j.StartedAt(),
 	}, "request", time.Now().UTC())
 	body, err := json.MarshalIndent(logEntry, "", "  ")

@@ -325,7 +325,7 @@ func TestWriteProjectResult(t *testing.T) {
 	})
 
 	t.Run("file", func(t *testing.T) {
-		outputFile := filepath.Join(t.TempDir(), "result.json")
+		outputFile := filepath.Join(t.TempDir(), "summary.json")
 		if err := writeProjectResult(outputFile, body, io.Discard); err != nil {
 			t.Fatalf("writeProjectResult: %v", err)
 		}
@@ -349,7 +349,7 @@ func TestWriteProjectResult(t *testing.T) {
 	})
 
 	t.Run("file error", func(t *testing.T) {
-		err := writeProjectResult(filepath.Join(t.TempDir(), "missing", "result.json"), body, io.Discard)
+		err := writeProjectResult(filepath.Join(t.TempDir(), "missing", "summary.json"), body, io.Discard)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -424,7 +424,7 @@ rule_sets:
   - ruleset_id: "project"
     rules:
       - rule_id: "project_exec"
-        event_kind: "process_exec"
+        event_type: "process_exec"
         condition: 'process_name == "bash"'
         action: "detect"
 `), 0o644); err != nil {

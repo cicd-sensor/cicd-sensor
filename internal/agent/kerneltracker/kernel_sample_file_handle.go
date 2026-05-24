@@ -68,7 +68,7 @@ func handleFileOpenSample(state *jobTrackingState, sample fileOpenSample) []engi
 	}
 
 	record := jobevent.EventRecord{
-		EventKind: jobevent.FileOpen,
+		EventType: jobevent.FileOpen,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{
@@ -92,7 +92,7 @@ func handleFileRemoveSample(state *jobTrackingState, sample fileRemoveSample) []
 	}
 
 	record := jobevent.EventRecord{
-		EventKind: jobevent.FileRemove,
+		EventType: jobevent.FileRemove,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{
@@ -114,7 +114,7 @@ func handleFileMoveSample(state *jobTrackingState, sample fileMoveSample) []engi
 	}
 
 	record := jobevent.EventRecord{
-		EventKind: jobevent.FileMove,
+		EventType: jobevent.FileMove,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{
@@ -141,7 +141,7 @@ func handleFileLinkSample(state *jobTrackingState, sample fileLinkSample) []engi
 	}
 
 	record := jobevent.EventRecord{
-		EventKind: jobevent.FileLink,
+		EventType: jobevent.FileLink,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{

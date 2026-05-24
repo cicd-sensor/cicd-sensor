@@ -19,10 +19,10 @@ func TestDebugOutputWritesSingleReadableGzipStreamAfterClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDebugOutputForTesting: %v", err)
 	}
-	if err := output.WriteRuntimeTelemetryPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
+	if err := output.WriteRuntimeEventPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("write first record: %v", err)
 	}
-	if err := output.WriteRuntimeTelemetryPayload(context.Background(), []byte(`{"n":2}`)); err != nil {
+	if err := output.WriteRuntimeEventPayload(context.Background(), []byte(`{"n":2}`)); err != nil {
 		t.Fatalf("write second record: %v", err)
 	}
 	if err := output.Close(context.Background()); err != nil {
@@ -41,7 +41,7 @@ func TestDebugOutputCloseIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDebugOutputForTesting: %v", err)
 	}
-	if err := output.WriteRuntimeTelemetryPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
+	if err := output.WriteRuntimeEventPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("write record: %v", err)
 	}
 	if err := output.Close(context.Background()); err != nil {
@@ -60,14 +60,14 @@ func TestDebugOutputIgnoresWritesAfterClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDebugOutputForTesting: %v", err)
 	}
-	if err := output.WriteRuntimeTelemetryPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
+	if err := output.WriteRuntimeEventPayload(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("write record: %v", err)
 	}
 	if err := output.Close(context.Background()); err != nil {
 		t.Fatalf("close debug output: %v", err)
 	}
 	before := readDebugGzip(t, dir)
-	if err := output.WriteRuntimeTelemetryPayload(context.Background(), []byte(`{"late":true}`)); err != nil {
+	if err := output.WriteRuntimeEventPayload(context.Background(), []byte(`{"late":true}`)); err != nil {
 		t.Fatalf("late write: %v", err)
 	}
 	after := readDebugGzip(t, dir)
@@ -82,7 +82,7 @@ func TestDebugOutputIgnoresWritesAfterClose(t *testing.T) {
 func readDebugGzip(t *testing.T, dir string) string {
 	t.Helper()
 
-	file, err := os.Open(filepath.Join(dir, DebugRuntimeTelemetryLogFilename))
+	file, err := os.Open(filepath.Join(dir, DebugRuntimeEventLogFilename))
 	if err != nil {
 		t.Fatalf("open debug gzip: %v", err)
 	}

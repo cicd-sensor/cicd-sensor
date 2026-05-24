@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink/sinktest"
 	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
@@ -47,8 +47,8 @@ func TestCollectorService_IngestLog(t *testing.T) {
 	badFlushAtAfterRange.FlushAt = timestamppb.New(time.Date(3000, 1, 1, 0, 0, 0, 0, time.UTC))
 	badFlushAtInvalidProto := validIngestLogBatch(validIdentity, payload)
 	badFlushAtInvalidProto.FlushAt = &timestamppb.Timestamp{Seconds: -1, Nanos: -1}
-	unsupportedLogKind := validIngestLogBatch(validIdentity, payload)
-	unsupportedLogKind.LogKind = managerv1.LogKind_LOG_KIND_UNSPECIFIED
+	unsupportedLogType := validIngestLogBatch(validIdentity, payload)
+	unsupportedLogType.LogType = managerv1.LogType_LOG_TYPE_UNSPECIFIED
 	unsupportedScope := validIngestLogBatch(validIdentity, payload)
 	unsupportedScope.Scope = managerv1.Scope_SCOPE_UNSPECIFIED
 
@@ -104,9 +104,9 @@ func TestCollectorService_IngestLog(t *testing.T) {
 			wantCode: connect.CodeInvalidArgument,
 		},
 		{
-			name:     "unsupported log kind returns invalid_argument",
+			name:     "unsupported log type returns invalid_argument",
 			sink:     sinktest.New("primary"),
-			batch:    unsupportedLogKind,
+			batch:    unsupportedLogType,
 			wantCode: connect.CodeInvalidArgument,
 		},
 		{
@@ -155,8 +155,8 @@ func TestCollectorService_IngestLog(t *testing.T) {
 				t.Fatalf("%s batches: got %d, want 1", tt.sink.Name(), len(batches))
 			}
 			batch := batches[0]
-			if batch.LogKind != logkind.JobDetection {
-				t.Fatalf("log kind: got %q, want detection", batch.LogKind)
+			if batch.LogType != logtype.Detection {
+				t.Fatalf("log type: got %q, want detection", batch.LogType)
 			}
 			if batch.Scope != sink.ScopeHost {
 				t.Fatalf("scope: got %q, want host", batch.Scope)
@@ -265,8 +265,8 @@ func callCollector(t *testing.T, dst *sinktest.Sink, batch *managerv1.IngestLogB
 	t.Helper()
 	var router *OutputRouter
 	if dst != nil {
-		router = newOutputRouterForTest(map[logkind.LogKind]sink.Sink{
-			logkind.JobDetection: dst,
+		router = newOutputRouterForTest(map[logtype.LogType]sink.Sink{
+			logtype.Detection: dst,
 		})
 	}
 	server := NewServer(testLogger, ":0", testManagerTokens, &ServedConfig{}, "", &StartupConfig{}, router)
@@ -286,7 +286,7 @@ func validIngestLogBatch(identity *managerv1.JobIdentity, payload []byte) *manag
 	return &managerv1.IngestLogBatch{
 		JobIdentity:     identity,
 		Scope:           managerv1.Scope_SCOPE_HOST,
-		LogKind:         managerv1.LogKind_LOG_KIND_JOB_DETECTION,
+		LogType:         managerv1.LogType_LOG_TYPE_DETECTION,
 		CompressedJsonl: payload,
 		FlushAt:         fixtureFlushAt,
 	}

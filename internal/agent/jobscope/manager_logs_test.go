@@ -32,7 +32,7 @@ var (
 
 type recordingJobScopeBatches struct {
 	mu      sync.Mutex
-	records map[managerv1.LogKind][][]byte
+	records map[managerv1.LogType][][]byte
 }
 
 func (r *recordingJobScopeBatches) sendBatch(_ context.Context, batch managerclient.LogBatch) error {
@@ -40,27 +40,27 @@ func (r *recordingJobScopeBatches) sendBatch(_ context.Context, batch managercli
 	defer r.mu.Unlock()
 
 	if r.records == nil {
-		r.records = make(map[managerv1.LogKind][][]byte)
+		r.records = make(map[managerv1.LogType][][]byte)
 	}
 	for _, record := range batch.Records {
 		if len(record) == 0 {
 			continue
 		}
-		r.records[batch.Kind] = append(r.records[batch.Kind], append([]byte(nil), record...))
+		r.records[batch.Type] = append(r.records[batch.Type], append([]byte(nil), record...))
 	}
 	return nil
 }
 
-func (r *recordingJobScopeBatches) detectionEntries(t *testing.T) []*logv1.JobDetectionLogEntry {
+func (r *recordingJobScopeBatches) detectionEntries(t *testing.T) []*logv1.DetectionLogEntry {
 	t.Helper()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	records := r.records[managerv1.LogKind_LOG_KIND_JOB_DETECTION]
-	out := make([]*logv1.JobDetectionLogEntry, 0, len(records))
+	records := r.records[managerv1.LogType_LOG_TYPE_DETECTION]
+	out := make([]*logv1.DetectionLogEntry, 0, len(records))
 	for _, record := range records {
-		entry := &logv1.JobDetectionLogEntry{}
+		entry := &logv1.DetectionLogEntry{}
 		if err := protojson.Unmarshal(record, entry); err != nil {
 			t.Fatalf("unmarshal detection log record: %v", err)
 		}
@@ -69,36 +69,36 @@ func (r *recordingJobScopeBatches) detectionEntries(t *testing.T) []*logv1.JobDe
 	return out
 }
 
-func (r *recordingJobScopeBatches) runtimeTelemetryEntries(t *testing.T) []*logv1.JobRuntimeTelemetryLogEntry {
+func (r *recordingJobScopeBatches) runtimeEventEntries(t *testing.T) []*logv1.RuntimeEventLogEntry {
 	t.Helper()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	records := r.records[managerv1.LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY]
-	out := make([]*logv1.JobRuntimeTelemetryLogEntry, 0, len(records))
+	records := r.records[managerv1.LogType_LOG_TYPE_RUNTIME_EVENT]
+	out := make([]*logv1.RuntimeEventLogEntry, 0, len(records))
 	for _, record := range records {
-		entry := &logv1.JobRuntimeTelemetryLogEntry{}
+		entry := &logv1.RuntimeEventLogEntry{}
 		if err := protojson.Unmarshal(record, entry); err != nil {
-			t.Fatalf("unmarshal runtime telemetry log record: %v", err)
+			t.Fatalf("unmarshal runtime event log record: %v", err)
 		}
 		out = append(out, entry)
 	}
 	return out
 }
 
-func (r *recordingJobScopeBatches) jobResultEntries(t *testing.T) []*logv1.JobResultLogEntry {
+func (r *recordingJobScopeBatches) summaryEntries(t *testing.T) []*logv1.SummaryLogEntry {
 	t.Helper()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	records := r.records[managerv1.LogKind_LOG_KIND_JOB_RESULT]
-	out := make([]*logv1.JobResultLogEntry, 0, len(records))
+	records := r.records[managerv1.LogType_LOG_TYPE_SUMMARY]
+	out := make([]*logv1.SummaryLogEntry, 0, len(records))
 	for _, record := range records {
-		entry := &logv1.JobResultLogEntry{}
+		entry := &logv1.SummaryLogEntry{}
 		if err := protojson.Unmarshal(record, entry); err != nil {
-			t.Fatalf("unmarshal job result log record: %v", err)
+			t.Fatalf("unmarshal summary log record: %v", err)
 		}
 		out = append(out, entry)
 	}
@@ -110,7 +110,7 @@ func TestJobScopeStateWriteDetectionLogForHit_CollectEmitsDetectionLog(t *testin
 
 	recorder := &recordingJobScopeBatches{}
 	scope := jobscope.NewHost()
-	scope.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testJobIdentity, scope.Kind, recorder.sendBatch)
+	scope.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testJobIdentity, scope.Type, recorder.sendBatch)
 	hit := observations.HitEntry{
 		Identity:  rule.RuleIdentity{RulesetID: "set", RuleID: "collect_token"},
 		Action:    string(rule.RuleActionCollect),
@@ -147,13 +147,13 @@ func TestJobScopeStateWriteDetectionLogForHit_MaxAlertsCapsDetectionLog(t *testi
 		RulesetRevision: "rules-sha",
 		Rule: rule.Rule{
 			RuleID:      "detect_token",
-			EventKind:   jobevent.ProcessExec,
+			EventType:   jobevent.ProcessExec,
 			RuleName:    "Detect token",
 			Description: "flags token-like process arguments",
 			Action:      rule.RuleActionDetect,
 		},
 	}}}
-	scope.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testJobIdentity, scope.Kind, recorder.sendBatch)
+	scope.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testJobIdentity, scope.Type, recorder.sendBatch)
 	hit := observations.HitEntry{
 		Identity:  rule.RuleIdentity{RulesetID: "set", RuleID: "detect_token"},
 		Action:    string(rule.RuleActionDetect),
@@ -182,8 +182,8 @@ func TestJobScopeStateWriteDetectionLogForHit_MaxAlertsCapsDetectionLog(t *testi
 	if got, want := entries[0].GetRuleName(), "Detect token"; got != want {
 		t.Fatalf("rule name: got %q, want %q", got, want)
 	}
-	if got, want := entries[0].GetRunnerKind(), "machine"; got != want {
-		t.Fatalf("runner kind: got %q, want %q", got, want)
+	if got, want := entries[0].GetRunnerType(), "machine"; got != want {
+		t.Fatalf("runner type: got %q, want %q", got, want)
 	}
 	if got, want := entries[0].GetRuleDescription(), "flags token-like process arguments"; got != want {
 		t.Fatalf("rule description: got %q, want %q", got, want)
@@ -193,28 +193,28 @@ func TestJobScopeStateWriteDetectionLogForHit_MaxAlertsCapsDetectionLog(t *testi
 	}
 }
 
-func TestJobScopeStateWriteRuntimeTelemetryLog_EmitsEvent(t *testing.T) {
+func TestJobScopeStateWriteRuntimeEventLog_EmitsEvent(t *testing.T) {
 	t.Parallel()
 
 	recorder := &recordingJobScopeBatches{}
 	scope := jobscope.NewProject()
-	scope.ManagerJobLogsForTesting().AttachRuntimeTelemetryRecorderForTesting(testJobIdentity, scope.Kind, recorder.sendBatch)
+	scope.ManagerJobLogsForTesting().AttachRuntimeEventRecorderForTesting(testJobIdentity, scope.Type, recorder.sendBatch)
 	event := testJobScopeNetworkEvent("event-runtime", "203.0.113.10")
 
-	scope.WriteRuntimeTelemetryLog(context.Background(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	scope.WriteRuntimeEventLog(context.Background(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
 	if err := scope.FinalizeStreamingLogs(context.Background()); err != nil {
 		t.Fatalf("finalize logs: %v", err)
 	}
 
-	entries := recorder.runtimeTelemetryEntries(t)
+	entries := recorder.runtimeEventEntries(t)
 	if len(entries) != 1 {
-		t.Fatalf("runtime telemetry entries: got %d, want 1", len(entries))
+		t.Fatalf("runtime event entries: got %d, want 1", len(entries))
 	}
-	if got, want := entries[0].GetScope(), string(jobcontext.ScopeKindProject); got != want {
+	if got, want := entries[0].GetScope(), string(jobcontext.ScopeTypeProject); got != want {
 		t.Fatalf("scope: got %q, want %q", got, want)
 	}
-	if got, want := entries[0].GetRunnerKind(), "machine"; got != want {
-		t.Fatalf("runner kind: got %q, want %q", got, want)
+	if got, want := entries[0].GetRunnerType(), "machine"; got != want {
+		t.Fatalf("runner type: got %q, want %q", got, want)
 	}
 	if got, want := entries[0].Event.GetId(), event.ID; got != want {
 		t.Fatalf("event id: got %q, want %q", got, want)
@@ -224,7 +224,7 @@ func TestJobScopeStateWriteRuntimeTelemetryLog_EmitsEvent(t *testing.T) {
 	}
 }
 
-func TestJobScopeStateWriteRuntimeTelemetryLog_WritesDebugOutput(t *testing.T) {
+func TestJobScopeStateWriteRuntimeEventLog_WritesDebugOutput(t *testing.T) {
 	t.Parallel()
 
 	debugDir := t.TempDir()
@@ -236,12 +236,12 @@ func TestJobScopeStateWriteRuntimeTelemetryLog_WritesDebugOutput(t *testing.T) {
 	scope.SetDebugOutput(debugOutput)
 
 	event := testJobScopeNetworkEvent("event-debug-runtime", "203.0.113.30")
-	scope.WriteRuntimeTelemetryLog(context.Background(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	scope.WriteRuntimeEventLog(context.Background(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
 	if err := scope.CloseDebugOutput(context.Background()); err != nil {
 		t.Fatalf("close debug output: %v", err)
 	}
 
-	entry := readDebugRuntimeTelemetryEntry(t, debugDir)
+	entry := readDebugRuntimeEventEntry(t, debugDir)
 	if got, want := entry.GetEvent().GetId(), event.ID; got != want {
 		t.Fatalf("event id: got %q, want %q", got, want)
 	}
@@ -262,18 +262,18 @@ func TestJobScopeStateFinalizeStreamingLogs_ClosesDebugOutput(t *testing.T) {
 	scope.SetDebugOutput(debugOutput)
 
 	event := testJobScopeNetworkEvent("event-debug-finalize", "203.0.113.31")
-	scope.WriteRuntimeTelemetryLog(context.Background(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	scope.WriteRuntimeEventLog(context.Background(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
 	if err := scope.FinalizeStreamingLogs(context.Background()); err != nil {
 		t.Fatalf("finalize streaming logs: %v", err)
 	}
 
-	entry := readDebugRuntimeTelemetryEntry(t, debugDir)
+	entry := readDebugRuntimeEventEntry(t, debugDir)
 	if got, want := entry.GetEvent().GetId(), event.ID; got != want {
 		t.Fatalf("event id: got %q, want %q", got, want)
 	}
 }
 
-func TestJobScopeStateEmitJobResultLog_FlushesFinalRecord(t *testing.T) {
+func TestJobScopeStateEmitSummaryLog_FlushesFinalRecord(t *testing.T) {
 	t.Parallel()
 
 	recorder := &recordingJobScopeBatches{}
@@ -284,12 +284,12 @@ func TestJobScopeStateEmitJobResultLog_FlushesFinalRecord(t *testing.T) {
 		RulesetRevision: "rules-sha",
 		Rule: rule.Rule{
 			RuleID:    "detect_token",
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 			Action:    rule.RuleActionDetect,
 		},
 	}}}
 	logs := joblogs.NewForTesting(testJobScopeLogger, recorder.sendBatch)
-	logs.AttachJobResultRecorderForTesting(testJobIdentity, scope.Kind, recorder.sendBatch)
+	logs.AttachSummaryRecorderForTesting(testJobIdentity, scope.Type, recorder.sendBatch)
 	scope.SetManagerJobLogs(logs)
 	hit := observations.HitEntry{
 		Identity:  rule.RuleIdentity{RulesetID: "set", RuleID: "detect_token"},
@@ -299,25 +299,25 @@ func TestJobScopeStateEmitJobResultLog_FlushesFinalRecord(t *testing.T) {
 	scope.RecordHit(hit, testJobScopeProcessEvent("event-result"))
 	scope.Observations.RecordEvent(testJobScopeNetworkEvent("event-network", "203.0.113.20"))
 
-	if err := scope.EmitJobResultLog(context.Background(), jobscope.JobResultLogInputs{
+	if err := scope.EmitSummaryLog(context.Background(), jobscope.SummaryLogInputs{
 		Identity:   testJobIdentity,
 		Metadata:   testJobMetadata,
-		RunnerKind: "machine",
+		RunnerType: "machine",
 		StartedAt:  testEventTime.Add(-time.Minute),
 	}, "completed", testEventTime.Add(time.Minute)); err != nil {
-		t.Fatalf("emit result log: %v", err)
+		t.Fatalf("emit summary log: %v", err)
 	}
 
-	entries := recorder.jobResultEntries(t)
+	entries := recorder.summaryEntries(t)
 	if len(entries) != 1 {
-		t.Fatalf("job result entries: got %d, want 1", len(entries))
+		t.Fatalf("summary entries: got %d, want 1", len(entries))
 	}
 	entry := entries[0]
-	if got, want := entry.GetScope(), string(jobcontext.ScopeKindHost); got != want {
+	if got, want := entry.GetScope(), string(jobcontext.ScopeTypeHost); got != want {
 		t.Fatalf("scope: got %q, want %q", got, want)
 	}
-	if got, want := entry.GetRunnerKind(), "machine"; got != want {
-		t.Fatalf("runner kind: got %q, want %q", got, want)
+	if got, want := entry.GetRunnerType(), "machine"; got != want {
+		t.Fatalf("runner type: got %q, want %q", got, want)
 	}
 	if got, want := entry.GetConfigRevision(), "config-sha"; got != want {
 		t.Fatalf("config revision: got %q, want %q", got, want)
@@ -336,7 +336,7 @@ func TestJobScopeStateEmitJobResultLog_FlushesFinalRecord(t *testing.T) {
 	}
 }
 
-func readDebugRuntimeTelemetryEntry(t *testing.T, debugDir string) *logv1.JobRuntimeTelemetryLogEntry {
+func readDebugRuntimeEventEntry(t *testing.T, debugDir string) *logv1.RuntimeEventLogEntry {
 	t.Helper()
 
 	root, err := os.OpenRoot(debugDir)
@@ -345,9 +345,9 @@ func readDebugRuntimeTelemetryEntry(t *testing.T, debugDir string) *logv1.JobRun
 	}
 	defer root.Close()
 
-	file, err := root.Open(joblogs.DebugRuntimeTelemetryLogFilename)
+	file, err := root.Open(joblogs.DebugRuntimeEventLogFilename)
 	if err != nil {
-		t.Fatalf("open debug telemetry: %v", err)
+		t.Fatalf("open debug runtime event: %v", err)
 	}
 	defer file.Close()
 	reader, err := gzip.NewReader(file)
@@ -362,9 +362,9 @@ func readDebugRuntimeTelemetryEntry(t *testing.T, debugDir string) *logv1.JobRun
 		t.Fatalf("close gzip: %v", err)
 	}
 
-	var entry logv1.JobRuntimeTelemetryLogEntry
+	var entry logv1.RuntimeEventLogEntry
 	if err := protojson.Unmarshal(body, &entry); err != nil {
-		t.Fatalf("unmarshal debug runtime telemetry: %v\nbody=%s", err, body)
+		t.Fatalf("unmarshal debug runtime event: %v\nbody=%s", err, body)
 	}
 	return &entry
 }
@@ -395,7 +395,7 @@ func TestJobScopeStateCorrelationHitCountFor(t *testing.T) {
 func testJobScopeProcessEvent(id string) jobevent.EventRecord {
 	return jobevent.EventRecord{
 		ID:        id,
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Timestamp: testEventTime,
 		Payload:   map[string]any{"is_memfd": false},
 		Process: jobevent.ProcessSummary{
@@ -409,7 +409,7 @@ func testJobScopeProcessEvent(id string) jobevent.EventRecord {
 func testJobScopeNetworkEvent(id, remoteIP string) jobevent.EventRecord {
 	return jobevent.EventRecord{
 		ID:        id,
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Timestamp: testEventTime,
 		Payload: map[string]any{
 			"remote_ip":   remoteIP,

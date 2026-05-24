@@ -25,7 +25,7 @@ func postSocket(ctx context.Context, socketPath, urlPath string, body any) error
 //
 // `project result` is the only endpoint that needs the response body
 // today; keeping the helper separate from postSocket means other callers
-// stay unaffected by the larger read budget the result log needs.
+// stay unaffected by the larger read budget the summary log needs.
 func postSocketForResponse(ctx context.Context, socketPath, urlPath string, body any, maxBytes int64) ([]byte, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {

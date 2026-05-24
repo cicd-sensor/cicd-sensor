@@ -31,7 +31,7 @@ func TestEvaluateEvent_TerminateKillsEventProcessIntegration(t *testing.T) {
 		RulesetID: "host-set",
 		Rules: []rule.Rule{{
 			RuleID:    "terminate",
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Condition: `remote_ip == "example.com"`,
 			Action:    rule.RuleActionTerminate,
 		}},

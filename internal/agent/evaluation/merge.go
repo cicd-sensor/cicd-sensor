@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	scopeHost    = string(jobcontext.ScopeKindHost)
-	scopeProject = string(jobcontext.ScopeKindProject)
+	scopeHost    = string(jobcontext.ScopeTypeHost)
+	scopeProject = string(jobcontext.ScopeTypeProject)
 )
 
 type compiledRuleEntry struct {

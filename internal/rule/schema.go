@@ -58,7 +58,7 @@ type Rule struct {
 	RuleName    string            `json:"rule_name,omitempty" yaml:"rule_name,omitempty"`
 	Description string            `json:"description,omitempty" yaml:"description,omitempty"`
 	Type        string            `json:"type,omitempty" yaml:"type,omitempty"`
-	EventKind   jobevent.Kind     `json:"event_kind,omitempty" yaml:"event_kind,omitempty"`
+	EventType   jobevent.Type     `json:"event_type,omitempty" yaml:"event_type,omitempty"`
 	Target      RuleTarget        `json:"target,omitzero" yaml:"target,omitempty"`
 	Condition   string            `json:"condition" yaml:"condition"`
 	Exceptions  string            `json:"exceptions,omitempty" yaml:"exceptions,omitempty"`

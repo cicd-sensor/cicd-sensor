@@ -286,7 +286,7 @@ type Rule struct {
 	RuleName      string                 `protobuf:"bytes,2,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
 	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
-	EventKind     string                 `protobuf:"bytes,5,opt,name=event_kind,json=eventKind,proto3" json:"event_kind,omitempty"`
+	EventType     string                 `protobuf:"bytes,5,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
 	Target        *RuleTarget            `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
 	Condition     string                 `protobuf:"bytes,7,opt,name=condition,proto3" json:"condition,omitempty"`
 	Exceptions    string                 `protobuf:"bytes,8,opt,name=exceptions,proto3" json:"exceptions,omitempty"`
@@ -355,9 +355,9 @@ func (x *Rule) GetType() string {
 	return ""
 }
 
-func (x *Rule) GetEventKind() string {
+func (x *Rule) GetEventType() string {
 	if x != nil {
-		return x.EventKind
+		return x.EventType
 	}
 	return ""
 }
@@ -684,7 +684,7 @@ func (x *RuleSource) GetRuleModifiers() []*RuleModifier {
 	return nil
 }
 
-// OutputSetting tells the agent whether to send one log kind and when to
+// OutputSetting tells the agent whether to send one log type and when to
 // flush buffered JSONL records.
 type OutputSetting struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -749,12 +749,12 @@ func (x *OutputSetting) GetFlushIntervalSeconds() uint32 {
 
 // OutputSettings tells the agent which logs should be sent to manager.
 type OutputSettings struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	JobDetectionLog        *OutputSetting         `protobuf:"bytes,1,opt,name=job_detection_log,json=jobDetectionLog,proto3" json:"job_detection_log,omitempty"`
-	JobRuntimeTelemetryLog *OutputSetting         `protobuf:"bytes,2,opt,name=job_runtime_telemetry_log,json=jobRuntimeTelemetryLog,proto3" json:"job_runtime_telemetry_log,omitempty"`
-	JobResultLog           *OutputSetting         `protobuf:"bytes,3,opt,name=job_result_log,json=jobResultLog,proto3" json:"job_result_log,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	DetectionLog    *OutputSetting         `protobuf:"bytes,1,opt,name=detection_log,json=detectionLog,proto3" json:"detection_log,omitempty"`
+	RuntimeEventLog *OutputSetting         `protobuf:"bytes,2,opt,name=runtime_event_log,json=runtimeEventLog,proto3" json:"runtime_event_log,omitempty"`
+	SummaryLog      *OutputSetting         `protobuf:"bytes,3,opt,name=summary_log,json=summaryLog,proto3" json:"summary_log,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *OutputSettings) Reset() {
@@ -787,23 +787,23 @@ func (*OutputSettings) Descriptor() ([]byte, []int) {
 	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *OutputSettings) GetJobDetectionLog() *OutputSetting {
+func (x *OutputSettings) GetDetectionLog() *OutputSetting {
 	if x != nil {
-		return x.JobDetectionLog
+		return x.DetectionLog
 	}
 	return nil
 }
 
-func (x *OutputSettings) GetJobRuntimeTelemetryLog() *OutputSetting {
+func (x *OutputSettings) GetRuntimeEventLog() *OutputSetting {
 	if x != nil {
-		return x.JobRuntimeTelemetryLog
+		return x.RuntimeEventLog
 	}
 	return nil
 }
 
-func (x *OutputSettings) GetJobResultLog() *OutputSetting {
+func (x *OutputSettings) GetSummaryLog() *OutputSetting {
 	if x != nil {
-		return x.JobResultLog
+		return x.SummaryLog
 	}
 	return nil
 }
@@ -840,7 +840,7 @@ const file_cicd_sensor_manager_v1_types_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x1d\n" +
 	"\n" +
-	"event_kind\x18\x05 \x01(\tR\teventKind\x12:\n" +
+	"event_type\x18\x05 \x01(\tR\teventType\x12:\n" +
 	"\x06target\x18\x06 \x01(\v2\".cicd_sensor.manager.v1.RuleTargetR\x06target\x12\x1c\n" +
 	"\tcondition\x18\a \x01(\tR\tcondition\x12\x1e\n" +
 	"\n" +
@@ -890,11 +890,12 @@ const file_cicd_sensor_manager_v1_types_proto_rawDesc = "" +
 	"\rOutputSetting\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x122\n" +
 	"\x15flush_threshold_bytes\x18\x02 \x01(\rR\x13flushThresholdBytes\x124\n" +
-	"\x16flush_interval_seconds\x18\x03 \x01(\rR\x14flushIntervalSeconds\"\x92\x02\n" +
-	"\x0eOutputSettings\x12Q\n" +
-	"\x11job_detection_log\x18\x01 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\x0fjobDetectionLog\x12`\n" +
-	"\x19job_runtime_telemetry_log\x18\x02 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\x16jobRuntimeTelemetryLog\x12K\n" +
-	"\x0ejob_result_log\x18\x03 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\fjobResultLogB\xf2\x01\n" +
+	"\x16flush_interval_seconds\x18\x03 \x01(\rR\x14flushIntervalSeconds\"\xf7\x01\n" +
+	"\x0eOutputSettings\x12J\n" +
+	"\rdetection_log\x18\x01 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\fdetectionLog\x12Q\n" +
+	"\x11runtime_event_log\x18\x02 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\x0fruntimeEventLog\x12F\n" +
+	"\vsummary_log\x18\x03 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\n" +
+	"summaryLogB\xf2\x01\n" +
 	"\x1acom.cicd_sensor.manager.v1B\n" +
 	"TypesProtoP\x01ZRgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1;managerv1\xa2\x02\x03CMX\xaa\x02\x15CicdSensor.Manager.V1\xca\x02\x15CicdSensor\\Manager\\V1\xe2\x02!CicdSensor\\Manager\\V1\\GPBMetadata\xea\x02\x17CicdSensor::Manager::V1b\x06proto3"
 
@@ -937,9 +938,9 @@ var file_cicd_sensor_manager_v1_types_proto_depIdxs = []int32{
 	2,  // 7: cicd_sensor.manager.v1.RuleModifier.add_target_exclude:type_name -> cicd_sensor.manager.v1.RuleTargetMatcher
 	5,  // 8: cicd_sensor.manager.v1.RuleSource.rule_sets:type_name -> cicd_sensor.manager.v1.RuleSet
 	7,  // 9: cicd_sensor.manager.v1.RuleSource.rule_modifiers:type_name -> cicd_sensor.manager.v1.RuleModifier
-	9,  // 10: cicd_sensor.manager.v1.OutputSettings.job_detection_log:type_name -> cicd_sensor.manager.v1.OutputSetting
-	9,  // 11: cicd_sensor.manager.v1.OutputSettings.job_runtime_telemetry_log:type_name -> cicd_sensor.manager.v1.OutputSetting
-	9,  // 12: cicd_sensor.manager.v1.OutputSettings.job_result_log:type_name -> cicd_sensor.manager.v1.OutputSetting
+	9,  // 10: cicd_sensor.manager.v1.OutputSettings.detection_log:type_name -> cicd_sensor.manager.v1.OutputSetting
+	9,  // 11: cicd_sensor.manager.v1.OutputSettings.runtime_event_log:type_name -> cicd_sensor.manager.v1.OutputSetting
+	9,  // 12: cicd_sensor.manager.v1.OutputSettings.summary_log:type_name -> cicd_sensor.manager.v1.OutputSetting
 	1,  // 13: cicd_sensor.manager.v1.RuleSet.ListsEntry.value:type_name -> cicd_sensor.manager.v1.StringList
 	14, // [14:14] is the sub-list for method output_type
 	14, // [14:14] is the sub-list for method input_type

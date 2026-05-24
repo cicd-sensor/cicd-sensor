@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestJobIdentityFlagsUseJobLogContextNames(t *testing.T) {
+func TestJobIdentityFlagsUseLogContextNames(t *testing.T) {
 	fs := flag.NewFlagSet("identity", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var identity jobIdentityFlags
@@ -42,7 +42,7 @@ func TestJobIdentityFlagsUseJobLogContextNames(t *testing.T) {
 	}
 }
 
-func TestJobMetadataFlagsUseJobLogContextNames(t *testing.T) {
+func TestJobMetadataFlagsUseLogContextNames(t *testing.T) {
 	fs := flag.NewFlagSet("metadata", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var metadata jobMetadataFlags

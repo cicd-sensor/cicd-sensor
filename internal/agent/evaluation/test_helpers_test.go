@@ -78,7 +78,7 @@ func newProjectScopeWithRules(setIdentity string, rules []rule.Rule) *jobscope.J
 
 func testDispatchEvent(execPath, host string, port int64) jobevent.EventRecord {
 	return jobevent.EventRecord{
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Timestamp: time.Date(2026, 4, 16, 1, 2, 3, 4, time.UTC),
 		Payload: map[string]any{
 			"remote_ip":   host,

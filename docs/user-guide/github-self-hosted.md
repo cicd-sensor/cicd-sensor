@@ -18,7 +18,7 @@ flowchart LR
     RUNNER --> HOOKS
     HOOKS -->|"host start / host end"| AGENT
     MANAGER -->|"Config / Rules"| AGENT
-    AGENT -->|"Job Result / Detection / Telemetry Logs"| MANAGER
+    AGENT -->|"Summary / Detection / Runtime Event Logs"| MANAGER
     MANAGER --> CLOUD
 
     classDef cicdSensor fill:#ecfdf5,stroke:#0f766e,color:#134e4a,stroke-width:1.5px;

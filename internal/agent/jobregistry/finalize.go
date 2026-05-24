@@ -34,7 +34,7 @@ func (jr *JobRegistry) FinalizeAll(ctx context.Context, reason kerneltracker.End
 			continue
 		}
 		if err := jr.finalizeTakenJobSync(ctx, job, reason, time.Now().UTC()); err != nil {
-			jr.logger.WarnContext(ctx, "result_log_emit_failed",
+			jr.logger.WarnContext(ctx, "summary_log_emit_failed",
 				"job_identity", job.Identity(),
 				"error", err,
 			)
@@ -64,7 +64,7 @@ func (jr *JobRegistry) FinalizeExpiredJobs(ctx context.Context) {
 			continue
 		}
 		if err := jr.finalizeTakenJobSync(ctx, job, kerneltracker.EndTTL, time.Now().UTC()); err != nil {
-			jr.logger.WarnContext(ctx, "result_log_emit_failed",
+			jr.logger.WarnContext(ctx, "summary_log_emit_failed",
 				"job_identity", job.Identity(),
 				"error", err,
 			)
@@ -94,7 +94,7 @@ func (jr *JobRegistry) OnJobEnded(jobID jobcontext.JobIdentity, reason kerneltra
 			return
 		}
 		if err := jr.finalizeTakenJobSync(ctx, job, reason, time.Now().UTC()); err != nil {
-			jr.logger.WarnContext(ctx, "result_log_emit_failed",
+			jr.logger.WarnContext(ctx, "summary_log_emit_failed",
 				"job_identity", job.Identity(),
 				"error", err,
 			)
@@ -161,7 +161,7 @@ func (jr *JobRegistry) finalizeTakenJobSync(ctx context.Context, job *job.Job, r
 		}
 	}
 	<-job.Done()
-	// Flush streaming logs before the final result row.
+	// Flush streaming logs before the final summary row.
 	if host := job.HostScope(); host != nil {
 		if err := host.FinalizeStreamingLogs(ctx); err != nil {
 			jr.logger.WarnContext(ctx, "job_host_scope_finalize_failed", "error", err)
@@ -173,21 +173,21 @@ func (jr *JobRegistry) finalizeTakenJobSync(ctx context.Context, job *job.Job, r
 		}
 	}
 	jr.logger.InfoContext(ctx, "job_finalized", "job_identity", job.Identity(), "reason", string(reason))
-	resultIn := jobscope.JobResultLogInputs{
+	summaryIn := jobscope.SummaryLogInputs{
 		Identity:   job.Identity(),
 		Metadata:   job.Metadata(),
-		RunnerKind: job.RunnerKind(),
+		RunnerType: job.RunnerType(),
 		StartedAt:  job.StartedAt(),
 	}
 	var errs []error
 	if host := job.HostScope(); host != nil {
-		if err := host.EmitJobResultLog(ctx, resultIn, string(reason), finalizedAt); err != nil {
-			errs = append(errs, fmt.Errorf("emit host job result log: %w", err))
+		if err := host.EmitSummaryLog(ctx, summaryIn, string(reason), finalizedAt); err != nil {
+			errs = append(errs, fmt.Errorf("emit host summary log: %w", err))
 		}
 	}
 	if project := job.ProjectScope(); project != nil {
-		if err := project.EmitJobResultLog(ctx, resultIn, string(reason), finalizedAt); err != nil {
-			errs = append(errs, fmt.Errorf("emit project job result log: %w", err))
+		if err := project.EmitSummaryLog(ctx, summaryIn, string(reason), finalizedAt); err != nil {
+			errs = append(errs, fmt.Errorf("emit project summary log: %w", err))
 		}
 	}
 	return errors.Join(errs...)

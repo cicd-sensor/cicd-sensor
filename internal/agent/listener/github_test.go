@@ -64,11 +64,11 @@ func TestListener_HostStart_SetsHostScope(t *testing.T) {
 	if job.HostScope() == nil {
 		t.Fatal("expected host scope to be set")
 	}
-	// The listener stamps its agent-process-wide runner kind ("machine"
+	// The listener stamps its agent-process-wide runner type ("machine"
 	// in setupListenerWithRegistry) onto the metadata; request body fields
 	// no longer carry it.
-	if job.RunnerKind() != "machine" {
-		t.Fatalf("job runner_kind: got %q, want %q", job.RunnerKind(), "machine")
+	if job.RunnerType() != "machine" {
+		t.Fatalf("job runner_type: got %q, want %q", job.RunnerType(), "machine")
 	}
 	if job.Metadata().CommitSHA != "abc123" {
 		t.Fatalf("job metadata commit_sha: got %q, want abc123", job.Metadata().CommitSHA)
@@ -686,7 +686,7 @@ func TestListener_ProjectStart_AcceptsProjectRules(t *testing.T) {
 				RulesetID: "project",
 				Rules: []rule.Rule{{
 					RuleID:    "project_exec",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -727,7 +727,7 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 				RulesetID: "project-manager",
 				Rules: []rule.Rule{{
 					RuleID:    "project-manager-rule",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -735,7 +735,7 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 			return connect.NewResponse(&managerv1.FetchConfigResponse{
 				Config: &managerv1.ServedConfig{
 					OutputSettings: &managerv1.OutputSettings{
-						JobDetectionLog: &managerv1.OutputSetting{Enabled: true},
+						DetectionLog: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -777,7 +777,7 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 	if got := len(job.ProjectScope().ResolvedRules.Rules); got != 1 {
 		t.Fatalf("project manager rules: got %d, want 1", got)
 	}
-	if !job.ProjectScope().OutputSettings.GetJobDetectionLog().GetEnabled() {
+	if !job.ProjectScope().OutputSettings.GetDetectionLog().GetEnabled() {
 		t.Fatal("project output detection: got false, want true")
 	}
 	if job.HostScope() != nil {
@@ -910,7 +910,7 @@ func TestListener_ProjectStart_RejectsInvalidProjectRules(t *testing.T) {
 			RuleSets: []rule.RuleSet{{
 				Rules: []rule.Rule{{
 					RuleID:    "bad",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -1268,9 +1268,9 @@ func TestListener_ProjectResult_ReturnsContent(t *testing.T) {
 		t.Fatalf("NewDebugOutputForTesting: %v", err)
 	}
 	job.ProjectScope().SetDebugOutput(debugOutput)
-	job.ProjectScope().WriteRuntimeTelemetryLog(context.Background(), id, jobcontext.JobMetadata{}, "machine", jobevent.EventRecord{
+	job.ProjectScope().WriteRuntimeEventLog(context.Background(), id, jobcontext.JobMetadata{}, "machine", jobevent.EventRecord{
 		ID:        "listener-project-result-debug",
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Process: jobevent.ProcessSummary{
 			PID:      100,
 			ExecPath: "/usr/bin/curl",
@@ -1382,7 +1382,7 @@ func TestListener_ProjectResult_ProjectScopeMissingReturnsConflict(t *testing.T)
 func readListenerDebugGzip(t *testing.T, debugDir string) string {
 	t.Helper()
 
-	file, err := os.Open(filepath.Join(debugDir, joblogs.DebugRuntimeTelemetryLogFilename))
+	file, err := os.Open(filepath.Join(debugDir, joblogs.DebugRuntimeEventLogFilename))
 	if err != nil {
 		t.Fatalf("open debug gzip: %v", err)
 	}

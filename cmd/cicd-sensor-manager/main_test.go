@@ -277,12 +277,12 @@ func TestBuildServedConfig(t *testing.T) {
 		DefaultMaxAlertsPerRule: 7,
 	}
 	settings := &managerv1.OutputSettings{
-		JobDetectionLog: &managerv1.OutputSetting{
+		DetectionLog: &managerv1.OutputSetting{
 			Enabled:              true,
 			FlushThresholdBytes:  1,
 			FlushIntervalSeconds: 1,
 		},
-		JobResultLog: &managerv1.OutputSetting{
+		SummaryLog: &managerv1.OutputSetting{
 			Enabled:              true,
 			FlushThresholdBytes:  1,
 			FlushIntervalSeconds: 1,
@@ -297,14 +297,14 @@ func TestBuildServedConfig(t *testing.T) {
 	if served.DefaultMaxAlertsPerRule != 7 {
 		t.Fatalf("DefaultMaxAlertsPerRule: got %d, want 7", served.DefaultMaxAlertsPerRule)
 	}
-	if !served.OutputSettings.GetJobDetectionLog().GetEnabled() {
+	if !served.OutputSettings.GetDetectionLog().GetEnabled() {
 		t.Fatalf("detection settings: got false, want true")
 	}
-	if served.OutputSettings.GetJobRuntimeTelemetryLog().GetEnabled() {
-		t.Fatalf("runtime telemetry settings: got true, want false")
+	if served.OutputSettings.GetRuntimeEventLog().GetEnabled() {
+		t.Fatalf("runtime event settings: got true, want false")
 	}
-	if !served.OutputSettings.GetJobResultLog().GetEnabled() {
-		t.Fatalf("result settings: got false, want true")
+	if !served.OutputSettings.GetSummaryLog().GetEnabled() {
+		t.Fatalf("summary settings: got false, want true")
 	}
 }
 

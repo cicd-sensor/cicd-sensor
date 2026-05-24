@@ -27,7 +27,7 @@ rule_sets:
       # ---- Shai-Hulud original (TruffleHog) ----
       - rule_id: shaihulud_scanner_exec
         rule_name: "Shai-Hulud: trufflehog executed"
-        event_kind: process_exec
+        event_type: process_exec
         condition: list.shaihulud_scanner_basenames.exists(b, process.exec_path.endsWith(b))
         action: collect
         tags:
@@ -36,7 +36,7 @@ rule_sets:
 
       - rule_id: shaihulud_credential_read
         rule_name: "Shai-Hulud: HOME credential read"
-        event_kind: file_open
+        event_type: file_open
         condition: is_read && list.shaihulud_credential_suffixes.exists(p, path.endsWith(p))
         action: collect
         tags:
@@ -45,7 +45,7 @@ rule_sets:
 
       - rule_id: shaihulud_artefact_write
         rule_name: "Shai-Hulud: staging artefact written"
-        event_kind: file_open
+        event_type: file_open
         condition: is_write && list.shaihulud_artefact_basenames.exists(p, path.endsWith(p))
         action: collect
         tags:
@@ -86,7 +86,7 @@ rule_sets:
       # ---- Mini Shai-Hulud (Bun loader, 2026-04) ----
       - rule_id: mini_shaihulud_bun_exec
         rule_name: "Mini Shai-Hulud: bun runtime exec"
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bun")
         action: collect
         tags:
@@ -95,7 +95,7 @@ rule_sets:
 
       - rule_id: mini_shaihulud_artefact_write
         rule_name: "Mini Shai-Hulud: setup.mjs / router_runtime.js written"
-        event_kind: file_open
+        event_type: file_open
         condition: |
           is_write &&
           list.mini_shaihulud_artefact_basenames.exists(p, path.endsWith(p))
@@ -106,7 +106,7 @@ rule_sets:
 
       - rule_id: mini_shaihulud_persistence_write
         rule_name: "Mini Shai-Hulud: AI tool persistence write"
-        event_kind: file_open
+        event_type: file_open
         condition: |
           is_write &&
           list.mini_shaihulud_persistence_path_fragments.exists(p, path.contains(p))

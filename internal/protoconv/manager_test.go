@@ -92,13 +92,13 @@ func TestFromProtoJobIdentity_NilReturnsZero(t *testing.T) {
 func TestToProtoScope(t *testing.T) {
 	tests := []struct {
 		name string
-		in   jobcontext.ScopeKind
+		in   jobcontext.ScopeType
 		want managerv1.Scope
 	}{
-		{name: "host", in: jobcontext.ScopeKindHost, want: managerv1.Scope_SCOPE_HOST},
-		{name: "project", in: jobcontext.ScopeKindProject, want: managerv1.Scope_SCOPE_PROJECT},
+		{name: "host", in: jobcontext.ScopeTypeHost, want: managerv1.Scope_SCOPE_HOST},
+		{name: "project", in: jobcontext.ScopeTypeProject, want: managerv1.Scope_SCOPE_PROJECT},
 		{name: "empty", in: "", want: managerv1.Scope_SCOPE_UNSPECIFIED},
-		{name: "unknown", in: jobcontext.ScopeKind("other"), want: managerv1.Scope_SCOPE_UNSPECIFIED},
+		{name: "unknown", in: jobcontext.ScopeType("other"), want: managerv1.Scope_SCOPE_UNSPECIFIED},
 	}
 
 	for _, tt := range tests {
@@ -122,7 +122,7 @@ func TestRuleSources_RoundTrip(t *testing.T) {
 			Rules: []rule.Rule{{
 				RuleID:    "detect_bash",
 				RuleName:  "Detect bash",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Tags:      map[string]string{"severity": "medium"},
 				Target: rule.RuleTarget{
 					Include: []rule.RuleTargetMatcher{{ProviderHost: "github.com", Path: "acme/example"}},
@@ -157,7 +157,7 @@ func TestRuleSources_RoundTrip(t *testing.T) {
 	}
 	if gotRule.RuleID != "detect_bash" ||
 		gotRule.RuleName != "Detect bash" ||
-		gotRule.EventKind != jobevent.ProcessExec ||
+		gotRule.EventType != jobevent.ProcessExec ||
 		gotRule.Condition != `process.exec_path.endsWith("/bash")` ||
 		gotRule.Exceptions != `process.argv.exists(a, a.contains("safe"))` ||
 		gotRule.MaxAlerts != maxAlerts ||
@@ -210,7 +210,7 @@ func TestRuleSources_NilProtoElements(t *testing.T) {
 						nil,
 						{
 							RuleId:    "detect_bash",
-							EventKind: string(jobevent.ProcessExec),
+							EventType: string(jobevent.ProcessExec),
 							Target: &managerv1.RuleTarget{
 								Include: []*managerv1.RuleTargetMatcher{nil, {Path: "acme/example"}},
 							},
@@ -282,7 +282,7 @@ func TestRuleSources_ConversionDoesNotAliasMaps(t *testing.T) {
 			Lists:     map[string][]string{"bins": {"/bin/bash"}},
 			Rules: []rule.Rule{{
 				RuleID:    "detect_bash",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process.exec_path.endsWith("/bash")`,
 				Action:    rule.RuleActionDetect,
 				Tags:      map[string]string{"severity": "medium"},

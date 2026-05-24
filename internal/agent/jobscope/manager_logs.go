@@ -15,23 +15,23 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 )
 
-type JobResultLogInputs struct {
+type SummaryLogInputs struct {
 	Identity   jobcontext.JobIdentity
 	Metadata   jobcontext.JobMetadata
-	RunnerKind string
+	RunnerType string
 	StartedAt  time.Time
 }
 
-func (s *JobScopeState) EmitJobResultLog(ctx context.Context, in JobResultLogInputs, reason string, finalizedAt time.Time) error {
-	if s == nil || !s.managerJobLogs.HasJobResultLog() {
+func (s *JobScopeState) EmitSummaryLog(ctx context.Context, in SummaryLogInputs, reason string, finalizedAt time.Time) error {
+	if s == nil || !s.managerJobLogs.HasSummaryLog() {
 		return nil
 	}
-	payload, err := joblogs.MarshalJobResultLogEntry(joblogs.JobResultLogInput{
+	payload, err := joblogs.MarshalSummaryLogEntry(joblogs.SummaryLogInput{
 		ScopeLogContext: joblogs.ScopeLogContext{
 			Identity:       in.Identity,
 			Metadata:       in.Metadata,
-			RunnerKind:     in.RunnerKind,
-			Scope:          s.Kind,
+			RunnerType:     in.RunnerType,
+			Scope:          s.Type,
 			ConfigRevision: s.ConfigRevision,
 		},
 		RuleModifiers:  s.RuleModifiers,
@@ -44,20 +44,20 @@ func (s *JobScopeState) EmitJobResultLog(ctx context.Context, in JobResultLogInp
 	if err != nil {
 		return err
 	}
-	return s.managerJobLogs.EmitAndCloseJobResultLog(ctx, payload)
+	return s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
 }
 
-func (s *JobScopeState) WriteDetectionLogForHit(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, hit observations.HitEntry, event jobevent.EventRecord, logger *slog.Logger) {
+func (s *JobScopeState) WriteDetectionLogForHit(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, hit observations.HitEntry, event jobevent.EventRecord, logger *slog.Logger) {
 	if s == nil || hit.Identity.IsZero() {
 		return
 	}
 
 	switch hit.Action {
 	case string(rule.RuleActionTerminate):
-		s.writeDetectionLog(ctx, identity, metadata, runnerKind, &hit, event, logger, "")
+		s.writeDetectionLog(ctx, identity, metadata, runnerType, &hit, event, logger, "")
 	case string(rule.RuleActionDetect), string(rule.RuleActionCollect):
 		if hit.MaxAlerts <= 0 {
-			s.writeDetectionLog(ctx, identity, metadata, runnerKind, &hit, event, logger, "")
+			s.writeDetectionLog(ctx, identity, metadata, runnerType, &hit, event, logger, "")
 			return
 		}
 		hitCount := s.CorrelationHitCountFor(hit.Identity)
@@ -69,11 +69,11 @@ func (s *JobScopeState) WriteDetectionLogForHit(ctx context.Context, identity jo
 		if hitCount == cap {
 			truncation = resultdoc.AlertTruncationMaxAlertsReached
 		}
-		s.writeDetectionLog(ctx, identity, metadata, runnerKind, &hit, event, logger, truncation)
+		s.writeDetectionLog(ctx, identity, metadata, runnerType, &hit, event, logger, truncation)
 	}
 }
 
-func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, hit *observations.HitEntry, event jobevent.EventRecord, logger *slog.Logger, truncation string) {
+func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, hit *observations.HitEntry, event jobevent.EventRecord, logger *slog.Logger, truncation string) {
 	if s == nil || hit == nil {
 		return
 	}
@@ -83,8 +83,8 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 		ScopeLogContext: joblogs.ScopeLogContext{
 			Identity:   identity,
 			Metadata:   metadata,
-			RunnerKind: runnerKind,
-			Scope:      s.Kind,
+			RunnerType: runnerType,
+			Scope:      s.Type,
 		},
 		Hit:                 hit,
 		Event:               event,
@@ -107,44 +107,44 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 		logger.WarnContext(ctx, "detection_log_write_failed",
 			"ruleset_id", hit.Identity.RulesetID,
 			"rule_id", hit.Identity.RuleID,
-			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1.LogKind_LOG_KIND_JOB_DETECTION),
+			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1.LogType_LOG_TYPE_DETECTION),
 			"error", err,
 		)
 	}
 }
 
-func (s *JobScopeState) WriteRuntimeTelemetryLog(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, event jobevent.EventRecord, logger *slog.Logger) {
+func (s *JobScopeState) WriteRuntimeEventLog(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, event jobevent.EventRecord, logger *slog.Logger) {
 	if s == nil {
 		return
 	}
 
-	payload, err := joblogs.MarshalRuntimeTelemetryLogEntry(joblogs.RuntimeTelemetryLogInput{
+	payload, err := joblogs.MarshalRuntimeEventLogEntry(joblogs.RuntimeEventLogInput{
 		ScopeLogContext: joblogs.ScopeLogContext{
 			Identity:   identity,
 			Metadata:   metadata,
-			RunnerKind: runnerKind,
-			Scope:      s.Kind,
+			RunnerType: runnerType,
+			Scope:      s.Type,
 		},
 		Event: event,
 	})
 	if err != nil {
 		if logger != nil {
-			logger.WarnContext(ctx, "runtime_telemetry_marshal_failed",
-				"scope", string(s.Kind),
+			logger.WarnContext(ctx, "runtime_event_marshal_failed",
+				"scope", string(s.Type),
 				"error", err,
 			)
 		}
 		return
 	}
-	if err := s.managerJobLogs.WriteRuntimeTelemetryPayload(ctx, payload); err != nil && logger != nil {
-		logger.WarnContext(ctx, "runtime_telemetry_write_failed",
-			"scope", string(s.Kind),
-			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1.LogKind_LOG_KIND_JOB_RUNTIME_TELEMETRY),
+	if err := s.managerJobLogs.WriteRuntimeEventPayload(ctx, payload); err != nil && logger != nil {
+		logger.WarnContext(ctx, "runtime_event_write_failed",
+			"scope", string(s.Type),
+			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1.LogType_LOG_TYPE_RUNTIME_EVENT),
 			"error", err,
 		)
 	}
 	if s.debugOutput != nil {
-		_ = s.debugOutput.WriteRuntimeTelemetryPayload(ctx, payload)
+		_ = s.debugOutput.WriteRuntimeEventPayload(ctx, payload)
 	}
 }
 

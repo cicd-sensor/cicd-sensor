@@ -103,14 +103,14 @@ func TestJob_SetProjectScope_ResolvesScopeRules(t *testing.T) {
 	j := job.NewJob(externalTestLogger, id, meta, "machine", make(chan jobevent.EventRecord, externalTestEventChannelSize))
 
 	scope := &jobscope.JobScopeState{
-		Kind: jobcontext.ScopeKindProject,
+		Type: jobcontext.ScopeTypeProject,
 		RuleSets: []rule.RuleSet{
 			{
 				RulesetID: "project-set",
 				Rules: []rule.Rule{
 					{
 						RuleID:    "r1",
-						EventKind: jobevent.ProcessExec,
+						EventType: jobevent.ProcessExec,
 						Condition: `process_name == "bash"`,
 						Action:    rule.RuleActionDetect,
 					},

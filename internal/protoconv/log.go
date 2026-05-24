@@ -8,10 +8,10 @@ import (
 	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
 )
 
-// ToJobLogContext populates only provider-relevant fields so the unrelated
+// ToLogContext populates only provider-relevant fields so the unrelated
 // provider's keys stay zero-valued and drop out of marshalled JSON.
-func ToJobLogContext(identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) *logv1.JobLogContext {
-	out := &logv1.JobLogContext{
+func ToLogContext(identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) *logv1.LogContext {
+	out := &logv1.LogContext{
 		Provider:     string(identity.Provider),
 		ProviderHost: identity.ProviderHost,
 		ProjectPath:  identity.ProjectPath,

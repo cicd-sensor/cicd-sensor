@@ -24,18 +24,18 @@ service ConfigService {
 // RequestedOutputs indicates which logs the caller will upload,
 // so the manager can tailor output policy for those types.
 message RequestedOutputs {
-  bool job_result_log = 1;
-  bool job_detection_log = 2;
-  bool job_runtime_telemetry_log = 3;
+  bool summary_log = 1;
+  bool detection_log = 2;
+  bool runtime_event_log = 3;
 }
 
 // FetchConfigRequest is the FetchConfig input. Auth is carried in headers,
 // not in the body.
 message FetchConfigRequest {
-  // RunnerKind is the agent-process-wide runner kind ("machine" for VM /
+  // RunnerType is the agent-process-wide runner type ("machine" for VM /
   // physical server, "kubernetes" for a Pod) that helps the manager route
   // the request.
-  string runner_kind = 1;
+  string runner_type = 1;
   JobIdentity job_identity = 2;
   RequestedOutputs requested_outputs = 3;
 }

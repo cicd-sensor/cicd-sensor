@@ -2,10 +2,10 @@ rule_sets:
   - ruleset_id: set-invalid-dup
     rules:
       - rule_id: duplicate_id
-        event_kind: network_connect
+        event_type: network_connect
         condition: remote_ip == "example.com"
         action: detect
       - rule_id: duplicate_id
-        event_kind: network_connect
+        event_type: network_connect
         condition: protocol == "tcp"
         action: terminate

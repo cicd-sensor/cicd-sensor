@@ -147,8 +147,8 @@ func TestHandleUnixSocketConnect(t *testing.T) {
 			if !ok {
 				t.Fatalf("effects = %#v, want single emitEventRecord", effects)
 			}
-			if emit.Record.EventKind != jobevent.UnixSocketConnect {
-				t.Fatalf("kind = %q, want %q", emit.Record.EventKind, jobevent.UnixSocketConnect)
+			if emit.Record.EventType != jobevent.UnixSocketConnect {
+				t.Fatalf("kind = %q, want %q", emit.Record.EventType, jobevent.UnixSocketConnect)
 			}
 			if got, _ := emit.Record.Payload["path"].(string); got != tc.wantPath {
 				t.Fatalf("payload[path] = %q, want %q", got, tc.wantPath)

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package cicd_sensor.log.v1;
 
-message JobLogContext {
+message LogContext {
   string provider = 1 [json_name = "provider"];
   string provider_host = 2 [json_name = "provider_host"];
   string project_path = 3 [json_name = "project_path"];
@@ -29,9 +29,9 @@ message JobLogContext {
 }
 
 message EventRecord {
-  // UUIDv7 shared by telemetry and detection rows derived from this event.
+  // UUIDv7 shared by runtime-event and detection rows derived from this event.
   string id = 1 [json_name = "id"];
-  string kind = 2 [json_name = "kind"];
+  string type = 2 [json_name = "type"];
   repeated string tags = 3 [json_name = "tags"];
   ProcessSummary process = 4 [json_name = "process"];
 

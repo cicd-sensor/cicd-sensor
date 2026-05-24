@@ -23,7 +23,7 @@ const (
 type JobEventSummaryForReport struct {
 	JobIdentity        jobcontext.JobIdentity `json:"job_identity"`
 	Metadata           jobcontext.JobMetadata `json:"metadata"`
-	RunnerKind         string                 `json:"runner_kind,omitempty"`
+	RunnerType         string                 `json:"runner_type,omitempty"`
 	StartedAt          time.Time              `json:"started_at"`
 	GeneratedAt        time.Time              `json:"generated_at"`
 	FinalizeReason     string                 `json:"finalize_reason"`
@@ -93,7 +93,7 @@ type HitRecord struct {
 	RuleType        string          `json:"rule_type,omitempty"`
 	RuleCondition   string          `json:"rule_condition,omitempty"`
 	Action          string          `json:"action"`
-	EventKind       jobevent.Kind   `json:"event_kind,omitempty"`
+	EventType       jobevent.Type   `json:"event_type,omitempty"`
 	Process         *ProcessSummary `json:"process,omitempty"`
 	Payload         map[string]any  `json:"payload,omitempty"`
 	AlertTruncation string          `json:"alert_truncation,omitempty"`

@@ -27,7 +27,7 @@ const validBaselineBundleYAML = `rule_sets:
     rules:
       - rule_id: proc_environ_read
         description: Detect reads of /proc/<pid>/environ.
-        event_kind: file_open
+        event_type: file_open
         condition: is_read && path.startsWith("/proc/") && path.endsWith("/environ")
         action: detect
 ---
@@ -287,7 +287,7 @@ func TestParseRuleBundleGzipRejectsInvalidInputs(t *testing.T) {
   - ruleset_id: invalid
     rules:
       - condition: "true"
-        event_kind: process_exec
+        event_type: process_exec
         action: detect
 `),
 			wantErrMsg: "validate rule file rule bundle",

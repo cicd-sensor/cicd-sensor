@@ -10,7 +10,7 @@ import (
 
 	"cloud.google.com/go/pubsub/v2"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/logkind"
+	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 )
 
 type pubsubSink struct {
@@ -25,8 +25,8 @@ const (
 	pubsubImmediateFlushBytes   = 1
 	pubsubImmediateFlushSeconds = 1
 
-	pubsubRuntimeTelemetryFlushBytes   = 256 * 1024 // 256 KiB
-	pubsubRuntimeTelemetryFlushSeconds = 5
+	pubsubRuntimeEventFlushBytes   = 256 * 1024 // 256 KiB
+	pubsubRuntimeEventFlushSeconds = 5
 )
 
 // NewPubSub creates a Pub/Sub-backed Sink using Google Application Default
@@ -106,7 +106,7 @@ func pubsubAttributes(batch IngestLogBatch) map[string]string {
 	return map[string]string{
 		"content_type": "application/json",
 		"flush_at":     formatFlushAt(batch.FlushAt),
-		"log_kind":     string(batch.LogKind),
+		"log_type":     string(batch.LogType),
 		"scope":        string(batch.Scope),
 	}
 }
@@ -115,11 +115,11 @@ func (s *pubsubSink) Name() string {
 	return "pubsub://" + s.projectID + "/" + s.topicName
 }
 
-func (s *pubsubSink) FlushPolicy(logKind logkind.LogKind) FlushPolicy {
-	if logKind == logkind.JobRuntimeTelemetry {
+func (s *pubsubSink) FlushPolicy(logKind logtype.LogType) FlushPolicy {
+	if logKind == logtype.RuntimeEvent {
 		return FlushPolicy{
-			FlushThresholdBytes:  pubsubRuntimeTelemetryFlushBytes,
-			FlushIntervalSeconds: pubsubRuntimeTelemetryFlushSeconds,
+			FlushThresholdBytes:  pubsubRuntimeEventFlushBytes,
+			FlushIntervalSeconds: pubsubRuntimeEventFlushSeconds,
 		}
 	}
 	return FlushPolicy{

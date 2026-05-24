@@ -1,4 +1,4 @@
-package logkind
+package logtype
 
 import "testing"
 
@@ -6,12 +6,12 @@ func TestParse(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		want  LogKind
+		want  LogType
 		ok    bool
 	}{
-		{name: "job detection", input: "job_detection_log", want: JobDetection, ok: true},
-		{name: "runtime telemetry", input: "job_runtime_telemetry_log", want: JobRuntimeTelemetry, ok: true},
-		{name: "job result", input: "job_result_log", want: JobResult, ok: true},
+		{name: "detection", input: "detection_log", want: Detection, ok: true},
+		{name: "runtime event", input: "runtime_event_log", want: RuntimeEvent, ok: true},
+		{name: "summary", input: "summary_log", want: Summary, ok: true},
 		{name: "unknown", input: "detection", ok: false},
 		{name: "empty", input: "", ok: false},
 	}
@@ -23,7 +23,7 @@ func TestParse(t *testing.T) {
 				t.Fatalf("ok: got %v, want %v", ok, tt.ok)
 			}
 			if got != tt.want {
-				t.Fatalf("kind: got %q, want %q", got, tt.want)
+				t.Fatalf("type: got %q, want %q", got, tt.want)
 			}
 		})
 	}

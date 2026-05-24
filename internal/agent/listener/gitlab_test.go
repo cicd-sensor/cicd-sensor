@@ -650,7 +650,7 @@ func setupGitLabListenerWithHostManager(t *testing.T, hostManagerClient jobregis
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
 		HostManagerClient:     hostManagerClient,
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              jobcontext.ProviderGitLab,
 	})
 

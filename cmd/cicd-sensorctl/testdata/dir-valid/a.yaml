@@ -2,6 +2,6 @@ rule_sets:
   - ruleset_id: set-valid-a
     rules:
       - rule_id: detect_a
-        event_kind: network_connect
+        event_type: network_connect
         condition: protocol == "tcp"
         action: detect

@@ -26,7 +26,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 			name: "simple_suffix_match_is_cheap",
 			set: ruleSetWithRule(rule.Rule{
 				RuleID:    "simple",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process.exec_path.endsWith("/bash")`,
 			}),
 			wantWarnings: map[string]bool{"condition": false},
@@ -35,7 +35,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 			name: "single_argv_scan_is_acceptable",
 			set: ruleSetWithRule(rule.Rule{
 				RuleID:    "argv_scan",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process.argv.exists(a, a.contains("password"))`,
 			}),
 			wantWarnings: map[string]bool{"condition": false},
@@ -49,7 +49,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 				},
 				Rules: []rule.Rule{{
 					RuleID:    "list_scan",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `list.bins.exists(b, process.exec_path.endsWith(b))`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -65,7 +65,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 				},
 				Rules: []rule.Rule{{
 					RuleID:    "ancestor_list",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process.ancestors.exists(a, list.pkg_install_basenames.exists(b, a.exec_path.endsWith(b)))`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -84,7 +84,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 				},
 				Rules: []rule.Rule{{
 					RuleID:    "argv_x_list",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process.argv.exists(a, list.needles.exists(s, a.contains(s)))`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -97,7 +97,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 			name: "single_ancestor_times_argv_scan_is_acceptable",
 			set: ruleSetWithRule(rule.Rule{
 				RuleID:    "ancestor_argv",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process.ancestors.exists(p, p.argv.exists(a, a.contains("token")))`,
 			}),
 			wantWarnings: map[string]bool{"condition": false},
@@ -108,7 +108,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 			name: "ancestor_times_argv_with_many_ored_contains_warns",
 			set: ruleSetWithRule(rule.Rule{
 				RuleID:    "ancestor_argv_ors",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process.ancestors.exists(p, p.argv.exists(a, a.contains("aaa") || a.contains("bbb") || a.contains("ccc") || a.contains("ddd") || a.contains("eee") || a.contains("fff") || a.contains("ggg") || a.contains("hhh") || a.contains("iii") || a.contains("jjj")))`,
 			}),
 			wantWarnings: map[string]bool{"condition": true},
@@ -119,7 +119,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 			name: "heavy_exception_warns_even_when_condition_is_cheap",
 			set: ruleSetWithRule(rule.Rule{
 				RuleID:     "heavy_exception",
-				EventKind:  jobevent.ProcessExec,
+				EventType:  jobevent.ProcessExec,
 				Condition:  `process.exec_path.endsWith("/bash")`,
 				Exceptions: `process.ancestors.exists(p, p.argv.exists(a, a.contains("aaa") || a.contains("bbb") || a.contains("ccc") || a.contains("ddd") || a.contains("eee") || a.contains("fff") || a.contains("ggg") || a.contains("hhh") || a.contains("iii") || a.contains("jjj")))`,
 			}),
@@ -145,7 +145,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 			name: "invalid_cel_is_reported_by_compile_not_cost",
 			set: ruleSetWithRule(rule.Rule{
 				RuleID:    "invalid",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process.argv[0] == "bash"`,
 			}),
 			wantMissing: []string{"condition"},

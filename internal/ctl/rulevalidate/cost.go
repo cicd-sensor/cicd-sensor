@@ -47,11 +47,11 @@ func RuleSetCosts(env *celengine.Env, set rule.RuleSet) map[RuleCostKey]uint64 {
 		}
 		identity := rule.RuleIdentity{RulesetID: set.RulesetID, RuleID: candidate.RuleID}
 		canonicalRuleID := identity.CanonicalRuleID()
-		if cost, ok := estimateExpressionCost(env, canonicalRuleID.String(), candidate.EventKind, candidate.Condition, predefinedLists); ok {
+		if cost, ok := estimateExpressionCost(env, canonicalRuleID.String(), candidate.EventType, candidate.Condition, predefinedLists); ok {
 			out[RuleCostKey{Identity: identity, Kind: "condition"}] = cost
 		}
 		if strings.TrimSpace(candidate.Exceptions) != "" {
-			if cost, ok := estimateExpressionCost(env, canonicalRuleID.String(), candidate.EventKind, candidate.Exceptions, predefinedLists); ok {
+			if cost, ok := estimateExpressionCost(env, canonicalRuleID.String(), candidate.EventType, candidate.Exceptions, predefinedLists); ok {
 				out[RuleCostKey{Identity: identity, Kind: "exception"}] = cost
 			}
 		}
@@ -59,11 +59,11 @@ func RuleSetCosts(env *celengine.Env, set rule.RuleSet) map[RuleCostKey]uint64 {
 	return out
 }
 
-func estimateExpressionCost(env *celengine.Env, ruleID string, kind jobevent.Kind, source string, predefinedLists map[string][]string) (uint64, bool) {
-	if _, err := env.Compile(ruleID, kind, source, predefinedLists); err != nil {
+func estimateExpressionCost(env *celengine.Env, ruleID string, eventType jobevent.Type, source string, predefinedLists map[string][]string) (uint64, bool) {
+	if _, err := env.Compile(ruleID, eventType, source, predefinedLists); err != nil {
 		return 0, false
 	}
-	celEnv, err := env.EnvForKind(kind)
+	celEnv, err := env.EnvForType(eventType)
 	if err != nil {
 		return 0, false
 	}

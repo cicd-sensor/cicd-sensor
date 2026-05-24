@@ -6,29 +6,29 @@ The log schema is maintained in Protocol Buffers, and the source of truth is [`p
 With manager delivery, the Agent sends these JSONL batches to the manager.
 The manager delivers each batch to the configured sink.
 
-## Log kinds
+## Log types
 
-| Log kind | Purpose | Timing |
+| Log type | Purpose | Timing |
 | --- | --- | --- |
-| `job_result_log` | Final job summary. This is the entry point for reviewing runtime results per job. | Generated when the job finalizes. |
-| `job_detection_log` | Per-rule-hit log for real-time detection and triage. Includes both `detect` and `collect` actions. | Streamed while the job is running. |
-| `job_runtime_telemetry_log` | Detailed runtime events for incident response and forensics. | Streamed while the job is running. |
+| `summary_log` | Final job summary. This is the entry point for reviewing runtime results per job. | Generated when the job finalizes. |
+| `detection_log` | Per-rule-hit log for real-time detection and triage. Includes both `detect` and `collect` actions. | Streamed while the job is running. |
+| `runtime_event_log` | Detailed runtime events for incident response and forensics. | Streamed while the job is running. |
 
 ## Common fields
 
-Every log entry carries these top-level fields, regardless of log kind.
+Every log entry carries these top-level fields, regardless of log type.
 
 | Field | Description |
 | --- | --- |
 | `timestamp` | UTC, RFC 3339 |
-| `log_type` | One of the log kinds listed above |
+| `log_type` | One of the log types listed above |
 | `schema_version` | Schema version of this `log_type`. Bumped on breaking changes |
 | `agent_version` | Agent build version |
 | `log_id` | UUID(v7) per log row |
 | `scope` | `host` for self-hosted configuration, `project` for GitHub Action invocations |
-| `runner_kind` | Runner kind, such as `machine` |
+| `runner_type` | Runner type, such as `machine` |
 
-`job_result_log` additionally carries `config_revision` — the manager config revision used for this job, or `(none)`.
+`summary_log` additionally carries `config_revision` — the manager config revision used for this job, or `(none)`.
 
 ## Job context
 
@@ -60,16 +60,16 @@ Other fields add useful context for search, reports, and triage.
 
 ## Runtime event format
 
-Both `job_detection_log` and `job_runtime_telemetry_log` include an `event` object.
-This object describes the runtime behavior that triggered a rule hit or was emitted as telemetry.
+Both `detection_log` and `runtime_event_log` include an `event` object.
+This object describes the runtime behavior that triggered a rule hit or was emitted as a runtime event.
 
 | Field | Description |
 | --- | --- |
-| `id` | Runtime event UUID(v7). Use it to join telemetry and detections. |
-| `kind` | `process_exec`, `network_connect`, `file_open`, `domain`, and other event kinds |
+| `id` | Runtime event UUID(v7). Use it to join runtime events and detections. |
+| `type` | `process_exec`, `network_connect`, `file_open`, `domain`, and other event types |
 | `tags` | Tags attached to the event |
 | `process` | PID, executable path, argv, and ancestor processes |
-| event-specific payload | Fields for the specific event kind, such as network destination, file path, or domain |
+| event-specific payload | Fields for the specific event type, such as network destination, file path, or domain |
 
 ### argv output sanitization
 
@@ -85,10 +85,10 @@ This means a rule can match full argv content even when the corresponding log en
 
 | Question | First log to check |
 | --- | --- |
-| What happened across the job? | `job_result_log` |
-| Which rules hit? | `job_detection_log` |
-| Which process / network / file events happened around a detection? | `job_runtime_telemetry_log` |
-| How do I investigate the source event behind a SIEM alert? | Join `job_detection_log.event.id` with `job_runtime_telemetry_log.event.id` |
+| What happened across the job? | `summary_log` |
+| Which rules hit? | `detection_log` |
+| Which process / network / file events happened around a detection? | `runtime_event_log` |
+| How do I investigate the source event behind a SIEM alert? | Join `detection_log.event.id` with `runtime_event_log.event.id` |
 
 When building a compatible log consumer, use the linked proto schema as the exact field reference.
 

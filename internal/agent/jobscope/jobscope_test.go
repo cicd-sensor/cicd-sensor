@@ -16,8 +16,8 @@ func TestNewProject_InitializesRuntimeState(t *testing.T) {
 
 	scope := jobscope.NewProject()
 
-	if scope.Kind != jobcontext.ScopeKindProject {
-		t.Fatalf("scope kind: got %q, want %q", scope.Kind, jobcontext.ScopeKindProject)
+	if scope.Type != jobcontext.ScopeTypeProject {
+		t.Fatalf("scope type: got %q, want %q", scope.Type, jobcontext.ScopeTypeProject)
 	}
 	if scope.Observations == nil {
 		t.Fatal("expected observations to be initialized")
@@ -39,7 +39,7 @@ func TestBuildJobEventSummaryForReportSanitizesRetainedEvent(t *testing.T) {
 		MaxAlerts: 1,
 	}
 	event := jobevent.EventRecord{
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Timestamp: now,
 		Process: jobevent.ProcessSummary{
 			PID:      100,

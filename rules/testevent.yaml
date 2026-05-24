@@ -3,8 +3,8 @@ rule_sets:
     rules:
       - rule_id: testevent_domain_lookup
         rule_name: "Testevent: cicd-sensor canary domain looked up"
-        description: Synthetic canary for domain lookup telemetry.
-        event_kind: domain
+        description: Synthetic canary for domain lookup runtime events.
+        event_type: domain
         condition: domain == "testevent.cicd-sensor.com"
         action: detect
         tags:
@@ -13,8 +13,8 @@ rule_sets:
 
       - rule_id: testevent_file_write
         rule_name: "Testevent: cicd-sensor canary file written"
-        description: Synthetic canary for file write telemetry.
-        event_kind: file_open
+        description: Synthetic canary for file write runtime events.
+        event_type: file_open
         condition: is_write && path.endsWith("/cicd-sensor-testevent.txt")
         action: detect
         tags:

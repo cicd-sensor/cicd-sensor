@@ -41,11 +41,11 @@ func FromProtoJobIdentity(id *managerv1.JobIdentity) jobcontext.JobIdentity {
 	}
 }
 
-func ToProtoScope(scope jobcontext.ScopeKind) managerv1.Scope {
+func ToProtoScope(scope jobcontext.ScopeType) managerv1.Scope {
 	switch scope {
-	case jobcontext.ScopeKindHost:
+	case jobcontext.ScopeTypeHost:
 		return managerv1.Scope_SCOPE_HOST
-	case jobcontext.ScopeKindProject:
+	case jobcontext.ScopeTypeProject:
 		return managerv1.Scope_SCOPE_PROJECT
 	default:
 		return managerv1.Scope_SCOPE_UNSPECIFIED
@@ -137,7 +137,7 @@ func toProtoRule(in rule.Rule) *managerv1.Rule {
 		RuleName:    in.RuleName,
 		Description: in.Description,
 		Type:        in.Type,
-		EventKind:   string(in.EventKind),
+		EventType:   string(in.EventType),
 		Target:      toProtoRuleTarget(in.Target),
 		Condition:   in.Condition,
 		Exceptions:  in.Exceptions,
@@ -156,7 +156,7 @@ func fromProtoRule(in *managerv1.Rule) rule.Rule {
 		RuleName:    in.RuleName,
 		Description: in.Description,
 		Type:        in.Type,
-		EventKind:   jobevent.Kind(in.EventKind),
+		EventType:   jobevent.Type(in.EventType),
 		Target:      fromProtoRuleTarget(in.Target),
 		Condition:   in.Condition,
 		Exceptions:  in.Exceptions,

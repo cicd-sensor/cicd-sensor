@@ -14,7 +14,7 @@ import (
 )
 
 // ApplyGitHubHostStart starts a host scope and seeds tracking from the caller cgroup.
-func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, rootPID int32, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*job.Job, error) {
+func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, rootPID int32, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*job.Job, error) {
 	// Build scope config first, register the Job runtime, attach the scope, then
 	// bind the caller cgroup so routed events always see a resolved scope.
 	reservation := jr.reserveJobStart(identity)
@@ -32,13 +32,13 @@ func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcon
 	if hostManagerClient == nil {
 		return nil, ErrHostManagerRequired
 	}
-	hostScope, err := jr.buildHostScopeFromManagerConfig(ctx, identity, metadata, runnerKind, hostManagerConnection, hostManagerClient)
+	hostScope, err := jr.buildHostScopeFromManagerConfig(ctx, identity, metadata, runnerType, hostManagerConnection, hostManagerClient)
 	if err != nil {
 		return nil, err
 	}
 
 	// Register the runtime before attaching scope so the Job owns its event worker.
-	job, err := jr.registerJobRuntime(ctx, identity, metadata, runnerKind)
+	job, err := jr.registerJobRuntime(ctx, identity, metadata, runnerType)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcon
 }
 
 // ApplyGitLabHostStart lazily creates the GitLab host scope from docker proxy labels.
-func (jr *JobRegistry) ApplyGitLabHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*job.Job, error) {
+func (jr *JobRegistry) ApplyGitLabHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*job.Job, error) {
 	// Docker proxy calls can race; wait for any in-flight lazy create, then
 	// build and attach the host scope. Cgroup tracking starts later via staging.
 	reservation, err := jr.waitForJobStartReservation(ctx, identity)
@@ -73,13 +73,13 @@ func (jr *JobRegistry) ApplyGitLabHostStart(ctx context.Context, identity jobcon
 	if hostManagerClient == nil {
 		return nil, ErrHostManagerRequired
 	}
-	hostScope, err := jr.buildHostScopeFromManagerConfig(ctx, identity, metadata, runnerKind, hostManagerConnection, hostManagerClient)
+	hostScope, err := jr.buildHostScopeFromManagerConfig(ctx, identity, metadata, runnerType, hostManagerConnection, hostManagerClient)
 	if err != nil {
 		return nil, err
 	}
 
 	// Register now; GitLab seeds tracking later through staging_map promotion.
-	job, err := jr.registerJobRuntime(ctx, identity, metadata, runnerKind)
+	job, err := jr.registerJobRuntime(ctx, identity, metadata, runnerType)
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +91,9 @@ func (jr *JobRegistry) ApplyGitLabHostStart(ctx context.Context, identity jobcon
 }
 
 // buildHostScopeFromManagerConfig builds a resolved host scope from manager config.
-func (jr *JobRegistry) buildHostScopeFromManagerConfig(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*jobscope.JobScopeState, error) {
+func (jr *JobRegistry) buildHostScopeFromManagerConfig(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*jobscope.JobScopeState, error) {
 	hostScope := jobscope.NewHost()
-	managerConfig, err := jr.fetchManagerConfig(ctx, identity, metadata, runnerKind, hostManagerClient, "manager_config_fetched")
+	managerConfig, err := jr.fetchManagerConfig(ctx, identity, metadata, runnerType, hostManagerClient, "manager_config_fetched")
 	if err != nil {
 		return nil, err
 	}
@@ -105,9 +105,9 @@ func (jr *JobRegistry) buildHostScopeFromManagerConfig(ctx context.Context, iden
 	return hostScope, nil
 }
 
-func (jr *JobRegistry) fetchManagerConfig(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, managerClient ManagerConfigFetcher, eventName string) (jobscope.ManagerConfig, error) {
+func (jr *JobRegistry) fetchManagerConfig(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, managerClient ManagerConfigFetcher, eventName string) (jobscope.ManagerConfig, error) {
 	result, err := managerClient.FetchConfig(ctx, &managerv1.FetchConfigRequest{
-		RunnerKind:  runnerKind,
+		RunnerType:  runnerType,
 		JobIdentity: protoconv.ToProtoJobIdentity(identity),
 	})
 	if err != nil {

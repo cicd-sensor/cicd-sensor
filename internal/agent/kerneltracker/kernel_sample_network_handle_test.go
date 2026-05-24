@@ -28,8 +28,8 @@ func TestHandleNetConnectV4Sample_EmitsPayloadAndBlockTag(t *testing.T) {
 	if !ok {
 		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
 	}
-	if emit.Record.EventKind != jobevent.NetworkConnect {
-		t.Fatalf("kind = %q, want %q", emit.Record.EventKind, jobevent.NetworkConnect)
+	if emit.Record.EventType != jobevent.NetworkConnect {
+		t.Fatalf("kind = %q, want %q", emit.Record.EventType, jobevent.NetworkConnect)
 	}
 	assertNetworkConnectPayload(t, emit.Record, "192.0.2.10", 443, "tcp", "ipv4")
 	if got := emit.Record.Tags["block_source"]; got != "kernel" {
@@ -57,8 +57,8 @@ func TestHandleNetConnectV6Sample_EmitsPayload(t *testing.T) {
 	if !ok {
 		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
 	}
-	if emit.Record.EventKind != jobevent.NetworkConnect {
-		t.Fatalf("kind = %q, want %q", emit.Record.EventKind, jobevent.NetworkConnect)
+	if emit.Record.EventType != jobevent.NetworkConnect {
+		t.Fatalf("kind = %q, want %q", emit.Record.EventType, jobevent.NetworkConnect)
 	}
 	assertNetworkConnectPayload(t, emit.Record, "2001:db8::1", 53, "udp", "ipv6")
 	if got := emit.Record.Tags["block_source"]; got != "" {

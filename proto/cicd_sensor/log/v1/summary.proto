@@ -6,16 +6,16 @@ import "buf/validate/validate.proto";
 import "cicd_sensor/log/v1/common.proto";
 import "google/protobuf/timestamp.proto";
 
-message JobResultLogEntry {
+message SummaryLogEntry {
   google.protobuf.Timestamp timestamp = 1 [json_name = "timestamp"];
   optional string log_type = 2 [json_name = "log_type"];
   optional string schema_version = 3 [json_name = "schema_version", (buf.validate.field).string.const = "v1"];
   optional string agent_version = 4 [json_name = "agent_version"];
-  // UUIDv7 for this result log row.
+  // UUIDv7 for this summary log row.
   optional string log_id = 5 [json_name = "log_id"];
-  JobLogContext job = 6 [json_name = "job"];
+  LogContext job = 6 [json_name = "job"];
   optional string scope = 7 [json_name = "scope"];
-  optional string runner_kind = 8 [json_name = "runner_kind"];
+  optional string runner_type = 8 [json_name = "runner_type"];
   optional string config_revision = 9 [json_name = "config_revision"];
   repeated RulesetUse rulesets = 10 [json_name = "rulesets"];
   repeated RuleModifierUse rule_modifiers = 11 [json_name = "rule_modifiers"];

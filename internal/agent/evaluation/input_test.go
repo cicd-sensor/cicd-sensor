@@ -15,7 +15,7 @@ func TestCELInputEventFromRecordNormalizesProcessAndPayload(t *testing.T) {
 	t.Parallel()
 
 	input := celInputEventFromRecord(jobevent.EventRecord{
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Payload: map[string]any{
 			"remote_ip":   "EXAMPLE.COM",
 			"remote_port": 443,
@@ -60,7 +60,7 @@ func TestCELInputEventFromRecordNormalizesProcessAndPayload(t *testing.T) {
 	}
 }
 
-func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
+func TestCELInputEventFromRecordFileMutationTypes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -71,7 +71,7 @@ func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
 		{
 			name: "file_remove_unlink",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileRemove,
+				EventType: jobevent.FileRemove,
 				Payload: map[string]any{
 					"path":      "/ETC/SHADOW",
 					"is_folder": false,
@@ -89,7 +89,7 @@ func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
 		{
 			name: "file_remove_rmdir",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileRemove,
+				EventType: jobevent.FileRemove,
 				Payload: map[string]any{
 					"path":      "/var/log/journal",
 					"is_folder": true,
@@ -107,7 +107,7 @@ func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
 		{
 			name: "file_move_normalizes_paths",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileMove,
+				EventType: jobevent.FileMove,
 				Payload: map[string]any{
 					"from_path": "/TMP/PAYLOAD.BIN",
 					"to_path":   "/RUN/INIT",
@@ -125,7 +125,7 @@ func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
 		{
 			name: "file_link_hardlink",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileLink,
+				EventType: jobevent.FileLink,
 				Payload: map[string]any{
 					"created_path":  "/tmp/copy",
 					"existing_path": "/etc/shadow",
@@ -149,7 +149,7 @@ func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
 		{
 			name: "file_link_symlink",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileLink,
+				EventType: jobevent.FileLink,
 				Payload: map[string]any{
 					"created_path":  "/usr/local/bin/curl",
 					"existing_path": "/usr/tmp/wrap", // already absolutized by handler
@@ -173,7 +173,7 @@ func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
 		{
 			name: "file_remove_missing_payload_is_zero",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileRemove,
+				EventType: jobevent.FileRemove,
 				Payload:   nil,
 			},
 			assertion: func(t *testing.T, input celengine.CELInputEvent) {
@@ -188,7 +188,7 @@ func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
 		{
 			name: "file_link_payload_wrong_types_falls_back_to_zero",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileLink,
+				EventType: jobevent.FileLink,
 				Payload: map[string]any{
 					"created_path": 42,    // wrong type
 					"is_hardlink":  "yes", // wrong type
@@ -214,7 +214,7 @@ func TestCELInputEventFromRecordFileMutationKinds(t *testing.T) {
 	}
 }
 
-func TestCELInputEventFromRecordEventKindPayloads(t *testing.T) {
+func TestCELInputEventFromRecordEventTypePayloads(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -225,7 +225,7 @@ func TestCELInputEventFromRecordEventKindPayloads(t *testing.T) {
 		{
 			name: "process_exec_memfd",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Payload: map[string]any{
 					"is_memfd": true,
 				},
@@ -239,7 +239,7 @@ func TestCELInputEventFromRecordEventKindPayloads(t *testing.T) {
 		{
 			name: "file_open_flags_and_access",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.FileOpen,
+				EventType: jobevent.FileOpen,
 				Payload: map[string]any{
 					"path":     "/TMP/SECRET.ENV",
 					"is_write": true,
@@ -262,7 +262,7 @@ func TestCELInputEventFromRecordEventKindPayloads(t *testing.T) {
 		{
 			name: "domain_query_and_source",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.Domain,
+				EventType: jobevent.Domain,
 				Payload: map[string]any{
 					"domain": "Registry.NPMJS.Org",
 					"source": "DNS",
@@ -280,7 +280,7 @@ func TestCELInputEventFromRecordEventKindPayloads(t *testing.T) {
 		{
 			name: "unix_socket_connect",
 			event: jobevent.EventRecord{
-				EventKind: jobevent.UnixSocketConnect,
+				EventType: jobevent.UnixSocketConnect,
 				Payload: map[string]any{
 					"path":        "@DBUS-7",
 					"socket_type": "STREAM",
@@ -314,7 +314,7 @@ func TestCELInputEventFromRecordReturnsEmptyAncestorsWhenMissing(t *testing.T) {
 	t.Parallel()
 
 	input := celInputEventFromRecord(jobevent.EventRecord{
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Process: jobevent.ProcessSummary{
 			ExecPath: "/usr/bin/echo",
 		},
@@ -427,7 +427,7 @@ func TestCELInputEventFromRecordPayloadTypeCoercion(t *testing.T) {
 			t.Parallel()
 
 			input := celInputEventFromRecord(jobevent.EventRecord{
-				EventKind: jobevent.NetworkConnect,
+				EventType: jobevent.NetworkConnect,
 				Payload:   tt.payload,
 			})
 			if input.RemotePort != tt.wantPort {

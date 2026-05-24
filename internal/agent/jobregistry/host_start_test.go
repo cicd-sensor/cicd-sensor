@@ -158,8 +158,8 @@ func TestJobRegistry_ApplyGitHubHostStart_SetsHostScope(t *testing.T) {
 	if job.HostScope() == nil {
 		t.Fatal("expected host scope to be set")
 	}
-	if job.RunnerKind() != "machine" {
-		t.Fatalf("job runner_kind: got %q, want %q", job.RunnerKind(), "machine")
+	if job.RunnerType() != "machine" {
+		t.Fatalf("job runner_type: got %q, want %q", job.RunnerType(), "machine")
 	}
 	if len(job.HostScope().ResolvedRules.Warnings) != 0 {
 		t.Fatalf("host scope warnings: got %d, want 0", len(job.HostScope().ResolvedRules.Warnings))
@@ -176,7 +176,7 @@ func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 				RulesetID: "managed",
 				Rules: []rule.Rule{{
 					RuleID:    "detect-1",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -186,7 +186,7 @@ func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 					ConfigRevision:          "sha256:test",
 					DefaultMaxAlertsPerRule: 27,
 					OutputSettings: &managerv1.OutputSettings{
-						JobDetectionLog: &managerv1.OutputSetting{Enabled: true},
+						DetectionLog: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -214,7 +214,7 @@ func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 	if got := job.HostScope().DefaultMaxAlertsPerRule; got != 27 {
 		t.Fatalf("host scope default_max_alerts_per_rule: got %d, want 27", got)
 	}
-	if !job.HostScope().OutputSettings.GetJobDetectionLog().GetEnabled() {
+	if !job.HostScope().OutputSettings.GetDetectionLog().GetEnabled() {
 		t.Fatal("host scope detection output: got false, want true")
 	}
 }
@@ -226,7 +226,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 				RulesetID: "manager-host",
 				Rules: []rule.Rule{{
 					RuleID:    "host-only",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				}},
@@ -235,7 +235,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 				Config: &managerv1.ServedConfig{
 					DefaultMaxAlertsPerRule: 99,
 					OutputSettings: &managerv1.OutputSettings{
-						JobDetectionLog: &managerv1.OutputSetting{Enabled: true},
+						DetectionLog: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -259,7 +259,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 			RulesetID: "project",
 			Rules: []rule.Rule{{
 				RuleID:    "project-only",
-				EventKind: jobevent.ProcessExec,
+				EventType: jobevent.ProcessExec,
 				Condition: `process_name == "go"`,
 				Action:    rule.RuleActionDetect,
 			}},
@@ -290,7 +290,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 	if got := project.DefaultMaxAlertsPerRule; got != 7 {
 		t.Fatalf("project default_max_alerts_per_rule: got %d, want 7", got)
 	}
-	if project.OutputSettings.GetJobDetectionLog().GetEnabled() {
+	if project.OutputSettings.GetDetectionLog().GetEnabled() {
 		t.Fatal("project detection output: got true, want false")
 	}
 }

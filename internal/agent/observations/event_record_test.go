@@ -15,7 +15,7 @@ func TestState_RecordEventAggregatesDomains(t *testing.T) {
 	now := time.Date(2026, 5, 11, 1, 2, 3, 0, time.UTC)
 	for i, domain := range []string{"b.example.com", "a.example.com", "b.example.com"} {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload: map[string]any{
 				"domain": domain,
@@ -47,7 +47,7 @@ func TestState_RecordEventCapsDomainSnapshot(t *testing.T) {
 	now := time.Date(2026, 5, 11, 1, 2, 3, 0, time.UTC)
 	for i := range observationCap {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload: map[string]any{
 				"domain": fmt.Sprintf("d-%04d.example.com", i),
@@ -56,7 +56,7 @@ func TestState_RecordEventCapsDomainSnapshot(t *testing.T) {
 	}
 	for _, domain := range []string{"d-0000.example.com", "overflow-1.example.com", "overflow-2.example.com"} {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload: map[string]any{
 				"domain": domain,
@@ -89,7 +89,7 @@ func TestState_RecordEventAggregatesNetworks(t *testing.T) {
 	}
 	for _, record := range records {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Timestamp: now,
 			Payload:   record.payload,
 			Process:   record.process,
@@ -124,7 +124,7 @@ func TestState_RecordEventDistinguishesProcessStartBoottime(t *testing.T) {
 		{PID: 100, StartBoottime: 10, ExecPath: "/usr/bin/curl"},
 	} {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload:   map[string]any{"domain": "example.com"},
 			Process:   process,
@@ -153,7 +153,7 @@ func TestState_RecordEventDedupesProcessByPIDAndStartBoottime(t *testing.T) {
 		{PID: 100, StartBoottime: 10, ExecPath: "/usr/bin/wget"},
 	} {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload:   map[string]any{"domain": "example.com"},
 			Process:   process,
@@ -179,7 +179,7 @@ func TestState_RecordEventDoesNotOverwriteProcessContextWithEmptySnapshot(t *tes
 		{PID: 100, StartBoottime: 10},
 	} {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload:   map[string]any{"domain": "example.com"},
 			Process:   process,
@@ -200,7 +200,7 @@ func TestState_RecordEventOmitsObservationProcessArgv(t *testing.T) {
 
 	state := NewState()
 	state.RecordEvent(jobevent.EventRecord{
-		EventKind: jobevent.Domain,
+		EventType: jobevent.Domain,
 		Timestamp: time.Date(2026, 5, 11, 1, 2, 3, 0, time.UTC),
 		Payload:   map[string]any{"domain": "example.com"},
 		Process: jobevent.ProcessSummary{
@@ -237,7 +237,7 @@ func TestState_RecordEventOverwritesPidOnlyProcessContextWhenDetailsArrive(t *te
 		{PID: 100, StartBoottime: 10, ExecPath: "/usr/bin/node"},
 	} {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload:   map[string]any{"domain": "example.com"},
 			Process:   process,
@@ -258,7 +258,7 @@ func TestState_RecordEventSkipsEmptyProcessContext(t *testing.T) {
 
 	state := NewState()
 	state.RecordEvent(jobevent.EventRecord{
-		EventKind: jobevent.Domain,
+		EventType: jobevent.Domain,
 		Timestamp: time.Date(2026, 5, 11, 1, 2, 3, 0, time.UTC),
 		Payload:   map[string]any{"domain": "example.com"},
 	})
@@ -279,7 +279,7 @@ func TestState_RecordEventCapsNetworkSnapshot(t *testing.T) {
 	now := time.Date(2026, 5, 11, 1, 2, 3, 0, time.UTC)
 	for i := range observationCap {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Timestamp: now,
 			Payload: map[string]any{
 				"remote_ip":   fmt.Sprintf("192.0.2.%d", i),
@@ -290,7 +290,7 @@ func TestState_RecordEventCapsNetworkSnapshot(t *testing.T) {
 	}
 	for _, ip := range []string{"192.0.2.0", "198.51.100.1", "198.51.100.2"} {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Timestamp: now,
 			Payload: map[string]any{
 				"remote_ip":   ip,
@@ -315,15 +315,15 @@ func TestState_RecordEventCountsMalformedObservationPayloads(t *testing.T) {
 	state := NewState()
 	now := time.Date(2026, 5, 11, 1, 2, 3, 0, time.UTC)
 	for _, event := range []jobevent.EventRecord{
-		{EventKind: jobevent.Domain, Timestamp: now},
-		{EventKind: jobevent.Domain, Timestamp: now, Payload: map[string]any{"domain": ""}},
-		{EventKind: jobevent.Domain, Timestamp: now, Payload: map[string]any{"domain": 123}},
-		{EventKind: jobevent.NetworkConnect, Timestamp: now},
-		{EventKind: jobevent.NetworkConnect, Timestamp: now, Payload: map[string]any{"remote_ip": ""}},
-		{EventKind: jobevent.NetworkConnect, Timestamp: now, Payload: map[string]any{"remote_ip": 123}},
-		{EventKind: jobevent.NetworkConnect, Timestamp: now, Payload: map[string]any{"remote_ip": "192.0.2.1", "remote_port": "bad", "protocol": "tcp"}},
-		{EventKind: jobevent.NetworkConnect, Timestamp: now, Payload: map[string]any{"remote_ip": "192.0.2.1", "remote_port": int64(443), "protocol": ""}},
-		{EventKind: jobevent.ProcessExec, Timestamp: now},
+		{EventType: jobevent.Domain, Timestamp: now},
+		{EventType: jobevent.Domain, Timestamp: now, Payload: map[string]any{"domain": ""}},
+		{EventType: jobevent.Domain, Timestamp: now, Payload: map[string]any{"domain": 123}},
+		{EventType: jobevent.NetworkConnect, Timestamp: now},
+		{EventType: jobevent.NetworkConnect, Timestamp: now, Payload: map[string]any{"remote_ip": ""}},
+		{EventType: jobevent.NetworkConnect, Timestamp: now, Payload: map[string]any{"remote_ip": 123}},
+		{EventType: jobevent.NetworkConnect, Timestamp: now, Payload: map[string]any{"remote_ip": "192.0.2.1", "remote_port": "bad", "protocol": "tcp"}},
+		{EventType: jobevent.NetworkConnect, Timestamp: now, Payload: map[string]any{"remote_ip": "192.0.2.1", "remote_port": int64(443), "protocol": ""}},
+		{EventType: jobevent.ProcessExec, Timestamp: now},
 	} {
 		state.RecordEvent(event)
 	}
@@ -348,13 +348,13 @@ func TestState_RecordEventCapsProcessContextsPerObservation(t *testing.T) {
 	for i := range observationProcessCap + 1 {
 		process := testProcess(int32(i+1), fmt.Sprintf("/usr/bin/tool-%02d", i))
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload:   map[string]any{"domain": "registry.npmjs.org"},
 			Process:   process,
 		})
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.NetworkConnect,
+			EventType: jobevent.NetworkConnect,
 			Timestamp: now,
 			Payload: map[string]any{
 				"remote_ip":   "203.0.113.10",
@@ -387,14 +387,14 @@ func TestState_RecordEventDoesNotOverflowDuplicateProcessContext(t *testing.T) {
 	now := time.Date(2026, 5, 11, 1, 2, 3, 0, time.UTC)
 	for i := range observationProcessCap {
 		state.RecordEvent(jobevent.EventRecord{
-			EventKind: jobevent.Domain,
+			EventType: jobevent.Domain,
 			Timestamp: now,
 			Payload:   map[string]any{"domain": "registry.npmjs.org"},
 			Process:   testProcess(int32(i+1), fmt.Sprintf("/usr/bin/tool-%02d", i)),
 		})
 	}
 	state.RecordEvent(jobevent.EventRecord{
-		EventKind: jobevent.Domain,
+		EventType: jobevent.Domain,
 		Timestamp: now,
 		Payload:   map[string]any{"domain": "registry.npmjs.org"},
 		Process:   testProcess(1, "/usr/bin/tool-00"),

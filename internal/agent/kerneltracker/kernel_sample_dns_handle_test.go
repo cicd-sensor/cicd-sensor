@@ -319,8 +319,8 @@ func TestHandleDNS_EmitsDomainEvent(t *testing.T) {
 	if !ok {
 		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
 	}
-	if emit.Record.EventKind != jobevent.Domain {
-		t.Fatalf("kind = %q, want %q", emit.Record.EventKind, jobevent.Domain)
+	if emit.Record.EventType != jobevent.Domain {
+		t.Fatalf("kind = %q, want %q", emit.Record.EventType, jobevent.Domain)
 	}
 	if got, _ := emit.Record.Payload["domain"].(string); got != "registry.npmjs.org" {
 		t.Fatalf("payload[domain] = %q, want registry.npmjs.org", got)
@@ -478,7 +478,7 @@ func TestHandleDNS_TCPDropsTooShortForPrefix(t *testing.T) {
 
 // Local-name-resolution noise (single-label hostname queries from
 // glibc / sudo / nss self-lookups, RFC 6761 placeholder TLDs) must be
-// dropped before reaching the result log so that domain rules and the
+// dropped before reaching the summary log so that domain rules and the
 // HTML report do not surface intrinsically local traffic. The unit test
 // of isLocalNameResolution pins the rule; this case pins the wiring at
 // handleDNSSample.

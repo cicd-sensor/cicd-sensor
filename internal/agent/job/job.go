@@ -1,4 +1,4 @@
-// Package job owns the per-job runtime state: identity, metadata, runner kind,
+// Package job owns the per-job runtime state: identity, metadata, runner type,
 // lifecycle transitions, the per-job event worker, and the immutable evaluation bundle
 // that drives the rule hot path. JobRegistry constructs Job instances and
 // JobScopeState fills in scope-local rule data; this package keeps the
@@ -53,7 +53,7 @@ type Job struct {
 	logger     *slog.Logger
 	identity   jobcontext.JobIdentity
 	metadata   jobcontext.JobMetadata
-	runnerKind string
+	runnerType string
 	state      JobState
 	host       *jobscope.JobScopeState
 	project    *jobscope.JobScopeState
@@ -72,7 +72,7 @@ type evaluationBundle struct {
 }
 
 // NewJob creates a running job.
-func NewJob(logger *slog.Logger, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string, eventCh <-chan jobevent.EventRecord) *Job {
+func NewJob(logger *slog.Logger, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, eventCh <-chan jobevent.EventRecord) *Job {
 	now := time.Now().UTC()
 	if logger == nil {
 		logger = slog.Default()
@@ -82,7 +82,7 @@ func NewJob(logger *slog.Logger, identity jobcontext.JobIdentity, metadata jobco
 		logger:     logger.With("component", "job", "job_identity", identity),
 		identity:   identity,
 		metadata:   metadata,
-		runnerKind: runnerKind,
+		runnerType: runnerType,
 		state:      JobStateRunning,
 		eventCh:    eventCh,
 		doneCh:     make(chan struct{}),
@@ -108,9 +108,9 @@ func (j *Job) Metadata() jobcontext.JobMetadata {
 	return j.metadata
 }
 
-// RunnerKind returns the agent-process-wide runner kind stamped onto this job.
-func (j *Job) RunnerKind() string {
-	return j.runnerKind
+// RunnerType returns the agent-process-wide runner type stamped onto this job.
+func (j *Job) RunnerType() string {
+	return j.runnerType
 }
 
 // StartedAt returns the time the job was created.
@@ -143,9 +143,9 @@ func (j *Job) SetHostScope(ctx context.Context, scope *jobscope.JobScopeState) e
 		j.mu.Unlock()
 		return ErrHostScopeRequired
 	}
-	if scope.Kind != jobcontext.ScopeKindHost {
+	if scope.Type != jobcontext.ScopeTypeHost {
 		j.mu.Unlock()
-		return fmt.Errorf("%w: expected %q, got %q", jobscope.ErrScopeKindMismatch, jobcontext.ScopeKindHost, scope.Kind)
+		return fmt.Errorf("%w: expected %q, got %q", jobscope.ErrScopeTypeMismatch, jobcontext.ScopeTypeHost, scope.Type)
 	}
 	if j.host != nil {
 		j.mu.Unlock()
@@ -171,9 +171,9 @@ func (j *Job) SetProjectScope(ctx context.Context, scope *jobscope.JobScopeState
 		j.mu.Unlock()
 		return ErrProjectScopeRequired
 	}
-	if scope.Kind != jobcontext.ScopeKindProject {
+	if scope.Type != jobcontext.ScopeTypeProject {
 		j.mu.Unlock()
-		return fmt.Errorf("%w: expected %q, got %q", jobscope.ErrScopeKindMismatch, jobcontext.ScopeKindProject, scope.Kind)
+		return fmt.Errorf("%w: expected %q, got %q", jobscope.ErrScopeTypeMismatch, jobcontext.ScopeTypeProject, scope.Type)
 	}
 	if j.project != nil {
 		j.mu.Unlock()
@@ -267,5 +267,5 @@ func (j *Job) processEvent(ctx context.Context, event jobevent.EventRecord, acti
 		return
 	}
 
-	evaluation.EvaluateEvent(ctx, bundle.evaluation, event, j.identity, j.metadata, j.runnerKind, bundle.host, bundle.project, j.logger, activation)
+	evaluation.EvaluateEvent(ctx, bundle.evaluation, event, j.identity, j.metadata, j.runnerType, bundle.host, bundle.project, j.logger, activation)
 }

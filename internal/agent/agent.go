@@ -19,7 +19,7 @@ type Agent struct {
 	hostManagerConn   managerclient.Connection
 	hostManagerClient *managerclient.ConfigClient
 	provider          jobcontext.Provider
-	runnerKind        string
+	runnerType        string
 	jobRegistry       *jobregistry.JobRegistry
 	kernelTracker     *kerneltracker.KernelTracker
 	socketPath        string
@@ -32,8 +32,8 @@ type Agent struct {
 const defaultAgentShutdownGrace = 8 * time.Second
 
 // NewAgent creates an agent for one provider and one control socket.
-// runnerKind is copied into every Job for logs/reports.
-func NewAgent(logger *slog.Logger, socketPath string, provider jobcontext.Provider, runnerKind string, hostManagerConn managerclient.Connection, hostManagerClient *managerclient.ConfigClient) *Agent {
+// runnerType is copied into every Job for logs/reports.
+func NewAgent(logger *slog.Logger, socketPath string, provider jobcontext.Provider, runnerType string, hostManagerConn managerclient.Connection, hostManagerClient *managerclient.ConfigClient) *Agent {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -42,7 +42,7 @@ func NewAgent(logger *slog.Logger, socketPath string, provider jobcontext.Provid
 		hostManagerConn:   hostManagerConn,
 		hostManagerClient: hostManagerClient,
 		provider:          provider,
-		runnerKind:        runnerKind,
+		runnerType:        runnerType,
 		socketPath:        socketPath,
 	}
 }
@@ -77,7 +77,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		SocketPath:            a.socketPath,
 		HostManagerConnection: a.hostManagerConn,
 		HostManagerClient:     hostManagerClient,
-		RunnerKind:            a.runnerKind,
+		RunnerType:            a.runnerType,
 		Provider:              a.provider,
 	})
 

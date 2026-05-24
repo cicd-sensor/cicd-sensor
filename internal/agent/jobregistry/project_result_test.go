@@ -41,7 +41,7 @@ func TestJobRegistry_RequestGitHubProjectResult_ExistingJob(t *testing.T) {
 	}
 	var entry resultdoc.JobEventSummaryForReport
 	if err := json.Unmarshal(body, &entry); err != nil {
-		t.Fatalf("unmarshal job_result_log: %v", err)
+		t.Fatalf("unmarshal summary_log: %v", err)
 	}
 	if entry.JobIdentity != id {
 		t.Fatalf("job_identity: got %#v, want %#v", entry.JobIdentity, id)
@@ -68,7 +68,7 @@ func TestJobRegistry_RequestGitHubProjectResult_ClosesDebugOutputBeforeReturn(t 
 	project := job.ProjectScope()
 	project.SetDebugOutput(debugOutput)
 
-	project.WriteRuntimeTelemetryLog(testCtx, id, meta, "machine", testProjectResultEvent("event-before-result"), testLogger)
+	project.WriteRuntimeEventLog(testCtx, id, meta, "machine", testProjectResultEvent("event-before-result"), testLogger)
 	if _, err := jr.RequestGitHubProjectResult(testCtx, id, 0); err != nil {
 		t.Fatalf("request project result: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestJobRegistry_RequestGitHubProjectResult_ClosesDebugOutputBeforeReturn(t 
 		t.Fatalf("debug gzip does not contain pre-result event: %s", body)
 	}
 
-	project.WriteRuntimeTelemetryLog(testCtx, id, meta, "machine", testProjectResultEvent("event-after-result"), testLogger)
+	project.WriteRuntimeEventLog(testCtx, id, meta, "machine", testProjectResultEvent("event-after-result"), testLogger)
 	body = readProjectResultDebugGzip(t, debugDir)
 	if strings.Contains(body, "event-after-result") {
 		t.Fatalf("debug gzip contains event written after project result: %s", body)
@@ -112,7 +112,7 @@ func TestJobRegistry_RequestGitHubProjectResult_ProjectScopeMissing(t *testing.T
 func testProjectResultEvent(id string) jobevent.EventRecord {
 	return jobevent.EventRecord{
 		ID:        id,
-		EventKind: jobevent.NetworkConnect,
+		EventType: jobevent.NetworkConnect,
 		Timestamp: time.Date(2026, 5, 23, 1, 2, 3, 0, time.UTC),
 		Process: jobevent.ProcessSummary{
 			PID:      100,
@@ -129,7 +129,7 @@ func testProjectResultEvent(id string) jobevent.EventRecord {
 func readProjectResultDebugGzip(t *testing.T, debugDir string) string {
 	t.Helper()
 
-	file, err := os.Open(filepath.Join(debugDir, joblogs.DebugRuntimeTelemetryLogFilename))
+	file, err := os.Open(filepath.Join(debugDir, joblogs.DebugRuntimeEventLogFilename))
 	if err != nil {
 		t.Fatalf("open debug gzip: %v", err)
 	}

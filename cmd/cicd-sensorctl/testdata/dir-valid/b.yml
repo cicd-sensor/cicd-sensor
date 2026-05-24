@@ -2,6 +2,6 @@ rule_sets:
   - ruleset_id: set-valid-b
     rules:
       - rule_id: detect_b
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: collect

@@ -12,12 +12,12 @@ func TestNilStateNoopsAndReturnsZeroSnapshot(t *testing.T) {
 
 	var state *State
 
-	state.RecordEvent(jobevent.EventRecord{EventKind: jobevent.ProcessExec})
+	state.RecordEvent(jobevent.EventRecord{EventType: jobevent.ProcessExec})
 	state.RecordDroppedEvent()
 	state.FeedHit(HitEntry{
 		Identity: rule.RuleIdentity{RulesetID: "set", RuleID: "rule"},
 		Action:   string(rule.RuleActionDetect),
-	}, jobevent.EventRecord{EventKind: jobevent.ProcessExec})
+	}, jobevent.EventRecord{EventType: jobevent.ProcessExec})
 
 	if got := state.CorrelationHitCountFor(rule.RuleIdentity{RulesetID: "set", RuleID: "rule"}); got != 0 {
 		t.Fatalf("nil state CorrelationHitCountFor: got %d, want 0", got)
@@ -35,7 +35,7 @@ func TestState_RecordDroppedEventIncrementsDroppedCounter(t *testing.T) {
 	t.Parallel()
 
 	state := NewState()
-	state.RecordEvent(jobevent.EventRecord{EventKind: jobevent.ProcessExec})
+	state.RecordEvent(jobevent.EventRecord{EventType: jobevent.ProcessExec})
 	state.RecordDroppedEvent()
 	state.RecordDroppedEvent()
 

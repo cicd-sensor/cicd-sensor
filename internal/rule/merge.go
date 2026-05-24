@@ -225,7 +225,7 @@ func isRuleContentEqual(left, right Rule) bool {
 		left.RuleName != right.RuleName ||
 		left.Description != right.Description ||
 		left.Type != right.Type ||
-		left.EventKind != right.EventKind ||
+		left.EventType != right.EventType ||
 		left.Condition != right.Condition ||
 		left.Exceptions != right.Exceptions ||
 		left.MaxAlerts != right.MaxAlerts ||

@@ -1,14 +1,14 @@
-# Event kinds
+# Event types
 
-An event kind determines which runtime event a rule evaluates.
-Every event kind can use `process`.
+An event type determines which runtime event a rule evaluates.
+Every event type can use `process`.
 
 ```yaml
 rule_sets:
   - ruleset_id: acme/process
     rules:
       - rule_id: network_tool_exec
-        event_kind: process_exec
+        event_type: process_exec
         condition: |
           process.exec_path.endsWith("/curl") ||
           process.exec_path.endsWith("/wget")
@@ -52,7 +52,7 @@ rule_sets:
   - ruleset_id: acme/process
     rules:
       - rule_id: network_tool_exec
-        event_kind: process_exec
+        event_type: process_exec
         condition: |
           process.exec_path.endsWith("/curl") ||
           process.exec_path.endsWith("/wget") ||
@@ -67,7 +67,7 @@ rule_sets:
   - ruleset_id: acme/process
     rules:
       - rule_id: shell_from_package_manager
-        event_kind: process_exec
+        event_type: process_exec
         condition: |
           (
             process.exec_path.endsWith("/sh") ||
@@ -91,7 +91,7 @@ Example event value:
 
 ```json
 {
-  "event_kind": "process_exec",
+  "event_type": "process_exec",
   "process": {
     "exec_path": "/usr/bin/curl",
     "argv": ["curl", "-fsSL", "https://example.com/install.sh"],
@@ -124,7 +124,7 @@ rule_sets:
   - ruleset_id: acme/network
     rules:
       - rule_id: network_tool_outbound
-        event_kind: network_connect
+        event_type: network_connect
         condition: |
           protocol == "tcp" &&
           remote_port == 443 &&
@@ -151,7 +151,7 @@ Example event value:
 
 ```json
 {
-  "event_kind": "network_connect",
+  "event_type": "network_connect",
   "process": {
     "exec_path": "/usr/bin/curl",
     "argv": ["curl", "https://registry.npmjs.org/"]
@@ -183,7 +183,7 @@ rule_sets:
   - ruleset_id: acme/socket
     rules:
       - rule_id: docker_socket_access
-        event_kind: unix_socket_connect
+        event_type: unix_socket_connect
         condition: |
           socket_type == "stream" &&
           !is_abstract &&
@@ -198,7 +198,7 @@ Example event value:
 
 ```json
 {
-  "event_kind": "unix_socket_connect",
+  "event_type": "unix_socket_connect",
   "process": {
     "exec_path": "/usr/bin/docker",
     "argv": ["docker", "ps"]
@@ -230,7 +230,7 @@ rule_sets:
   - ruleset_id: acme/file
     rules:
       - rule_id: package_credential_read
-        event_kind: file_open
+        event_type: file_open
         condition: |
           is_read &&
           (
@@ -257,7 +257,7 @@ Example event value:
 
 ```json
 {
-  "event_kind": "file_open",
+  "event_type": "file_open",
   "process": {
     "exec_path": "/bin/cat",
     "argv": ["cat", "/home/runner/.npmrc"]
@@ -298,7 +298,7 @@ Example event value:
 
 ```json
 {
-  "event_kind": "file_remove",
+  "event_type": "file_remove",
   "process": {
     "exec_path": "/bin/rm",
     "argv": ["rm", "/workspace/.env"]
@@ -335,7 +335,7 @@ Example event value:
 
 ```json
 {
-  "event_kind": "file_move",
+  "event_type": "file_move",
   "process": {
     "exec_path": "/bin/mv",
     "argv": ["mv", "/tmp/payload.bin", "/usr/local/bin/curl"]
@@ -378,7 +378,7 @@ Example event value:
 
 ```json
 {
-  "event_kind": "file_link",
+  "event_type": "file_link",
   "process": {
     "exec_path": "/bin/ln",
     "argv": ["ln", "-s", "/tmp/wrapper", "/usr/local/bin/curl"]
@@ -425,7 +425,7 @@ Example event value:
 
 ```json
 {
-  "event_kind": "domain",
+  "event_type": "domain",
   "process": {
     "exec_path": "/usr/bin/npm",
     "argv": ["npm", "install"]

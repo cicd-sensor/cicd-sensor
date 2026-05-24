@@ -15,11 +15,11 @@ func sanitizedLogEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
 func logEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
 	out := &logv1.EventRecord{
 		Id:      event.ID,
-		Kind:    string(event.EventKind),
+		Type:    string(event.EventType),
 		Tags:    logEventTags(event.Tags),
 		Process: logProcessSummary(event.Process),
 	}
-	switch event.EventKind {
+	switch event.EventType {
 	case jobevent.ProcessExec:
 		out.ProcessExec = &logv1.ProcessExecPayload{IsMemfd: payloadBool(event.Payload, "is_memfd")}
 	case jobevent.NetworkConnect:

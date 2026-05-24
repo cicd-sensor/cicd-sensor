@@ -14,13 +14,13 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 )
 
-func sampleResultLog() resultdoc.JobEventSummaryForReport {
+func sampleSummaryLog() resultdoc.JobEventSummaryForReport {
 	return resultdoc.JobEventSummaryForReport{
 		JobIdentity: jobcontext.GitHubJobIdentity(
 			"github.com", "acme/example", "123", "build", "1", "runner-1",
 		),
 		Metadata:       jobcontext.JobMetadata{},
-		RunnerKind:     "machine",
+		RunnerType:     "machine",
 		StartedAt:      time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
 		GeneratedAt:    time.Date(2026, 4, 30, 12, 5, 0, 0, time.UTC),
 		FinalizeReason: "shutdown",
@@ -49,7 +49,7 @@ func sampleResultLog() resultdoc.JobEventSummaryForReport {
 func TestRunReportAttest_StdinHappyPath(t *testing.T) {
 	t.Parallel()
 
-	body, err := json.Marshal(sampleResultLog())
+	body, err := json.Marshal(sampleSummaryLog())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestRunReportAttest_OutputFile(t *testing.T) {
 
 	dir := t.TempDir()
 	outputFile := filepath.Join(dir, "attestation.json")
-	body, err := json.Marshal(sampleResultLog())
+	body, err := json.Marshal(sampleSummaryLog())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestRunReportAttest_ReadError(t *testing.T) {
 func TestRunReportAttest_WriteError(t *testing.T) {
 	t.Parallel()
 
-	body, err := json.Marshal(sampleResultLog())
+	body, err := json.Marshal(sampleSummaryLog())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestRunReportAttest_Help(t *testing.T) {
 	for _, want := range []string{
 		"usage: cicd-sensorctl report attest [flags]",
 		"Input:",
-		"Reads job_result_log JSON from stdin.",
+		"Reads summary_log JSON from stdin.",
 		"Optional:",
 		"File to write runtime-trace attestation JSON to. Writes to stdout when empty.",
 		"--output-file",

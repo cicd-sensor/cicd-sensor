@@ -27,7 +27,7 @@ Use the manager for operations such as:
 
 - Running a Self-hosted Machine Runner fleet.
 - Distributing organization-wide standard rules or custom rules.
-- Aggregating Detection Logs and Runtime Telemetry Logs into a SIEM or data lake.
+- Aggregating Detection Logs and Runtime Event Logs into a SIEM or data lake.
 - Keeping per-job evidence centrally for incident response.
 - Avoiding cloud credentials on runner hosts.
 
@@ -132,7 +132,7 @@ With token files, specify `--manager-token-file` up to two times.
 ## manager.yaml
 
 Minimal config that actually persists logs. Defines one S3 sink and routes
-all three log kinds to it:
+all three log types to it:
 
 ```yaml
 bind:
@@ -148,11 +148,11 @@ sinks:
     region: ap-northeast-1
 
 logs:
-  job_result_log:
+  summary_log:
     sink: s3-out
-  job_detection_log:
+  detection_log:
     sink: s3-out
-  job_runtime_telemetry_log:
+  runtime_event_log:
     sink: s3-out
 ```
 
@@ -173,7 +173,7 @@ For richer routing (per-log-kind destinations, multiple sinks), see
 ## Log routing
 
 When logs are aggregated through the manager, define `sinks` and `logs`.
-`sinks` define physical destinations, and `logs` maps each log kind to one sink.
+`sinks` define physical destinations, and `logs` maps each log type to one sink.
 
 ```yaml
 sinks:
@@ -186,30 +186,30 @@ sinks:
     project_id: security-prod
     topic: cicd-sensor-detection-log
 
-  pubsub-telemetry:
+  pubsub-runtime-event:
     type: pubsub
     project_id: security-prod
-    topic: cicd-sensor-runtime-telemetry-log
+    topic: cicd-sensor-runtime-event-log
 
 logs:
-  job_result_log:
+  summary_log:
     sink: gcs-result
-  job_detection_log:
+  detection_log:
     sink: pubsub-detection
-  job_runtime_telemetry_log:
-    sink: pubsub-telemetry
+  runtime_event_log:
+    sink: pubsub-runtime-event
 ```
 
-Supported log kinds:
+Supported log types:
 
 | Log kind | Purpose |
 | --- | --- |
-| `job_result_log` | Job summary generated at finalize time |
-| `job_detection_log` | Detection stream for rule hits |
-| `job_runtime_telemetry_log` | Runtime telemetry for incident response and forensics |
+| `summary_log` | Job summary generated at finalize time |
+| `detection_log` | Detection stream for rule hits |
+| `runtime_event_log` | Runtime events for incident response and forensics |
 
-Each log kind takes one `sink`.
-Use this mapping to choose patterns such as storing all logs in one GCS destination, streaming only Detection Logs to Pub/Sub, or retaining Runtime Telemetry Logs in object storage.
+Each log type takes one `sink`.
+Use this mapping to choose patterns such as storing all logs in one GCS destination, streaming only Detection Logs to Pub/Sub, or retaining Runtime Event Logs in object storage.
 
 ### Sink settings
 
@@ -228,11 +228,11 @@ sinks:
     uri: gs://cicd-sensor-prod/cicd-sensor/
 
 logs:
-  job_result_log:
+  summary_log:
     sink: gcs-prod
-  job_detection_log:
+  detection_log:
     sink: gcs-prod
-  job_runtime_telemetry_log:
+  runtime_event_log:
     sink: gcs-prod
 ```
 
@@ -245,16 +245,16 @@ sinks:
     project_id: security-prod
     topic: cicd-sensor-detection-log
 
-  pubsub-telemetry:
+  pubsub-runtime-event:
     type: pubsub
     project_id: security-prod
-    topic: cicd-sensor-runtime-telemetry-log
+    topic: cicd-sensor-runtime-event-log
 
 logs:
-  job_detection_log:
+  detection_log:
     sink: pubsub-detection
-  job_runtime_telemetry_log:
-    sink: pubsub-telemetry
+  runtime_event_log:
+    sink: pubsub-runtime-event
 ```
 
 For GCS / Pub/Sub authentication, the manager process uses standard Google Cloud Application Default Credentials.

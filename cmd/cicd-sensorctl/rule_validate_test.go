@@ -191,7 +191,7 @@ rule_sets:
   - ruleset_id: set-dup
     rules:
       - rule_id: same_rule
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/bash")
         action: detect
 `)
@@ -200,7 +200,7 @@ rule_sets:
   - ruleset_id: set-dup
     rules:
       - rule_id: same_rule
-        event_kind: process_exec
+        event_type: process_exec
         condition: process.exec_path.endsWith("/sh")
         action: detect
 `)

@@ -21,7 +21,7 @@ func TestJobScopeState_ApplyManagerConfig_AppendsAndResolvesHostScope(t *testing
 			Rules: []rule.Rule{
 				{
 					RuleID:    "local-rule",
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
 					Action:    rule.RuleActionDetect,
 				},
@@ -37,7 +37,7 @@ func TestJobScopeState_ApplyManagerConfig_AppendsAndResolvesHostScope(t *testing
 				Rules: []rule.Rule{
 					{
 						RuleID:    "manager-rule",
-						EventKind: jobevent.NetworkConnect,
+						EventType: jobevent.NetworkConnect,
 						Condition: `remote_ip == "example.com"`,
 						Action:    rule.RuleActionTerminate,
 					},
@@ -45,7 +45,7 @@ func TestJobScopeState_ApplyManagerConfig_AppendsAndResolvesHostScope(t *testing
 			}},
 		}},
 		OutputSettings: &managerv1.OutputSettings{
-			JobResultLog: &managerv1.OutputSetting{Enabled: true},
+			SummaryLog: &managerv1.OutputSetting{Enabled: true},
 		},
 	}
 
@@ -57,8 +57,8 @@ func TestJobScopeState_ApplyManagerConfig_AppendsAndResolvesHostScope(t *testing
 	if len(scope.RuleSets) != 2 {
 		t.Fatalf("rule_sets: got %d, want 2", len(scope.RuleSets))
 	}
-	if !scope.OutputSettings.GetJobResultLog().GetEnabled() {
-		t.Fatal("expected job_result_log output settings to be set")
+	if !scope.OutputSettings.GetSummaryLog().GetEnabled() {
+		t.Fatal("expected summary_log output settings to be set")
 	}
 	if len(scope.ResolvedRules.Rules) != 2 {
 		t.Fatalf("resolved rules: got %d, want 2", len(scope.ResolvedRules.Rules))

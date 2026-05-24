@@ -27,12 +27,12 @@ const (
 // RequestedOutputs indicates which logs the caller will upload,
 // so the manager can tailor output policy for those types.
 type RequestedOutputs struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	JobResultLog           bool                   `protobuf:"varint,1,opt,name=job_result_log,json=jobResultLog,proto3" json:"job_result_log,omitempty"`
-	JobDetectionLog        bool                   `protobuf:"varint,2,opt,name=job_detection_log,json=jobDetectionLog,proto3" json:"job_detection_log,omitempty"`
-	JobRuntimeTelemetryLog bool                   `protobuf:"varint,3,opt,name=job_runtime_telemetry_log,json=jobRuntimeTelemetryLog,proto3" json:"job_runtime_telemetry_log,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	SummaryLog      bool                   `protobuf:"varint,1,opt,name=summary_log,json=summaryLog,proto3" json:"summary_log,omitempty"`
+	DetectionLog    bool                   `protobuf:"varint,2,opt,name=detection_log,json=detectionLog,proto3" json:"detection_log,omitempty"`
+	RuntimeEventLog bool                   `protobuf:"varint,3,opt,name=runtime_event_log,json=runtimeEventLog,proto3" json:"runtime_event_log,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RequestedOutputs) Reset() {
@@ -65,23 +65,23 @@ func (*RequestedOutputs) Descriptor() ([]byte, []int) {
 	return file_cicd_sensor_manager_v1_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *RequestedOutputs) GetJobResultLog() bool {
+func (x *RequestedOutputs) GetSummaryLog() bool {
 	if x != nil {
-		return x.JobResultLog
+		return x.SummaryLog
 	}
 	return false
 }
 
-func (x *RequestedOutputs) GetJobDetectionLog() bool {
+func (x *RequestedOutputs) GetDetectionLog() bool {
 	if x != nil {
-		return x.JobDetectionLog
+		return x.DetectionLog
 	}
 	return false
 }
 
-func (x *RequestedOutputs) GetJobRuntimeTelemetryLog() bool {
+func (x *RequestedOutputs) GetRuntimeEventLog() bool {
 	if x != nil {
-		return x.JobRuntimeTelemetryLog
+		return x.RuntimeEventLog
 	}
 	return false
 }
@@ -90,10 +90,10 @@ func (x *RequestedOutputs) GetJobRuntimeTelemetryLog() bool {
 // not in the body.
 type FetchConfigRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// RunnerKind is the agent-process-wide runner kind ("machine" for VM /
+	// RunnerType is the agent-process-wide runner type ("machine" for VM /
 	// physical server, "kubernetes" for a Pod) that helps the manager route
 	// the request.
-	RunnerKind       string            `protobuf:"bytes,1,opt,name=runner_kind,json=runnerKind,proto3" json:"runner_kind,omitempty"`
+	RunnerType       string            `protobuf:"bytes,1,opt,name=runner_type,json=runnerType,proto3" json:"runner_type,omitempty"`
 	JobIdentity      *JobIdentity      `protobuf:"bytes,2,opt,name=job_identity,json=jobIdentity,proto3" json:"job_identity,omitempty"`
 	RequestedOutputs *RequestedOutputs `protobuf:"bytes,3,opt,name=requested_outputs,json=requestedOutputs,proto3" json:"requested_outputs,omitempty"`
 	unknownFields    protoimpl.UnknownFields
@@ -130,9 +130,9 @@ func (*FetchConfigRequest) Descriptor() ([]byte, []int) {
 	return file_cicd_sensor_manager_v1_config_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *FetchConfigRequest) GetRunnerKind() string {
+func (x *FetchConfigRequest) GetRunnerType() string {
 	if x != nil {
-		return x.RunnerKind
+		return x.RunnerType
 	}
 	return ""
 }
@@ -269,14 +269,15 @@ var File_cicd_sensor_manager_v1_config_proto protoreflect.FileDescriptor
 
 const file_cicd_sensor_manager_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"#cicd_sensor/manager/v1/config.proto\x12\x16cicd_sensor.manager.v1\x1a\"cicd_sensor/manager/v1/types.proto\"\x9f\x01\n" +
-	"\x10RequestedOutputs\x12$\n" +
-	"\x0ejob_result_log\x18\x01 \x01(\bR\fjobResultLog\x12*\n" +
-	"\x11job_detection_log\x18\x02 \x01(\bR\x0fjobDetectionLog\x129\n" +
-	"\x19job_runtime_telemetry_log\x18\x03 \x01(\bR\x16jobRuntimeTelemetryLog\"\xd4\x01\n" +
+	"#cicd_sensor/manager/v1/config.proto\x12\x16cicd_sensor.manager.v1\x1a\"cicd_sensor/manager/v1/types.proto\"\x84\x01\n" +
+	"\x10RequestedOutputs\x12\x1f\n" +
+	"\vsummary_log\x18\x01 \x01(\bR\n" +
+	"summaryLog\x12#\n" +
+	"\rdetection_log\x18\x02 \x01(\bR\fdetectionLog\x12*\n" +
+	"\x11runtime_event_log\x18\x03 \x01(\bR\x0fruntimeEventLog\"\xd4\x01\n" +
 	"\x12FetchConfigRequest\x12\x1f\n" +
-	"\vrunner_kind\x18\x01 \x01(\tR\n" +
-	"runnerKind\x12F\n" +
+	"\vrunner_type\x18\x01 \x01(\tR\n" +
+	"runnerType\x12F\n" +
 	"\fjob_identity\x18\x02 \x01(\v2#.cicd_sensor.manager.v1.JobIdentityR\vjobIdentity\x12U\n" +
 	"\x11requested_outputs\x18\x03 \x01(\v2(.cicd_sensor.manager.v1.RequestedOutputsR\x10requestedOutputs\"\xc6\x01\n" +
 	"\fServedConfig\x12'\n" +

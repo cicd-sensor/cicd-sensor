@@ -62,7 +62,7 @@ func TestJobMetadata_JSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestJobMetadata_JSONFieldOrderMatchesJobLogContext(t *testing.T) {
+func TestJobMetadata_JSONFieldOrderMatchesLogContext(t *testing.T) {
 	input := jobcontext.JobMetadata{
 		CommitSHA:          "abc123",
 		RefName:            "main",

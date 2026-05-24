@@ -34,7 +34,7 @@ const testRuleBundleA = `rule_sets:
     rules:
       - rule_id: test_rule_a
         description: test
-        event_kind: file_open
+        event_type: file_open
         condition: 'is_read'
         action: detect
 `
@@ -44,7 +44,7 @@ const testRuleBundleB = `rule_sets:
     rules:
       - rule_id: test_rule_b
         description: test
-        event_kind: file_open
+        event_type: file_open
         condition: 'is_read'
         action: detect
 `

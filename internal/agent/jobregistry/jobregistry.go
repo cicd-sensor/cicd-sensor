@@ -149,7 +149,7 @@ func (jr *JobRegistry) waitForJobStartReservation(ctx context.Context, identity 
 
 // registerJobRuntime creates a running Job, wires BPF events, and stores it.
 // Cgroup binding is provider-specific and happens in the start flow.
-func (jr *JobRegistry) registerJobRuntime(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerKind string) (*job.Job, error) {
+func (jr *JobRegistry) registerJobRuntime(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string) (*job.Job, error) {
 	jr.mu.Lock()
 	if _, ok := jr.jobs[identity]; ok {
 		jr.mu.Unlock()
@@ -173,7 +173,7 @@ func (jr *JobRegistry) registerJobRuntime(ctx context.Context, identity jobconte
 		engineRegistered = true
 	}
 
-	j := job.NewJob(jobLogger, identity, metadata, runnerKind, eventCh)
+	j := job.NewJob(jobLogger, identity, metadata, runnerType, eventCh)
 	jr.mu.Lock()
 	if _, ok := jr.jobs[identity]; ok {
 		jr.mu.Unlock()
@@ -244,7 +244,7 @@ func (jr *JobRegistry) startManagerJobLogs(scope *jobscope.JobScopeState, identi
 		Logger:         jr.logger,
 		Connection:     conn,
 		Identity:       identity,
-		Kind:           scope.Kind,
+		Type:           scope.Type,
 		OutputSettings: scope.OutputSettings,
 	})
 	scope.SetManagerJobLogs(logs)

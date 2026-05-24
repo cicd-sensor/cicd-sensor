@@ -88,7 +88,7 @@ func setupListenerWithRegistryAndRootForProviderWithHostManager(t *testing.T, pr
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
 		HostManagerClient:     hostManagerClient,
-		RunnerKind:            "machine",
+		RunnerType:            "machine",
 		Provider:              provider,
 	})
 

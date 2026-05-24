@@ -128,7 +128,7 @@ func TestState_FeedHitIgnoresZeroIdentity(t *testing.T) {
 	state := NewState()
 	state.FeedHit(HitEntry{
 		Action: string(rule.RuleActionDetect),
-	}, jobevent.EventRecord{EventKind: jobevent.ProcessExec})
+	}, jobevent.EventRecord{EventType: jobevent.ProcessExec})
 
 	if got := len(state.Snapshot().Hits); got != 0 {
 		t.Fatalf("hit snapshot length: got %d, want 0", got)
@@ -148,7 +148,7 @@ func TestState_FeedHitRespectsMaxAlerts(t *testing.T) {
 	for i, id := range []string{"event-a", "event-b", "event-c"} {
 		state.FeedHit(hit, jobevent.EventRecord{
 			ID:        id,
-			EventKind: jobevent.ProcessExec,
+			EventType: jobevent.ProcessExec,
 			Timestamp: now.Add(time.Duration(i) * time.Second),
 		})
 	}
@@ -193,7 +193,7 @@ func TestState_FeedHitRetainsAllEventsWhenMaxAlertsUnsetOrNegative(t *testing.T)
 			now := time.Date(2026, 4, 16, 1, 2, 3, 0, time.UTC)
 			for i := range 3 {
 				state.FeedHit(hit, jobevent.EventRecord{
-					EventKind: jobevent.ProcessExec,
+					EventType: jobevent.ProcessExec,
 					Timestamp: now.Add(time.Duration(i) * time.Second),
 				})
 			}
@@ -254,7 +254,7 @@ func TestState_HitSnapshotClonesEventRecordSlice(t *testing.T) {
 	state := NewState()
 	state.FeedHit(testHit("set", "rule-1", "detect"), jobevent.EventRecord{
 		ID:        "original",
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 	})
 
 	first := state.Snapshot().Hits
@@ -273,7 +273,7 @@ func TestState_FeedHitStoresProvidedEvent(t *testing.T) {
 	now := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)
 
 	state.FeedHit(testHit("set", "curl", "detect"), jobevent.EventRecord{
-		EventKind: jobevent.ProcessExec,
+		EventType: jobevent.ProcessExec,
 		Timestamp: now,
 		Process: jobevent.ProcessSummary{
 			PID:      100,

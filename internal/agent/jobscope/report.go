@@ -11,7 +11,7 @@ import (
 type ReportInputs struct {
 	Identity   jobcontext.JobIdentity
 	Metadata   jobcontext.JobMetadata
-	RunnerKind string
+	RunnerType string
 	StartedAt  time.Time
 }
 
@@ -19,7 +19,7 @@ func (s *JobScopeState) BuildJobEventSummaryForReport(in ReportInputs, finalizeR
 	return projectresult.BuildJobEventSummaryForReport(projectresult.ReportDocumentInput{
 		Identity:       in.Identity,
 		Metadata:       in.Metadata,
-		RunnerKind:     in.RunnerKind,
+		RunnerType:     in.RunnerType,
 		StartedAt:      in.StartedAt,
 		GeneratedAt:    generatedAt,
 		FinalizeReason: finalizeReason,

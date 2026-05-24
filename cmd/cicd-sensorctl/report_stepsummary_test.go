@@ -13,7 +13,7 @@ import (
 func TestRunReportStepSummary_StdinHappyPath(t *testing.T) {
 	t.Parallel()
 
-	sample := sampleResultLog()
+	sample := sampleSummaryLog()
 	sample.Hits[0].RuleID = "]((https://evil.example))"
 	sample.Hits[0].RuleCondition = "![evil](https://evil.example)"
 	sample.Hits[0].Process = &resultdoc.ProcessSummary{ExecPath: "<script>alert(1)"}
@@ -69,7 +69,7 @@ func TestRunReportStepSummary_StdinHappyPath(t *testing.T) {
 func TestRunReportStepSummary_TopFiveSummaries(t *testing.T) {
 	t.Parallel()
 
-	sample := sampleResultLog()
+	sample := sampleSummaryLog()
 	sample.Hits = nil
 	for i := range 6 {
 		ruleID := "rule-" + string(rune('a'+i))
@@ -135,7 +135,7 @@ func TestRunReportStepSummary_TopFiveSummaries(t *testing.T) {
 func TestRunReportStepSummary_OmitsCollectOnlyRules(t *testing.T) {
 	t.Parallel()
 
-	sample := sampleResultLog()
+	sample := sampleSummaryLog()
 	sample.Hits = []resultdoc.HitRecord{
 		{RuleID: "collect-only-rule", Action: "collect", Process: &resultdoc.ProcessSummary{ExecPath: "/usr/bin/curl"}},
 		{RuleID: "collect-only-rule", Action: "collect", Process: &resultdoc.ProcessSummary{ExecPath: "/usr/bin/curl"}},
@@ -183,7 +183,7 @@ func TestRunReportStepSummary_ResultHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			sample := sampleResultLog()
+			sample := sampleSummaryLog()
 			sample.ResultSummary.Result = tt.result
 			body, err := json.Marshal(sample)
 			if err != nil {
@@ -234,7 +234,7 @@ func TestRunReportStepSummary_HealthFailedWithoutInput(t *testing.T) {
 func TestRunReportStepSummary_HealthFailedOverridesResult(t *testing.T) {
 	t.Parallel()
 
-	sample := sampleResultLog()
+	sample := sampleSummaryLog()
 	sample.ResultSummary.Result = resultdoc.ResultDetected
 	body, err := json.Marshal(sample)
 	if err != nil {
@@ -325,7 +325,7 @@ func TestRunReportStepSummary_InvalidInputAndUsage(t *testing.T) {
 		wantCode int
 		wantErr  string
 	}{
-		{name: "invalid JSON", input: "not json", wantCode: 1, wantErr: "decode job_result_log"},
+		{name: "invalid JSON", input: "not json", wantCode: 1, wantErr: "decode summary_log"},
 		{name: "unknown flag", args: []string{"--bogus"}, wantCode: 2, wantErr: "flag provided but not defined"},
 		{name: "too many args", args: []string{"extra"}, wantCode: 2, wantErr: "too many arguments"},
 	}

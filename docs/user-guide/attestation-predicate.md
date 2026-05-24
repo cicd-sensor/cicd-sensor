@@ -41,7 +41,7 @@ The actual predicate may contain more network addresses, domains, detections, an
         "rule_type": "event",
         "rule_condition": "domain == \"testevent.cicd-sensor.com\"",
         "action": "detect",
-        "event_kind": "domain",
+        "event_type": "domain",
         "process": {
           "pid": 2129,
           "exec_path": "/usr/bin/curl",
@@ -104,7 +104,7 @@ The actual predicate may contain more network addresses, domains, detections, an
       "workflow": "cicd-sensor Demo",
       "actor": "octocat"
     },
-    "https://cicd-sensor.github.io/runner-kind": "machine"
+    "https://cicd-sensor.github.io/runner-type": "machine"
   }
 }
 ```
@@ -118,7 +118,7 @@ The important parts are:
 - `argv`: output-redacted command-line arguments. Sensitive-looking values are replaced with `<redacted>`, and long non-sensitive values are truncated.
 - `payload`: event-specific evidence, such as the resolved domain or opened file path.
 - `https://cicd-sensor.github.io/terminations`: rule hits whose action is `terminate`.
-- `https://cicd-sensor.github.io/summary`: final job result summary.
+- `https://cicd-sensor.github.io/summary`: final job summary.
 - `https://cicd-sensor.github.io/job-identity`: provider, repository / project, run, job, attempt, and runner tracking identity.
 
 The URI keys are cicd-sensor extension fields.
@@ -127,9 +127,9 @@ Generic in-toto consumers can ignore unknown extension fields while preserving t
 ## What is not included
 
 `collect` hits are not included in the predicate.
-They are telemetry / correlation inputs and are available through the logs, not through the attestation predicate.
+They are runtime event / correlation inputs and are available through the logs, not through the attestation predicate.
 
-Raw Runtime Telemetry Log events are also not embedded.
+Raw Runtime Event Log events are also not embedded.
 Use the [Logging](logging.md) page when you need detailed event-level records for incident response or forensics.
 
 File access is not emitted as a dedicated runtime-trace `fileAccess` field today.

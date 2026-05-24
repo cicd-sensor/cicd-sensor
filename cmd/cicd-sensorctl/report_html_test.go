@@ -13,7 +13,7 @@ import (
 func TestRunReportHTML_StdinHappyPath(t *testing.T) {
 	t.Parallel()
 
-	body, err := json.Marshal(sampleResultLog())
+	body, err := json.Marshal(sampleSummaryLog())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestRunReportHTML_OutputFile(t *testing.T) {
 
 	dir := t.TempDir()
 	outputFile := filepath.Join(dir, "report.html")
-	body, err := json.Marshal(sampleResultLog())
+	body, err := json.Marshal(sampleSummaryLog())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestRunReportHTML_ReadError(t *testing.T) {
 func TestRunReportHTML_WriteError(t *testing.T) {
 	t.Parallel()
 
-	body, err := json.Marshal(sampleResultLog())
+	body, err := json.Marshal(sampleSummaryLog())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestRunReportHTML_Help(t *testing.T) {
 	for _, want := range []string{
 		"usage: cicd-sensorctl report html [flags]",
 		"Input:",
-		"Reads job_result_log JSON from stdin.",
+		"Reads summary_log JSON from stdin.",
 		"Optional:",
 		"File to write a self-contained HTML report to. Writes to stdout when empty.",
 		"--output-file",

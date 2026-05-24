@@ -45,7 +45,7 @@ message Rule {
   string rule_name = 2;
   string description = 3;
   string type = 4;
-  string event_kind = 5;
+  string event_type = 5;
   RuleTarget target = 6;
   string condition = 7;
   string exceptions = 8;
@@ -83,7 +83,7 @@ message RuleSource {
   repeated RuleModifier rule_modifiers = 2;
 }
 
-// OutputSetting tells the agent whether to send one log kind and when to
+// OutputSetting tells the agent whether to send one log type and when to
 // flush buffered JSONL records.
 message OutputSetting {
   bool enabled = 1;
@@ -94,7 +94,7 @@ message OutputSetting {
 
 // OutputSettings tells the agent which logs should be sent to manager.
 message OutputSettings {
-  OutputSetting job_detection_log = 1;
-  OutputSetting job_runtime_telemetry_log = 2;
-  OutputSetting job_result_log = 3;
+  OutputSetting detection_log = 1;
+  OutputSetting runtime_event_log = 2;
+  OutputSetting summary_log = 3;
 }

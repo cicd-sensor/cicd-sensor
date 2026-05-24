@@ -13,7 +13,7 @@ import (
 type ReportDocumentInput struct {
 	Identity       jobcontext.JobIdentity
 	Metadata       jobcontext.JobMetadata
-	RunnerKind     string
+	RunnerType     string
 	StartedAt      time.Time
 	GeneratedAt    time.Time
 	FinalizeReason string
@@ -54,7 +54,7 @@ func BuildJobEventSummaryForReport(in ReportDocumentInput) resultdoc.JobEventSum
 				RuleType:      detail.ruleType,
 				RuleCondition: detail.condition,
 				Action:        hit.Action,
-				EventKind:     event.EventKind,
+				EventType:     event.EventType,
 				Process:       &process,
 				Payload:       event.Payload,
 			}
@@ -70,7 +70,7 @@ func BuildJobEventSummaryForReport(in ReportDocumentInput) resultdoc.JobEventSum
 	return resultdoc.JobEventSummaryForReport{
 		JobIdentity:    in.Identity,
 		Metadata:       in.Metadata,
-		RunnerKind:     in.RunnerKind,
+		RunnerType:     in.RunnerType,
 		StartedAt:      in.StartedAt.UTC(),
 		GeneratedAt:    in.GeneratedAt.UTC(),
 		FinalizeReason: in.FinalizeReason,

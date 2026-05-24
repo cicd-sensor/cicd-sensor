@@ -14,7 +14,7 @@ flowchart LR
     COMPILE["CEL compile"]
     EVAL["EvaluationState"]
     EVENT["Runtime EventRecord"]
-    LOGS["Detection / telemetry logs"]
+    LOGS["Detection / runtime event logs"]
 
     SRC --> MERGE --> COMPILE --> EVAL
     EVENT --> EVAL --> LOGS
@@ -26,7 +26,7 @@ flowchart LR
 | --- | --- |
 | Schema | YAML schema validation for RuleSet / RuleModifier |
 | Merge | Merge baseline, local, and manager rule sources with modifiers |
-| CEL | Build activations per event kind and compile conditions / correlations |
+| CEL | Build activations per event type and compile conditions / correlations |
 | Evaluation | Evaluate runtime events against rules and apply actions / tags / max alerts |
 | Correlation | Multi-signal detection with `rule.<rule_id>.total_count` |
 
@@ -36,4 +36,4 @@ The CEL environment exposes only the surface needed for rule authoring.
 Regex, index access, arithmetic, and similar features are not allowed.
 This keeps detection rules readable and runtime evaluation predictable.
 
-The source of truth for event-kind fields is the User Guide [Event kinds](../user-guide/rule-event-kinds.md) and [CEL conditions](../user-guide/rule-cel-conditions.md) pages.
+The source of truth for event-type fields is the User Guide [Event types](../user-guide/rule-event-types.md) and [CEL conditions](../user-guide/rule-cel-conditions.md) pages.
