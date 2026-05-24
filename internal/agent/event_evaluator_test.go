@@ -16,8 +16,8 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -28,15 +28,15 @@ type recordingDetectionOutput struct {
 	payload [][]byte
 }
 
-func (s *recordingDetectionOutput) Entries(t *testing.T) []*logv1.DetectionLogEntry {
+func (s *recordingDetectionOutput) Entries(t *testing.T) []*logv1beta1.DetectionLogEntry {
 	t.Helper()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	out := make([]*logv1.DetectionLogEntry, 0, len(s.payload))
+	out := make([]*logv1beta1.DetectionLogEntry, 0, len(s.payload))
 	for _, payload := range s.payload {
-		entry := &logv1.DetectionLogEntry{}
+		entry := &logv1beta1.DetectionLogEntry{}
 		if err := protojson.Unmarshal(payload, entry); err != nil {
 			t.Fatalf("unmarshal detection entry: %v", err)
 		}
@@ -88,7 +88,7 @@ func closeRecordingOutputs(t *testing.T, scope *jobscope.JobScopeState) {
 	}
 }
 
-func managerBatchRecords(t *testing.T, batch *managerv1.IngestLogBatch) [][]byte {
+func managerBatchRecords(t *testing.T, batch *managerv1beta1.IngestLogBatch) [][]byte {
 	t.Helper()
 	reader, err := gzip.NewReader(bytes.NewReader(batch.CompressedJsonl))
 	if err != nil {

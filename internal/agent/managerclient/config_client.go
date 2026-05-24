@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -24,7 +24,7 @@ const fetchConfigTimeout = time.Minute
 
 // ConfigClient wraps ConfigService.FetchConfig for host and project scopes.
 type ConfigClient struct {
-	client managerv1connect.ConfigServiceClient
+	client managerv1beta1connect.ConfigServiceClient
 	logger *slog.Logger
 }
 
@@ -49,7 +49,7 @@ func NewConfigClient(logger *slog.Logger, conn Connection) (*ConfigClient, error
 		return nil, fmt.Errorf("%s", managerauth.ValidTokenDescription())
 	}
 	return &ConfigClient{
-		client: managerv1connect.NewConfigServiceClient(
+		client: managerv1beta1connect.NewConfigServiceClient(
 			NewConnectHTTPClient(),
 			conn.BaseURL,
 			ConnectClientOptions(conn.Token)...,
@@ -90,7 +90,7 @@ type FetchResult struct {
 	ConfigRevision          string
 	DefaultMaxAlertsPerRule int
 	RuleSources             []rulesource.LoadedRules
-	OutputSettings          *managerv1.OutputSettings
+	OutputSettings          *managerv1beta1.OutputSettings
 }
 
 type RPCError struct {
@@ -107,7 +107,7 @@ func (e *RPCError) Unwrap() error {
 }
 
 // FetchConfig fetches manager config with a bounded per-call timeout.
-func (c *ConfigClient) FetchConfig(ctx context.Context, req *managerv1.FetchConfigRequest) (*FetchResult, error) {
+func (c *ConfigClient) FetchConfig(ctx context.Context, req *managerv1beta1.FetchConfigRequest) (*FetchResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("manager client is nil")
 	}

@@ -3,10 +3,10 @@
 // destinations without buffering or parsing records.
 syntax = "proto3";
 
-package cicd_sensor.manager.v1;
+package cicd_sensor.manager.v1beta1;
 
 import "google/protobuf/timestamp.proto";
-import "cicd_sensor/manager/v1/types.proto";
+import "cicd_sensor/manager/v1beta1/types.proto";
 
 // CollectorService is the output data plane. Each request carries one
 // gzip-compressed JSONL batch and is handled as a unary RPC so the manager can

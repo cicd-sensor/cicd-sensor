@@ -9,7 +9,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
@@ -37,7 +37,7 @@ func MarshalDetectionLogEntry(in DetectionLogInput) ([]byte, error) {
 	if timestamp.IsZero() {
 		timestamp = time.Now()
 	}
-	message := &logv1.DetectionLogEntry{
+	message := &logv1beta1.DetectionLogEntry{
 		Timestamp:           timestamppb.New(timestamp.UTC()),
 		LogType:             proto.String(logtype.Detection.Wire()),
 		ServiceName:         proto.String(logtype.ServiceName),

@@ -6,7 +6,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
@@ -17,7 +17,7 @@ type RuntimeEventLogInput struct {
 }
 
 func MarshalRuntimeEventLogEntry(in RuntimeEventLogInput) ([]byte, error) {
-	message := &logv1.RuntimeEventLogEntry{
+	message := &logv1beta1.RuntimeEventLogEntry{
 		Timestamp:      timestamppb.New(in.Event.Timestamp.UTC()),
 		LogType:        proto.String(logtype.RuntimeEvent.Wire()),
 		ServiceName:    proto.String(logtype.ServiceName),

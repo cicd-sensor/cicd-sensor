@@ -8,7 +8,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 // ManagerJobLogs owns the manager collector workers for one scope.
@@ -28,7 +28,7 @@ type ManagerJobLogsConfig struct {
 	Connection     managerclient.Connection
 	Identity       jobcontext.JobIdentity
 	Type           jobcontext.ScopeType
-	OutputSettings *managerv1.OutputSettings
+	OutputSettings *managerv1beta1.OutputSettings
 }
 
 // NewManagerJobLogs starts workers for enabled manager job log settings.
@@ -54,7 +54,7 @@ func (o *ManagerJobLogs) HasWorkersForTesting() bool {
 	return o != nil && (o.detection != nil || o.runtimeEvent != nil || o.summaryLog != nil)
 }
 
-func newManagerJobLogsWithSender(logger *slog.Logger, sendBatch func(context.Context, managerclient.LogBatch) error, identity jobcontext.JobIdentity, scopeType jobcontext.ScopeType, settings *managerv1.OutputSettings) ManagerJobLogs {
+func newManagerJobLogsWithSender(logger *slog.Logger, sendBatch func(context.Context, managerclient.LogBatch) error, identity jobcontext.JobIdentity, scopeType jobcontext.ScopeType, settings *managerv1beta1.OutputSettings) ManagerJobLogs {
 	logs := ManagerJobLogs{
 		logger:    logger,
 		sendBatch: sendBatch,
@@ -63,7 +63,7 @@ func newManagerJobLogsWithSender(logger *slog.Logger, sendBatch func(context.Con
 	return logs
 }
 
-func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcontext.ScopeType, settings *managerv1.OutputSettings) {
+func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcontext.ScopeType, settings *managerv1beta1.OutputSettings) {
 	if settings == nil {
 		return
 	}
@@ -87,7 +87,7 @@ func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcon
 			sendBatch,
 			identity,
 			scopeType,
-			managerv1.LogType_LOG_TYPE_DETECTION,
+			managerv1beta1.LogType_LOG_TYPE_DETECTION,
 			detection,
 		)
 	}
@@ -97,7 +97,7 @@ func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcon
 			sendBatch,
 			identity,
 			scopeType,
-			managerv1.LogType_LOG_TYPE_RUNTIME_EVENT,
+			managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT,
 			runtimeEvent,
 		)
 	}
@@ -107,7 +107,7 @@ func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcon
 			sendBatch,
 			identity,
 			scopeType,
-			managerv1.LogType_LOG_TYPE_SUMMARY,
+			managerv1beta1.LogType_LOG_TYPE_SUMMARY,
 			summary,
 		)
 	}
@@ -157,16 +157,16 @@ func (o *ManagerJobLogs) HasSummaryLog() bool {
 
 // DroppedLogRecords returns the number of streaming records dropped because
 // the manager output backlog was full. Close-after-emit errors are not drops.
-func (o *ManagerJobLogs) DroppedLogRecords(logType managerv1.LogType) uint64 {
+func (o *ManagerJobLogs) DroppedLogRecords(logType managerv1beta1.LogType) uint64 {
 	if o == nil {
 		return 0
 	}
 	switch logType {
-	case managerv1.LogType_LOG_TYPE_DETECTION:
+	case managerv1beta1.LogType_LOG_TYPE_DETECTION:
 		return o.detection.droppedCount()
-	case managerv1.LogType_LOG_TYPE_RUNTIME_EVENT:
+	case managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT:
 		return o.runtimeEvent.droppedCount()
-	case managerv1.LogType_LOG_TYPE_SUMMARY:
+	case managerv1beta1.LogType_LOG_TYPE_SUMMARY:
 		return o.summaryLog.droppedCount()
 	default:
 		return 0

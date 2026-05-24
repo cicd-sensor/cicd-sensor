@@ -6,7 +6,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobscope"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 func TestStartManagerJobLogs_AttachesOnlyWhenOutputSettingsExist(t *testing.T) {
@@ -20,8 +20,8 @@ func TestStartManagerJobLogs_AttachesOnlyWhenOutputSettingsExist(t *testing.T) {
 	}
 
 	withOutputSettings := jobscope.NewProject()
-	withOutputSettings.OutputSettings = &managerv1.OutputSettings{
-		Summary: &managerv1.OutputSetting{Enabled: true},
+	withOutputSettings.OutputSettings = &managerv1beta1.OutputSettings{
+		Summary: &managerv1beta1.OutputSetting{Enabled: true},
 	}
 	jr.startManagerJobLogs(withOutputSettings, id, managerclient.Connection{
 		BaseURL: "https://manager.example.test",

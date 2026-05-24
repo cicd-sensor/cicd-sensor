@@ -5,14 +5,14 @@ package protoconv
 import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
 // ToProtoJobIdentity converts a jobcontext.JobIdentity to the manager proto shape.
-func ToProtoJobIdentity(id jobcontext.JobIdentity) *managerv1.JobIdentity {
-	return &managerv1.JobIdentity{
+func ToProtoJobIdentity(id jobcontext.JobIdentity) *managerv1beta1.JobIdentity {
+	return &managerv1beta1.JobIdentity{
 		Provider:               string(id.Provider),
 		ProviderHost:           id.ProviderHost,
 		ProjectPath:            id.ProjectPath,
@@ -25,7 +25,7 @@ func ToProtoJobIdentity(id jobcontext.JobIdentity) *managerv1.JobIdentity {
 }
 
 // FromProtoJobIdentity converts the manager proto shape to jobcontext.JobIdentity.
-func FromProtoJobIdentity(id *managerv1.JobIdentity) jobcontext.JobIdentity {
+func FromProtoJobIdentity(id *managerv1beta1.JobIdentity) jobcontext.JobIdentity {
 	if id == nil {
 		return jobcontext.JobIdentity{}
 	}
@@ -41,21 +41,21 @@ func FromProtoJobIdentity(id *managerv1.JobIdentity) jobcontext.JobIdentity {
 	}
 }
 
-func ToProtoScope(scope jobcontext.ScopeType) managerv1.Scope {
+func ToProtoScope(scope jobcontext.ScopeType) managerv1beta1.Scope {
 	switch scope {
 	case jobcontext.ScopeTypeHost:
-		return managerv1.Scope_SCOPE_HOST
+		return managerv1beta1.Scope_SCOPE_HOST
 	case jobcontext.ScopeTypeProject:
-		return managerv1.Scope_SCOPE_PROJECT
+		return managerv1beta1.Scope_SCOPE_PROJECT
 	default:
-		return managerv1.Scope_SCOPE_UNSPECIFIED
+		return managerv1beta1.Scope_SCOPE_UNSPECIFIED
 	}
 }
 
-func ToProtoRuleSources(in []rulesource.LoadedRules) []*managerv1.RuleSource {
-	out := make([]*managerv1.RuleSource, 0, len(in))
+func ToProtoRuleSources(in []rulesource.LoadedRules) []*managerv1beta1.RuleSource {
+	out := make([]*managerv1beta1.RuleSource, 0, len(in))
 	for _, source := range in {
-		out = append(out, &managerv1.RuleSource{
+		out = append(out, &managerv1beta1.RuleSource{
 			RuleSets:      toProtoRuleSets(source.RuleSets),
 			RuleModifiers: toProtoRuleModifiers(source.RuleModifiers),
 		})
@@ -63,7 +63,7 @@ func ToProtoRuleSources(in []rulesource.LoadedRules) []*managerv1.RuleSource {
 	return out
 }
 
-func FromProtoRuleSources(in []*managerv1.RuleSource) []rulesource.LoadedRules {
+func FromProtoRuleSources(in []*managerv1beta1.RuleSource) []rulesource.LoadedRules {
 	out := make([]rulesource.LoadedRules, 0, len(in))
 	for _, source := range in {
 		if source == nil {
@@ -78,15 +78,15 @@ func FromProtoRuleSources(in []*managerv1.RuleSource) []rulesource.LoadedRules {
 	return out
 }
 
-func toProtoRuleSets(in []rule.RuleSet) []*managerv1.RuleSet {
-	out := make([]*managerv1.RuleSet, 0, len(in))
+func toProtoRuleSets(in []rule.RuleSet) []*managerv1beta1.RuleSet {
+	out := make([]*managerv1beta1.RuleSet, 0, len(in))
 	for _, set := range in {
 		out = append(out, toProtoRuleSet(set))
 	}
 	return out
 }
 
-func fromProtoRuleSets(in []*managerv1.RuleSet) []rule.RuleSet {
+func fromProtoRuleSets(in []*managerv1beta1.RuleSet) []rule.RuleSet {
 	out := make([]rule.RuleSet, 0, len(in))
 	for _, set := range in {
 		out = append(out, fromProtoRuleSet(set))
@@ -94,8 +94,8 @@ func fromProtoRuleSets(in []*managerv1.RuleSet) []rule.RuleSet {
 	return out
 }
 
-func toProtoRuleSet(in rule.RuleSet) *managerv1.RuleSet {
-	return &managerv1.RuleSet{
+func toProtoRuleSet(in rule.RuleSet) *managerv1beta1.RuleSet {
+	return &managerv1beta1.RuleSet{
 		RulesetId: in.RulesetID,
 		Lists:     toProtoLists(in.Lists),
 		Rules:     toProtoRules(in.Rules),
@@ -103,7 +103,7 @@ func toProtoRuleSet(in rule.RuleSet) *managerv1.RuleSet {
 	}
 }
 
-func fromProtoRuleSet(in *managerv1.RuleSet) rule.RuleSet {
+func fromProtoRuleSet(in *managerv1beta1.RuleSet) rule.RuleSet {
 	if in == nil {
 		return rule.RuleSet{}
 	}
@@ -115,15 +115,15 @@ func fromProtoRuleSet(in *managerv1.RuleSet) rule.RuleSet {
 	}
 }
 
-func toProtoRules(in []rule.Rule) []*managerv1.Rule {
-	out := make([]*managerv1.Rule, 0, len(in))
+func toProtoRules(in []rule.Rule) []*managerv1beta1.Rule {
+	out := make([]*managerv1beta1.Rule, 0, len(in))
 	for _, r := range in {
 		out = append(out, toProtoRule(r))
 	}
 	return out
 }
 
-func fromProtoRules(in []*managerv1.Rule) []rule.Rule {
+func fromProtoRules(in []*managerv1beta1.Rule) []rule.Rule {
 	out := make([]rule.Rule, 0, len(in))
 	for _, r := range in {
 		out = append(out, fromProtoRule(r))
@@ -131,8 +131,8 @@ func fromProtoRules(in []*managerv1.Rule) []rule.Rule {
 	return out
 }
 
-func toProtoRule(in rule.Rule) *managerv1.Rule {
-	return &managerv1.Rule{
+func toProtoRule(in rule.Rule) *managerv1beta1.Rule {
+	return &managerv1beta1.Rule{
 		RuleId:      in.RuleID,
 		RuleName:    in.RuleName,
 		Description: in.Description,
@@ -147,7 +147,7 @@ func toProtoRule(in rule.Rule) *managerv1.Rule {
 	}
 }
 
-func fromProtoRule(in *managerv1.Rule) rule.Rule {
+func fromProtoRule(in *managerv1beta1.Rule) rule.Rule {
 	if in == nil {
 		return rule.Rule{}
 	}
@@ -166,15 +166,15 @@ func fromProtoRule(in *managerv1.Rule) rule.Rule {
 	}
 }
 
-func toProtoRuleModifiers(in []rule.RuleModifier) []*managerv1.RuleModifier {
-	out := make([]*managerv1.RuleModifier, 0, len(in))
+func toProtoRuleModifiers(in []rule.RuleModifier) []*managerv1beta1.RuleModifier {
+	out := make([]*managerv1beta1.RuleModifier, 0, len(in))
 	for _, modifier := range in {
 		out = append(out, toProtoRuleModifier(modifier))
 	}
 	return out
 }
 
-func fromProtoRuleModifiers(in []*managerv1.RuleModifier) []rule.RuleModifier {
+func fromProtoRuleModifiers(in []*managerv1beta1.RuleModifier) []rule.RuleModifier {
 	out := make([]rule.RuleModifier, 0, len(in))
 	for _, modifier := range in {
 		out = append(out, fromProtoRuleModifier(modifier))
@@ -182,8 +182,8 @@ func fromProtoRuleModifiers(in []*managerv1.RuleModifier) []rule.RuleModifier {
 	return out
 }
 
-func toProtoRuleModifier(in rule.RuleModifier) *managerv1.RuleModifier {
-	out := &managerv1.RuleModifier{
+func toProtoRuleModifier(in rule.RuleModifier) *managerv1beta1.RuleModifier {
+	out := &managerv1beta1.RuleModifier{
 		ModifierId:       in.ModifierID,
 		Revision:         in.Revision,
 		Description:      in.Description,
@@ -206,7 +206,7 @@ func toProtoRuleModifier(in rule.RuleModifier) *managerv1.RuleModifier {
 	return out
 }
 
-func fromProtoRuleModifier(in *managerv1.RuleModifier) rule.RuleModifier {
+func fromProtoRuleModifier(in *managerv1beta1.RuleModifier) rule.RuleModifier {
 	if in == nil {
 		return rule.RuleModifier{}
 	}
@@ -233,17 +233,17 @@ func fromProtoRuleModifier(in *managerv1.RuleModifier) rule.RuleModifier {
 	return out
 }
 
-func toProtoRuleTarget(in rule.RuleTarget) *managerv1.RuleTarget {
+func toProtoRuleTarget(in rule.RuleTarget) *managerv1beta1.RuleTarget {
 	if in.IsZero() {
 		return nil
 	}
-	return &managerv1.RuleTarget{
+	return &managerv1beta1.RuleTarget{
 		Include: toProtoRuleTargetMatchers(in.Include),
 		Exclude: toProtoRuleTargetMatchers(in.Exclude),
 	}
 }
 
-func fromProtoRuleTarget(in *managerv1.RuleTarget) rule.RuleTarget {
+func fromProtoRuleTarget(in *managerv1beta1.RuleTarget) rule.RuleTarget {
 	if in == nil {
 		return rule.RuleTarget{}
 	}
@@ -253,10 +253,10 @@ func fromProtoRuleTarget(in *managerv1.RuleTarget) rule.RuleTarget {
 	}
 }
 
-func toProtoRuleTargetMatchers(in []rule.RuleTargetMatcher) []*managerv1.RuleTargetMatcher {
-	out := make([]*managerv1.RuleTargetMatcher, 0, len(in))
+func toProtoRuleTargetMatchers(in []rule.RuleTargetMatcher) []*managerv1beta1.RuleTargetMatcher {
+	out := make([]*managerv1beta1.RuleTargetMatcher, 0, len(in))
 	for _, matcher := range in {
-		out = append(out, &managerv1.RuleTargetMatcher{
+		out = append(out, &managerv1beta1.RuleTargetMatcher{
 			ProviderHost: matcher.ProviderHost,
 			Path:         matcher.Path,
 		})
@@ -264,7 +264,7 @@ func toProtoRuleTargetMatchers(in []rule.RuleTargetMatcher) []*managerv1.RuleTar
 	return out
 }
 
-func fromProtoRuleTargetMatchers(in []*managerv1.RuleTargetMatcher) []rule.RuleTargetMatcher {
+func fromProtoRuleTargetMatchers(in []*managerv1beta1.RuleTargetMatcher) []rule.RuleTargetMatcher {
 	out := make([]rule.RuleTargetMatcher, 0, len(in))
 	for _, matcher := range in {
 		if matcher == nil {
@@ -279,10 +279,10 @@ func fromProtoRuleTargetMatchers(in []*managerv1.RuleTargetMatcher) []rule.RuleT
 	return out
 }
 
-func toProtoRuleModifierTargets(in []rule.RuleModifierTarget) []*managerv1.RuleModifierTarget {
-	out := make([]*managerv1.RuleModifierTarget, 0, len(in))
+func toProtoRuleModifierTargets(in []rule.RuleModifierTarget) []*managerv1beta1.RuleModifierTarget {
+	out := make([]*managerv1beta1.RuleModifierTarget, 0, len(in))
 	for _, target := range in {
-		out = append(out, &managerv1.RuleModifierTarget{
+		out = append(out, &managerv1beta1.RuleModifierTarget{
 			RulesetId: target.RulesetID,
 			RuleId:    target.RuleID,
 		})
@@ -290,7 +290,7 @@ func toProtoRuleModifierTargets(in []rule.RuleModifierTarget) []*managerv1.RuleM
 	return out
 }
 
-func fromProtoRuleModifierTargets(in []*managerv1.RuleModifierTarget) []rule.RuleModifierTarget {
+func fromProtoRuleModifierTargets(in []*managerv1beta1.RuleModifierTarget) []rule.RuleModifierTarget {
 	out := make([]rule.RuleModifierTarget, 0, len(in))
 	for _, target := range in {
 		if target == nil {
@@ -305,18 +305,18 @@ func fromProtoRuleModifierTargets(in []*managerv1.RuleModifierTarget) []rule.Rul
 	return out
 }
 
-func toProtoLists(in map[string][]string) map[string]*managerv1.StringList {
+func toProtoLists(in map[string][]string) map[string]*managerv1beta1.StringList {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make(map[string]*managerv1.StringList, len(in))
+	out := make(map[string]*managerv1beta1.StringList, len(in))
 	for key, values := range in {
-		out[key] = &managerv1.StringList{Values: append([]string(nil), values...)}
+		out[key] = &managerv1beta1.StringList{Values: append([]string(nil), values...)}
 	}
 	return out
 }
 
-func fromProtoLists(in map[string]*managerv1.StringList) map[string][]string {
+func fromProtoLists(in map[string]*managerv1beta1.StringList) map[string][]string {
 	if len(in) == 0 {
 		return nil
 	}

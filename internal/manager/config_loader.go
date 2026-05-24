@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
@@ -15,7 +15,7 @@ import (
 type ServedConfig struct {
 	ConfigRevision          string
 	DefaultMaxAlertsPerRule int
-	OutputSettings          *managerv1.OutputSettings
+	OutputSettings          *managerv1beta1.OutputSettings
 }
 
 type BaselineRuleSource interface {

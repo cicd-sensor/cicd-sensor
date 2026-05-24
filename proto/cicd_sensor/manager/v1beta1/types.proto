@@ -4,7 +4,7 @@
 // Rule-authoring types mirror internal/rule/schema.go for manager delivery.
 syntax = "proto3";
 
-package cicd_sensor.manager.v1;
+package cicd_sensor.manager.v1beta1;
 
 import "buf/validate/validate.proto";
 

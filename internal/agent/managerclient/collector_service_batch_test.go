@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 func TestBuildCollectorIngestLogBatch_CompressesJSONLAndPreservesFlushAt(t *testing.T) {
@@ -17,8 +17,8 @@ func TestBuildCollectorIngestLogBatch_CompressesJSONLAndPreservesFlushAt(t *test
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	batch, err := BuildCollectorIngestLogBatch(LogBatch{
 		Identity: identity,
-		Scope:    managerv1.Scope_SCOPE_HOST,
-		Type:     managerv1.LogType_LOG_TYPE_DETECTION,
+		Scope:    managerv1beta1.Scope_SCOPE_HOST,
+		Type:     managerv1beta1.LogType_LOG_TYPE_DETECTION,
 		Records:  [][]byte{[]byte(`{"rule_id":"a"}`), []byte(`{"rule_id":"b"}`)},
 		FlushAt:  flushAt,
 	})
@@ -28,11 +28,11 @@ func TestBuildCollectorIngestLogBatch_CompressesJSONLAndPreservesFlushAt(t *test
 	if got := batch.FlushAt.AsTime(); !got.Equal(flushAt) {
 		t.Fatalf("flush_at: got %s, want %s", got, flushAt)
 	}
-	if got := batch.GetScope(); got != managerv1.Scope_SCOPE_HOST {
-		t.Fatalf("scope: got %v, want %v", got, managerv1.Scope_SCOPE_HOST)
+	if got := batch.GetScope(); got != managerv1beta1.Scope_SCOPE_HOST {
+		t.Fatalf("scope: got %v, want %v", got, managerv1beta1.Scope_SCOPE_HOST)
 	}
-	if got := batch.GetLogType(); got != managerv1.LogType_LOG_TYPE_DETECTION {
-		t.Fatalf("log_type: got %v, want %v", got, managerv1.LogType_LOG_TYPE_DETECTION)
+	if got := batch.GetLogType(); got != managerv1beta1.LogType_LOG_TYPE_DETECTION {
+		t.Fatalf("log_type: got %v, want %v", got, managerv1beta1.LogType_LOG_TYPE_DETECTION)
 	}
 	if got := batch.GetJobIdentity(); got.GetProviderHost() != identity.ProviderHost ||
 		got.GetProjectPath() != identity.ProjectPath ||
@@ -78,8 +78,8 @@ func TestBuildCollectorIngestLogBatch_RecordBoundaries(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			batch, err := BuildCollectorIngestLogBatch(LogBatch{
 				Identity: jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
-				Scope:    managerv1.Scope_SCOPE_PROJECT,
-				Type:     managerv1.LogType_LOG_TYPE_SUMMARY,
+				Scope:    managerv1beta1.Scope_SCOPE_PROJECT,
+				Type:     managerv1beta1.LogType_LOG_TYPE_SUMMARY,
 				Records:  tt.records,
 				FlushAt:  time.Now(),
 			})
@@ -103,8 +103,8 @@ func TestBuildCollectorIngestLogBatch_GitLabIdentity(t *testing.T) {
 	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
 	batch, err := BuildCollectorIngestLogBatch(LogBatch{
 		Identity: identity,
-		Scope:    managerv1.Scope_SCOPE_PROJECT,
-		Type:     managerv1.LogType_LOG_TYPE_SUMMARY,
+		Scope:    managerv1beta1.Scope_SCOPE_PROJECT,
+		Type:     managerv1beta1.LogType_LOG_TYPE_SUMMARY,
 		Records:  [][]byte{[]byte(`{"ok":true}`)},
 		FlushAt:  time.Now(),
 	})

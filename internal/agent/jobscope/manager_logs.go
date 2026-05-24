@@ -10,7 +10,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 )
@@ -108,7 +108,7 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 		logger.WarnContext(ctx, "detection_write_failed",
 			"ruleset_id", hit.Identity.RulesetID,
 			"rule_id", hit.Identity.RuleID,
-			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1.LogType_LOG_TYPE_DETECTION),
+			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1beta1.LogType_LOG_TYPE_DETECTION),
 			"error", err,
 		)
 	}
@@ -140,7 +140,7 @@ func (s *JobScopeState) WriteRuntimeEventLog(ctx context.Context, identity jobco
 	if err := s.managerJobLogs.WriteRuntimeEventPayload(ctx, payload); err != nil && logger != nil {
 		logger.WarnContext(ctx, "runtime_event_write_failed",
 			"scope", string(s.Type),
-			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1.LogType_LOG_TYPE_RUNTIME_EVENT),
+			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT),
 			"error", err,
 		)
 	}

@@ -2,9 +2,9 @@
 // Manager is stateless: every call authenticates and returns a fresh bundle.
 syntax = "proto3";
 
-package cicd_sensor.manager.v1;
+package cicd_sensor.manager.v1beta1;
 
-import "cicd_sensor/manager/v1/types.proto";
+import "cicd_sensor/manager/v1beta1/types.proto";
 
 // ConfigService is the rule/output config distribution plane.
 //

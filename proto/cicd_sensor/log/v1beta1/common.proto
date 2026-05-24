@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package cicd_sensor.log.v1;
+package cicd_sensor.log.v1beta1;
 
 message LogContext {
   string provider = 1 [json_name = "provider"];

@@ -10,7 +10,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 const (
@@ -102,24 +102,24 @@ func buildNamedSink(ctx context.Context, logger *slog.Logger, sc SinkConfig) (si
 }
 
 // OutputSettings exposes manager-owned batching policy to agents.
-func (r *OutputRouter) OutputSettings() *managerv1.OutputSettings {
+func (r *OutputRouter) OutputSettings() *managerv1beta1.OutputSettings {
 	if r == nil || len(r.perKind) == 0 {
 		return nil
 	}
-	return &managerv1.OutputSettings{
+	return &managerv1beta1.OutputSettings{
 		Detection:    r.outputSetting(logtype.Detection),
 		RuntimeEvent: r.outputSetting(logtype.RuntimeEvent),
 		Summary:      r.outputSetting(logtype.Summary),
 	}
 }
 
-func (r *OutputRouter) outputSetting(logKind logtype.LogType) *managerv1.OutputSetting {
+func (r *OutputRouter) outputSetting(logKind logtype.LogType) *managerv1beta1.OutputSetting {
 	dst := r.perKind[logKind]
 	if dst == nil {
-		return &managerv1.OutputSetting{}
+		return &managerv1beta1.OutputSetting{}
 	}
 	policy := dst.FlushPolicy(logKind)
-	return &managerv1.OutputSetting{
+	return &managerv1beta1.OutputSetting{
 		Enabled:              true,
 		FlushThresholdBytes:  policy.FlushThresholdBytes,
 		FlushIntervalSeconds: policy.FlushIntervalSeconds,

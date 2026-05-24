@@ -9,7 +9,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 type recordingLogBatchSender struct {
@@ -37,14 +37,14 @@ func (s *recordingLogBatchSender) count() int {
 func TestNewManagerOutputNilSenderReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	if got := testManagerOutput(nil, &managerv1.OutputSetting{}); got != nil {
+	if got := testManagerOutput(nil, &managerv1beta1.OutputSetting{}); got != nil {
 		t.Fatalf("new manager output with nil sender: got %#v, want nil", got)
 	}
 }
 
 func TestManagerOutput_EmptyPayloadIsIgnored(t *testing.T) {
 	poster := &recordingLogBatchSender{}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{FlushThresholdBytes: 1})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{FlushThresholdBytes: 1})
 
 	if err := out.Emit(context.Background(), nil); err != nil {
 		t.Fatalf("emit nil payload: %v", err)
@@ -62,7 +62,7 @@ func TestManagerOutput_EmptyPayloadIsIgnored(t *testing.T) {
 
 func TestManagerOutput_FlushesOnFlushThresholdBytes(t *testing.T) {
 	poster := &recordingLogBatchSender{}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{FlushThresholdBytes: 4})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{FlushThresholdBytes: 4})
 
 	if err := out.Emit(context.Background(), []byte(`a`)); err != nil {
 		t.Fatalf("emit first: %v", err)
@@ -83,7 +83,7 @@ func TestManagerOutput_FlushesOnFlushThresholdBytes(t *testing.T) {
 
 func TestManagerOutput_FlushesBeforeFlushThresholdBytesWouldBeExceeded(t *testing.T) {
 	poster := &recordingLogBatchSender{}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{FlushThresholdBytes: 16})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{FlushThresholdBytes: 16})
 
 	if err := out.Emit(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("emit first: %v", err)
@@ -113,7 +113,7 @@ func TestManagerOutput_FlushesBeforeFlushThresholdBytesWouldBeExceeded(t *testin
 
 func TestManagerOutput_CloseFlushesPendingRecords(t *testing.T) {
 	poster := &recordingLogBatchSender{}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{})
 
 	if err := out.Emit(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("emit: %v", err)
@@ -128,7 +128,7 @@ func TestManagerOutput_CloseFlushesPendingRecords(t *testing.T) {
 
 func TestManagerOutput_CloseReturnsFlushErrorAndStaysClosed(t *testing.T) {
 	poster := &recordingLogBatchSender{err: errors.New("manager unavailable")}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{})
 
 	if err := out.Emit(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("emit: %v", err)
@@ -146,7 +146,7 @@ func TestManagerOutput_CloseReturnsFlushErrorAndStaysClosed(t *testing.T) {
 
 func TestManagerOutput_TimerFlushesPendingRecords(t *testing.T) {
 	poster := &recordingLogBatchSender{}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{FlushIntervalSeconds: 1})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{FlushIntervalSeconds: 1})
 
 	if err := out.Emit(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("emit: %v", err)
@@ -159,7 +159,7 @@ func TestManagerOutput_TimerFlushesPendingRecords(t *testing.T) {
 
 func TestManagerOutput_EmitAndCloseFlushesFinalRecord(t *testing.T) {
 	poster := &recordingLogBatchSender{}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{})
 
 	if err := out.EmitAndClose(context.Background(), []byte(`{"final":true}`)); err != nil {
 		t.Fatalf("emit and close: %v", err)
@@ -174,7 +174,7 @@ func TestManagerOutput_EmitAndCloseFlushesFinalRecord(t *testing.T) {
 
 func TestManagerOutput_CloseIsIdempotent(t *testing.T) {
 	poster := &recordingLogBatchSender{}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{})
 
 	if err := out.Close(context.Background()); err != nil {
 		t.Fatalf("first close: %v", err)
@@ -189,7 +189,7 @@ func TestManagerOutput_SendsSequentially(t *testing.T) {
 		entered: make(chan struct{}, 2),
 		release: make(chan struct{}),
 	}
-	out := testManagerOutput(poster.sendBatch, &managerv1.OutputSetting{FlushThresholdBytes: 1})
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{FlushThresholdBytes: 1})
 
 	if err := out.Emit(context.Background(), []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("emit first: %v", err)
@@ -230,9 +230,9 @@ func TestManagerOutput_StreamEmitReturnsBacklogFull(t *testing.T) {
 		logger:    testLogger,
 		sendBatch: poster.sendBatch,
 		identity:  jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
-		scope:     managerv1.Scope_SCOPE_HOST,
-		logType:   managerv1.LogType_LOG_TYPE_DETECTION,
-		setting:   &managerv1.OutputSetting{FlushThresholdBytes: 1},
+		scope:     managerv1beta1.Scope_SCOPE_HOST,
+		logType:   managerv1beta1.LogType_LOG_TYPE_DETECTION,
+		setting:   &managerv1beta1.OutputSetting{FlushThresholdBytes: 1},
 	}).run(out.requests, out.done)
 
 	if err := out.Emit(context.Background(), []byte(`{"n":1}`)); err != nil {
@@ -259,13 +259,13 @@ func TestManagerOutput_StreamEmitReturnsBacklogFull(t *testing.T) {
 	}
 }
 
-func testManagerOutput(sendBatch func(context.Context, managerclient.LogBatch) error, setting *managerv1.OutputSetting) *managerOutput {
+func testManagerOutput(sendBatch func(context.Context, managerclient.LogBatch) error, setting *managerv1beta1.OutputSetting) *managerOutput {
 	return newManagerOutput(
 		testLogger,
 		sendBatch,
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
 		jobcontext.ScopeTypeHost,
-		managerv1.LogType_LOG_TYPE_DETECTION,
+		managerv1beta1.LogType_LOG_TYPE_DETECTION,
 		setting,
 	)
 }

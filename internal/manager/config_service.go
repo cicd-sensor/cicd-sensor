@@ -7,8 +7,8 @@ import (
 	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
 
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -19,12 +19,12 @@ type configServiceHandler struct {
 	server *Server
 }
 
-func newConfigServiceHandler(s *Server) managerv1connect.ConfigServiceHandler {
+func newConfigServiceHandler(s *Server) managerv1beta1connect.ConfigServiceHandler {
 	return &configServiceHandler{server: s}
 }
 
 // FetchConfig handles ConfigService.FetchConfig.
-func (h *configServiceHandler) FetchConfig(ctx context.Context, req *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error) {
+func (h *configServiceHandler) FetchConfig(ctx context.Context, req *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
 	if err := protovalidate.Validate(req.Msg); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request: %w", err))
 	}
@@ -56,8 +56,8 @@ func (h *configServiceHandler) FetchConfig(ctx context.Context, req *connect.Req
 	merged = append(merged, sources...)
 	sources = merged
 
-	out := &managerv1.FetchConfigResponse{
-		Config: &managerv1.ServedConfig{
+	out := &managerv1beta1.FetchConfigResponse{
+		Config: &managerv1beta1.ServedConfig{
 			ConfigRevision:          config.ConfigRevision,
 			DefaultMaxAlertsPerRule: int32(config.DefaultMaxAlertsPerRule),
 			OutputSettings:          config.OutputSettings,

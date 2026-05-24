@@ -9,7 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule/baseline"
 )
 
@@ -46,13 +46,13 @@ func newServer(logger *slog.Logger, addr string, tokens []string, config *Served
 	}
 
 	mux := http.NewServeMux()
-	configPath, configHandler := managerv1connect.NewConfigServiceHandler(
+	configPath, configHandler := managerv1beta1connect.NewConfigServiceHandler(
 		newConfigServiceHandler(s),
 		connect.WithReadMaxBytes(managerMaxRequestBytes),
 		connect.WithInterceptors(unaryOnlyInterceptor{}),
 	)
 	mux.Handle(configPath, configHandler)
-	collectorPath, collectorHandler := managerv1connect.NewCollectorServiceHandler(
+	collectorPath, collectorHandler := managerv1beta1connect.NewCollectorServiceHandler(
 		newCollectorServiceHandler(s),
 		connect.WithReadMaxBytes(managerMaxRequestBytes),
 		connect.WithInterceptors(unaryOnlyInterceptor{}),

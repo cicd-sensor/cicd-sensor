@@ -8,7 +8,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 const managerOutputChannelCap = 10_000
@@ -17,9 +17,9 @@ type managerWorkerConfig struct {
 	logger    *slog.Logger
 	sendBatch func(context.Context, managerclient.LogBatch) error
 	identity  jobcontext.JobIdentity
-	scope     managerv1.Scope
-	logType   managerv1.LogType
-	setting   *managerv1.OutputSetting
+	scope     managerv1beta1.Scope
+	logType   managerv1beta1.LogType
+	setting   *managerv1beta1.OutputSetting
 	now       func() time.Time
 }
 
@@ -27,9 +27,9 @@ type managerWorker struct {
 	logger    *slog.Logger
 	sendBatch func(context.Context, managerclient.LogBatch) error
 	identity  jobcontext.JobIdentity
-	scope     managerv1.Scope
-	logType   managerv1.LogType
-	setting   *managerv1.OutputSetting
+	scope     managerv1beta1.Scope
+	logType   managerv1beta1.LogType
+	setting   *managerv1beta1.OutputSetting
 	now       func() time.Time
 }
 

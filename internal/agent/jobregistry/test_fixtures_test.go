@@ -13,8 +13,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
@@ -25,17 +25,17 @@ var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 const fakeConfigServerAddr = "127.0.0.1:0"
 
 type fakeConfigService struct {
-	handler func(ctx context.Context, req *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error)
+	handler func(ctx context.Context, req *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error)
 }
 
-func (f *fakeConfigService) FetchConfig(ctx context.Context, req *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error) {
+func (f *fakeConfigService) FetchConfig(ctx context.Context, req *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
 	return f.handler(ctx, req)
 }
 
 func newFakeConfigServer(t *testing.T, addr string, svc *fakeConfigService) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	path, handler := managerv1connect.NewConfigServiceHandler(svc)
+	path, handler := managerv1beta1connect.NewConfigServiceHandler(svc)
 	mux.Handle(path, handler)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -50,7 +50,7 @@ func newFakeConfigServer(t *testing.T, addr string, svc *fakeConfigService) *htt
 	return server
 }
 
-func mustRuleSources(t *testing.T, sets []rule.RuleSet, modifiers []rule.RuleModifier) []*managerv1.RuleSource {
+func mustRuleSources(t *testing.T, sets []rule.RuleSet, modifiers []rule.RuleModifier) []*managerv1beta1.RuleSource {
 	t.Helper()
 	return protoconv.ToProtoRuleSources([]rulesource.LoadedRules{{
 		RuleSets:      sets,

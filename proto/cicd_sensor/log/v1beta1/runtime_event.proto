@@ -1,9 +1,9 @@
 syntax = "proto3";
 
-package cicd_sensor.log.v1;
+package cicd_sensor.log.v1beta1;
 
 import "buf/validate/validate.proto";
-import "cicd_sensor/log/v1/common.proto";
+import "cicd_sensor/log/v1beta1/common.proto";
 import "google/protobuf/timestamp.proto";
 
 message RuntimeEventLogEntry {

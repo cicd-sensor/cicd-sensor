@@ -16,7 +16,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -168,7 +168,7 @@ func TestJobRegistry_ApplyGitHubHostStart_SetsHostScope(t *testing.T) {
 
 func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 	svc := &fakeConfigService{
-		handler: func(_ context.Context, req *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error) {
+		handler: func(_ context.Context, req *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
 			if req.Msg.RequestedOutputs != nil {
 				t.Fatalf("requested outputs: got %+v, want nil", req.Msg.RequestedOutputs)
 			}
@@ -181,12 +181,12 @@ func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 					Action:    rule.RuleActionDetect,
 				}},
 			}}, nil)
-			return connect.NewResponse(&managerv1.FetchConfigResponse{
-				Config: &managerv1.ServedConfig{
+			return connect.NewResponse(&managerv1beta1.FetchConfigResponse{
+				Config: &managerv1beta1.ServedConfig{
 					ConfigRevision:          "sha256:test",
 					DefaultMaxAlertsPerRule: 27,
-					OutputSettings: &managerv1.OutputSettings{
-						Detection: &managerv1.OutputSetting{Enabled: true},
+					OutputSettings: &managerv1beta1.OutputSettings{
+						Detection: &managerv1beta1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -221,7 +221,7 @@ func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 
 func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 	svc := &fakeConfigService{
-		handler: func(context.Context, *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error) {
+		handler: func(context.Context, *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
 			sources := mustRuleSources(t, []rule.RuleSet{{
 				RulesetID: "manager-host",
 				Rules: []rule.Rule{{
@@ -231,11 +231,11 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 					Action:    rule.RuleActionDetect,
 				}},
 			}}, nil)
-			return connect.NewResponse(&managerv1.FetchConfigResponse{
-				Config: &managerv1.ServedConfig{
+			return connect.NewResponse(&managerv1beta1.FetchConfigResponse{
+				Config: &managerv1beta1.ServedConfig{
 					DefaultMaxAlertsPerRule: 99,
-					OutputSettings: &managerv1.OutputSettings{
-						Detection: &managerv1.OutputSetting{Enabled: true},
+					OutputSettings: &managerv1beta1.OutputSettings{
+						Detection: &managerv1beta1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -297,7 +297,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 
 func TestJobRegistry_ApplyGitHubHostStart_ManagerFailureFailsClosed(t *testing.T) {
 	svc := &fakeConfigService{
-		handler: func(context.Context, *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error) {
+		handler: func(context.Context, *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
 			return nil, connect.NewError(connect.CodeInternal, errors.New("boom"))
 		},
 	}

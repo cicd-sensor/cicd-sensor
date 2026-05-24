@@ -16,15 +16,15 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type recordingManagerBatchPoster struct {
 	mu      sync.Mutex
-	batches []*managerv1.IngestLogBatch
+	batches []*managerv1beta1.IngestLogBatch
 }
 
 func (r *recordingManagerBatchPoster) sendBatch(_ context.Context, batch managerclient.LogBatch) error {
@@ -84,25 +84,25 @@ func TestJobFinalizeAfterEventWorkerFlushesAllJobLogs(t *testing.T) {
 	if len(batches) != 3 {
 		t.Fatalf("sent batches: got %d, want 3", len(batches))
 	}
-	gotTypes := make(map[managerv1.LogType]*managerv1.IngestLogBatch, len(batches))
+	gotTypes := make(map[managerv1beta1.LogType]*managerv1beta1.IngestLogBatch, len(batches))
 	for _, batch := range batches {
 		gotTypes[batch.LogType] = batch
 	}
-	for _, logType := range []managerv1.LogType{
-		managerv1.LogType_LOG_TYPE_DETECTION,
-		managerv1.LogType_LOG_TYPE_RUNTIME_EVENT,
-		managerv1.LogType_LOG_TYPE_SUMMARY,
+	for _, logType := range []managerv1beta1.LogType{
+		managerv1beta1.LogType_LOG_TYPE_DETECTION,
+		managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT,
+		managerv1beta1.LogType_LOG_TYPE_SUMMARY,
 	} {
 		if gotTypes[logType] == nil {
 			t.Fatalf("missing log type %s in batches %#v", logType, gotTypes)
 		}
 	}
 
-	summaryRecords := decodeManagerBatchRecords(t, gotTypes[managerv1.LogType_LOG_TYPE_SUMMARY])
+	summaryRecords := decodeManagerBatchRecords(t, gotTypes[managerv1beta1.LogType_LOG_TYPE_SUMMARY])
 	if len(summaryRecords) != 1 {
 		t.Fatalf("summary records: got %d, want 1", len(summaryRecords))
 	}
-	var summaryLog logv1.SummaryLogEntry
+	var summaryLog logv1beta1.SummaryLogEntry
 	if err := protojson.Unmarshal(summaryRecords[0], &summaryLog); err != nil {
 		t.Fatalf("unmarshal summary: %v", err)
 	}
@@ -119,16 +119,16 @@ func TestJobFinalizeAfterEventWorkerFlushesAllJobLogs(t *testing.T) {
 		t.Fatalf("event counters: total=%d dropped=%d, want 1/0", summaryLog.GetEventsTotal(), summaryLog.GetEventsDropped())
 	}
 
-	detectionRecords := decodeManagerBatchRecords(t, gotTypes[managerv1.LogType_LOG_TYPE_DETECTION])
-	runtimeRecords := decodeManagerBatchRecords(t, gotTypes[managerv1.LogType_LOG_TYPE_RUNTIME_EVENT])
+	detectionRecords := decodeManagerBatchRecords(t, gotTypes[managerv1beta1.LogType_LOG_TYPE_DETECTION])
+	runtimeRecords := decodeManagerBatchRecords(t, gotTypes[managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT])
 	if len(detectionRecords) != 1 || len(runtimeRecords) != 1 {
 		t.Fatalf("streaming records: detection=%d runtime=%d, want 1/1", len(detectionRecords), len(runtimeRecords))
 	}
-	var detectionLog logv1.DetectionLogEntry
+	var detectionLog logv1beta1.DetectionLogEntry
 	if err := protojson.Unmarshal(detectionRecords[0], &detectionLog); err != nil {
 		t.Fatalf("unmarshal detection log: %v", err)
 	}
-	var runtimeLog logv1.RuntimeEventLogEntry
+	var runtimeLog logv1beta1.RuntimeEventLogEntry
 	if err := protojson.Unmarshal(runtimeRecords[0], &runtimeLog); err != nil {
 		t.Fatalf("unmarshal runtime event log: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestFinalizeTakenJob_EmitsProjectResultWhenHostResultFails(t *testing.T) {
 	var mu sync.Mutex
 	var sent []managerclient.LogBatch
 	send := func(_ context.Context, batch managerclient.LogBatch) error {
-		if batch.Type == managerv1.LogType_LOG_TYPE_SUMMARY && batch.Scope == managerv1.Scope_SCOPE_HOST {
+		if batch.Type == managerv1beta1.LogType_LOG_TYPE_SUMMARY && batch.Scope == managerv1beta1.Scope_SCOPE_HOST {
 			return hostErr
 		}
 		mu.Lock()
@@ -195,18 +195,18 @@ func TestFinalizeTakenJob_EmitsProjectResultWhenHostResultFails(t *testing.T) {
 	if len(sent) != 1 {
 		t.Fatalf("sent batches after host failure: got %d, want 1", len(sent))
 	}
-	if sent[0].Type != managerv1.LogType_LOG_TYPE_SUMMARY || sent[0].Scope != managerv1.Scope_SCOPE_PROJECT {
+	if sent[0].Type != managerv1beta1.LogType_LOG_TYPE_SUMMARY || sent[0].Scope != managerv1beta1.Scope_SCOPE_PROJECT {
 		t.Fatalf("sent batch: type=%s scope=%s, want project result", sent[0].Type, sent[0].Scope)
 	}
 }
 
-func managerBatchPosterSnapshot(poster *recordingManagerBatchPoster) []*managerv1.IngestLogBatch {
+func managerBatchPosterSnapshot(poster *recordingManagerBatchPoster) []*managerv1beta1.IngestLogBatch {
 	poster.mu.Lock()
 	defer poster.mu.Unlock()
-	return append([]*managerv1.IngestLogBatch(nil), poster.batches...)
+	return append([]*managerv1beta1.IngestLogBatch(nil), poster.batches...)
 }
 
-func decodeManagerBatchRecords(t *testing.T, batch *managerv1.IngestLogBatch) [][]byte {
+func decodeManagerBatchRecords(t *testing.T, batch *managerv1beta1.IngestLogBatch) [][]byte {
 	t.Helper()
 
 	reader, err := gzip.NewReader(bytes.NewReader(batch.CompressedJsonl))

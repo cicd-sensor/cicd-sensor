@@ -9,7 +9,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
@@ -38,7 +38,7 @@ func MarshalSummaryLogEntry(in SummaryLogInput) ([]byte, error) {
 		secs := int64(finalizedAt.Sub(in.StartedAt).Seconds())
 		durationS = proto.Int64(secs)
 	}
-	message := &logv1.SummaryLogEntry{
+	message := &logv1beta1.SummaryLogEntry{
 		Timestamp:       timestamppb.New(finalizedAt.UTC()),
 		LogType:         proto.String(logtype.Summary.Wire()),
 		ServiceName:     proto.String(logtype.ServiceName),
@@ -97,8 +97,8 @@ func domains(records []observations.DomainObservationRecord) []string {
 	return out
 }
 
-func rulesetUseProtos(rules []rule.ResolvedRule) []*logv1.RulesetUse {
-	out := make([]*logv1.RulesetUse, 0, len(rules))
+func rulesetUseProtos(rules []rule.ResolvedRule) []*logv1beta1.RulesetUse {
+	out := make([]*logv1beta1.RulesetUse, 0, len(rules))
 	seen := make(map[rulesetUseKey]struct{}, len(rules))
 	for _, resolved := range rules {
 		if resolved.RulesetID == "" {
@@ -109,7 +109,7 @@ func rulesetUseProtos(rules []rule.ResolvedRule) []*logv1.RulesetUse {
 			continue
 		}
 		seen[key] = struct{}{}
-		out = append(out, &logv1.RulesetUse{RulesetId: proto.String(resolved.RulesetID), Revision: proto.String(resolved.RulesetRevision)})
+		out = append(out, &logv1beta1.RulesetUse{RulesetId: proto.String(resolved.RulesetID), Revision: proto.String(resolved.RulesetRevision)})
 	}
 	return out
 }
@@ -119,21 +119,21 @@ type rulesetUseKey struct {
 	revision  string
 }
 
-func ruleModifierUseProtos(modifiers []rule.RuleModifier) []*logv1.RuleModifierUse {
-	out := make([]*logv1.RuleModifierUse, 0, len(modifiers))
+func ruleModifierUseProtos(modifiers []rule.RuleModifier) []*logv1beta1.RuleModifierUse {
+	out := make([]*logv1beta1.RuleModifierUse, 0, len(modifiers))
 	for _, modifier := range modifiers {
 		if modifier.ModifierID == "" {
 			continue
 		}
-		out = append(out, &logv1.RuleModifierUse{ModifierId: proto.String(modifier.ModifierID), Revision: proto.String(modifier.Revision)})
+		out = append(out, &logv1beta1.RuleModifierUse{ModifierId: proto.String(modifier.ModifierID), Revision: proto.String(modifier.Revision)})
 	}
 	return out
 }
 
-func detectedRuleSummaryProtos(snapshot observations.StateSnapshot) []*logv1.DetectedRuleSummary {
-	out := make([]*logv1.DetectedRuleSummary, 0, len(snapshot.Hits))
+func detectedRuleSummaryProtos(snapshot observations.StateSnapshot) []*logv1beta1.DetectedRuleSummary {
+	out := make([]*logv1beta1.DetectedRuleSummary, 0, len(snapshot.Hits))
 	for _, hit := range snapshot.Hits {
-		out = append(out, &logv1.DetectedRuleSummary{
+		out = append(out, &logv1beta1.DetectedRuleSummary{
 			RulesetId:       proto.String(hit.RulesetID),
 			RuleId:          proto.String(hit.RuleID),
 			RulesetRevision: proto.String(hit.RulesetRevision),

@@ -4,16 +4,16 @@ import (
 	"slices"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
 )
 
-func sanitizedLogEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
+func sanitizedLogEventRecord(event jobevent.EventRecord) *logv1beta1.EventRecord {
 	event.Process = jobevent.RedactProcessSummaryForOutput(event.Process)
 	return logEventRecord(event)
 }
 
-func logEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
-	out := &logv1.EventRecord{
+func logEventRecord(event jobevent.EventRecord) *logv1beta1.EventRecord {
+	out := &logv1beta1.EventRecord{
 		Id:      event.ID,
 		Type:    string(event.EventType),
 		Tags:    logEventTags(event.Tags),
@@ -21,12 +21,12 @@ func logEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
 	}
 	switch event.EventType {
 	case jobevent.ProcessExec:
-		out.ProcessExec = &logv1.ProcessExecPayload{IsMemfd: payloadBool(event.Payload, "is_memfd")}
+		out.ProcessExec = &logv1beta1.ProcessExecPayload{IsMemfd: payloadBool(event.Payload, "is_memfd")}
 	case jobevent.NetworkConnect:
 		remoteIP, _ := event.Payload["remote_ip"].(string)
 		protocol, _ := event.Payload["protocol"].(string)
 		family, _ := event.Payload["family"].(string)
-		out.NetworkConnect = &logv1.NetworkConnectPayload{
+		out.NetworkConnect = &logv1beta1.NetworkConnectPayload{
 			RemoteIp:   remoteIP,
 			RemotePort: uint32(payloadInt64(event.Payload, "remote_port")),
 			Protocol:   protocol,
@@ -35,14 +35,14 @@ func logEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
 	case jobevent.UnixSocketConnect:
 		path, _ := event.Payload["path"].(string)
 		socketType, _ := event.Payload["socket_type"].(string)
-		out.UnixSocketConnect = &logv1.UnixSocketConnectPayload{
+		out.UnixSocketConnect = &logv1beta1.UnixSocketConnectPayload{
 			Path:       path,
 			SocketType: socketType,
 			IsAbstract: payloadBool(event.Payload, "is_abstract"),
 		}
 	case jobevent.FileOpen:
 		path, _ := event.Payload["path"].(string)
-		out.FileOpen = &logv1.FileOpenPayload{
+		out.FileOpen = &logv1beta1.FileOpenPayload{
 			Path:    path,
 			IsWrite: payloadBool(event.Payload, "is_write"),
 			IsRead:  payloadBool(event.Payload, "is_read"),
@@ -50,21 +50,21 @@ func logEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
 		}
 	case jobevent.FileRemove:
 		path, _ := event.Payload["path"].(string)
-		out.FileRemove = &logv1.FileRemovePayload{
+		out.FileRemove = &logv1beta1.FileRemovePayload{
 			Path:     path,
 			IsFolder: payloadBool(event.Payload, "is_folder"),
 		}
 	case jobevent.FileMove:
 		fromPath, _ := event.Payload["from_path"].(string)
 		toPath, _ := event.Payload["to_path"].(string)
-		out.FileMove = &logv1.FileMovePayload{
+		out.FileMove = &logv1beta1.FileMovePayload{
 			FromPath: fromPath,
 			ToPath:   toPath,
 		}
 	case jobevent.FileLink:
 		createdPath, _ := event.Payload["created_path"].(string)
 		existingPath, _ := event.Payload["existing_path"].(string)
-		out.FileLink = &logv1.FileLinkPayload{
+		out.FileLink = &logv1beta1.FileLinkPayload{
 			CreatedPath:  createdPath,
 			ExistingPath: existingPath,
 			IsHardlink:   payloadBool(event.Payload, "is_hardlink"),
@@ -73,7 +73,7 @@ func logEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
 	case jobevent.Domain:
 		name, _ := event.Payload["domain"].(string)
 		source, _ := event.Payload["source"].(string)
-		out.Domain = &logv1.DomainPayload{
+		out.Domain = &logv1beta1.DomainPayload{
 			Name:   name,
 			Source: source,
 		}
@@ -81,16 +81,16 @@ func logEventRecord(event jobevent.EventRecord) *logv1.EventRecord {
 	return out
 }
 
-func logProcessSummary(process jobevent.ProcessSummary) *logv1.ProcessSummary {
-	out := &logv1.ProcessSummary{
+func logProcessSummary(process jobevent.ProcessSummary) *logv1beta1.ProcessSummary {
+	out := &logv1beta1.ProcessSummary{
 		Pid:      process.PID,
 		ExecPath: process.ExecPath,
 		Argv:     slices.Clone(process.Argv),
 	}
 	if len(process.Ancestors) > 0 {
-		out.Ancestors = make([]*logv1.AncestorProcess, 0, len(process.Ancestors))
+		out.Ancestors = make([]*logv1beta1.AncestorProcess, 0, len(process.Ancestors))
 		for _, ancestor := range process.Ancestors {
-			out.Ancestors = append(out.Ancestors, &logv1.AncestorProcess{
+			out.Ancestors = append(out.Ancestors, &logv1beta1.AncestorProcess{
 				ExecPath: ancestor.ExecPath,
 				Argv:     slices.Clone(ancestor.Argv),
 			})

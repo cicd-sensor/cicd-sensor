@@ -9,7 +9,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -26,7 +26,7 @@ type JobScopeState struct {
 	RuleSets       []rule.RuleSet
 	RuleModifiers  []rule.RuleModifier
 	ConfigRevision string
-	OutputSettings *managerv1.OutputSettings
+	OutputSettings *managerv1beta1.OutputSettings
 	ResolvedRules  rule.ResolvedRules
 	Observations   *observations.State
 	managerJobLogs joblogs.ManagerJobLogs
@@ -46,7 +46,7 @@ type ProjectLocalConfig struct {
 type ManagerConfig struct {
 	RuleSources             []rulesource.LoadedRules
 	ConfigRevision          string
-	OutputSettings          *managerv1.OutputSettings
+	OutputSettings          *managerv1beta1.OutputSettings
 	DefaultMaxAlertsPerRule int
 }
 

@@ -13,7 +13,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -76,7 +76,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_AppliesProjectRules(t *testing.T) {
 
 func TestJobRegistry_ApplyGitHubProjectStart_ManagerConfigIgnoresLocalProjectInputs(t *testing.T) {
 	svc := &fakeConfigService{
-		handler: func(context.Context, *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error) {
+		handler: func(context.Context, *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
 			sources := mustRuleSources(t, []rule.RuleSet{{
 				RulesetID: "managed-project",
 				Rules: []rule.Rule{{
@@ -86,11 +86,11 @@ func TestJobRegistry_ApplyGitHubProjectStart_ManagerConfigIgnoresLocalProjectInp
 					Action:    rule.RuleActionDetect,
 				}},
 			}}, nil)
-			return connect.NewResponse(&managerv1.FetchConfigResponse{
-				Config: &managerv1.ServedConfig{
+			return connect.NewResponse(&managerv1beta1.FetchConfigResponse{
+				Config: &managerv1beta1.ServedConfig{
 					DefaultMaxAlertsPerRule: 29,
-					OutputSettings: &managerv1.OutputSettings{
-						Summary: &managerv1.OutputSetting{Enabled: true},
+					OutputSettings: &managerv1beta1.OutputSettings{
+						Summary: &managerv1beta1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,

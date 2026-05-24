@@ -15,8 +15,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
@@ -39,7 +39,7 @@ func (s *fakeBaselineRuleSource) LoadForProvider(ctx context.Context, logger *sl
 }
 
 func TestConfigService_FetchConfig(t *testing.T) {
-	validIdentity := &managerv1.JobIdentity{
+	validIdentity := &managerv1beta1.JobIdentity{
 		Provider:               "github",
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",
@@ -48,15 +48,15 @@ func TestConfigService_FetchConfig(t *testing.T) {
 		GithubRunAttempt:       "1",
 		GithubRunnerTrackingId: "runner-1",
 	}
-	unsupportedProviderIdentity := proto.Clone(validIdentity).(*managerv1.JobIdentity)
+	unsupportedProviderIdentity := proto.Clone(validIdentity).(*managerv1beta1.JobIdentity)
 	unsupportedProviderIdentity.Provider = "bitbucket"
-	emptyProviderIdentity := proto.Clone(validIdentity).(*managerv1.JobIdentity)
+	emptyProviderIdentity := proto.Clone(validIdentity).(*managerv1beta1.JobIdentity)
 	emptyProviderIdentity.Provider = ""
 
 	tests := []struct {
 		name         string
 		token        string
-		req          *managerv1.FetchConfigRequest
+		req          *managerv1beta1.FetchConfigRequest
 		ruleFiles    map[string]string
 		startupYAML  string
 		wantCode     connect.Code
@@ -67,7 +67,7 @@ func TestConfigService_FetchConfig(t *testing.T) {
 		{
 			name:  "valid request returns cached config response",
 			token: testManagerSecret,
-			req:   &managerv1.FetchConfigRequest{JobIdentity: validIdentity},
+			req:   &managerv1beta1.FetchConfigRequest{JobIdentity: validIdentity},
 			ruleFiles: map[string]string{
 				"set.yaml": `
 rule_sets:
@@ -99,7 +99,7 @@ logs:
 		{
 			name:      "baseline response is allowed when no rules file is configured",
 			token:     testManagerSecret,
-			req:       &managerv1.FetchConfigRequest{JobIdentity: validIdentity},
+			req:       &managerv1beta1.FetchConfigRequest{JobIdentity: validIdentity},
 			ruleFiles: map[string]string{},
 			startupYAML: `
 bind:
@@ -111,31 +111,31 @@ bind:
 		{
 			name:     "token mismatch returns unauthenticated",
 			token:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			req:      &managerv1.FetchConfigRequest{JobIdentity: validIdentity},
+			req:      &managerv1beta1.FetchConfigRequest{JobIdentity: validIdentity},
 			wantCode: connect.CodeUnauthenticated,
 		},
 		{
 			name:     "missing token returns unauthenticated",
 			token:    "",
-			req:      &managerv1.FetchConfigRequest{JobIdentity: validIdentity},
+			req:      &managerv1beta1.FetchConfigRequest{JobIdentity: validIdentity},
 			wantCode: connect.CodeUnauthenticated,
 		},
 		{
 			name:     "invalid job identity returns invalid_argument",
 			token:    testManagerSecret,
-			req:      &managerv1.FetchConfigRequest{},
+			req:      &managerv1beta1.FetchConfigRequest{},
 			wantCode: connect.CodeInvalidArgument,
 		},
 		{
 			name:     "unsupported provider returns invalid_argument",
 			token:    testManagerSecret,
-			req:      &managerv1.FetchConfigRequest{JobIdentity: unsupportedProviderIdentity},
+			req:      &managerv1beta1.FetchConfigRequest{JobIdentity: unsupportedProviderIdentity},
 			wantCode: connect.CodeInvalidArgument,
 		},
 		{
 			name:     "empty provider returns invalid_argument",
 			token:    testManagerSecret,
-			req:      &managerv1.FetchConfigRequest{JobIdentity: emptyProviderIdentity},
+			req:      &managerv1beta1.FetchConfigRequest{JobIdentity: emptyProviderIdentity},
 			wantCode: connect.CodeInvalidArgument,
 		},
 	}
@@ -164,8 +164,8 @@ bind:
 				rulesPath = writeManagerRuleBundle(t, dir, tt.ruleFiles)
 			}
 			if startupCfg.Logs["summary"].Sink != "" {
-				config.OutputSettings = &managerv1.OutputSettings{
-					Summary: &managerv1.OutputSetting{
+				config.OutputSettings = &managerv1beta1.OutputSettings{
+					Summary: &managerv1beta1.OutputSetting{
 						Enabled:              true,
 						FlushThresholdBytes:  1,
 						FlushIntervalSeconds: 1,
@@ -191,7 +191,7 @@ bind:
 			ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
 			defer ts.Close()
 
-			client := managerv1connect.NewConfigServiceClient(ts.Client(), ts.URL)
+			client := managerv1beta1connect.NewConfigServiceClient(ts.Client(), ts.URL)
 
 			connectReq := connect.NewRequest(tt.req)
 			if tt.token != "" {
@@ -276,8 +276,8 @@ rule_sets:
 	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
 	defer ts.Close()
 
-	client := managerv1connect.NewConfigServiceClient(ts.Client(), ts.URL)
-	req := connect.NewRequest(&managerv1.FetchConfigRequest{JobIdentity: &managerv1.JobIdentity{
+	client := managerv1beta1connect.NewConfigServiceClient(ts.Client(), ts.URL)
+	req := connect.NewRequest(&managerv1beta1.FetchConfigRequest{JobIdentity: &managerv1beta1.JobIdentity{
 		Provider:               "github",
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",
@@ -315,8 +315,8 @@ func TestConfigService_FetchConfig_BaselineFailureReturnsUnavailable(t *testing.
 	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
 	defer ts.Close()
 
-	client := managerv1connect.NewConfigServiceClient(ts.Client(), ts.URL)
-	req := connect.NewRequest(&managerv1.FetchConfigRequest{JobIdentity: &managerv1.JobIdentity{
+	client := managerv1beta1connect.NewConfigServiceClient(ts.Client(), ts.URL)
+	req := connect.NewRequest(&managerv1beta1.FetchConfigRequest{JobIdentity: &managerv1beta1.JobIdentity{
 		Provider:               "github",
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",
@@ -352,8 +352,8 @@ rule_sets:
 	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
 	defer ts.Close()
 
-	client := managerv1connect.NewConfigServiceClient(ts.Client(), ts.URL)
-	req := connect.NewRequest(&managerv1.FetchConfigRequest{JobIdentity: &managerv1.JobIdentity{
+	client := managerv1beta1connect.NewConfigServiceClient(ts.Client(), ts.URL)
+	req := connect.NewRequest(&managerv1beta1.FetchConfigRequest{JobIdentity: &managerv1beta1.JobIdentity{
 		Provider:               "github",
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",
@@ -382,7 +382,7 @@ rule_sets:
 		t.Fatalf("update rules: %v", err)
 	}
 
-	secondReq := connect.NewRequest(proto.Clone(req.Msg).(*managerv1.FetchConfigRequest))
+	secondReq := connect.NewRequest(proto.Clone(req.Msg).(*managerv1beta1.FetchConfigRequest))
 	secondReq.Header().Set("Authorization", managerBearer(testManagerSecret))
 	second, err := client.FetchConfig(context.Background(), secondReq)
 	if err != nil {
@@ -399,8 +399,8 @@ func TestConfigService_FetchConfig_LocalRulesFailureReturnsUnavailable(t *testin
 	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
 	defer ts.Close()
 
-	client := managerv1connect.NewConfigServiceClient(ts.Client(), ts.URL)
-	req := connect.NewRequest(&managerv1.FetchConfigRequest{JobIdentity: &managerv1.JobIdentity{
+	client := managerv1beta1connect.NewConfigServiceClient(ts.Client(), ts.URL)
+	req := connect.NewRequest(&managerv1beta1.FetchConfigRequest{JobIdentity: &managerv1beta1.JobIdentity{
 		Provider:               "github",
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",
@@ -436,7 +436,7 @@ func writeManagerRuleBundle(t *testing.T, dir string, ruleFiles map[string]strin
 	return path
 }
 
-func assertRuleSetIDAt(t *testing.T, sources []*managerv1.RuleSource, index int, want string) {
+func assertRuleSetIDAt(t *testing.T, sources []*managerv1beta1.RuleSource, index int, want string) {
 	t.Helper()
 	loaded := protoconv.FromProtoRuleSources(sources)
 	if len(loaded) <= index || len(loaded[index].RuleSets) == 0 {
@@ -447,7 +447,7 @@ func assertRuleSetIDAt(t *testing.T, sources []*managerv1.RuleSource, index int,
 	}
 }
 
-func assertSummaryOutputSettings(t *testing.T, got *managerv1.OutputSettings) {
+func assertSummaryOutputSettings(t *testing.T, got *managerv1beta1.OutputSettings) {
 	t.Helper()
 	if got == nil {
 		t.Fatal("output_settings: got nil")
@@ -485,9 +485,9 @@ func TestAuthInterceptor_EmitsAuditLogOnFailure(t *testing.T) {
 	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
 	defer ts.Close()
 
-	client := managerv1connect.NewConfigServiceClient(ts.Client(), ts.URL)
-	connectReq := connect.NewRequest(&managerv1.FetchConfigRequest{
-		JobIdentity: &managerv1.JobIdentity{
+	client := managerv1beta1connect.NewConfigServiceClient(ts.Client(), ts.URL)
+	connectReq := connect.NewRequest(&managerv1beta1.FetchConfigRequest{
+		JobIdentity: &managerv1beta1.JobIdentity{
 			Provider:               "github",
 			ProviderHost:           "github.com",
 			ProjectPath:            "acme/example",
@@ -522,13 +522,13 @@ func TestCollectorService_MountedBehindAuth(t *testing.T) {
 	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
 	defer ts.Close()
 
-	client := managerv1connect.NewCollectorServiceClient(ts.Client(), ts.URL)
-	req := connect.NewRequest(&managerv1.IngestLogRequest{})
+	client := managerv1beta1connect.NewCollectorServiceClient(ts.Client(), ts.URL)
+	req := connect.NewRequest(&managerv1beta1.IngestLogRequest{})
 	if _, err := client.IngestLog(context.Background(), req); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("missing token code: got %v, want %v (err=%v)", connect.CodeOf(err), connect.CodeUnauthenticated, err)
 	}
 
-	req = connect.NewRequest(&managerv1.IngestLogRequest{})
+	req = connect.NewRequest(&managerv1beta1.IngestLogRequest{})
 	req.Header().Set("Authorization", managerBearer(testManagerSecret))
 	if _, err := client.IngestLog(context.Background(), req); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("valid token code: got %v, want %v (err=%v)", connect.CodeOf(err), connect.CodeInvalidArgument, err)

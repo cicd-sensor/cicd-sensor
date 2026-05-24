@@ -15,8 +15,8 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink/sinktest"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 )
 
 func TestCollectorWire_HappyPath_WritesToConfiguredSink(t *testing.T) {
@@ -56,8 +56,8 @@ func TestCollectorWire_ManagerClientRoundTrip(t *testing.T) {
 	flushAt := time.Date(2026, 4, 26, 7, 30, 45, 123_000_000, time.UTC)
 	if err := client.SendLogBatch(context.Background(), managerclient.LogBatch{
 		Identity: jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
-		Scope:    managerv1.Scope_SCOPE_HOST,
-		Type:     managerv1.LogType_LOG_TYPE_DETECTION,
+		Scope:    managerv1beta1.Scope_SCOPE_HOST,
+		Type:     managerv1beta1.LogType_LOG_TYPE_DETECTION,
 		Records:  [][]byte{[]byte(`{"rule_id":"a"}`), []byte(`{"rule_id":"b"}`)},
 		FlushAt:  flushAt,
 	}); err != nil {
@@ -134,7 +134,7 @@ func TestCollectorWire_UnauthorizedToken_ReturnsUnauthenticated(t *testing.T) {
 }
 
 type collectorWireClient struct {
-	client managerv1connect.CollectorServiceClient
+	client managerv1beta1connect.CollectorServiceClient
 }
 
 func newCollectorWireClient(t *testing.T, token string, router *OutputRouter) (*collectorWireClient, func()) {
@@ -144,18 +144,18 @@ func newCollectorWireClient(t *testing.T, token string, router *OutputRouter) (*
 		return time.Date(2026, 4, 26, 7, 0, 0, 0, time.UTC)
 	}
 	ts := newManagerHTTPTestServer(t, server.Handler())
-	client := managerv1connect.NewCollectorServiceClient(ts.Client(), ts.URL)
+	client := managerv1beta1connect.NewCollectorServiceClient(ts.Client(), ts.URL)
 	return &collectorWireClient{client: client}, ts.Close
 }
 
-func (c *collectorWireClient) send(ctx context.Context, token string, batch *managerv1.IngestLogBatch) (*connect.Response[managerv1.IngestLogResponse], error) {
-	req := connect.NewRequest(&managerv1.IngestLogRequest{Batch: batch})
+func (c *collectorWireClient) send(ctx context.Context, token string, batch *managerv1beta1.IngestLogBatch) (*connect.Response[managerv1beta1.IngestLogResponse], error) {
+	req := connect.NewRequest(&managerv1beta1.IngestLogRequest{Batch: batch})
 	req.Header().Set("Authorization", managerBearer(token))
 	return c.client.IngestLog(ctx, req)
 }
 
-func validCollectorIdentity() *managerv1.JobIdentity {
-	return &managerv1.JobIdentity{
+func validCollectorIdentity() *managerv1beta1.JobIdentity {
+	return &managerv1beta1.JobIdentity{
 		Provider:               "github",
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",

@@ -8,7 +8,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -16,8 +16,8 @@ var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 func TestStartJobLogsAddsManagerDestination(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
-	settings := &managerv1.OutputSettings{
-		Detection: &managerv1.OutputSetting{Enabled: true},
+	settings := &managerv1beta1.OutputSettings{
+		Detection: &managerv1beta1.OutputSetting{Enabled: true},
 	}
 
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeTypeHost, settings)
@@ -38,7 +38,7 @@ func TestStartJobLogsAddsManagerDestination(t *testing.T) {
 func TestStartJobLogsIgnoresDisabledType(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
-	settings := &managerv1.OutputSettings{}
+	settings := &managerv1beta1.OutputSettings{}
 
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeTypeHost, settings)
 	if conn.detection != nil {
@@ -52,7 +52,7 @@ func TestStartJobLogsDoesNotCreateSenderWithoutEnabledLogs(t *testing.T) {
 		Connection:     managerclient.Connection{BaseURL: "http://127.0.0.1:1", Token: "sk_csensor_testtoken"},
 		Identity:       jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
 		Type:           jobcontext.ScopeTypeHost,
-		OutputSettings: &managerv1.OutputSettings{},
+		OutputSettings: &managerv1beta1.OutputSettings{},
 	})
 
 	if conn.sendBatch != nil {
@@ -66,8 +66,8 @@ func TestStartJobLogsDoesNotCreateSenderWithoutManagerCredentials(t *testing.T) 
 		Connection: managerclient.Connection{},
 		Identity:   jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
 		Type:       jobcontext.ScopeTypeHost,
-		OutputSettings: &managerv1.OutputSettings{
-			Detection: &managerv1.OutputSetting{Enabled: true},
+		OutputSettings: &managerv1beta1.OutputSettings{
+			Detection: &managerv1beta1.OutputSetting{Enabled: true},
 		},
 	})
 
@@ -86,8 +86,8 @@ func TestNewForTestingUsesInjectedSender(t *testing.T) {
 	conn.start(
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
 		jobcontext.ScopeTypeHost,
-		&managerv1.OutputSettings{
-			Detection: &managerv1.OutputSetting{Enabled: true},
+		&managerv1beta1.OutputSettings{
+			Detection: &managerv1beta1.OutputSetting{Enabled: true},
 		},
 	)
 	if conn.detection == nil {
@@ -119,10 +119,10 @@ func TestManagerJobLogsNoOpWhenLogTypesAreNotConfigured(t *testing.T) {
 	if conn.HasSummaryLog() {
 		t.Fatal("summary log reported configured on zero ManagerJobLogs")
 	}
-	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_DETECTION); got != 0 {
+	if got := conn.DroppedLogRecords(managerv1beta1.LogType_LOG_TYPE_DETECTION); got != 0 {
 		t.Fatalf("dropped records on zero ManagerJobLogs: got %d, want 0", got)
 	}
-	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_UNSPECIFIED); got != 0 {
+	if got := conn.DroppedLogRecords(managerv1beta1.LogType_LOG_TYPE_UNSPECIFIED); got != 0 {
 		t.Fatalf("dropped records for unknown log type: got %d, want 0", got)
 	}
 	if err := conn.FinalizeStreamingLogs(context.Background()); err != nil {
@@ -133,10 +133,10 @@ func TestManagerJobLogsNoOpWhenLogTypesAreNotConfigured(t *testing.T) {
 func TestStartJobLogsUsesOneWorkerPerType(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
-	settings := &managerv1.OutputSettings{
-		Detection:    &managerv1.OutputSetting{Enabled: true},
-		RuntimeEvent: &managerv1.OutputSetting{Enabled: true},
-		Summary:      &managerv1.OutputSetting{Enabled: true},
+	settings := &managerv1beta1.OutputSettings{
+		Detection:    &managerv1beta1.OutputSetting{Enabled: true},
+		RuntimeEvent: &managerv1beta1.OutputSetting{Enabled: true},
+		Summary:      &managerv1beta1.OutputSetting{Enabled: true},
 	}
 
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeTypeHost, settings)
@@ -156,8 +156,8 @@ func TestManagerJobLogsEmitAndCloseSummaryLog(t *testing.T) {
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch,
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
 		jobcontext.ScopeTypeProject,
-		&managerv1.OutputSettings{
-			Summary: &managerv1.OutputSetting{Enabled: true},
+		&managerv1beta1.OutputSettings{
+			Summary: &managerv1beta1.OutputSetting{Enabled: true},
 		},
 	)
 
@@ -170,7 +170,7 @@ func TestManagerJobLogsEmitAndCloseSummaryLog(t *testing.T) {
 	if got := poster.count(); got != 1 {
 		t.Fatalf("sent batches: got %d, want 1", got)
 	}
-	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_SUMMARY); got != 0 {
+	if got := conn.DroppedLogRecords(managerv1beta1.LogType_LOG_TYPE_SUMMARY); got != 0 {
 		t.Fatalf("summary drops: got %d, want 0", got)
 	}
 }
@@ -180,9 +180,9 @@ func TestManagerJobLogsRejectsStreamingWritesAfterFinalize(t *testing.T) {
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch,
 		jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
 		jobcontext.ScopeTypeHost,
-		&managerv1.OutputSettings{
-			Detection:    &managerv1.OutputSetting{Enabled: true},
-			RuntimeEvent: &managerv1.OutputSetting{Enabled: true},
+		&managerv1beta1.OutputSettings{
+			Detection:    &managerv1beta1.OutputSetting{Enabled: true},
+			RuntimeEvent: &managerv1beta1.OutputSetting{Enabled: true},
 		},
 	)
 
@@ -195,7 +195,7 @@ func TestManagerJobLogsRejectsStreamingWritesAfterFinalize(t *testing.T) {
 	if err := conn.WriteRuntimeEventPayload(context.Background(), []byte(`{"late":true}`)); err != errManagerOutputClosed {
 		t.Fatalf("late runtime event write: got %v, want %v", err, errManagerOutputClosed)
 	}
-	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_DETECTION); got != 0 {
+	if got := conn.DroppedLogRecords(managerv1beta1.LogType_LOG_TYPE_DETECTION); got != 0 {
 		t.Fatalf("closed detection writes counted as drops: got %d, want 0", got)
 	}
 }

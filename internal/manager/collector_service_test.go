@@ -15,8 +15,8 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink/sinktest"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 )
 
 var (
@@ -26,7 +26,7 @@ var (
 
 func TestCollectorService_IngestLog(t *testing.T) {
 	payload := gzipPayload(t, `{"message":"hello"}`+"\n")
-	validIdentity := &managerv1.JobIdentity{
+	validIdentity := &managerv1beta1.JobIdentity{
 		Provider:               "github",
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",
@@ -35,9 +35,9 @@ func TestCollectorService_IngestLog(t *testing.T) {
 		GithubRunAttempt:       "1",
 		GithubRunnerTrackingId: "runner-1",
 	}
-	unsupportedProviderIdentity := proto.Clone(validIdentity).(*managerv1.JobIdentity)
+	unsupportedProviderIdentity := proto.Clone(validIdentity).(*managerv1beta1.JobIdentity)
 	unsupportedProviderIdentity.Provider = "bitbucket"
-	emptyProviderIdentity := proto.Clone(validIdentity).(*managerv1.JobIdentity)
+	emptyProviderIdentity := proto.Clone(validIdentity).(*managerv1beta1.JobIdentity)
 	emptyProviderIdentity.Provider = ""
 	badFlushAtNil := validIngestLogBatch(validIdentity, payload)
 	badFlushAtNil.FlushAt = nil
@@ -48,14 +48,14 @@ func TestCollectorService_IngestLog(t *testing.T) {
 	badFlushAtInvalidProto := validIngestLogBatch(validIdentity, payload)
 	badFlushAtInvalidProto.FlushAt = &timestamppb.Timestamp{Seconds: -1, Nanos: -1}
 	unsupportedLogType := validIngestLogBatch(validIdentity, payload)
-	unsupportedLogType.LogType = managerv1.LogType_LOG_TYPE_UNSPECIFIED
+	unsupportedLogType.LogType = managerv1beta1.LogType_LOG_TYPE_UNSPECIFIED
 	unsupportedScope := validIngestLogBatch(validIdentity, payload)
-	unsupportedScope.Scope = managerv1.Scope_SCOPE_UNSPECIFIED
+	unsupportedScope.Scope = managerv1beta1.Scope_SCOPE_UNSPECIFIED
 
 	tests := []struct {
 		name     string
 		sink     *sinktest.Sink
-		batch    *managerv1.IngestLogBatch
+		batch    *managerv1beta1.IngestLogBatch
 		wantCode connect.Code
 	}{
 		{
@@ -173,7 +173,7 @@ func TestCollectorService_IngestLog(t *testing.T) {
 
 func TestCollectorService_IngestMapsSinkFailures(t *testing.T) {
 	payload := gzipPayload(t, `{"message":"hello"}`+"\n")
-	identity := &managerv1.JobIdentity{
+	identity := &managerv1beta1.JobIdentity{
 		Provider:               "github",
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",
@@ -261,7 +261,7 @@ func TestValidateFlushAt(t *testing.T) {
 	}
 }
 
-func callCollector(t *testing.T, dst *sinktest.Sink, batch *managerv1.IngestLogBatch) (*connect.Response[managerv1.IngestLogResponse], error) {
+func callCollector(t *testing.T, dst *sinktest.Sink, batch *managerv1beta1.IngestLogBatch) (*connect.Response[managerv1beta1.IngestLogResponse], error) {
 	t.Helper()
 	var router *OutputRouter
 	if dst != nil {
@@ -276,17 +276,17 @@ func callCollector(t *testing.T, dst *sinktest.Sink, batch *managerv1.IngestLogB
 	ts := newManagerHTTPTestServer(t, server.Handler())
 	defer ts.Close()
 
-	client := managerv1connect.NewCollectorServiceClient(ts.Client(), ts.URL)
-	req := connect.NewRequest(&managerv1.IngestLogRequest{Batch: batch})
+	client := managerv1beta1connect.NewCollectorServiceClient(ts.Client(), ts.URL)
+	req := connect.NewRequest(&managerv1beta1.IngestLogRequest{Batch: batch})
 	req.Header().Set("Authorization", managerBearer(testManagerSecret))
 	return client.IngestLog(context.Background(), req)
 }
 
-func validIngestLogBatch(identity *managerv1.JobIdentity, payload []byte) *managerv1.IngestLogBatch {
-	return &managerv1.IngestLogBatch{
+func validIngestLogBatch(identity *managerv1beta1.JobIdentity, payload []byte) *managerv1beta1.IngestLogBatch {
+	return &managerv1beta1.IngestLogBatch{
 		JobIdentity:     identity,
-		Scope:           managerv1.Scope_SCOPE_HOST,
-		LogType:         managerv1.LogType_LOG_TYPE_DETECTION,
+		Scope:           managerv1beta1.Scope_SCOPE_HOST,
+		LogType:         managerv1beta1.LogType_LOG_TYPE_DETECTION,
 		CompressedJsonl: payload,
 		FlushAt:         fixtureFlushAt,
 	}

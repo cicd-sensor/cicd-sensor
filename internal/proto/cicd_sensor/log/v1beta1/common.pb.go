@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: cicd_sensor/log/v1/common.proto
+// source: cicd_sensor/log/v1beta1/common.proto
 
-package logv1
+package logv1beta1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -50,7 +50,7 @@ type LogContext struct {
 
 func (x *LogContext) Reset() {
 	*x = LogContext{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[0]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -62,7 +62,7 @@ func (x *LogContext) String() string {
 func (*LogContext) ProtoMessage() {}
 
 func (x *LogContext) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[0]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -75,7 +75,7 @@ func (x *LogContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogContext.ProtoReflect.Descriptor instead.
 func (*LogContext) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{0}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *LogContext) GetProvider() string {
@@ -232,7 +232,7 @@ type EventRecord struct {
 
 func (x *EventRecord) Reset() {
 	*x = EventRecord{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[1]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -244,7 +244,7 @@ func (x *EventRecord) String() string {
 func (*EventRecord) ProtoMessage() {}
 
 func (x *EventRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[1]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -257,7 +257,7 @@ func (x *EventRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventRecord.ProtoReflect.Descriptor instead.
 func (*EventRecord) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{1}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *EventRecord) GetId() string {
@@ -356,7 +356,7 @@ type ProcessSummary struct {
 
 func (x *ProcessSummary) Reset() {
 	*x = ProcessSummary{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[2]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -368,7 +368,7 @@ func (x *ProcessSummary) String() string {
 func (*ProcessSummary) ProtoMessage() {}
 
 func (x *ProcessSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[2]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -381,7 +381,7 @@ func (x *ProcessSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessSummary.ProtoReflect.Descriptor instead.
 func (*ProcessSummary) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{2}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ProcessSummary) GetPid() int32 {
@@ -422,7 +422,7 @@ type AncestorProcess struct {
 
 func (x *AncestorProcess) Reset() {
 	*x = AncestorProcess{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[3]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -434,7 +434,7 @@ func (x *AncestorProcess) String() string {
 func (*AncestorProcess) ProtoMessage() {}
 
 func (x *AncestorProcess) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[3]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -447,7 +447,7 @@ func (x *AncestorProcess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AncestorProcess.ProtoReflect.Descriptor instead.
 func (*AncestorProcess) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{3}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AncestorProcess) GetExecPath() string {
@@ -473,7 +473,7 @@ type ProcessExecPayload struct {
 
 func (x *ProcessExecPayload) Reset() {
 	*x = ProcessExecPayload{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[4]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +485,7 @@ func (x *ProcessExecPayload) String() string {
 func (*ProcessExecPayload) ProtoMessage() {}
 
 func (x *ProcessExecPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[4]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,7 +498,7 @@ func (x *ProcessExecPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessExecPayload.ProtoReflect.Descriptor instead.
 func (*ProcessExecPayload) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{4}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProcessExecPayload) GetIsMemfd() bool {
@@ -520,7 +520,7 @@ type NetworkConnectPayload struct {
 
 func (x *NetworkConnectPayload) Reset() {
 	*x = NetworkConnectPayload{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[5]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -532,7 +532,7 @@ func (x *NetworkConnectPayload) String() string {
 func (*NetworkConnectPayload) ProtoMessage() {}
 
 func (x *NetworkConnectPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[5]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -545,7 +545,7 @@ func (x *NetworkConnectPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkConnectPayload.ProtoReflect.Descriptor instead.
 func (*NetworkConnectPayload) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{5}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *NetworkConnectPayload) GetRemoteIp() string {
@@ -587,7 +587,7 @@ type UnixSocketConnectPayload struct {
 
 func (x *UnixSocketConnectPayload) Reset() {
 	*x = UnixSocketConnectPayload{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[6]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -599,7 +599,7 @@ func (x *UnixSocketConnectPayload) String() string {
 func (*UnixSocketConnectPayload) ProtoMessage() {}
 
 func (x *UnixSocketConnectPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[6]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -612,7 +612,7 @@ func (x *UnixSocketConnectPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnixSocketConnectPayload.ProtoReflect.Descriptor instead.
 func (*UnixSocketConnectPayload) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{6}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UnixSocketConnectPayload) GetPath() string {
@@ -648,7 +648,7 @@ type FileOpenPayload struct {
 
 func (x *FileOpenPayload) Reset() {
 	*x = FileOpenPayload{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[7]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -660,7 +660,7 @@ func (x *FileOpenPayload) String() string {
 func (*FileOpenPayload) ProtoMessage() {}
 
 func (x *FileOpenPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[7]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -673,7 +673,7 @@ func (x *FileOpenPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileOpenPayload.ProtoReflect.Descriptor instead.
 func (*FileOpenPayload) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{7}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *FileOpenPayload) GetPath() string {
@@ -714,7 +714,7 @@ type FileRemovePayload struct {
 
 func (x *FileRemovePayload) Reset() {
 	*x = FileRemovePayload{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[8]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -726,7 +726,7 @@ func (x *FileRemovePayload) String() string {
 func (*FileRemovePayload) ProtoMessage() {}
 
 func (x *FileRemovePayload) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[8]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -739,7 +739,7 @@ func (x *FileRemovePayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileRemovePayload.ProtoReflect.Descriptor instead.
 func (*FileRemovePayload) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{8}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *FileRemovePayload) GetPath() string {
@@ -766,7 +766,7 @@ type FileMovePayload struct {
 
 func (x *FileMovePayload) Reset() {
 	*x = FileMovePayload{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[9]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -778,7 +778,7 @@ func (x *FileMovePayload) String() string {
 func (*FileMovePayload) ProtoMessage() {}
 
 func (x *FileMovePayload) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[9]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -791,7 +791,7 @@ func (x *FileMovePayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileMovePayload.ProtoReflect.Descriptor instead.
 func (*FileMovePayload) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{9}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *FileMovePayload) GetFromPath() string {
@@ -820,7 +820,7 @@ type FileLinkPayload struct {
 
 func (x *FileLinkPayload) Reset() {
 	*x = FileLinkPayload{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[10]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -832,7 +832,7 @@ func (x *FileLinkPayload) String() string {
 func (*FileLinkPayload) ProtoMessage() {}
 
 func (x *FileLinkPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[10]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -845,7 +845,7 @@ func (x *FileLinkPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileLinkPayload.ProtoReflect.Descriptor instead.
 func (*FileLinkPayload) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{10}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *FileLinkPayload) GetCreatedPath() string {
@@ -886,7 +886,7 @@ type DomainPayload struct {
 
 func (x *DomainPayload) Reset() {
 	*x = DomainPayload{}
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[11]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -898,7 +898,7 @@ func (x *DomainPayload) String() string {
 func (*DomainPayload) ProtoMessage() {}
 
 func (x *DomainPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_common_proto_msgTypes[11]
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -911,7 +911,7 @@ func (x *DomainPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainPayload.ProtoReflect.Descriptor instead.
 func (*DomainPayload) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_common_proto_rawDescGZIP(), []int{11}
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DomainPayload) GetName() string {
@@ -928,11 +928,11 @@ func (x *DomainPayload) GetSource() string {
 	return ""
 }
 
-var File_cicd_sensor_log_v1_common_proto protoreflect.FileDescriptor
+var File_cicd_sensor_log_v1beta1_common_proto protoreflect.FileDescriptor
 
-const file_cicd_sensor_log_v1_common_proto_rawDesc = "" +
+const file_cicd_sensor_log_v1beta1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x1fcicd_sensor/log/v1/common.proto\x12\x12cicd_sensor.log.v1\"\xe8\x05\n" +
+	"$cicd_sensor/log/v1beta1/common.proto\x12\x17cicd_sensor.log.v1beta1\"\xe8\x05\n" +
 	"\n" +
 	"LogContext\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12$\n" +
@@ -960,26 +960,26 @@ const file_cicd_sensor_log_v1_common_proto_rawDesc = "" +
 	"\x0fgithub_workflow\x18\x10 \x01(\tR\x0fgithub_workflow\x12$\n" +
 	"\rgitlab_job_id\x18\x11 \x01(\tR\rgitlab_job_id\x12(\n" +
 	"\x0fgitlab_job_name\x18\x12 \x01(\tR\x0fgitlab_job_name\x124\n" +
-	"\x15gitlab_config_ref_uri\x18\x13 \x01(\tR\x15gitlab_config_ref_uri\"\xd1\x05\n" +
+	"\x15gitlab_config_ref_uri\x18\x13 \x01(\tR\x15gitlab_config_ref_uri\"\xfe\x05\n" +
 	"\vEventRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
-	"\x04tags\x18\x03 \x03(\tR\x04tags\x12<\n" +
-	"\aprocess\x18\x04 \x01(\v2\".cicd_sensor.log.v1.ProcessSummaryR\aprocess\x12J\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\x12A\n" +
+	"\aprocess\x18\x04 \x01(\v2'.cicd_sensor.log.v1beta1.ProcessSummaryR\aprocess\x12O\n" +
 	"\fprocess_exec\x18\n" +
-	" \x01(\v2&.cicd_sensor.log.v1.ProcessExecPayloadR\fprocess_exec\x12S\n" +
-	"\x0fnetwork_connect\x18\v \x01(\v2).cicd_sensor.log.v1.NetworkConnectPayloadR\x0fnetwork_connect\x12^\n" +
-	"\x13unix_socket_connect\x18\f \x01(\v2,.cicd_sensor.log.v1.UnixSocketConnectPayloadR\x13unix_socket_connect\x12A\n" +
-	"\tfile_open\x18\r \x01(\v2#.cicd_sensor.log.v1.FileOpenPayloadR\tfile_open\x12G\n" +
-	"\vfile_remove\x18\x0e \x01(\v2%.cicd_sensor.log.v1.FileRemovePayloadR\vfile_remove\x12A\n" +
-	"\tfile_move\x18\x0f \x01(\v2#.cicd_sensor.log.v1.FileMovePayloadR\tfile_move\x12A\n" +
-	"\tfile_link\x18\x10 \x01(\v2#.cicd_sensor.log.v1.FileLinkPayloadR\tfile_link\x129\n" +
-	"\x06domain\x18\x12 \x01(\v2!.cicd_sensor.log.v1.DomainPayloadR\x06domain\"\x97\x01\n" +
+	" \x01(\v2+.cicd_sensor.log.v1beta1.ProcessExecPayloadR\fprocess_exec\x12X\n" +
+	"\x0fnetwork_connect\x18\v \x01(\v2..cicd_sensor.log.v1beta1.NetworkConnectPayloadR\x0fnetwork_connect\x12c\n" +
+	"\x13unix_socket_connect\x18\f \x01(\v21.cicd_sensor.log.v1beta1.UnixSocketConnectPayloadR\x13unix_socket_connect\x12F\n" +
+	"\tfile_open\x18\r \x01(\v2(.cicd_sensor.log.v1beta1.FileOpenPayloadR\tfile_open\x12L\n" +
+	"\vfile_remove\x18\x0e \x01(\v2*.cicd_sensor.log.v1beta1.FileRemovePayloadR\vfile_remove\x12F\n" +
+	"\tfile_move\x18\x0f \x01(\v2(.cicd_sensor.log.v1beta1.FileMovePayloadR\tfile_move\x12F\n" +
+	"\tfile_link\x18\x10 \x01(\v2(.cicd_sensor.log.v1beta1.FileLinkPayloadR\tfile_link\x12>\n" +
+	"\x06domain\x18\x12 \x01(\v2&.cicd_sensor.log.v1beta1.DomainPayloadR\x06domain\"\x9c\x01\n" +
 	"\x0eProcessSummary\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x1c\n" +
 	"\texec_path\x18\x02 \x01(\tR\texec_path\x12\x12\n" +
-	"\x04argv\x18\x03 \x03(\tR\x04argv\x12A\n" +
-	"\tancestors\x18\x04 \x03(\v2#.cicd_sensor.log.v1.AncestorProcessR\tancestors\"C\n" +
+	"\x04argv\x18\x03 \x03(\tR\x04argv\x12F\n" +
+	"\tancestors\x18\x04 \x03(\v2(.cicd_sensor.log.v1beta1.AncestorProcessR\tancestors\"C\n" +
 	"\x0fAncestorProcess\x12\x1c\n" +
 	"\texec_path\x18\x01 \x01(\tR\texec_path\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\"0\n" +
@@ -1014,47 +1014,47 @@ const file_cicd_sensor_log_v1_common_proto_rawDesc = "" +
 	"is_symlink\";\n" +
 	"\rDomainPayload\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06source\x18\x02 \x01(\tR\x06sourceB\xd7\x01\n" +
-	"\x16com.cicd_sensor.log.v1B\vCommonProtoP\x01ZJgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1;logv1\xa2\x02\x03CLX\xaa\x02\x11CicdSensor.Log.V1\xca\x02\x11CicdSensor\\Log\\V1\xe2\x02\x1dCicdSensor\\Log\\V1\\GPBMetadata\xea\x02\x13CicdSensor::Log::V1b\x06proto3"
+	"\x06source\x18\x02 \x01(\tR\x06sourceB\xfa\x01\n" +
+	"\x1bcom.cicd_sensor.log.v1beta1B\vCommonProtoP\x01ZTgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1;logv1beta1\xa2\x02\x03CLX\xaa\x02\x16CicdSensor.Log.V1beta1\xca\x02\x16CicdSensor\\Log\\V1beta1\xe2\x02\"CicdSensor\\Log\\V1beta1\\GPBMetadata\xea\x02\x18CicdSensor::Log::V1beta1b\x06proto3"
 
 var (
-	file_cicd_sensor_log_v1_common_proto_rawDescOnce sync.Once
-	file_cicd_sensor_log_v1_common_proto_rawDescData []byte
+	file_cicd_sensor_log_v1beta1_common_proto_rawDescOnce sync.Once
+	file_cicd_sensor_log_v1beta1_common_proto_rawDescData []byte
 )
 
-func file_cicd_sensor_log_v1_common_proto_rawDescGZIP() []byte {
-	file_cicd_sensor_log_v1_common_proto_rawDescOnce.Do(func() {
-		file_cicd_sensor_log_v1_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1_common_proto_rawDesc), len(file_cicd_sensor_log_v1_common_proto_rawDesc)))
+func file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP() []byte {
+	file_cicd_sensor_log_v1beta1_common_proto_rawDescOnce.Do(func() {
+		file_cicd_sensor_log_v1beta1_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1beta1_common_proto_rawDesc), len(file_cicd_sensor_log_v1beta1_common_proto_rawDesc)))
 	})
-	return file_cicd_sensor_log_v1_common_proto_rawDescData
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescData
 }
 
-var file_cicd_sensor_log_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
-var file_cicd_sensor_log_v1_common_proto_goTypes = []any{
-	(*LogContext)(nil),               // 0: cicd_sensor.log.v1.LogContext
-	(*EventRecord)(nil),              // 1: cicd_sensor.log.v1.EventRecord
-	(*ProcessSummary)(nil),           // 2: cicd_sensor.log.v1.ProcessSummary
-	(*AncestorProcess)(nil),          // 3: cicd_sensor.log.v1.AncestorProcess
-	(*ProcessExecPayload)(nil),       // 4: cicd_sensor.log.v1.ProcessExecPayload
-	(*NetworkConnectPayload)(nil),    // 5: cicd_sensor.log.v1.NetworkConnectPayload
-	(*UnixSocketConnectPayload)(nil), // 6: cicd_sensor.log.v1.UnixSocketConnectPayload
-	(*FileOpenPayload)(nil),          // 7: cicd_sensor.log.v1.FileOpenPayload
-	(*FileRemovePayload)(nil),        // 8: cicd_sensor.log.v1.FileRemovePayload
-	(*FileMovePayload)(nil),          // 9: cicd_sensor.log.v1.FileMovePayload
-	(*FileLinkPayload)(nil),          // 10: cicd_sensor.log.v1.FileLinkPayload
-	(*DomainPayload)(nil),            // 11: cicd_sensor.log.v1.DomainPayload
+var file_cicd_sensor_log_v1beta1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_cicd_sensor_log_v1beta1_common_proto_goTypes = []any{
+	(*LogContext)(nil),               // 0: cicd_sensor.log.v1beta1.LogContext
+	(*EventRecord)(nil),              // 1: cicd_sensor.log.v1beta1.EventRecord
+	(*ProcessSummary)(nil),           // 2: cicd_sensor.log.v1beta1.ProcessSummary
+	(*AncestorProcess)(nil),          // 3: cicd_sensor.log.v1beta1.AncestorProcess
+	(*ProcessExecPayload)(nil),       // 4: cicd_sensor.log.v1beta1.ProcessExecPayload
+	(*NetworkConnectPayload)(nil),    // 5: cicd_sensor.log.v1beta1.NetworkConnectPayload
+	(*UnixSocketConnectPayload)(nil), // 6: cicd_sensor.log.v1beta1.UnixSocketConnectPayload
+	(*FileOpenPayload)(nil),          // 7: cicd_sensor.log.v1beta1.FileOpenPayload
+	(*FileRemovePayload)(nil),        // 8: cicd_sensor.log.v1beta1.FileRemovePayload
+	(*FileMovePayload)(nil),          // 9: cicd_sensor.log.v1beta1.FileMovePayload
+	(*FileLinkPayload)(nil),          // 10: cicd_sensor.log.v1beta1.FileLinkPayload
+	(*DomainPayload)(nil),            // 11: cicd_sensor.log.v1beta1.DomainPayload
 }
-var file_cicd_sensor_log_v1_common_proto_depIdxs = []int32{
-	2,  // 0: cicd_sensor.log.v1.EventRecord.process:type_name -> cicd_sensor.log.v1.ProcessSummary
-	4,  // 1: cicd_sensor.log.v1.EventRecord.process_exec:type_name -> cicd_sensor.log.v1.ProcessExecPayload
-	5,  // 2: cicd_sensor.log.v1.EventRecord.network_connect:type_name -> cicd_sensor.log.v1.NetworkConnectPayload
-	6,  // 3: cicd_sensor.log.v1.EventRecord.unix_socket_connect:type_name -> cicd_sensor.log.v1.UnixSocketConnectPayload
-	7,  // 4: cicd_sensor.log.v1.EventRecord.file_open:type_name -> cicd_sensor.log.v1.FileOpenPayload
-	8,  // 5: cicd_sensor.log.v1.EventRecord.file_remove:type_name -> cicd_sensor.log.v1.FileRemovePayload
-	9,  // 6: cicd_sensor.log.v1.EventRecord.file_move:type_name -> cicd_sensor.log.v1.FileMovePayload
-	10, // 7: cicd_sensor.log.v1.EventRecord.file_link:type_name -> cicd_sensor.log.v1.FileLinkPayload
-	11, // 8: cicd_sensor.log.v1.EventRecord.domain:type_name -> cicd_sensor.log.v1.DomainPayload
-	3,  // 9: cicd_sensor.log.v1.ProcessSummary.ancestors:type_name -> cicd_sensor.log.v1.AncestorProcess
+var file_cicd_sensor_log_v1beta1_common_proto_depIdxs = []int32{
+	2,  // 0: cicd_sensor.log.v1beta1.EventRecord.process:type_name -> cicd_sensor.log.v1beta1.ProcessSummary
+	4,  // 1: cicd_sensor.log.v1beta1.EventRecord.process_exec:type_name -> cicd_sensor.log.v1beta1.ProcessExecPayload
+	5,  // 2: cicd_sensor.log.v1beta1.EventRecord.network_connect:type_name -> cicd_sensor.log.v1beta1.NetworkConnectPayload
+	6,  // 3: cicd_sensor.log.v1beta1.EventRecord.unix_socket_connect:type_name -> cicd_sensor.log.v1beta1.UnixSocketConnectPayload
+	7,  // 4: cicd_sensor.log.v1beta1.EventRecord.file_open:type_name -> cicd_sensor.log.v1beta1.FileOpenPayload
+	8,  // 5: cicd_sensor.log.v1beta1.EventRecord.file_remove:type_name -> cicd_sensor.log.v1beta1.FileRemovePayload
+	9,  // 6: cicd_sensor.log.v1beta1.EventRecord.file_move:type_name -> cicd_sensor.log.v1beta1.FileMovePayload
+	10, // 7: cicd_sensor.log.v1beta1.EventRecord.file_link:type_name -> cicd_sensor.log.v1beta1.FileLinkPayload
+	11, // 8: cicd_sensor.log.v1beta1.EventRecord.domain:type_name -> cicd_sensor.log.v1beta1.DomainPayload
+	3,  // 9: cicd_sensor.log.v1beta1.ProcessSummary.ancestors:type_name -> cicd_sensor.log.v1beta1.AncestorProcess
 	10, // [10:10] is the sub-list for method output_type
 	10, // [10:10] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
@@ -1062,26 +1062,26 @@ var file_cicd_sensor_log_v1_common_proto_depIdxs = []int32{
 	0,  // [0:10] is the sub-list for field type_name
 }
 
-func init() { file_cicd_sensor_log_v1_common_proto_init() }
-func file_cicd_sensor_log_v1_common_proto_init() {
-	if File_cicd_sensor_log_v1_common_proto != nil {
+func init() { file_cicd_sensor_log_v1beta1_common_proto_init() }
+func file_cicd_sensor_log_v1beta1_common_proto_init() {
+	if File_cicd_sensor_log_v1beta1_common_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1_common_proto_rawDesc), len(file_cicd_sensor_log_v1_common_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1beta1_common_proto_rawDesc), len(file_cicd_sensor_log_v1beta1_common_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_cicd_sensor_log_v1_common_proto_goTypes,
-		DependencyIndexes: file_cicd_sensor_log_v1_common_proto_depIdxs,
-		MessageInfos:      file_cicd_sensor_log_v1_common_proto_msgTypes,
+		GoTypes:           file_cicd_sensor_log_v1beta1_common_proto_goTypes,
+		DependencyIndexes: file_cicd_sensor_log_v1beta1_common_proto_depIdxs,
+		MessageInfos:      file_cicd_sensor_log_v1beta1_common_proto_msgTypes,
 	}.Build()
-	File_cicd_sensor_log_v1_common_proto = out.File
-	file_cicd_sensor_log_v1_common_proto_goTypes = nil
-	file_cicd_sensor_log_v1_common_proto_depIdxs = nil
+	File_cicd_sensor_log_v1beta1_common_proto = out.File
+	file_cicd_sensor_log_v1beta1_common_proto_goTypes = nil
+	file_cicd_sensor_log_v1beta1_common_proto_depIdxs = nil
 }

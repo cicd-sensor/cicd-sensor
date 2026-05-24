@@ -9,7 +9,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 )
@@ -217,7 +217,7 @@ func TestEvaluateEvent_Correlations_EmitsDetectionLog(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("detection entries: got %d, want 3", len(entries))
 	}
-	corrIdx := slices.IndexFunc(entries, func(entry *logv1.DetectionLogEntry) bool {
+	corrIdx := slices.IndexFunc(entries, func(entry *logv1beta1.DetectionLogEntry) bool {
 		return detectionRuleRef(entry) == "host-set/corr"
 	})
 	if corrIdx < 0 {
@@ -228,7 +228,7 @@ func TestEvaluateEvent_Correlations_EmitsDetectionLog(t *testing.T) {
 	}
 }
 
-func detectionRuleIDs(entries []*logv1.DetectionLogEntry) []string {
+func detectionRuleIDs(entries []*logv1beta1.DetectionLogEntry) []string {
 	ruleIDs := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		ruleIDs = append(ruleIDs, detectionRuleRef(entry))
@@ -236,7 +236,7 @@ func detectionRuleIDs(entries []*logv1.DetectionLogEntry) []string {
 	return ruleIDs
 }
 
-func detectionRuleIDCount(entries []*logv1.DetectionLogEntry, ruleID string) int {
+func detectionRuleIDCount(entries []*logv1beta1.DetectionLogEntry, ruleID string) int {
 	count := 0
 	for _, entry := range entries {
 		if detectionRuleRef(entry) == ruleID {
@@ -250,7 +250,7 @@ func summaryRuleRef(hit observations.HitSummary) string {
 	return hit.RulesetID + "/" + hit.RuleID
 }
 
-func detectionRuleRef(entry *logv1.DetectionLogEntry) string {
+func detectionRuleRef(entry *logv1beta1.DetectionLogEntry) string {
 	return entry.GetRulesetId() + "/" + entry.GetRuleId()
 }
 

@@ -12,11 +12,11 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 )
 
-func assertProtoEventProcessSanitized(t *testing.T, event *logv1.EventRecord) {
+func assertProtoEventProcessSanitized(t *testing.T, event *logv1beta1.EventRecord) {
 	t.Helper()
 	if event == nil || event.GetProcess() == nil {
 		t.Fatalf("event process missing: %#v", event)

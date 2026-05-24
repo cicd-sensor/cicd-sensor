@@ -6,9 +6,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: cicd_sensor/manager/v1/collector.proto
+// source: cicd_sensor/manager/v1beta1/collector.proto
 
-package managerv1
+package managerv1beta1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -63,11 +63,11 @@ func (x LogType) String() string {
 }
 
 func (LogType) Descriptor() protoreflect.EnumDescriptor {
-	return file_cicd_sensor_manager_v1_collector_proto_enumTypes[0].Descriptor()
+	return file_cicd_sensor_manager_v1beta1_collector_proto_enumTypes[0].Descriptor()
 }
 
 func (LogType) Type() protoreflect.EnumType {
-	return &file_cicd_sensor_manager_v1_collector_proto_enumTypes[0]
+	return &file_cicd_sensor_manager_v1beta1_collector_proto_enumTypes[0]
 }
 
 func (x LogType) Number() protoreflect.EnumNumber {
@@ -76,7 +76,7 @@ func (x LogType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LogType.Descriptor instead.
 func (LogType) EnumDescriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_collector_proto_rawDescGZIP(), []int{0}
+	return file_cicd_sensor_manager_v1beta1_collector_proto_rawDescGZIP(), []int{0}
 }
 
 // Scope identifies which ownership scope produced an ingest batch.
@@ -113,11 +113,11 @@ func (x Scope) String() string {
 }
 
 func (Scope) Descriptor() protoreflect.EnumDescriptor {
-	return file_cicd_sensor_manager_v1_collector_proto_enumTypes[1].Descriptor()
+	return file_cicd_sensor_manager_v1beta1_collector_proto_enumTypes[1].Descriptor()
 }
 
 func (Scope) Type() protoreflect.EnumType {
-	return &file_cicd_sensor_manager_v1_collector_proto_enumTypes[1]
+	return &file_cicd_sensor_manager_v1beta1_collector_proto_enumTypes[1]
 }
 
 func (x Scope) Number() protoreflect.EnumNumber {
@@ -126,15 +126,15 @@ func (x Scope) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Scope.Descriptor instead.
 func (Scope) EnumDescriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_collector_proto_rawDescGZIP(), []int{1}
+	return file_cicd_sensor_manager_v1beta1_collector_proto_rawDescGZIP(), []int{1}
 }
 
 // IngestLogBatch carries one agent-side batch of gzip-compressed JSONL records.
 type IngestLogBatch struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	JobIdentity *JobIdentity           `protobuf:"bytes,1,opt,name=job_identity,json=jobIdentity,proto3" json:"job_identity,omitempty"`
-	Scope       Scope                  `protobuf:"varint,2,opt,name=scope,proto3,enum=cicd_sensor.manager.v1.Scope" json:"scope,omitempty"`
-	LogType     LogType                `protobuf:"varint,3,opt,name=log_type,json=logType,proto3,enum=cicd_sensor.manager.v1.LogType" json:"log_type,omitempty"`
+	Scope       Scope                  `protobuf:"varint,2,opt,name=scope,proto3,enum=cicd_sensor.manager.v1beta1.Scope" json:"scope,omitempty"`
+	LogType     LogType                `protobuf:"varint,3,opt,name=log_type,json=logType,proto3,enum=cicd_sensor.manager.v1beta1.LogType" json:"log_type,omitempty"`
 	// compressed_jsonl is gzip-compressed JSONL. The manager writes these bytes
 	// verbatim and only checks the gzip magic bytes.
 	CompressedJsonl []byte `protobuf:"bytes,4,opt,name=compressed_jsonl,json=compressedJsonl,proto3" json:"compressed_jsonl,omitempty"`
@@ -151,7 +151,7 @@ type IngestLogBatch struct {
 
 func (x *IngestLogBatch) Reset() {
 	*x = IngestLogBatch{}
-	mi := &file_cicd_sensor_manager_v1_collector_proto_msgTypes[0]
+	mi := &file_cicd_sensor_manager_v1beta1_collector_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -163,7 +163,7 @@ func (x *IngestLogBatch) String() string {
 func (*IngestLogBatch) ProtoMessage() {}
 
 func (x *IngestLogBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_collector_proto_msgTypes[0]
+	mi := &file_cicd_sensor_manager_v1beta1_collector_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -176,7 +176,7 @@ func (x *IngestLogBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IngestLogBatch.ProtoReflect.Descriptor instead.
 func (*IngestLogBatch) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_collector_proto_rawDescGZIP(), []int{0}
+	return file_cicd_sensor_manager_v1beta1_collector_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *IngestLogBatch) GetJobIdentity() *JobIdentity {
@@ -223,7 +223,7 @@ type IngestLogRequest struct {
 
 func (x *IngestLogRequest) Reset() {
 	*x = IngestLogRequest{}
-	mi := &file_cicd_sensor_manager_v1_collector_proto_msgTypes[1]
+	mi := &file_cicd_sensor_manager_v1beta1_collector_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -235,7 +235,7 @@ func (x *IngestLogRequest) String() string {
 func (*IngestLogRequest) ProtoMessage() {}
 
 func (x *IngestLogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_collector_proto_msgTypes[1]
+	mi := &file_cicd_sensor_manager_v1beta1_collector_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -248,7 +248,7 @@ func (x *IngestLogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IngestLogRequest.ProtoReflect.Descriptor instead.
 func (*IngestLogRequest) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_collector_proto_rawDescGZIP(), []int{1}
+	return file_cicd_sensor_manager_v1beta1_collector_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *IngestLogRequest) GetBatch() *IngestLogBatch {
@@ -270,7 +270,7 @@ type IngestLogResponse struct {
 
 func (x *IngestLogResponse) Reset() {
 	*x = IngestLogResponse{}
-	mi := &file_cicd_sensor_manager_v1_collector_proto_msgTypes[2]
+	mi := &file_cicd_sensor_manager_v1beta1_collector_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -282,7 +282,7 @@ func (x *IngestLogResponse) String() string {
 func (*IngestLogResponse) ProtoMessage() {}
 
 func (x *IngestLogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_collector_proto_msgTypes[2]
+	mi := &file_cicd_sensor_manager_v1beta1_collector_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -295,7 +295,7 @@ func (x *IngestLogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IngestLogResponse.ProtoReflect.Descriptor instead.
 func (*IngestLogResponse) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_collector_proto_rawDescGZIP(), []int{2}
+	return file_cicd_sensor_manager_v1beta1_collector_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *IngestLogResponse) GetReceivedBatches() uint64 {
@@ -312,19 +312,19 @@ func (x *IngestLogResponse) GetBytesWritten() uint64 {
 	return 0
 }
 
-var File_cicd_sensor_manager_v1_collector_proto protoreflect.FileDescriptor
+var File_cicd_sensor_manager_v1beta1_collector_proto protoreflect.FileDescriptor
 
-const file_cicd_sensor_manager_v1_collector_proto_rawDesc = "" +
+const file_cicd_sensor_manager_v1beta1_collector_proto_rawDesc = "" +
 	"\n" +
-	"&cicd_sensor/manager/v1/collector.proto\x12\x16cicd_sensor.manager.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"cicd_sensor/manager/v1/types.proto\"\xab\x02\n" +
-	"\x0eIngestLogBatch\x12F\n" +
-	"\fjob_identity\x18\x01 \x01(\v2#.cicd_sensor.manager.v1.JobIdentityR\vjobIdentity\x123\n" +
-	"\x05scope\x18\x02 \x01(\x0e2\x1d.cicd_sensor.manager.v1.ScopeR\x05scope\x12:\n" +
-	"\blog_type\x18\x03 \x01(\x0e2\x1f.cicd_sensor.manager.v1.LogTypeR\alogType\x12)\n" +
+	"+cicd_sensor/manager/v1beta1/collector.proto\x12\x1bcicd_sensor.manager.v1beta1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'cicd_sensor/manager/v1beta1/types.proto\"\xba\x02\n" +
+	"\x0eIngestLogBatch\x12K\n" +
+	"\fjob_identity\x18\x01 \x01(\v2(.cicd_sensor.manager.v1beta1.JobIdentityR\vjobIdentity\x128\n" +
+	"\x05scope\x18\x02 \x01(\x0e2\".cicd_sensor.manager.v1beta1.ScopeR\x05scope\x12?\n" +
+	"\blog_type\x18\x03 \x01(\x0e2$.cicd_sensor.manager.v1beta1.LogTypeR\alogType\x12)\n" +
 	"\x10compressed_jsonl\x18\x04 \x01(\fR\x0fcompressedJsonl\x125\n" +
-	"\bflush_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aflushAt\"P\n" +
-	"\x10IngestLogRequest\x12<\n" +
-	"\x05batch\x18\x01 \x01(\v2&.cicd_sensor.manager.v1.IngestLogBatchR\x05batch\"c\n" +
+	"\bflush_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aflushAt\"U\n" +
+	"\x10IngestLogRequest\x12A\n" +
+	"\x05batch\x18\x01 \x01(\v2+.cicd_sensor.manager.v1beta1.IngestLogBatchR\x05batch\"c\n" +
 	"\x11IngestLogResponse\x12)\n" +
 	"\x10received_batches\x18\x01 \x01(\x04R\x0freceivedBatches\x12#\n" +
 	"\rbytes_written\x18\x02 \x01(\x04R\fbytesWritten*m\n" +
@@ -337,42 +337,42 @@ const file_cicd_sensor_manager_v1_collector_proto_rawDesc = "" +
 	"\x11SCOPE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
 	"SCOPE_HOST\x10\x01\x12\x11\n" +
-	"\rSCOPE_PROJECT\x10\x022t\n" +
-	"\x10CollectorService\x12`\n" +
-	"\tIngestLog\x12(.cicd_sensor.manager.v1.IngestLogRequest\x1a).cicd_sensor.manager.v1.IngestLogResponseB\xf6\x01\n" +
-	"\x1acom.cicd_sensor.manager.v1B\x0eCollectorProtoP\x01ZRgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1;managerv1\xa2\x02\x03CMX\xaa\x02\x15CicdSensor.Manager.V1\xca\x02\x15CicdSensor\\Manager\\V1\xe2\x02!CicdSensor\\Manager\\V1\\GPBMetadata\xea\x02\x17CicdSensor::Manager::V1b\x06proto3"
+	"\rSCOPE_PROJECT\x10\x022~\n" +
+	"\x10CollectorService\x12j\n" +
+	"\tIngestLog\x12-.cicd_sensor.manager.v1beta1.IngestLogRequest\x1a..cicd_sensor.manager.v1beta1.IngestLogResponseB\x99\x02\n" +
+	"\x1fcom.cicd_sensor.manager.v1beta1B\x0eCollectorProtoP\x01Z\\github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1;managerv1beta1\xa2\x02\x03CMX\xaa\x02\x1aCicdSensor.Manager.V1beta1\xca\x02\x1aCicdSensor\\Manager\\V1beta1\xe2\x02&CicdSensor\\Manager\\V1beta1\\GPBMetadata\xea\x02\x1cCicdSensor::Manager::V1beta1b\x06proto3"
 
 var (
-	file_cicd_sensor_manager_v1_collector_proto_rawDescOnce sync.Once
-	file_cicd_sensor_manager_v1_collector_proto_rawDescData []byte
+	file_cicd_sensor_manager_v1beta1_collector_proto_rawDescOnce sync.Once
+	file_cicd_sensor_manager_v1beta1_collector_proto_rawDescData []byte
 )
 
-func file_cicd_sensor_manager_v1_collector_proto_rawDescGZIP() []byte {
-	file_cicd_sensor_manager_v1_collector_proto_rawDescOnce.Do(func() {
-		file_cicd_sensor_manager_v1_collector_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_manager_v1_collector_proto_rawDesc), len(file_cicd_sensor_manager_v1_collector_proto_rawDesc)))
+func file_cicd_sensor_manager_v1beta1_collector_proto_rawDescGZIP() []byte {
+	file_cicd_sensor_manager_v1beta1_collector_proto_rawDescOnce.Do(func() {
+		file_cicd_sensor_manager_v1beta1_collector_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_manager_v1beta1_collector_proto_rawDesc), len(file_cicd_sensor_manager_v1beta1_collector_proto_rawDesc)))
 	})
-	return file_cicd_sensor_manager_v1_collector_proto_rawDescData
+	return file_cicd_sensor_manager_v1beta1_collector_proto_rawDescData
 }
 
-var file_cicd_sensor_manager_v1_collector_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_cicd_sensor_manager_v1_collector_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_cicd_sensor_manager_v1_collector_proto_goTypes = []any{
-	(LogType)(0),                  // 0: cicd_sensor.manager.v1.LogType
-	(Scope)(0),                    // 1: cicd_sensor.manager.v1.Scope
-	(*IngestLogBatch)(nil),        // 2: cicd_sensor.manager.v1.IngestLogBatch
-	(*IngestLogRequest)(nil),      // 3: cicd_sensor.manager.v1.IngestLogRequest
-	(*IngestLogResponse)(nil),     // 4: cicd_sensor.manager.v1.IngestLogResponse
-	(*JobIdentity)(nil),           // 5: cicd_sensor.manager.v1.JobIdentity
+var file_cicd_sensor_manager_v1beta1_collector_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_cicd_sensor_manager_v1beta1_collector_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_cicd_sensor_manager_v1beta1_collector_proto_goTypes = []any{
+	(LogType)(0),                  // 0: cicd_sensor.manager.v1beta1.LogType
+	(Scope)(0),                    // 1: cicd_sensor.manager.v1beta1.Scope
+	(*IngestLogBatch)(nil),        // 2: cicd_sensor.manager.v1beta1.IngestLogBatch
+	(*IngestLogRequest)(nil),      // 3: cicd_sensor.manager.v1beta1.IngestLogRequest
+	(*IngestLogResponse)(nil),     // 4: cicd_sensor.manager.v1beta1.IngestLogResponse
+	(*JobIdentity)(nil),           // 5: cicd_sensor.manager.v1beta1.JobIdentity
 	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
 }
-var file_cicd_sensor_manager_v1_collector_proto_depIdxs = []int32{
-	5, // 0: cicd_sensor.manager.v1.IngestLogBatch.job_identity:type_name -> cicd_sensor.manager.v1.JobIdentity
-	1, // 1: cicd_sensor.manager.v1.IngestLogBatch.scope:type_name -> cicd_sensor.manager.v1.Scope
-	0, // 2: cicd_sensor.manager.v1.IngestLogBatch.log_type:type_name -> cicd_sensor.manager.v1.LogType
-	6, // 3: cicd_sensor.manager.v1.IngestLogBatch.flush_at:type_name -> google.protobuf.Timestamp
-	2, // 4: cicd_sensor.manager.v1.IngestLogRequest.batch:type_name -> cicd_sensor.manager.v1.IngestLogBatch
-	3, // 5: cicd_sensor.manager.v1.CollectorService.IngestLog:input_type -> cicd_sensor.manager.v1.IngestLogRequest
-	4, // 6: cicd_sensor.manager.v1.CollectorService.IngestLog:output_type -> cicd_sensor.manager.v1.IngestLogResponse
+var file_cicd_sensor_manager_v1beta1_collector_proto_depIdxs = []int32{
+	5, // 0: cicd_sensor.manager.v1beta1.IngestLogBatch.job_identity:type_name -> cicd_sensor.manager.v1beta1.JobIdentity
+	1, // 1: cicd_sensor.manager.v1beta1.IngestLogBatch.scope:type_name -> cicd_sensor.manager.v1beta1.Scope
+	0, // 2: cicd_sensor.manager.v1beta1.IngestLogBatch.log_type:type_name -> cicd_sensor.manager.v1beta1.LogType
+	6, // 3: cicd_sensor.manager.v1beta1.IngestLogBatch.flush_at:type_name -> google.protobuf.Timestamp
+	2, // 4: cicd_sensor.manager.v1beta1.IngestLogRequest.batch:type_name -> cicd_sensor.manager.v1beta1.IngestLogBatch
+	3, // 5: cicd_sensor.manager.v1beta1.CollectorService.IngestLog:input_type -> cicd_sensor.manager.v1beta1.IngestLogRequest
+	4, // 6: cicd_sensor.manager.v1beta1.CollectorService.IngestLog:output_type -> cicd_sensor.manager.v1beta1.IngestLogResponse
 	6, // [6:7] is the sub-list for method output_type
 	5, // [5:6] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
@@ -380,28 +380,28 @@ var file_cicd_sensor_manager_v1_collector_proto_depIdxs = []int32{
 	0, // [0:5] is the sub-list for field type_name
 }
 
-func init() { file_cicd_sensor_manager_v1_collector_proto_init() }
-func file_cicd_sensor_manager_v1_collector_proto_init() {
-	if File_cicd_sensor_manager_v1_collector_proto != nil {
+func init() { file_cicd_sensor_manager_v1beta1_collector_proto_init() }
+func file_cicd_sensor_manager_v1beta1_collector_proto_init() {
+	if File_cicd_sensor_manager_v1beta1_collector_proto != nil {
 		return
 	}
-	file_cicd_sensor_manager_v1_types_proto_init()
+	file_cicd_sensor_manager_v1beta1_types_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_manager_v1_collector_proto_rawDesc), len(file_cicd_sensor_manager_v1_collector_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_manager_v1beta1_collector_proto_rawDesc), len(file_cicd_sensor_manager_v1beta1_collector_proto_rawDesc)),
 			NumEnums:      2,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_cicd_sensor_manager_v1_collector_proto_goTypes,
-		DependencyIndexes: file_cicd_sensor_manager_v1_collector_proto_depIdxs,
-		EnumInfos:         file_cicd_sensor_manager_v1_collector_proto_enumTypes,
-		MessageInfos:      file_cicd_sensor_manager_v1_collector_proto_msgTypes,
+		GoTypes:           file_cicd_sensor_manager_v1beta1_collector_proto_goTypes,
+		DependencyIndexes: file_cicd_sensor_manager_v1beta1_collector_proto_depIdxs,
+		EnumInfos:         file_cicd_sensor_manager_v1beta1_collector_proto_enumTypes,
+		MessageInfos:      file_cicd_sensor_manager_v1beta1_collector_proto_msgTypes,
 	}.Build()
-	File_cicd_sensor_manager_v1_collector_proto = out.File
-	file_cicd_sensor_manager_v1_collector_proto_goTypes = nil
-	file_cicd_sensor_manager_v1_collector_proto_depIdxs = nil
+	File_cicd_sensor_manager_v1beta1_collector_proto = out.File
+	file_cicd_sensor_manager_v1beta1_collector_proto_goTypes = nil
+	file_cicd_sensor_manager_v1beta1_collector_proto_depIdxs = nil
 }

@@ -9,19 +9,19 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 )
 
 type LogBatch struct {
 	Identity jobcontext.JobIdentity
-	Scope    managerv1.Scope
-	Type     managerv1.LogType
+	Scope    managerv1beta1.Scope
+	Type     managerv1beta1.LogType
 	Records  [][]byte
 	FlushAt  time.Time
 }
 
-func BuildCollectorIngestLogBatch(batch LogBatch) (*managerv1.IngestLogBatch, error) {
+func BuildCollectorIngestLogBatch(batch LogBatch) (*managerv1beta1.IngestLogBatch, error) {
 	if len(batch.Records) == 0 {
 		return nil, fmt.Errorf("collector ingest log batch has no records")
 	}
@@ -51,7 +51,7 @@ func BuildCollectorIngestLogBatch(batch LogBatch) (*managerv1.IngestLogBatch, er
 		return nil, fmt.Errorf("close gzip collector ingest log batch: %w", err)
 	}
 
-	return &managerv1.IngestLogBatch{
+	return &managerv1beta1.IngestLogBatch{
 		JobIdentity:     protoconv.ToProtoJobIdentity(batch.Identity),
 		Scope:           batch.Scope,
 		LogType:         batch.Type,

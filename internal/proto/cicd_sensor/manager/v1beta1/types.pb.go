@@ -7,9 +7,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: cicd_sensor/manager/v1/types.proto
+// source: cicd_sensor/manager/v1beta1/types.proto
 
-package managerv1
+package managerv1beta1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
@@ -47,7 +47,7 @@ type JobIdentity struct {
 
 func (x *JobIdentity) Reset() {
 	*x = JobIdentity{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[0]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -59,7 +59,7 @@ func (x *JobIdentity) String() string {
 func (*JobIdentity) ProtoMessage() {}
 
 func (x *JobIdentity) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[0]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -72,7 +72,7 @@ func (x *JobIdentity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobIdentity.ProtoReflect.Descriptor instead.
 func (*JobIdentity) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{0}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *JobIdentity) GetProvider() string {
@@ -141,7 +141,7 @@ type StringList struct {
 
 func (x *StringList) Reset() {
 	*x = StringList{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[1]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -153,7 +153,7 @@ func (x *StringList) String() string {
 func (*StringList) ProtoMessage() {}
 
 func (x *StringList) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[1]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -166,7 +166,7 @@ func (x *StringList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StringList.ProtoReflect.Descriptor instead.
 func (*StringList) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{1}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *StringList) GetValues() []string {
@@ -186,7 +186,7 @@ type RuleTargetMatcher struct {
 
 func (x *RuleTargetMatcher) Reset() {
 	*x = RuleTargetMatcher{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[2]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -198,7 +198,7 @@ func (x *RuleTargetMatcher) String() string {
 func (*RuleTargetMatcher) ProtoMessage() {}
 
 func (x *RuleTargetMatcher) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[2]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -211,7 +211,7 @@ func (x *RuleTargetMatcher) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleTargetMatcher.ProtoReflect.Descriptor instead.
 func (*RuleTargetMatcher) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{2}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RuleTargetMatcher) GetProviderHost() string {
@@ -238,7 +238,7 @@ type RuleTarget struct {
 
 func (x *RuleTarget) Reset() {
 	*x = RuleTarget{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[3]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -250,7 +250,7 @@ func (x *RuleTarget) String() string {
 func (*RuleTarget) ProtoMessage() {}
 
 func (x *RuleTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[3]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -263,7 +263,7 @@ func (x *RuleTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleTarget.ProtoReflect.Descriptor instead.
 func (*RuleTarget) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{3}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RuleTarget) GetInclude() []*RuleTargetMatcher {
@@ -299,7 +299,7 @@ type Rule struct {
 
 func (x *Rule) Reset() {
 	*x = Rule{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[4]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -311,7 +311,7 @@ func (x *Rule) String() string {
 func (*Rule) ProtoMessage() {}
 
 func (x *Rule) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[4]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -324,7 +324,7 @@ func (x *Rule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Rule.ProtoReflect.Descriptor instead.
 func (*Rule) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{4}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Rule) GetRuleId() string {
@@ -416,7 +416,7 @@ type RuleSet struct {
 
 func (x *RuleSet) Reset() {
 	*x = RuleSet{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[5]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -428,7 +428,7 @@ func (x *RuleSet) String() string {
 func (*RuleSet) ProtoMessage() {}
 
 func (x *RuleSet) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[5]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -441,7 +441,7 @@ func (x *RuleSet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleSet.ProtoReflect.Descriptor instead.
 func (*RuleSet) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{5}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RuleSet) GetRulesetId() string {
@@ -482,7 +482,7 @@ type RuleModifierTarget struct {
 
 func (x *RuleModifierTarget) Reset() {
 	*x = RuleModifierTarget{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[6]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -494,7 +494,7 @@ func (x *RuleModifierTarget) String() string {
 func (*RuleModifierTarget) ProtoMessage() {}
 
 func (x *RuleModifierTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[6]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -507,7 +507,7 @@ func (x *RuleModifierTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleModifierTarget.ProtoReflect.Descriptor instead.
 func (*RuleModifierTarget) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{6}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RuleModifierTarget) GetRulesetId() string {
@@ -541,7 +541,7 @@ type RuleModifier struct {
 
 func (x *RuleModifier) Reset() {
 	*x = RuleModifier{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[7]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -553,7 +553,7 @@ func (x *RuleModifier) String() string {
 func (*RuleModifier) ProtoMessage() {}
 
 func (x *RuleModifier) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[7]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -566,7 +566,7 @@ func (x *RuleModifier) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleModifier.ProtoReflect.Descriptor instead.
 func (*RuleModifier) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{7}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RuleModifier) GetModifierId() string {
@@ -642,7 +642,7 @@ type RuleSource struct {
 
 func (x *RuleSource) Reset() {
 	*x = RuleSource{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[8]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -654,7 +654,7 @@ func (x *RuleSource) String() string {
 func (*RuleSource) ProtoMessage() {}
 
 func (x *RuleSource) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[8]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -667,7 +667,7 @@ func (x *RuleSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleSource.ProtoReflect.Descriptor instead.
 func (*RuleSource) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{8}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RuleSource) GetRuleSets() []*RuleSet {
@@ -698,7 +698,7 @@ type OutputSetting struct {
 
 func (x *OutputSetting) Reset() {
 	*x = OutputSetting{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[9]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -710,7 +710,7 @@ func (x *OutputSetting) String() string {
 func (*OutputSetting) ProtoMessage() {}
 
 func (x *OutputSetting) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[9]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -723,7 +723,7 @@ func (x *OutputSetting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputSetting.ProtoReflect.Descriptor instead.
 func (*OutputSetting) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{9}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *OutputSetting) GetEnabled() bool {
@@ -759,7 +759,7 @@ type OutputSettings struct {
 
 func (x *OutputSettings) Reset() {
 	*x = OutputSettings{}
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[10]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -771,7 +771,7 @@ func (x *OutputSettings) String() string {
 func (*OutputSettings) ProtoMessage() {}
 
 func (x *OutputSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_manager_v1_types_proto_msgTypes[10]
+	mi := &file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -784,7 +784,7 @@ func (x *OutputSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputSettings.ProtoReflect.Descriptor instead.
 func (*OutputSettings) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{10}
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *OutputSettings) GetDetection() *OutputSetting {
@@ -808,11 +808,11 @@ func (x *OutputSettings) GetSummary() *OutputSetting {
 	return nil
 }
 
-var File_cicd_sensor_manager_v1_types_proto protoreflect.FileDescriptor
+var File_cicd_sensor_manager_v1beta1_types_proto protoreflect.FileDescriptor
 
-const file_cicd_sensor_manager_v1_types_proto_rawDesc = "" +
+const file_cicd_sensor_manager_v1beta1_types_proto_rawDesc = "" +
 	"\n" +
-	"\"cicd_sensor/manager/v1/types.proto\x12\x16cicd_sensor.manager.v1\x1a\x1bbuf/validate/validate.proto\"\xd8\x02\n" +
+	"'cicd_sensor/manager/v1beta1/types.proto\x12\x1bcicd_sensor.manager.v1beta1\x1a\x1bbuf/validate/validate.proto\"\xd8\x02\n" +
 	"\vJobIdentity\x121\n" +
 	"\bprovider\x18\x01 \x01(\tB\x15\xbaH\x12r\x10R\x06githubR\x06gitlabR\bprovider\x12#\n" +
 	"\rprovider_host\x18\x02 \x01(\tR\fproviderHost\x12!\n" +
@@ -829,19 +829,19 @@ const file_cicd_sensor_manager_v1_types_proto_rawDesc = "" +
 	"\x06values\x18\x01 \x03(\tR\x06values\"L\n" +
 	"\x11RuleTargetMatcher\x12#\n" +
 	"\rprovider_host\x18\x01 \x01(\tR\fproviderHost\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\"\x96\x01\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\"\xa0\x01\n" +
 	"\n" +
-	"RuleTarget\x12C\n" +
-	"\ainclude\x18\x01 \x03(\v2).cicd_sensor.manager.v1.RuleTargetMatcherR\ainclude\x12C\n" +
-	"\aexclude\x18\x02 \x03(\v2).cicd_sensor.manager.v1.RuleTargetMatcherR\aexclude\"\xb7\x03\n" +
+	"RuleTarget\x12H\n" +
+	"\ainclude\x18\x01 \x03(\v2..cicd_sensor.manager.v1beta1.RuleTargetMatcherR\ainclude\x12H\n" +
+	"\aexclude\x18\x02 \x03(\v2..cicd_sensor.manager.v1beta1.RuleTargetMatcherR\aexclude\"\xc1\x03\n" +
 	"\x04Rule\x12\x17\n" +
 	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12\x1b\n" +
 	"\trule_name\x18\x02 \x01(\tR\bruleName\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x1d\n" +
 	"\n" +
-	"event_type\x18\x05 \x01(\tR\teventType\x12:\n" +
-	"\x06target\x18\x06 \x01(\v2\".cicd_sensor.manager.v1.RuleTargetR\x06target\x12\x1c\n" +
+	"event_type\x18\x05 \x01(\tR\teventType\x12?\n" +
+	"\x06target\x18\x06 \x01(\v2'.cicd_sensor.manager.v1beta1.RuleTargetR\x06target\x12\x1c\n" +
 	"\tcondition\x18\a \x01(\tR\tcondition\x12\x1e\n" +
 	"\n" +
 	"exceptions\x18\b \x01(\tR\n" +
@@ -849,98 +849,98 @@ const file_cicd_sensor_manager_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"max_alerts\x18\t \x01(\x05R\tmaxAlerts\x12\x16\n" +
 	"\x06action\x18\n" +
-	" \x01(\tR\x06action\x12:\n" +
-	"\x04tags\x18\v \x03(\v2&.cicd_sensor.manager.v1.Rule.TagsEntryR\x04tags\x1a7\n" +
+	" \x01(\tR\x06action\x12?\n" +
+	"\x04tags\x18\v \x03(\v2+.cicd_sensor.manager.v1beta1.Rule.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x98\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa7\x02\n" +
 	"\aRuleSet\x12\x1d\n" +
 	"\n" +
 	"ruleset_id\x18\x01 \x01(\tR\trulesetId\x12\x1a\n" +
-	"\brevision\x18\x02 \x01(\tR\brevision\x12@\n" +
-	"\x05lists\x18\x03 \x03(\v2*.cicd_sensor.manager.v1.RuleSet.ListsEntryR\x05lists\x122\n" +
-	"\x05rules\x18\x04 \x03(\v2\x1c.cicd_sensor.manager.v1.RuleR\x05rules\x1a\\\n" +
+	"\brevision\x18\x02 \x01(\tR\brevision\x12E\n" +
+	"\x05lists\x18\x03 \x03(\v2/.cicd_sensor.manager.v1beta1.RuleSet.ListsEntryR\x05lists\x127\n" +
+	"\x05rules\x18\x04 \x03(\v2!.cicd_sensor.manager.v1beta1.RuleR\x05rules\x1aa\n" +
 	"\n" +
 	"ListsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x128\n" +
-	"\x05value\x18\x02 \x01(\v2\".cicd_sensor.manager.v1.StringListR\x05value:\x028\x01\"L\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +
+	"\x05value\x18\x02 \x01(\v2'.cicd_sensor.manager.v1beta1.StringListR\x05value:\x028\x01\"L\n" +
 	"\x12RuleModifierTarget\x12\x1d\n" +
 	"\n" +
 	"ruleset_id\x18\x01 \x01(\tR\trulesetId\x12\x17\n" +
-	"\arule_id\x18\x02 \x01(\tR\x06ruleId\"\xed\x03\n" +
+	"\arule_id\x18\x02 \x01(\tR\x06ruleId\"\xf7\x03\n" +
 	"\fRuleModifier\x12\x1f\n" +
 	"\vmodifier_id\x18\x01 \x01(\tR\n" +
 	"modifierId\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\tR\brevision\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\x12D\n" +
-	"\atargets\x18\x04 \x03(\v2*.cicd_sensor.manager.v1.RuleModifierTargetR\atargets\x12,\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12I\n" +
+	"\atargets\x18\x04 \x03(\v2/.cicd_sensor.manager.v1beta1.RuleModifierTargetR\atargets\x12,\n" +
 	"\x0foverride_action\x18\x05 \x01(\tH\x00R\x0eoverrideAction\x88\x01\x01\x123\n" +
 	"\x13override_max_alerts\x18\x06 \x01(\x05H\x01R\x11overrideMaxAlerts\x88\x01\x01\x12%\n" +
-	"\x0eadd_exceptions\x18\a \x01(\tR\raddExceptions\x12W\n" +
-	"\x12add_target_exclude\x18\b \x03(\v2).cicd_sensor.manager.v1.RuleTargetMatcherR\x10addTargetExclude\x12\x1d\n" +
+	"\x0eadd_exceptions\x18\a \x01(\tR\raddExceptions\x12\\\n" +
+	"\x12add_target_exclude\x18\b \x03(\v2..cicd_sensor.manager.v1beta1.RuleTargetMatcherR\x10addTargetExclude\x12\x1d\n" +
 	"\adisable\x18\t \x01(\bH\x02R\adisable\x88\x01\x01B\x12\n" +
 	"\x10_override_actionB\x16\n" +
 	"\x14_override_max_alertsB\n" +
 	"\n" +
-	"\b_disable\"\x97\x01\n" +
+	"\b_disable\"\xa1\x01\n" +
 	"\n" +
-	"RuleSource\x12<\n" +
-	"\trule_sets\x18\x01 \x03(\v2\x1f.cicd_sensor.manager.v1.RuleSetR\bruleSets\x12K\n" +
-	"\x0erule_modifiers\x18\x02 \x03(\v2$.cicd_sensor.manager.v1.RuleModifierR\rruleModifiers\"\x93\x01\n" +
+	"RuleSource\x12A\n" +
+	"\trule_sets\x18\x01 \x03(\v2$.cicd_sensor.manager.v1beta1.RuleSetR\bruleSets\x12P\n" +
+	"\x0erule_modifiers\x18\x02 \x03(\v2).cicd_sensor.manager.v1beta1.RuleModifierR\rruleModifiers\"\x93\x01\n" +
 	"\rOutputSetting\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x122\n" +
 	"\x15flush_threshold_bytes\x18\x02 \x01(\rR\x13flushThresholdBytes\x124\n" +
-	"\x16flush_interval_seconds\x18\x03 \x01(\rR\x14flushIntervalSeconds\"\xe2\x01\n" +
-	"\x0eOutputSettings\x12C\n" +
-	"\tdetection\x18\x01 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\tdetection\x12J\n" +
-	"\rruntime_event\x18\x02 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\fruntimeEvent\x12?\n" +
-	"\asummary\x18\x03 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\asummaryB\xf2\x01\n" +
-	"\x1acom.cicd_sensor.manager.v1B\n" +
-	"TypesProtoP\x01ZRgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1;managerv1\xa2\x02\x03CMX\xaa\x02\x15CicdSensor.Manager.V1\xca\x02\x15CicdSensor\\Manager\\V1\xe2\x02!CicdSensor\\Manager\\V1\\GPBMetadata\xea\x02\x17CicdSensor::Manager::V1b\x06proto3"
+	"\x16flush_interval_seconds\x18\x03 \x01(\rR\x14flushIntervalSeconds\"\xf1\x01\n" +
+	"\x0eOutputSettings\x12H\n" +
+	"\tdetection\x18\x01 \x01(\v2*.cicd_sensor.manager.v1beta1.OutputSettingR\tdetection\x12O\n" +
+	"\rruntime_event\x18\x02 \x01(\v2*.cicd_sensor.manager.v1beta1.OutputSettingR\fruntimeEvent\x12D\n" +
+	"\asummary\x18\x03 \x01(\v2*.cicd_sensor.manager.v1beta1.OutputSettingR\asummaryB\x95\x02\n" +
+	"\x1fcom.cicd_sensor.manager.v1beta1B\n" +
+	"TypesProtoP\x01Z\\github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1;managerv1beta1\xa2\x02\x03CMX\xaa\x02\x1aCicdSensor.Manager.V1beta1\xca\x02\x1aCicdSensor\\Manager\\V1beta1\xe2\x02&CicdSensor\\Manager\\V1beta1\\GPBMetadata\xea\x02\x1cCicdSensor::Manager::V1beta1b\x06proto3"
 
 var (
-	file_cicd_sensor_manager_v1_types_proto_rawDescOnce sync.Once
-	file_cicd_sensor_manager_v1_types_proto_rawDescData []byte
+	file_cicd_sensor_manager_v1beta1_types_proto_rawDescOnce sync.Once
+	file_cicd_sensor_manager_v1beta1_types_proto_rawDescData []byte
 )
 
-func file_cicd_sensor_manager_v1_types_proto_rawDescGZIP() []byte {
-	file_cicd_sensor_manager_v1_types_proto_rawDescOnce.Do(func() {
-		file_cicd_sensor_manager_v1_types_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_manager_v1_types_proto_rawDesc), len(file_cicd_sensor_manager_v1_types_proto_rawDesc)))
+func file_cicd_sensor_manager_v1beta1_types_proto_rawDescGZIP() []byte {
+	file_cicd_sensor_manager_v1beta1_types_proto_rawDescOnce.Do(func() {
+		file_cicd_sensor_manager_v1beta1_types_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_manager_v1beta1_types_proto_rawDesc), len(file_cicd_sensor_manager_v1beta1_types_proto_rawDesc)))
 	})
-	return file_cicd_sensor_manager_v1_types_proto_rawDescData
+	return file_cicd_sensor_manager_v1beta1_types_proto_rawDescData
 }
 
-var file_cicd_sensor_manager_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
-var file_cicd_sensor_manager_v1_types_proto_goTypes = []any{
-	(*JobIdentity)(nil),        // 0: cicd_sensor.manager.v1.JobIdentity
-	(*StringList)(nil),         // 1: cicd_sensor.manager.v1.StringList
-	(*RuleTargetMatcher)(nil),  // 2: cicd_sensor.manager.v1.RuleTargetMatcher
-	(*RuleTarget)(nil),         // 3: cicd_sensor.manager.v1.RuleTarget
-	(*Rule)(nil),               // 4: cicd_sensor.manager.v1.Rule
-	(*RuleSet)(nil),            // 5: cicd_sensor.manager.v1.RuleSet
-	(*RuleModifierTarget)(nil), // 6: cicd_sensor.manager.v1.RuleModifierTarget
-	(*RuleModifier)(nil),       // 7: cicd_sensor.manager.v1.RuleModifier
-	(*RuleSource)(nil),         // 8: cicd_sensor.manager.v1.RuleSource
-	(*OutputSetting)(nil),      // 9: cicd_sensor.manager.v1.OutputSetting
-	(*OutputSettings)(nil),     // 10: cicd_sensor.manager.v1.OutputSettings
-	nil,                        // 11: cicd_sensor.manager.v1.Rule.TagsEntry
-	nil,                        // 12: cicd_sensor.manager.v1.RuleSet.ListsEntry
+var file_cicd_sensor_manager_v1beta1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_cicd_sensor_manager_v1beta1_types_proto_goTypes = []any{
+	(*JobIdentity)(nil),        // 0: cicd_sensor.manager.v1beta1.JobIdentity
+	(*StringList)(nil),         // 1: cicd_sensor.manager.v1beta1.StringList
+	(*RuleTargetMatcher)(nil),  // 2: cicd_sensor.manager.v1beta1.RuleTargetMatcher
+	(*RuleTarget)(nil),         // 3: cicd_sensor.manager.v1beta1.RuleTarget
+	(*Rule)(nil),               // 4: cicd_sensor.manager.v1beta1.Rule
+	(*RuleSet)(nil),            // 5: cicd_sensor.manager.v1beta1.RuleSet
+	(*RuleModifierTarget)(nil), // 6: cicd_sensor.manager.v1beta1.RuleModifierTarget
+	(*RuleModifier)(nil),       // 7: cicd_sensor.manager.v1beta1.RuleModifier
+	(*RuleSource)(nil),         // 8: cicd_sensor.manager.v1beta1.RuleSource
+	(*OutputSetting)(nil),      // 9: cicd_sensor.manager.v1beta1.OutputSetting
+	(*OutputSettings)(nil),     // 10: cicd_sensor.manager.v1beta1.OutputSettings
+	nil,                        // 11: cicd_sensor.manager.v1beta1.Rule.TagsEntry
+	nil,                        // 12: cicd_sensor.manager.v1beta1.RuleSet.ListsEntry
 }
-var file_cicd_sensor_manager_v1_types_proto_depIdxs = []int32{
-	2,  // 0: cicd_sensor.manager.v1.RuleTarget.include:type_name -> cicd_sensor.manager.v1.RuleTargetMatcher
-	2,  // 1: cicd_sensor.manager.v1.RuleTarget.exclude:type_name -> cicd_sensor.manager.v1.RuleTargetMatcher
-	3,  // 2: cicd_sensor.manager.v1.Rule.target:type_name -> cicd_sensor.manager.v1.RuleTarget
-	11, // 3: cicd_sensor.manager.v1.Rule.tags:type_name -> cicd_sensor.manager.v1.Rule.TagsEntry
-	12, // 4: cicd_sensor.manager.v1.RuleSet.lists:type_name -> cicd_sensor.manager.v1.RuleSet.ListsEntry
-	4,  // 5: cicd_sensor.manager.v1.RuleSet.rules:type_name -> cicd_sensor.manager.v1.Rule
-	6,  // 6: cicd_sensor.manager.v1.RuleModifier.targets:type_name -> cicd_sensor.manager.v1.RuleModifierTarget
-	2,  // 7: cicd_sensor.manager.v1.RuleModifier.add_target_exclude:type_name -> cicd_sensor.manager.v1.RuleTargetMatcher
-	5,  // 8: cicd_sensor.manager.v1.RuleSource.rule_sets:type_name -> cicd_sensor.manager.v1.RuleSet
-	7,  // 9: cicd_sensor.manager.v1.RuleSource.rule_modifiers:type_name -> cicd_sensor.manager.v1.RuleModifier
-	9,  // 10: cicd_sensor.manager.v1.OutputSettings.detection:type_name -> cicd_sensor.manager.v1.OutputSetting
-	9,  // 11: cicd_sensor.manager.v1.OutputSettings.runtime_event:type_name -> cicd_sensor.manager.v1.OutputSetting
-	9,  // 12: cicd_sensor.manager.v1.OutputSettings.summary:type_name -> cicd_sensor.manager.v1.OutputSetting
-	1,  // 13: cicd_sensor.manager.v1.RuleSet.ListsEntry.value:type_name -> cicd_sensor.manager.v1.StringList
+var file_cicd_sensor_manager_v1beta1_types_proto_depIdxs = []int32{
+	2,  // 0: cicd_sensor.manager.v1beta1.RuleTarget.include:type_name -> cicd_sensor.manager.v1beta1.RuleTargetMatcher
+	2,  // 1: cicd_sensor.manager.v1beta1.RuleTarget.exclude:type_name -> cicd_sensor.manager.v1beta1.RuleTargetMatcher
+	3,  // 2: cicd_sensor.manager.v1beta1.Rule.target:type_name -> cicd_sensor.manager.v1beta1.RuleTarget
+	11, // 3: cicd_sensor.manager.v1beta1.Rule.tags:type_name -> cicd_sensor.manager.v1beta1.Rule.TagsEntry
+	12, // 4: cicd_sensor.manager.v1beta1.RuleSet.lists:type_name -> cicd_sensor.manager.v1beta1.RuleSet.ListsEntry
+	4,  // 5: cicd_sensor.manager.v1beta1.RuleSet.rules:type_name -> cicd_sensor.manager.v1beta1.Rule
+	6,  // 6: cicd_sensor.manager.v1beta1.RuleModifier.targets:type_name -> cicd_sensor.manager.v1beta1.RuleModifierTarget
+	2,  // 7: cicd_sensor.manager.v1beta1.RuleModifier.add_target_exclude:type_name -> cicd_sensor.manager.v1beta1.RuleTargetMatcher
+	5,  // 8: cicd_sensor.manager.v1beta1.RuleSource.rule_sets:type_name -> cicd_sensor.manager.v1beta1.RuleSet
+	7,  // 9: cicd_sensor.manager.v1beta1.RuleSource.rule_modifiers:type_name -> cicd_sensor.manager.v1beta1.RuleModifier
+	9,  // 10: cicd_sensor.manager.v1beta1.OutputSettings.detection:type_name -> cicd_sensor.manager.v1beta1.OutputSetting
+	9,  // 11: cicd_sensor.manager.v1beta1.OutputSettings.runtime_event:type_name -> cicd_sensor.manager.v1beta1.OutputSetting
+	9,  // 12: cicd_sensor.manager.v1beta1.OutputSettings.summary:type_name -> cicd_sensor.manager.v1beta1.OutputSetting
+	1,  // 13: cicd_sensor.manager.v1beta1.RuleSet.ListsEntry.value:type_name -> cicd_sensor.manager.v1beta1.StringList
 	14, // [14:14] is the sub-list for method output_type
 	14, // [14:14] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
@@ -948,27 +948,27 @@ var file_cicd_sensor_manager_v1_types_proto_depIdxs = []int32{
 	0,  // [0:14] is the sub-list for field type_name
 }
 
-func init() { file_cicd_sensor_manager_v1_types_proto_init() }
-func file_cicd_sensor_manager_v1_types_proto_init() {
-	if File_cicd_sensor_manager_v1_types_proto != nil {
+func init() { file_cicd_sensor_manager_v1beta1_types_proto_init() }
+func file_cicd_sensor_manager_v1beta1_types_proto_init() {
+	if File_cicd_sensor_manager_v1beta1_types_proto != nil {
 		return
 	}
-	file_cicd_sensor_manager_v1_types_proto_msgTypes[7].OneofWrappers = []any{}
+	file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_manager_v1_types_proto_rawDesc), len(file_cicd_sensor_manager_v1_types_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_manager_v1beta1_types_proto_rawDesc), len(file_cicd_sensor_manager_v1beta1_types_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_cicd_sensor_manager_v1_types_proto_goTypes,
-		DependencyIndexes: file_cicd_sensor_manager_v1_types_proto_depIdxs,
-		MessageInfos:      file_cicd_sensor_manager_v1_types_proto_msgTypes,
+		GoTypes:           file_cicd_sensor_manager_v1beta1_types_proto_goTypes,
+		DependencyIndexes: file_cicd_sensor_manager_v1beta1_types_proto_depIdxs,
+		MessageInfos:      file_cicd_sensor_manager_v1beta1_types_proto_msgTypes,
 	}.Build()
-	File_cicd_sensor_manager_v1_types_proto = out.File
-	file_cicd_sensor_manager_v1_types_proto_goTypes = nil
-	file_cicd_sensor_manager_v1_types_proto_depIdxs = nil
+	File_cicd_sensor_manager_v1beta1_types_proto = out.File
+	file_cicd_sensor_manager_v1beta1_types_proto_goTypes = nil
+	file_cicd_sensor_manager_v1beta1_types_proto_depIdxs = nil
 }

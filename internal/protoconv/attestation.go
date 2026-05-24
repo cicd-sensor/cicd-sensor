@@ -9,7 +9,7 @@ import (
 )
 
 // ToAttestationJob builds the attestation v1alpha1 JobContext. Kept fully
-// independent of log/v1's LogContext so the two wire schemas can evolve
+// independent of log/v1beta1's LogContext so the two wire schemas can evolve
 // separately even though their field sets overlap today.
 func ToAttestationJob(identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) *attestationv1alpha1.JobContext {
 	out := &attestationv1alpha1.JobContext{

@@ -1,7 +1,7 @@
 # Logging
 
 cicd-sensor logs are delivered as gzip-compressed JSONL batches.
-The log schema is maintained in Protocol Buffers, and the source of truth is [`proto/cicd_sensor/log/v1`](https://github.com/cicd-sensor/cicd-sensor/tree/main/proto/cicd_sensor/log/v1).
+The log schema is maintained in Protocol Buffers, and the source of truth is [`proto/cicd_sensor/log/v1beta1`](https://github.com/cicd-sensor/cicd-sensor/tree/main/proto/cicd_sensor/log/v1beta1).
 
 With manager delivery, the Agent sends these JSONL batches to the manager.
 The manager delivers each batch to the configured sink.

@@ -9,7 +9,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
@@ -92,7 +92,7 @@ func TestMarshalSummaryLogEntryBuildsFinalSummary(t *testing.T) {
 		t.Fatalf("marshal summary log: %v", err)
 	}
 
-	var got logv1.SummaryLogEntry
+	var got logv1beta1.SummaryLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal summary log: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestMarshalSummaryLogEntryResult(t *testing.T) {
 			if err != nil {
 				t.Fatalf("marshal: %v", err)
 			}
-			var got logv1.SummaryLogEntry
+			var got logv1beta1.SummaryLogEntry
 			if err := protojson.Unmarshal(payload, &got); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
@@ -225,7 +225,7 @@ func TestMarshalSummaryLogEntryStampsLogTypeAndVersions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var got logv1.SummaryLogEntry
+	var got logv1beta1.SummaryLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestMarshalSummaryLogEntryComputesDuration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var got logv1.SummaryLogEntry
+	var got logv1beta1.SummaryLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestMarshalSummaryLogEntryDefaultsFinalizedAt(t *testing.T) {
 	}
 	after := time.Now().Add(time.Second)
 
-	var got logv1.SummaryLogEntry
+	var got logv1beta1.SummaryLogEntry
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal summary log: %v", err)
 	}

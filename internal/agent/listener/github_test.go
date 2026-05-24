@@ -18,7 +18,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
@@ -719,7 +719,7 @@ func TestListener_ProjectStart_AcceptsProjectRules(t *testing.T) {
 func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 	managerBearerToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
 	svc := &fakeConfigService{
-		handler: func(_ context.Context, req *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error) {
+		handler: func(_ context.Context, req *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
 			if req.Msg.RequestedOutputs != nil {
 				t.Fatalf("requested outputs: got %+v, want nil", req.Msg.RequestedOutputs)
 			}
@@ -732,10 +732,10 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 					Action:    rule.RuleActionDetect,
 				}},
 			}}, nil)
-			return connect.NewResponse(&managerv1.FetchConfigResponse{
-				Config: &managerv1.ServedConfig{
-					OutputSettings: &managerv1.OutputSettings{
-						Detection: &managerv1.OutputSetting{Enabled: true},
+			return connect.NewResponse(&managerv1beta1.FetchConfigResponse{
+				Config: &managerv1beta1.ServedConfig{
+					OutputSettings: &managerv1beta1.OutputSettings{
+						Detection: &managerv1beta1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -788,9 +788,9 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 func TestListener_ProjectStart_ManagerModeIgnoresLocalDefaultMaxAlerts(t *testing.T) {
 	managerBearerToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
 	svc := &fakeConfigService{
-		handler: func(context.Context, *connect.Request[managerv1.FetchConfigRequest]) (*connect.Response[managerv1.FetchConfigResponse], error) {
-			return connect.NewResponse(&managerv1.FetchConfigResponse{
-				Config: &managerv1.ServedConfig{
+		handler: func(context.Context, *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
+			return connect.NewResponse(&managerv1beta1.FetchConfigResponse{
+				Config: &managerv1beta1.ServedConfig{
 					DefaultMaxAlertsPerRule: 31,
 				},
 			}), nil

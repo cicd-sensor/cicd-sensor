@@ -16,7 +16,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/manager"
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/slogid"
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
@@ -108,7 +108,7 @@ func main() {
 		slog.ErrorContext(ctx, "manager_failed", "error", err)
 		os.Exit(1)
 	}
-	var outputSettings *managerv1.OutputSettings
+	var outputSettings *managerv1beta1.OutputSettings
 	if router != nil {
 		outputSettings = router.OutputSettings()
 	}
@@ -224,7 +224,7 @@ func readManagerTokenFile(path string) (string, error) {
 	return strings.TrimRight(string(data), "\n"), nil
 }
 
-func buildServedConfig(startup manager.StartupConfig, outputSettings *managerv1.OutputSettings) *manager.ServedConfig {
+func buildServedConfig(startup manager.StartupConfig, outputSettings *managerv1beta1.OutputSettings) *manager.ServedConfig {
 	return &manager.ServedConfig{
 		ConfigRevision:          startup.Revision,
 		DefaultMaxAlertsPerRule: startup.DefaultMaxAlertsPerRule,

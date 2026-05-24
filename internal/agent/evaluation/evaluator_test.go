@@ -8,8 +8,8 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule/celengine"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -26,7 +26,7 @@ var testEvalIdentity = jobcontext.GitHubJobIdentity("github.com", "acme/example"
 
 type recordingEvaluationBatches struct {
 	mu      sync.Mutex
-	records map[managerv1.LogType][][]byte
+	records map[managerv1beta1.LogType][][]byte
 }
 
 func (r *recordingEvaluationBatches) sendBatch(_ context.Context, batch managerclient.LogBatch) error {
@@ -34,7 +34,7 @@ func (r *recordingEvaluationBatches) sendBatch(_ context.Context, batch managerc
 	defer r.mu.Unlock()
 
 	if r.records == nil {
-		r.records = make(map[managerv1.LogType][][]byte)
+		r.records = make(map[managerv1beta1.LogType][][]byte)
 	}
 	for _, record := range batch.Records {
 		if len(record) == 0 {
@@ -45,16 +45,16 @@ func (r *recordingEvaluationBatches) sendBatch(_ context.Context, batch managerc
 	return nil
 }
 
-func (r *recordingEvaluationBatches) detectionEntries(t *testing.T) []*logv1.DetectionLogEntry {
+func (r *recordingEvaluationBatches) detectionEntries(t *testing.T) []*logv1beta1.DetectionLogEntry {
 	t.Helper()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	records := r.records[managerv1.LogType_LOG_TYPE_DETECTION]
-	out := make([]*logv1.DetectionLogEntry, 0, len(records))
+	records := r.records[managerv1beta1.LogType_LOG_TYPE_DETECTION]
+	out := make([]*logv1beta1.DetectionLogEntry, 0, len(records))
 	for _, record := range records {
-		entry := &logv1.DetectionLogEntry{}
+		entry := &logv1beta1.DetectionLogEntry{}
 		if err := protojson.Unmarshal(record, entry); err != nil {
 			t.Fatalf("unmarshal detection log record: %v", err)
 		}
@@ -63,16 +63,16 @@ func (r *recordingEvaluationBatches) detectionEntries(t *testing.T) []*logv1.Det
 	return out
 }
 
-func (r *recordingEvaluationBatches) runtimeEventEntries(t *testing.T) []*logv1.RuntimeEventLogEntry {
+func (r *recordingEvaluationBatches) runtimeEventEntries(t *testing.T) []*logv1beta1.RuntimeEventLogEntry {
 	t.Helper()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	records := r.records[managerv1.LogType_LOG_TYPE_RUNTIME_EVENT]
-	out := make([]*logv1.RuntimeEventLogEntry, 0, len(records))
+	records := r.records[managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT]
+	out := make([]*logv1beta1.RuntimeEventLogEntry, 0, len(records))
 	for _, record := range records {
-		entry := &logv1.RuntimeEventLogEntry{}
+		entry := &logv1beta1.RuntimeEventLogEntry{}
 		if err := protojson.Unmarshal(record, entry); err != nil {
 			t.Fatalf("unmarshal runtime event log record: %v", err)
 		}

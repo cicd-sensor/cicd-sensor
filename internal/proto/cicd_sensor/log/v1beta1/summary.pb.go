@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: cicd_sensor/log/v1/summary.proto
+// source: cicd_sensor/log/v1beta1/summary.proto
 
-package logv1
+package logv1beta1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
@@ -54,7 +54,7 @@ type SummaryLogEntry struct {
 
 func (x *SummaryLogEntry) Reset() {
 	*x = SummaryLogEntry{}
-	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[0]
+	mi := &file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -66,7 +66,7 @@ func (x *SummaryLogEntry) String() string {
 func (*SummaryLogEntry) ProtoMessage() {}
 
 func (x *SummaryLogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[0]
+	mi := &file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -79,7 +79,7 @@ func (x *SummaryLogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SummaryLogEntry.ProtoReflect.Descriptor instead.
 func (*SummaryLogEntry) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_summary_proto_rawDescGZIP(), []int{0}
+	return file_cicd_sensor_log_v1beta1_summary_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *SummaryLogEntry) GetTimestamp() *timestamppb.Timestamp {
@@ -246,7 +246,7 @@ type RulesetUse struct {
 
 func (x *RulesetUse) Reset() {
 	*x = RulesetUse{}
-	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[1]
+	mi := &file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -258,7 +258,7 @@ func (x *RulesetUse) String() string {
 func (*RulesetUse) ProtoMessage() {}
 
 func (x *RulesetUse) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[1]
+	mi := &file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -271,7 +271,7 @@ func (x *RulesetUse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RulesetUse.ProtoReflect.Descriptor instead.
 func (*RulesetUse) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_summary_proto_rawDescGZIP(), []int{1}
+	return file_cicd_sensor_log_v1beta1_summary_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *RulesetUse) GetRulesetId() string {
@@ -298,7 +298,7 @@ type RuleModifierUse struct {
 
 func (x *RuleModifierUse) Reset() {
 	*x = RuleModifierUse{}
-	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[2]
+	mi := &file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -310,7 +310,7 @@ func (x *RuleModifierUse) String() string {
 func (*RuleModifierUse) ProtoMessage() {}
 
 func (x *RuleModifierUse) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[2]
+	mi := &file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -323,7 +323,7 @@ func (x *RuleModifierUse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleModifierUse.ProtoReflect.Descriptor instead.
 func (*RuleModifierUse) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_summary_proto_rawDescGZIP(), []int{2}
+	return file_cicd_sensor_log_v1beta1_summary_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RuleModifierUse) GetModifierId() string {
@@ -353,7 +353,7 @@ type DetectedRuleSummary struct {
 
 func (x *DetectedRuleSummary) Reset() {
 	*x = DetectedRuleSummary{}
-	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[3]
+	mi := &file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -365,7 +365,7 @@ func (x *DetectedRuleSummary) String() string {
 func (*DetectedRuleSummary) ProtoMessage() {}
 
 func (x *DetectedRuleSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cicd_sensor_log_v1_summary_proto_msgTypes[3]
+	mi := &file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -378,7 +378,7 @@ func (x *DetectedRuleSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DetectedRuleSummary.ProtoReflect.Descriptor instead.
 func (*DetectedRuleSummary) Descriptor() ([]byte, []int) {
-	return file_cicd_sensor_log_v1_summary_proto_rawDescGZIP(), []int{3}
+	return file_cicd_sensor_log_v1beta1_summary_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DetectedRuleSummary) GetRulesetId() string {
@@ -416,11 +416,11 @@ func (x *DetectedRuleSummary) GetCount() uint32 {
 	return 0
 }
 
-var File_cicd_sensor_log_v1_summary_proto protoreflect.FileDescriptor
+var File_cicd_sensor_log_v1beta1_summary_proto protoreflect.FileDescriptor
 
-const file_cicd_sensor_log_v1_summary_proto_rawDesc = "" +
+const file_cicd_sensor_log_v1beta1_summary_proto_rawDesc = "" +
 	"\n" +
-	" cicd_sensor/log/v1/summary.proto\x12\x12cicd_sensor.log.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fcicd_sensor/log/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x84\n" +
+	"%cicd_sensor/log/v1beta1/summary.proto\x12\x17cicd_sensor.log.v1beta1\x1a\x1bbuf/validate/validate.proto\x1a$cicd_sensor/log/v1beta1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x98\n" +
 	"\n" +
 	"\x0fSummaryLogEntry\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x1f\n" +
@@ -431,18 +431,18 @@ const file_cicd_sensor_log_v1_summary_proto_rawDesc = "" +
 	"\x02v1H\x03R\x0eschema_version\x88\x01\x01\x12\x1b\n" +
 	"\x06log_id\x18\x06 \x01(\tH\x04R\x06log_id\x88\x01\x01\x12@\n" +
 	"\x06result\x18\a \x01(\tB#\xbaH r\x1eR\x06passedR\bdetectedR\n" +
-	"terminatedH\x05R\x06result\x88\x01\x01\x120\n" +
-	"\x03job\x18\b \x01(\v2\x1e.cicd_sensor.log.v1.LogContextR\x03job\x12\x19\n" +
+	"terminatedH\x05R\x06result\x88\x01\x01\x125\n" +
+	"\x03job\x18\b \x01(\v2#.cicd_sensor.log.v1beta1.LogContextR\x03job\x12\x19\n" +
 	"\x05scope\x18\t \x01(\tH\x06R\x05scope\x88\x01\x01\x12%\n" +
 	"\vrunner_type\x18\n" +
 	" \x01(\tH\aR\vrunner_type\x88\x01\x01\x12-\n" +
-	"\x0fconfig_revision\x18\v \x01(\tH\bR\x0fconfig_revision\x88\x01\x01\x12:\n" +
-	"\brulesets\x18\f \x03(\v2\x1e.cicd_sensor.log.v1.RulesetUseR\brulesets\x12K\n" +
-	"\x0erule_modifiers\x18\r \x03(\v2#.cicd_sensor.log.v1.RuleModifierUseR\x0erule_modifiers\x12*\n" +
+	"\x0fconfig_revision\x18\v \x01(\tH\bR\x0fconfig_revision\x88\x01\x01\x12?\n" +
+	"\brulesets\x18\f \x03(\v2#.cicd_sensor.log.v1beta1.RulesetUseR\brulesets\x12P\n" +
+	"\x0erule_modifiers\x18\r \x03(\v2(.cicd_sensor.log.v1beta1.RuleModifierUseR\x0erule_modifiers\x12*\n" +
 	"\x10network_connects\x18\x0e \x03(\tR\x10network_connects\x12\x18\n" +
-	"\adomains\x18\x0f \x03(\tR\adomains\x12G\n" +
+	"\adomains\x18\x0f \x03(\tR\adomains\x12L\n" +
 	"\n" +
-	"detections\x18\x10 \x03(\v2'.cicd_sensor.log.v1.DetectedRuleSummaryR\n" +
+	"detections\x18\x10 \x03(\v2,.cicd_sensor.log.v1beta1.DetectedRuleSummaryR\n" +
 	"detections\x12'\n" +
 	"\fevents_total\x18\x11 \x01(\rH\tR\fevents_total\x88\x01\x01\x12+\n" +
 	"\x0eevents_dropped\x18\x12 \x01(\rH\n" +
@@ -494,38 +494,38 @@ const file_cicd_sensor_log_v1_summary_proto_rawDesc = "" +
 	"\b_rule_idB\x13\n" +
 	"\x11_ruleset_revisionB\t\n" +
 	"\a_actionB\b\n" +
-	"\x06_countB\xd8\x01\n" +
-	"\x16com.cicd_sensor.log.v1B\fSummaryProtoP\x01ZJgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1;logv1\xa2\x02\x03CLX\xaa\x02\x11CicdSensor.Log.V1\xca\x02\x11CicdSensor\\Log\\V1\xe2\x02\x1dCicdSensor\\Log\\V1\\GPBMetadata\xea\x02\x13CicdSensor::Log::V1b\x06proto3"
+	"\x06_countB\xfb\x01\n" +
+	"\x1bcom.cicd_sensor.log.v1beta1B\fSummaryProtoP\x01ZTgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1;logv1beta1\xa2\x02\x03CLX\xaa\x02\x16CicdSensor.Log.V1beta1\xca\x02\x16CicdSensor\\Log\\V1beta1\xe2\x02\"CicdSensor\\Log\\V1beta1\\GPBMetadata\xea\x02\x18CicdSensor::Log::V1beta1b\x06proto3"
 
 var (
-	file_cicd_sensor_log_v1_summary_proto_rawDescOnce sync.Once
-	file_cicd_sensor_log_v1_summary_proto_rawDescData []byte
+	file_cicd_sensor_log_v1beta1_summary_proto_rawDescOnce sync.Once
+	file_cicd_sensor_log_v1beta1_summary_proto_rawDescData []byte
 )
 
-func file_cicd_sensor_log_v1_summary_proto_rawDescGZIP() []byte {
-	file_cicd_sensor_log_v1_summary_proto_rawDescOnce.Do(func() {
-		file_cicd_sensor_log_v1_summary_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1_summary_proto_rawDesc), len(file_cicd_sensor_log_v1_summary_proto_rawDesc)))
+func file_cicd_sensor_log_v1beta1_summary_proto_rawDescGZIP() []byte {
+	file_cicd_sensor_log_v1beta1_summary_proto_rawDescOnce.Do(func() {
+		file_cicd_sensor_log_v1beta1_summary_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1beta1_summary_proto_rawDesc), len(file_cicd_sensor_log_v1beta1_summary_proto_rawDesc)))
 	})
-	return file_cicd_sensor_log_v1_summary_proto_rawDescData
+	return file_cicd_sensor_log_v1beta1_summary_proto_rawDescData
 }
 
-var file_cicd_sensor_log_v1_summary_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_cicd_sensor_log_v1_summary_proto_goTypes = []any{
-	(*SummaryLogEntry)(nil),       // 0: cicd_sensor.log.v1.SummaryLogEntry
-	(*RulesetUse)(nil),            // 1: cicd_sensor.log.v1.RulesetUse
-	(*RuleModifierUse)(nil),       // 2: cicd_sensor.log.v1.RuleModifierUse
-	(*DetectedRuleSummary)(nil),   // 3: cicd_sensor.log.v1.DetectedRuleSummary
+var file_cicd_sensor_log_v1beta1_summary_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_cicd_sensor_log_v1beta1_summary_proto_goTypes = []any{
+	(*SummaryLogEntry)(nil),       // 0: cicd_sensor.log.v1beta1.SummaryLogEntry
+	(*RulesetUse)(nil),            // 1: cicd_sensor.log.v1beta1.RulesetUse
+	(*RuleModifierUse)(nil),       // 2: cicd_sensor.log.v1beta1.RuleModifierUse
+	(*DetectedRuleSummary)(nil),   // 3: cicd_sensor.log.v1beta1.DetectedRuleSummary
 	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
-	(*LogContext)(nil),            // 5: cicd_sensor.log.v1.LogContext
+	(*LogContext)(nil),            // 5: cicd_sensor.log.v1beta1.LogContext
 }
-var file_cicd_sensor_log_v1_summary_proto_depIdxs = []int32{
-	4, // 0: cicd_sensor.log.v1.SummaryLogEntry.timestamp:type_name -> google.protobuf.Timestamp
-	5, // 1: cicd_sensor.log.v1.SummaryLogEntry.job:type_name -> cicd_sensor.log.v1.LogContext
-	1, // 2: cicd_sensor.log.v1.SummaryLogEntry.rulesets:type_name -> cicd_sensor.log.v1.RulesetUse
-	2, // 3: cicd_sensor.log.v1.SummaryLogEntry.rule_modifiers:type_name -> cicd_sensor.log.v1.RuleModifierUse
-	3, // 4: cicd_sensor.log.v1.SummaryLogEntry.detections:type_name -> cicd_sensor.log.v1.DetectedRuleSummary
-	4, // 5: cicd_sensor.log.v1.SummaryLogEntry.start_time:type_name -> google.protobuf.Timestamp
-	4, // 6: cicd_sensor.log.v1.SummaryLogEntry.end_time:type_name -> google.protobuf.Timestamp
+var file_cicd_sensor_log_v1beta1_summary_proto_depIdxs = []int32{
+	4, // 0: cicd_sensor.log.v1beta1.SummaryLogEntry.timestamp:type_name -> google.protobuf.Timestamp
+	5, // 1: cicd_sensor.log.v1beta1.SummaryLogEntry.job:type_name -> cicd_sensor.log.v1beta1.LogContext
+	1, // 2: cicd_sensor.log.v1beta1.SummaryLogEntry.rulesets:type_name -> cicd_sensor.log.v1beta1.RulesetUse
+	2, // 3: cicd_sensor.log.v1beta1.SummaryLogEntry.rule_modifiers:type_name -> cicd_sensor.log.v1beta1.RuleModifierUse
+	3, // 4: cicd_sensor.log.v1beta1.SummaryLogEntry.detections:type_name -> cicd_sensor.log.v1beta1.DetectedRuleSummary
+	4, // 5: cicd_sensor.log.v1beta1.SummaryLogEntry.start_time:type_name -> google.protobuf.Timestamp
+	4, // 6: cicd_sensor.log.v1beta1.SummaryLogEntry.end_time:type_name -> google.protobuf.Timestamp
 	7, // [7:7] is the sub-list for method output_type
 	7, // [7:7] is the sub-list for method input_type
 	7, // [7:7] is the sub-list for extension type_name
@@ -533,31 +533,31 @@ var file_cicd_sensor_log_v1_summary_proto_depIdxs = []int32{
 	0, // [0:7] is the sub-list for field type_name
 }
 
-func init() { file_cicd_sensor_log_v1_summary_proto_init() }
-func file_cicd_sensor_log_v1_summary_proto_init() {
-	if File_cicd_sensor_log_v1_summary_proto != nil {
+func init() { file_cicd_sensor_log_v1beta1_summary_proto_init() }
+func file_cicd_sensor_log_v1beta1_summary_proto_init() {
+	if File_cicd_sensor_log_v1beta1_summary_proto != nil {
 		return
 	}
-	file_cicd_sensor_log_v1_common_proto_init()
-	file_cicd_sensor_log_v1_summary_proto_msgTypes[0].OneofWrappers = []any{}
-	file_cicd_sensor_log_v1_summary_proto_msgTypes[1].OneofWrappers = []any{}
-	file_cicd_sensor_log_v1_summary_proto_msgTypes[2].OneofWrappers = []any{}
-	file_cicd_sensor_log_v1_summary_proto_msgTypes[3].OneofWrappers = []any{}
+	file_cicd_sensor_log_v1beta1_common_proto_init()
+	file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[0].OneofWrappers = []any{}
+	file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[1].OneofWrappers = []any{}
+	file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[2].OneofWrappers = []any{}
+	file_cicd_sensor_log_v1beta1_summary_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1_summary_proto_rawDesc), len(file_cicd_sensor_log_v1_summary_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1beta1_summary_proto_rawDesc), len(file_cicd_sensor_log_v1beta1_summary_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_cicd_sensor_log_v1_summary_proto_goTypes,
-		DependencyIndexes: file_cicd_sensor_log_v1_summary_proto_depIdxs,
-		MessageInfos:      file_cicd_sensor_log_v1_summary_proto_msgTypes,
+		GoTypes:           file_cicd_sensor_log_v1beta1_summary_proto_goTypes,
+		DependencyIndexes: file_cicd_sensor_log_v1beta1_summary_proto_depIdxs,
+		MessageInfos:      file_cicd_sensor_log_v1beta1_summary_proto_msgTypes,
 	}.Build()
-	File_cicd_sensor_log_v1_summary_proto = out.File
-	file_cicd_sensor_log_v1_summary_proto_goTypes = nil
-	file_cicd_sensor_log_v1_summary_proto_depIdxs = nil
+	File_cicd_sensor_log_v1beta1_summary_proto = out.File
+	file_cicd_sensor_log_v1beta1_summary_proto_goTypes = nil
+	file_cicd_sensor_log_v1beta1_summary_proto_depIdxs = nil
 }

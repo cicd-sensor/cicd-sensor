@@ -16,7 +16,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager"
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 // TestManagerIntegration_FetchConfig_EndToEnd wires the real manager.Server
@@ -57,10 +57,10 @@ rule_modifiers:
 	served := &manager.ServedConfig{
 		ConfigRevision:          "sha256:config",
 		DefaultMaxAlertsPerRule: 23,
-		OutputSettings: &managerv1.OutputSettings{
-			Summary:      &managerv1.OutputSetting{Enabled: true},
-			Detection:    &managerv1.OutputSetting{Enabled: true},
-			RuntimeEvent: &managerv1.OutputSetting{Enabled: true},
+		OutputSettings: &managerv1beta1.OutputSettings{
+			Summary:      &managerv1beta1.OutputSetting{Enabled: true},
+			Detection:    &managerv1beta1.OutputSetting{Enabled: true},
+			RuntimeEvent: &managerv1beta1.OutputSetting{Enabled: true},
 		},
 	}
 
@@ -73,9 +73,9 @@ rule_modifiers:
 		t.Fatalf("new manager client: %v", err)
 	}
 
-	req := &managerv1.FetchConfigRequest{
+	req := &managerv1beta1.FetchConfigRequest{
 		RunnerType: "machine",
-		JobIdentity: &managerv1.JobIdentity{
+		JobIdentity: &managerv1beta1.JobIdentity{
 			Provider:               "github",
 			ProviderHost:           "github.com",
 			ProjectPath:            "acme/example",
@@ -156,8 +156,8 @@ func TestManagerIntegration_FetchConfig_RejectsBadToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new manager client: %v", err)
 	}
-	_, err = client.FetchConfig(context.Background(), &managerv1.FetchConfigRequest{
-		JobIdentity: &managerv1.JobIdentity{
+	_, err = client.FetchConfig(context.Background(), &managerv1beta1.FetchConfigRequest{
+		JobIdentity: &managerv1beta1.JobIdentity{
 			Provider:               "github",
 			ProviderHost:           "github.com",
 			ProjectPath:            "acme/example",
@@ -191,7 +191,7 @@ func TestManagerIntegration_FetchConfig_RejectsInvalidIdentity(t *testing.T) {
 		t.Fatalf("new manager client: %v", err)
 	}
 	// Empty identity triggers server-side CodeInvalidArgument.
-	_, err = client.FetchConfig(context.Background(), &managerv1.FetchConfigRequest{})
+	_, err = client.FetchConfig(context.Background(), &managerv1beta1.FetchConfigRequest{})
 	if err == nil {
 		t.Fatal("expected invalid argument error")
 	}
@@ -215,8 +215,8 @@ func TestManagerIntegration_FetchConfig_EmptyBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new manager client: %v", err)
 	}
-	result, err := client.FetchConfig(context.Background(), &managerv1.FetchConfigRequest{
-		JobIdentity: &managerv1.JobIdentity{
+	result, err := client.FetchConfig(context.Background(), &managerv1beta1.FetchConfigRequest{
+		JobIdentity: &managerv1beta1.JobIdentity{
 			Provider:               "github",
 			ProviderHost:           "github.com",
 			ProjectPath:            "acme/example",

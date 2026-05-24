@@ -6,7 +6,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobscope"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	logv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1"
+	logv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -15,15 +15,15 @@ type recordingRuntimeEventOutput struct {
 	payload [][]byte
 }
 
-func (s *recordingRuntimeEventOutput) Entries(t *testing.T) []*logv1.RuntimeEventLogEntry {
+func (s *recordingRuntimeEventOutput) Entries(t *testing.T) []*logv1beta1.RuntimeEventLogEntry {
 	t.Helper()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	out := make([]*logv1.RuntimeEventLogEntry, 0, len(s.payload))
+	out := make([]*logv1beta1.RuntimeEventLogEntry, 0, len(s.payload))
 	for _, payload := range s.payload {
-		entry := &logv1.RuntimeEventLogEntry{}
+		entry := &logv1beta1.RuntimeEventLogEntry{}
 		if err := protojson.Unmarshal(payload, entry); err != nil {
 			t.Fatalf("unmarshal runtime event entry: %v", err)
 		}

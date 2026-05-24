@@ -6,7 +6,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -60,7 +60,7 @@ func TestJobIdentity_RoundTrip_Shared(t *testing.T) {
 // TestJobIdentity_RoundTrip_Proto verifies proto -> shared -> proto also
 // preserves every field (idempotent from the wire side).
 func TestJobIdentity_RoundTrip_Proto(t *testing.T) {
-	in := &managerv1.JobIdentity{
+	in := &managerv1beta1.JobIdentity{
 		Provider:               string(jobcontext.ProviderGitHub),
 		ProviderHost:           "github.com",
 		ProjectPath:            "acme/example",
@@ -93,12 +93,12 @@ func TestToProtoScope(t *testing.T) {
 	tests := []struct {
 		name string
 		in   jobcontext.ScopeType
-		want managerv1.Scope
+		want managerv1beta1.Scope
 	}{
-		{name: "host", in: jobcontext.ScopeTypeHost, want: managerv1.Scope_SCOPE_HOST},
-		{name: "project", in: jobcontext.ScopeTypeProject, want: managerv1.Scope_SCOPE_PROJECT},
-		{name: "empty", in: "", want: managerv1.Scope_SCOPE_UNSPECIFIED},
-		{name: "unknown", in: jobcontext.ScopeType("other"), want: managerv1.Scope_SCOPE_UNSPECIFIED},
+		{name: "host", in: jobcontext.ScopeTypeHost, want: managerv1beta1.Scope_SCOPE_HOST},
+		{name: "project", in: jobcontext.ScopeTypeProject, want: managerv1beta1.Scope_SCOPE_PROJECT},
+		{name: "empty", in: "", want: managerv1beta1.Scope_SCOPE_UNSPECIFIED},
+		{name: "unknown", in: jobcontext.ScopeType("other"), want: managerv1beta1.Scope_SCOPE_UNSPECIFIED},
 	}
 
 	for _, tt := range tests {
@@ -196,23 +196,23 @@ func TestRuleSources_RoundTrip(t *testing.T) {
 }
 
 func TestRuleSources_NilProtoElements(t *testing.T) {
-	got := FromProtoRuleSources([]*managerv1.RuleSource{
+	got := FromProtoRuleSources([]*managerv1beta1.RuleSource{
 		nil,
 		{
-			RuleSets: []*managerv1.RuleSet{
+			RuleSets: []*managerv1beta1.RuleSet{
 				nil,
 				{
 					RulesetId: "set",
-					Lists: map[string]*managerv1.StringList{
+					Lists: map[string]*managerv1beta1.StringList{
 						"nil_list": nil,
 					},
-					Rules: []*managerv1.Rule{
+					Rules: []*managerv1beta1.Rule{
 						nil,
 						{
 							RuleId:    "detect_bash",
 							EventType: string(jobevent.ProcessExec),
-							Target: &managerv1.RuleTarget{
-								Include: []*managerv1.RuleTargetMatcher{nil, {Path: "acme/example"}},
+							Target: &managerv1beta1.RuleTarget{
+								Include: []*managerv1beta1.RuleTargetMatcher{nil, {Path: "acme/example"}},
 							},
 							Condition: `process.exec_path.endsWith("/bash")`,
 							Action:    string(rule.RuleActionDetect),
@@ -220,15 +220,15 @@ func TestRuleSources_NilProtoElements(t *testing.T) {
 					},
 				},
 			},
-			RuleModifiers: []*managerv1.RuleModifier{
+			RuleModifiers: []*managerv1beta1.RuleModifier{
 				nil,
 				{
 					ModifierId: "mod",
-					Targets: []*managerv1.RuleModifierTarget{
+					Targets: []*managerv1beta1.RuleModifierTarget{
 						nil,
 						{RulesetId: "set", RuleId: "detect_bash"},
 					},
-					AddTargetExclude: []*managerv1.RuleTargetMatcher{nil, {Path: "acme/ignored"}},
+					AddTargetExclude: []*managerv1beta1.RuleTargetMatcher{nil, {Path: "acme/ignored"}},
 				},
 			},
 		},

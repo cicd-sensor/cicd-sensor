@@ -11,8 +11,8 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/logtype"
 	"github.com/cicd-sensor/cicd-sensor/internal/manager/sink"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 )
 
@@ -20,13 +20,13 @@ type collectorServiceHandler struct {
 	server *Server
 }
 
-func newCollectorServiceHandler(s *Server) managerv1connect.CollectorServiceHandler {
+func newCollectorServiceHandler(s *Server) managerv1beta1connect.CollectorServiceHandler {
 	return &collectorServiceHandler{server: s}
 }
 
 // IngestLog validates one compressed batch, keeps the payload opaque, and
 // writes the same bytes to every configured sink.
-func (h *collectorServiceHandler) IngestLog(ctx context.Context, req *connect.Request[managerv1.IngestLogRequest]) (*connect.Response[managerv1.IngestLogResponse], error) {
+func (h *collectorServiceHandler) IngestLog(ctx context.Context, req *connect.Request[managerv1beta1.IngestLogRequest]) (*connect.Response[managerv1beta1.IngestLogResponse], error) {
 	msg := req.Msg.GetBatch()
 	if msg == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ingest log batch is required"))
@@ -91,7 +91,7 @@ func (h *collectorServiceHandler) IngestLog(ctx context.Context, req *connect.Re
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("collector output failed: %w", err))
 	}
 
-	return connect.NewResponse(&managerv1.IngestLogResponse{
+	return connect.NewResponse(&managerv1beta1.IngestLogResponse{
 		ReceivedBatches: 1,
 		BytesWritten:    uint64(len(batch.Body)),
 	}), nil
@@ -123,13 +123,13 @@ func validateFlushAt(ts *timestamppb.Timestamp) error {
 }
 
 // outputLogType maps the wire enum to the stable log type used by sinks.
-func outputLogType(logType managerv1.LogType) (logtype.LogType, error) {
+func outputLogType(logType managerv1beta1.LogType) (logtype.LogType, error) {
 	switch logType {
-	case managerv1.LogType_LOG_TYPE_DETECTION:
+	case managerv1beta1.LogType_LOG_TYPE_DETECTION:
 		return logtype.Detection, nil
-	case managerv1.LogType_LOG_TYPE_RUNTIME_EVENT:
+	case managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT:
 		return logtype.RuntimeEvent, nil
-	case managerv1.LogType_LOG_TYPE_SUMMARY:
+	case managerv1beta1.LogType_LOG_TYPE_SUMMARY:
 		return logtype.Summary, nil
 	default:
 		return "", fmt.Errorf("unsupported log_type: %s", logType.String())
@@ -138,11 +138,11 @@ func outputLogType(logType managerv1.LogType) (logtype.LogType, error) {
 
 // outputScope rejects unspecified scope before sinks build provider-specific
 // routing data from it.
-func outputScope(scope managerv1.Scope) (sink.Scope, error) {
+func outputScope(scope managerv1beta1.Scope) (sink.Scope, error) {
 	switch scope {
-	case managerv1.Scope_SCOPE_HOST:
+	case managerv1beta1.Scope_SCOPE_HOST:
 		return sink.ScopeHost, nil
-	case managerv1.Scope_SCOPE_PROJECT:
+	case managerv1beta1.Scope_SCOPE_PROJECT:
 		return sink.ScopeProject, nil
 	default:
 		return "", fmt.Errorf("unsupported scope: %s", scope.String())

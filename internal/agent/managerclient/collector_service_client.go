@@ -13,8 +13,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
-	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1/managerv1connect"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
+	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 )
 
 const (
@@ -28,7 +28,7 @@ const (
 )
 
 type CollectorServiceClient struct {
-	client managerv1connect.CollectorServiceClient
+	client managerv1beta1connect.CollectorServiceClient
 	token  string
 	logger *slog.Logger
 	sleep  sleepFunc
@@ -44,7 +44,7 @@ func newCollectorServiceClient(logger *slog.Logger, httpClient *http.Client, con
 		httpClient = NewConnectHTTPClient()
 	}
 	return &CollectorServiceClient{
-		client: managerv1connect.NewCollectorServiceClient(
+		client: managerv1beta1connect.NewCollectorServiceClient(
 			httpClient,
 			conn.BaseURL,
 			ConnectClientOptions(conn.Token)...,
@@ -64,7 +64,7 @@ func (c *CollectorServiceClient) SendLogBatch(ctx context.Context, batch LogBatc
 	return c.sendIngestLogBatch(ctx, msg)
 }
 
-func (c *CollectorServiceClient) sendIngestLogBatch(ctx context.Context, batch *managerv1.IngestLogBatch) error {
+func (c *CollectorServiceClient) sendIngestLogBatch(ctx context.Context, batch *managerv1beta1.IngestLogBatch) error {
 	if c == nil {
 		return fmt.Errorf("collector service client is nil")
 	}
@@ -79,7 +79,7 @@ func (c *CollectorServiceClient) sendIngestLogBatch(ctx context.Context, batch *
 	attempt := 0
 	for {
 		reqCtx, cancel := context.WithTimeout(ctx, collectorServiceRequestTimeout)
-		req := connect.NewRequest(&managerv1.IngestLogRequest{Batch: batch})
+		req := connect.NewRequest(&managerv1beta1.IngestLogRequest{Batch: batch})
 		_, err := c.client.IngestLog(reqCtx, req)
 		cancel()
 		if err == nil {

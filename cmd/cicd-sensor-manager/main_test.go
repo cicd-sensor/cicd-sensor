@@ -10,7 +10,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/manager"
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 func TestValidateManagerStartupOptions(t *testing.T) {
@@ -276,13 +276,13 @@ func TestBuildServedConfig(t *testing.T) {
 		Revision:                "sha256:config",
 		DefaultMaxAlertsPerRule: 7,
 	}
-	settings := &managerv1.OutputSettings{
-		Detection: &managerv1.OutputSetting{
+	settings := &managerv1beta1.OutputSettings{
+		Detection: &managerv1beta1.OutputSetting{
 			Enabled:              true,
 			FlushThresholdBytes:  1,
 			FlushIntervalSeconds: 1,
 		},
-		Summary: &managerv1.OutputSetting{
+		Summary: &managerv1beta1.OutputSetting{
 			Enabled:              true,
 			FlushThresholdBytes:  1,
 			FlushIntervalSeconds: 1,

@@ -15,7 +15,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule/baseline"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -44,7 +44,7 @@ var ErrJobAlreadyRegistered = errors.New("job already registered")
 var ErrPeerNotInJob = errors.New("peer pid not in job tracking set")
 
 type ManagerConfigFetcher interface {
-	FetchConfig(ctx context.Context, req *managerv1.FetchConfigRequest) (*managerclient.FetchResult, error)
+	FetchConfig(ctx context.Context, req *managerv1beta1.FetchConfigRequest) (*managerclient.FetchResult, error)
 }
 
 type BaselineLoader func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error)

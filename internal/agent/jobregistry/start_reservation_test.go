@@ -8,12 +8,12 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 type fakeManagerFetcher struct{}
 
-func (fakeManagerFetcher) FetchConfig(context.Context, *managerv1.FetchConfigRequest) (*managerclient.FetchResult, error) {
+func (fakeManagerFetcher) FetchConfig(context.Context, *managerv1beta1.FetchConfigRequest) (*managerclient.FetchResult, error) {
 	return &managerclient.FetchResult{}, nil
 }
 
@@ -79,7 +79,7 @@ type blockingManagerFetcher struct {
 	release chan struct{}
 }
 
-func (f *blockingManagerFetcher) FetchConfig(ctx context.Context, _ *managerv1.FetchConfigRequest) (*managerclient.FetchResult, error) {
+func (f *blockingManagerFetcher) FetchConfig(ctx context.Context, _ *managerv1beta1.FetchConfigRequest) (*managerclient.FetchResult, error) {
 	close(f.started)
 	select {
 	case <-f.release:

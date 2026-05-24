@@ -9,7 +9,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 )
 
@@ -27,8 +27,8 @@ func newManagerOutput(
 	sendBatch func(context.Context, managerclient.LogBatch) error,
 	identity jobcontext.JobIdentity,
 	scope jobcontext.ScopeType,
-	logType managerv1.LogType,
-	setting *managerv1.OutputSetting,
+	logType managerv1beta1.LogType,
+	setting *managerv1beta1.OutputSetting,
 ) *managerOutput {
 	if sendBatch == nil {
 		return nil

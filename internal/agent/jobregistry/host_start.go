@@ -8,7 +8,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobscope"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	managerv1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -106,7 +106,7 @@ func (jr *JobRegistry) buildHostScopeFromManagerConfig(ctx context.Context, iden
 }
 
 func (jr *JobRegistry) fetchManagerConfig(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, managerClient ManagerConfigFetcher, eventName string) (jobscope.ManagerConfig, error) {
-	result, err := managerClient.FetchConfig(ctx, &managerv1.FetchConfigRequest{
+	result, err := managerClient.FetchConfig(ctx, &managerv1beta1.FetchConfigRequest{
 		RunnerType:  runnerType,
 		JobIdentity: protoconv.ToProtoJobIdentity(identity),
 	})
