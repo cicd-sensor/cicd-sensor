@@ -22,6 +22,7 @@ type DetectionLogInput struct {
 	RuleDescription     string
 	RulesetRevision     string
 	RuleAlertTruncation string
+	RuleTags            map[string]string
 }
 
 func MarshalDetectionLogEntry(in DetectionLogInput) ([]byte, error) {
@@ -53,6 +54,7 @@ func MarshalDetectionLogEntry(in DetectionLogInput) ([]byte, error) {
 		Action:              proto.String(in.Hit.Action),
 		RuleAlertTruncation: proto.String(in.RuleAlertTruncation),
 		Event:               sanitizedLogEventRecord(in.Event),
+		RuleTags:            logEventTags(in.RuleTags),
 	}
 	return logJSONMarshal.Marshal(message)
 }

@@ -23,5 +23,6 @@ message DetectionLogEntry {
   optional string rule_description = 13 [json_name = "rule_description"];
   optional string action = 14 [json_name = "action"];
   optional string rule_alert_truncation = 15 [json_name = "rule_alert_truncation"];
-  EventRecord event = 16 [json_name = "event"];
+  repeated string rule_tags = 16 [json_name = "rule_tags"];
+  EventRecord event = 17 [json_name = "event"];
 }

@@ -78,7 +78,7 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 		return
 	}
 
-	ruleName, ruleDescription, rulesetRevision := s.resolvedRuleInfo(hit.Identity)
+	ruleName, ruleDescription, rulesetRevision, ruleTags := s.resolvedRuleInfo(hit.Identity)
 	payload, err := joblogs.MarshalDetectionLogEntry(joblogs.DetectionLogInput{
 		ScopeLogContext: joblogs.ScopeLogContext{
 			Identity:   identity,
@@ -92,6 +92,7 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 		RuleDescription:     ruleDescription,
 		RulesetRevision:     rulesetRevision,
 		RuleAlertTruncation: truncation,
+		RuleTags:            ruleTags,
 	})
 	if err != nil {
 		if logger != nil {

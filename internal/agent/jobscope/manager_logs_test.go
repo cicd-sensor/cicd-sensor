@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -190,6 +191,80 @@ func TestJobScopeStateWriteDetectionLogForHit_MaxAlertsCapsDetectionLog(t *testi
 	}
 	if got, want := entries[0].GetRulesetRevision(), "rules-sha"; got != want {
 		t.Fatalf("ruleset revision: got %q, want %q", got, want)
+	}
+}
+
+func TestJobScopeStateWriteDetectionLogForHit_EmitsRuleTags(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingJobScopeBatches{}
+	scope := jobscope.NewHost()
+	scope.ResolvedRules = rule.ResolvedRules{Rules: []rule.ResolvedRule{{
+		RulesetID:       "set",
+		RulesetRevision: "rules-sha",
+		Rule: rule.Rule{
+			RuleID:    "tagged_detect",
+			EventType: jobevent.ProcessExec,
+			RuleName:  "Tagged detect",
+			Action:    rule.RuleActionDetect,
+			Tags: map[string]string{
+				"severity": "info",
+				"category": "self-test",
+			},
+		},
+	}}}
+	scope.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testJobIdentity, scope.Type, recorder.sendBatch)
+	hit := observations.HitEntry{
+		Identity:  rule.RuleIdentity{RulesetID: "set", RuleID: "tagged_detect"},
+		Action:    string(rule.RuleActionDetect),
+		MaxAlerts: 1,
+	}
+	event := testJobScopeProcessEvent("event-tagged")
+
+	scope.RecordHit(hit, event)
+	scope.WriteDetectionLogForHit(context.Background(), testJobIdentity, testJobMetadata, "machine", hit, event, testJobScopeLogger)
+	if err := scope.FinalizeStreamingLogs(context.Background()); err != nil {
+		t.Fatalf("finalize logs: %v", err)
+	}
+
+	entries := recorder.detectionEntries(t)
+	if len(entries) != 1 {
+		t.Fatalf("detection entries: got %d, want 1", len(entries))
+	}
+	want := []string{"category:self-test", "severity:info"}
+	if got := entries[0].GetRuleTags(); !slices.Equal(got, want) {
+		t.Fatalf("rule_tags: got %v, want %v", got, want)
+	}
+}
+
+func TestJobScopeStateWriteDetectionLogForHit_UnresolvedRuleEmitsEmptyRuleTags(t *testing.T) {
+	t.Parallel()
+
+	// Hit fires but the rule isn't in ResolvedRules — resolvedRuleInfo
+	// returns zero values, including a nil tags map. Detection log must still
+	// emit, with rule_tags absent (not a partial / panic).
+	recorder := &recordingJobScopeBatches{}
+	scope := jobscope.NewHost()
+	scope.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testJobIdentity, scope.Type, recorder.sendBatch)
+	hit := observations.HitEntry{
+		Identity:  rule.RuleIdentity{RulesetID: "set", RuleID: "missing_rule"},
+		Action:    string(rule.RuleActionDetect),
+		MaxAlerts: 1,
+	}
+	event := testJobScopeProcessEvent("event-missing")
+
+	scope.RecordHit(hit, event)
+	scope.WriteDetectionLogForHit(context.Background(), testJobIdentity, testJobMetadata, "machine", hit, event, testJobScopeLogger)
+	if err := scope.FinalizeStreamingLogs(context.Background()); err != nil {
+		t.Fatalf("finalize logs: %v", err)
+	}
+
+	entries := recorder.detectionEntries(t)
+	if len(entries) != 1 {
+		t.Fatalf("detection entries: got %d, want 1", len(entries))
+	}
+	if got := entries[0].GetRuleTags(); len(got) != 0 {
+		t.Fatalf("rule_tags: got %v, want empty (rule unresolved)", got)
 	}
 }
 

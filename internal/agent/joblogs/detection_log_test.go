@@ -1,6 +1,7 @@
 package joblogs
 
 import (
+	"slices"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -76,6 +77,86 @@ func TestMarshalDetectionLogEntryPopulatesRuleFields(t *testing.T) {
 	}
 	if got.GetRuleAlertTruncation() != "max_alerts" {
 		t.Fatalf("truncation: got %q", got.GetRuleAlertTruncation())
+	}
+}
+
+func TestMarshalDetectionLogEntryEmitsRuleTagsSorted(t *testing.T) {
+	t.Parallel()
+
+	payload, err := MarshalDetectionLogEntry(DetectionLogInput{
+		ScopeLogContext: testScopeLogContext(),
+		Hit:             testHitEntry(),
+		Event:           eventWithSecretArgv(),
+		RuleTags: map[string]string{
+			"severity": "info",
+			"category": "self-test",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detection log: %v", err)
+	}
+	var got logv1.DetectionLogEntry
+	if err := protojson.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("unmarshal detection log: %v", err)
+	}
+	want := []string{"category:self-test", "severity:info"}
+	if !slices.Equal(got.GetRuleTags(), want) {
+		t.Fatalf("rule_tags: got %v, want %v", got.GetRuleTags(), want)
+	}
+}
+
+func TestMarshalDetectionLogEntryOmitsEmptyRuleTags(t *testing.T) {
+	t.Parallel()
+
+	payload, err := MarshalDetectionLogEntry(DetectionLogInput{
+		ScopeLogContext: testScopeLogContext(),
+		Hit:             testHitEntry(),
+		Event:           eventWithSecretArgv(),
+	})
+	if err != nil {
+		t.Fatalf("marshal detection log: %v", err)
+	}
+	var got logv1.DetectionLogEntry
+	if err := protojson.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("unmarshal detection log: %v", err)
+	}
+	if len(got.GetRuleTags()) != 0 {
+		t.Fatalf("rule_tags: got %v, want empty", got.GetRuleTags())
+	}
+}
+
+func TestMarshalDetectionLogEntryRuleTagsEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	payload, err := MarshalDetectionLogEntry(DetectionLogInput{
+		ScopeLogContext: testScopeLogContext(),
+		Hit:             testHitEntry(),
+		Event:           eventWithSecretArgv(),
+		RuleTags: map[string]string{
+			"zeta":       "last",
+			"alpha":      "first",
+			"mid":        "middle",
+			"with:colon": "v", // delimiter collision: keys may contain ":"
+			"empty":      "",  // empty value rendered as "key:"
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detection log: %v", err)
+	}
+	var got logv1.DetectionLogEntry
+	if err := protojson.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("unmarshal detection log: %v", err)
+	}
+	// slices.Sort orders by joined "k:v" string lexicographically.
+	want := []string{
+		"alpha:first",
+		"empty:",
+		"mid:middle",
+		"with:colon:v",
+		"zeta:last",
+	}
+	if !slices.Equal(got.GetRuleTags(), want) {
+		t.Fatalf("rule_tags: got %v, want %v", got.GetRuleTags(), want)
 	}
 }
 

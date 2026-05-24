@@ -143,10 +143,10 @@ func (s *JobScopeState) RecordHit(hit observations.HitEntry, event jobevent.Even
 	s.Observations.FeedHit(hit, event)
 }
 
-func (s *JobScopeState) resolvedRuleInfo(identity rule.RuleIdentity) (name, description, revision string) {
+func (s *JobScopeState) resolvedRuleInfo(identity rule.RuleIdentity) (name, description, revision string, tags map[string]string) {
 	resolved, found := s.ResolvedRules.Lookup(identity)
 	if !found {
-		return "", "", ""
+		return "", "", "", nil
 	}
-	return resolved.Rule.RuleName, resolved.Rule.Description, resolved.RulesetRevision
+	return resolved.Rule.RuleName, resolved.Rule.Description, resolved.RulesetRevision, resolved.Rule.Tags
 }
