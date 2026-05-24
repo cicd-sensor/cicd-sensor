@@ -96,8 +96,8 @@ func TestBuildJobEventSummaryForReportBuildsPassSummary(t *testing.T) {
 		},
 	})
 
-	if doc.ResultSummary.Result != resultdoc.ResultNoAlert {
-		t.Fatalf("result: got %q, want no_alert", doc.ResultSummary.Result)
+	if doc.ResultSummary.Result != resultdoc.ResultPassed {
+		t.Fatalf("result: got %q, want passed", doc.ResultSummary.Result)
 	}
 	if doc.RulesSummary.RuleCount != 2 || doc.RulesSummary.WarningsCount != 1 {
 		t.Fatalf("rules summary: got %+v", doc.RulesSummary)
@@ -307,8 +307,8 @@ func TestBuildJobEventSummaryForReportCollectOnlyKeepsPassResult(t *testing.T) {
 		},
 	})
 
-	if got := doc.ResultSummary.Result; got != resultdoc.ResultNoAlert {
-		t.Fatalf("result: got %q, want no_alert", got)
+	if got := doc.ResultSummary.Result; got != resultdoc.ResultPassed {
+		t.Fatalf("result: got %q, want passed", got)
 	}
 	if got := doc.ResultSummary.HitsCount; got != 1 {
 		t.Fatalf("hits count: got %d, want 1", got)

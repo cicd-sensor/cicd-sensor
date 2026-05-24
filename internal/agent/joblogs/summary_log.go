@@ -40,10 +40,12 @@ func MarshalSummaryLogEntry(in SummaryLogInput) ([]byte, error) {
 	}
 	message := &logv1.SummaryLogEntry{
 		Timestamp:       timestamppb.New(finalizedAt.UTC()),
-		LogType:         proto.String(string(logtype.Summary)),
+		LogType:         proto.String(logtype.Summary.Wire()),
+		ServiceName:     proto.String(logtype.ServiceName),
+		ServiceVersion:  proto.String(version.Current),
 		SchemaVersion:   proto.String(logtype.SummarySchemaVersion),
-		AgentVersion:    proto.String(version.Current),
 		LogId:           proto.String(newLogID()),
+		Result:          proto.String(observations.OverallResult(in.Snapshot.Hits)),
 		Job:             protoconv.ToLogContext(in.Identity, in.Metadata),
 		Scope:           proto.String(string(in.Scope)),
 		RunnerType:      proto.String(in.RunnerType),

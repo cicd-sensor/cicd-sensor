@@ -17,7 +17,7 @@ func TestStartJobLogsAddsManagerDestination(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	settings := &managerv1.OutputSettings{
-		DetectionLog: &managerv1.OutputSetting{Enabled: true},
+		Detection: &managerv1.OutputSetting{Enabled: true},
 	}
 
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeTypeHost, settings)
@@ -67,7 +67,7 @@ func TestStartJobLogsDoesNotCreateSenderWithoutManagerCredentials(t *testing.T) 
 		Identity:   jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
 		Type:       jobcontext.ScopeTypeHost,
 		OutputSettings: &managerv1.OutputSettings{
-			DetectionLog: &managerv1.OutputSetting{Enabled: true},
+			Detection: &managerv1.OutputSetting{Enabled: true},
 		},
 	})
 
@@ -87,7 +87,7 @@ func TestNewForTestingUsesInjectedSender(t *testing.T) {
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
 		jobcontext.ScopeTypeHost,
 		&managerv1.OutputSettings{
-			DetectionLog: &managerv1.OutputSetting{Enabled: true},
+			Detection: &managerv1.OutputSetting{Enabled: true},
 		},
 	)
 	if conn.detection == nil {
@@ -117,7 +117,7 @@ func TestManagerJobLogsNoOpWhenLogTypesAreNotConfigured(t *testing.T) {
 		t.Fatalf("summary write without output: %v", err)
 	}
 	if conn.HasSummaryLog() {
-		t.Fatal("summary_log reported configured on zero ManagerJobLogs")
+		t.Fatal("summary log reported configured on zero ManagerJobLogs")
 	}
 	if got := conn.DroppedLogRecords(managerv1.LogType_LOG_TYPE_DETECTION); got != 0 {
 		t.Fatalf("dropped records on zero ManagerJobLogs: got %d, want 0", got)
@@ -134,20 +134,20 @@ func TestStartJobLogsUsesOneWorkerPerType(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	settings := &managerv1.OutputSettings{
-		DetectionLog:    &managerv1.OutputSetting{Enabled: true},
-		RuntimeEventLog: &managerv1.OutputSetting{Enabled: true},
-		SummaryLog:      &managerv1.OutputSetting{Enabled: true},
+		Detection:    &managerv1.OutputSetting{Enabled: true},
+		RuntimeEvent: &managerv1.OutputSetting{Enabled: true},
+		Summary:      &managerv1.OutputSetting{Enabled: true},
 	}
 
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch, identity, jobcontext.ScopeTypeHost, settings)
 	if conn.detection == nil || conn.runtimeEvent == nil || conn.summaryLog == nil {
-		t.Fatal("expected detection, runtime event, and summary_log workers")
+		t.Fatal("expected detection, runtime event, and summary workers")
 	}
 	if conn.detection.requests == conn.runtimeEvent.requests {
 		t.Fatal("detection and runtime event must use separate workers")
 	}
 	if conn.detection.requests == conn.summaryLog.requests {
-		t.Fatal("detection and summary_log must use separate workers")
+		t.Fatal("detection and summary must use separate workers")
 	}
 }
 
@@ -157,12 +157,12 @@ func TestManagerJobLogsEmitAndCloseSummaryLog(t *testing.T) {
 		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
 		jobcontext.ScopeTypeProject,
 		&managerv1.OutputSettings{
-			SummaryLog: &managerv1.OutputSetting{Enabled: true},
+			Summary: &managerv1.OutputSetting{Enabled: true},
 		},
 	)
 
 	if !conn.HasSummaryLog() {
-		t.Fatal("expected summary_log to be configured")
+		t.Fatal("expected summary log to be configured")
 	}
 	if err := conn.EmitAndCloseSummaryLog(context.Background(), []byte(`{"final":true}`)); err != nil {
 		t.Fatalf("emit summary log: %v", err)
@@ -181,8 +181,8 @@ func TestManagerJobLogsRejectsStreamingWritesAfterFinalize(t *testing.T) {
 		jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
 		jobcontext.ScopeTypeHost,
 		&managerv1.OutputSettings{
-			DetectionLog:    &managerv1.OutputSetting{Enabled: true},
-			RuntimeEventLog: &managerv1.OutputSetting{Enabled: true},
+			Detection:    &managerv1.OutputSetting{Enabled: true},
+			RuntimeEvent: &managerv1.OutputSetting{Enabled: true},
 		},
 	)
 

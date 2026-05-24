@@ -18,15 +18,16 @@ type RuntimeEventLogInput struct {
 
 func MarshalRuntimeEventLogEntry(in RuntimeEventLogInput) ([]byte, error) {
 	message := &logv1.RuntimeEventLogEntry{
-		Timestamp:     timestamppb.New(in.Event.Timestamp.UTC()),
-		LogType:       proto.String(string(logtype.RuntimeEvent)),
-		SchemaVersion: proto.String(logtype.RuntimeEventSchemaVersion),
-		AgentVersion:  proto.String(version.Current),
-		LogId:         proto.String(newLogID()),
-		Job:           protoconv.ToLogContext(in.Identity, in.Metadata),
-		Scope:         proto.String(string(in.Scope)),
-		RunnerType:    proto.String(in.RunnerType),
-		Event:         sanitizedLogEventRecord(in.Event),
+		Timestamp:      timestamppb.New(in.Event.Timestamp.UTC()),
+		LogType:        proto.String(logtype.RuntimeEvent.Wire()),
+		ServiceName:    proto.String(logtype.ServiceName),
+		ServiceVersion: proto.String(version.Current),
+		SchemaVersion:  proto.String(logtype.RuntimeEventSchemaVersion),
+		LogId:          proto.String(newLogID()),
+		Job:            protoconv.ToLogContext(in.Identity, in.Metadata),
+		Scope:          proto.String(string(in.Scope)),
+		RunnerType:     proto.String(in.RunnerType),
+		Event:          sanitizedLogEventRecord(in.Event),
 	}
 	return logJSONMarshal.Marshal(message)
 }

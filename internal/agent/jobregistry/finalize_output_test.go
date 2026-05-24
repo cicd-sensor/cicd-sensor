@@ -71,7 +71,7 @@ func TestJobFinalizeAfterEventWorkerFlushesAllJobLogs(t *testing.T) {
 	})
 	// In production KernelTracker.RemoveJob closes this channel. Closing it here
 	// pins the post-BPF boundary: finalize waits for the event worker to drain
-	// before flushing streaming logs and emitting summary_log.
+	// before flushing streaming logs and emitting the summary log.
 	close(eventCh)
 
 	jr := New(testLogger)
@@ -100,11 +100,11 @@ func TestJobFinalizeAfterEventWorkerFlushesAllJobLogs(t *testing.T) {
 
 	summaryRecords := decodeManagerBatchRecords(t, gotTypes[managerv1.LogType_LOG_TYPE_SUMMARY])
 	if len(summaryRecords) != 1 {
-		t.Fatalf("summary_log records: got %d, want 1", len(summaryRecords))
+		t.Fatalf("summary records: got %d, want 1", len(summaryRecords))
 	}
 	var summaryLog logv1.SummaryLogEntry
 	if err := protojson.Unmarshal(summaryRecords[0], &summaryLog); err != nil {
-		t.Fatalf("unmarshal summary_log: %v", err)
+		t.Fatalf("unmarshal summary: %v", err)
 	}
 	if got := len(summaryLog.GetDetections()); got != 1 {
 		t.Fatalf("detections: got %d, want 1", got)

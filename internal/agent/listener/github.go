@@ -220,7 +220,7 @@ func (l *Listener) handleGitHubProjectResult(w http.ResponseWriter, r *http.Requ
 			"limit_bytes", projectResultMaxBytes,
 		)
 		l.writeError(w, r, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("summary_log exceeds %d-byte limit", projectResultMaxBytes))
+			fmt.Sprintf("project result exceeds %d-byte limit", projectResultMaxBytes))
 		return
 	}
 

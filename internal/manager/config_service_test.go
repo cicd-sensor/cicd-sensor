@@ -89,7 +89,7 @@ sinks:
     type: gcs
     uri: gs://test-bucket
 logs:
-  summary_log:
+  summary:
     sink: test-sink
 `,
 			wantRuleSets: 2,
@@ -163,9 +163,9 @@ bind:
 			if len(tt.ruleFiles) > 0 {
 				rulesPath = writeManagerRuleBundle(t, dir, tt.ruleFiles)
 			}
-			if startupCfg.Logs["summary_log"].Sink != "" {
+			if startupCfg.Logs["summary"].Sink != "" {
 				config.OutputSettings = &managerv1.OutputSettings{
-					SummaryLog: &managerv1.OutputSetting{
+					Summary: &managerv1.OutputSetting{
 						Enabled:              true,
 						FlushThresholdBytes:  1,
 						FlushIntervalSeconds: 1,
@@ -228,7 +228,7 @@ bind:
 			if resp.Msg.GetConfig().GetDefaultMaxAlertsPerRule() != tt.wantDefault {
 				t.Fatalf("default_max_alerts_per_rule: got %d, want %d", resp.Msg.GetConfig().GetDefaultMaxAlertsPerRule(), tt.wantDefault)
 			}
-			hasManager := resp.Msg.GetConfig().GetOutputSettings().GetSummaryLog().GetEnabled()
+			hasManager := resp.Msg.GetConfig().GetOutputSettings().GetSummary().GetEnabled()
 			if hasManager != tt.wantManager {
 				t.Fatalf("manager output: got %v, want %v", hasManager, tt.wantManager)
 			}
@@ -452,20 +452,20 @@ func assertSummaryOutputSettings(t *testing.T, got *managerv1.OutputSettings) {
 	if got == nil {
 		t.Fatal("output_settings: got nil")
 	}
-	if got.GetDetectionLog().GetEnabled() ||
-		got.GetDetectionLog().GetFlushThresholdBytes() != 0 ||
-		got.GetDetectionLog().GetFlushIntervalSeconds() != 0 {
-		t.Fatalf("detection_log output setting: got %+v", got.GetDetectionLog())
+	if got.GetDetection().GetEnabled() ||
+		got.GetDetection().GetFlushThresholdBytes() != 0 ||
+		got.GetDetection().GetFlushIntervalSeconds() != 0 {
+		t.Fatalf("detection output setting: got %+v", got.GetDetection())
 	}
-	if got.GetRuntimeEventLog().GetEnabled() ||
-		got.GetRuntimeEventLog().GetFlushThresholdBytes() != 0 ||
-		got.GetRuntimeEventLog().GetFlushIntervalSeconds() != 0 {
-		t.Fatalf("runtime_event_log output setting: got %+v", got.GetRuntimeEventLog())
+	if got.GetRuntimeEvent().GetEnabled() ||
+		got.GetRuntimeEvent().GetFlushThresholdBytes() != 0 ||
+		got.GetRuntimeEvent().GetFlushIntervalSeconds() != 0 {
+		t.Fatalf("runtime_event output setting: got %+v", got.GetRuntimeEvent())
 	}
-	if !got.GetSummaryLog().GetEnabled() ||
-		got.GetSummaryLog().GetFlushThresholdBytes() != 1 ||
-		got.GetSummaryLog().GetFlushIntervalSeconds() != 1 {
-		t.Fatalf("summary_log output setting: got %+v", got.GetSummaryLog())
+	if !got.GetSummary().GetEnabled() ||
+		got.GetSummary().GetFlushThresholdBytes() != 1 ||
+		got.GetSummary().GetFlushIntervalSeconds() != 1 {
+		t.Fatalf("summary output setting: got %+v", got.GetSummary())
 	}
 }
 

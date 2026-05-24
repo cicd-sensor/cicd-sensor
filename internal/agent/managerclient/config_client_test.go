@@ -43,9 +43,9 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 					ConfigRevision:          "sha256:test",
 					DefaultMaxAlertsPerRule: 17,
 					OutputSettings: &managerv1.OutputSettings{
-						SummaryLog:      &managerv1.OutputSetting{Enabled: true},
-						DetectionLog:    &managerv1.OutputSetting{Enabled: true},
-						RuntimeEventLog: &managerv1.OutputSetting{Enabled: true},
+						Summary:      &managerv1.OutputSetting{Enabled: true},
+						Detection:    &managerv1.OutputSetting{Enabled: true},
+						RuntimeEvent: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -78,9 +78,9 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 		t.Fatalf("default_max_alerts_per_rule: got %d, want 17", result.DefaultMaxAlertsPerRule)
 	}
 	if result.OutputSettings == nil ||
-		!result.OutputSettings.GetSummaryLog().GetEnabled() ||
-		!result.OutputSettings.GetDetectionLog().GetEnabled() ||
-		!result.OutputSettings.GetRuntimeEventLog().GetEnabled() {
+		!result.OutputSettings.GetSummary().GetEnabled() ||
+		!result.OutputSettings.GetDetection().GetEnabled() ||
+		!result.OutputSettings.GetRuntimeEvent().GetEnabled() {
 		t.Fatalf("output_settings: got %+v, want all enabled", result.OutputSettings)
 	}
 	if len(result.RuleSources) != 1 {
@@ -119,7 +119,7 @@ func TestManagerClient_FetchConfig_PreservesOutputSettingPolicy(t *testing.T) {
 					return connect.NewResponse(&managerv1.FetchConfigResponse{
 						Config: &managerv1.ServedConfig{
 							OutputSettings: &managerv1.OutputSettings{
-								DetectionLog: tt.in,
+								Detection: tt.in,
 							},
 						},
 					}), nil
@@ -148,17 +148,17 @@ func TestManagerClient_FetchConfig_PreservesOutputSettingPolicy(t *testing.T) {
 				t.Fatal("output_settings: got nil")
 			}
 			if tt.in == nil {
-				if settings.GetDetectionLog() != nil {
-					t.Fatalf("detection_log: got %+v, want nil", settings.GetDetectionLog())
+				if settings.GetDetection() != nil {
+					t.Fatalf("detection: got %+v, want nil", settings.GetDetection())
 				}
 				return
 			}
-			if settings.GetDetectionLog() == nil {
-				t.Fatal("detection_log: got nil, want explicit zero policy")
+			if settings.GetDetection() == nil {
+				t.Fatal("detection: got nil, want explicit zero policy")
 			}
-			if settings.GetDetectionLog().GetFlushThresholdBytes() != 0 ||
-				settings.GetDetectionLog().GetFlushIntervalSeconds() != 0 {
-				t.Fatalf("detection_log: got %+v, want all-zero policy", settings.GetDetectionLog())
+			if settings.GetDetection().GetFlushThresholdBytes() != 0 ||
+				settings.GetDetection().GetFlushIntervalSeconds() != 0 {
+				t.Fatalf("detection: got %+v, want all-zero policy", settings.GetDetection())
 			}
 		})
 	}

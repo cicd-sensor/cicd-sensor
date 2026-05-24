@@ -9,12 +9,13 @@ import "google/protobuf/timestamp.proto";
 message RuntimeEventLogEntry {
   google.protobuf.Timestamp timestamp = 1 [json_name = "timestamp"];
   optional string log_type = 2 [json_name = "log_type"];
-  optional string schema_version = 3 [json_name = "schema_version", (buf.validate.field).string.const = "v1"];
-  optional string agent_version = 4 [json_name = "agent_version"];
+  optional string service_name = 3 [json_name = "service_name"];
+  optional string service_version = 4 [json_name = "service_version"];
+  optional string schema_version = 5 [json_name = "schema_version", (buf.validate.field).string.const = "v1"];
   // UUIDv7 for this runtime event log row.
-  optional string log_id = 5 [json_name = "log_id"];
-  LogContext job = 6 [json_name = "job"];
-  optional string scope = 7 [json_name = "scope"];
-  optional string runner_type = 8 [json_name = "runner_type"];
-  EventRecord event = 9 [json_name = "event"];
+  optional string log_id = 6 [json_name = "log_id"];
+  LogContext job = 7 [json_name = "job"];
+  optional string scope = 8 [json_name = "scope"];
+  optional string runner_type = 9 [json_name = "runner_type"];
+  EventRecord event = 10 [json_name = "event"];
 }

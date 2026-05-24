@@ -96,7 +96,7 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 	})
 	if err != nil {
 		if logger != nil {
-			logger.WarnContext(ctx, "detection_log_marshal_failed",
+			logger.WarnContext(ctx, "detection_marshal_failed",
 				"ruleset_id", hit.Identity.RulesetID,
 				"rule_id", hit.Identity.RuleID,
 				"error", err,
@@ -105,7 +105,7 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 		return
 	}
 	if err := s.managerJobLogs.WriteDetectionPayload(ctx, payload); err != nil && logger != nil {
-		logger.WarnContext(ctx, "detection_log_write_failed",
+		logger.WarnContext(ctx, "detection_write_failed",
 			"ruleset_id", hit.Identity.RulesetID,
 			"rule_id", hit.Identity.RuleID,
 			"dropped_records", s.managerJobLogs.DroppedLogRecords(managerv1.LogType_LOG_TYPE_DETECTION),

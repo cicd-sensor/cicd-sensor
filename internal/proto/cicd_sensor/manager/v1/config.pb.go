@@ -27,12 +27,12 @@ const (
 // RequestedOutputs indicates which logs the caller will upload,
 // so the manager can tailor output policy for those types.
 type RequestedOutputs struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SummaryLog      bool                   `protobuf:"varint,1,opt,name=summary_log,json=summaryLog,proto3" json:"summary_log,omitempty"`
-	DetectionLog    bool                   `protobuf:"varint,2,opt,name=detection_log,json=detectionLog,proto3" json:"detection_log,omitempty"`
-	RuntimeEventLog bool                   `protobuf:"varint,3,opt,name=runtime_event_log,json=runtimeEventLog,proto3" json:"runtime_event_log,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Summary       bool                   `protobuf:"varint,1,opt,name=summary,proto3" json:"summary,omitempty"`
+	Detection     bool                   `protobuf:"varint,2,opt,name=detection,proto3" json:"detection,omitempty"`
+	RuntimeEvent  bool                   `protobuf:"varint,3,opt,name=runtime_event,json=runtimeEvent,proto3" json:"runtime_event,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RequestedOutputs) Reset() {
@@ -65,23 +65,23 @@ func (*RequestedOutputs) Descriptor() ([]byte, []int) {
 	return file_cicd_sensor_manager_v1_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *RequestedOutputs) GetSummaryLog() bool {
+func (x *RequestedOutputs) GetSummary() bool {
 	if x != nil {
-		return x.SummaryLog
+		return x.Summary
 	}
 	return false
 }
 
-func (x *RequestedOutputs) GetDetectionLog() bool {
+func (x *RequestedOutputs) GetDetection() bool {
 	if x != nil {
-		return x.DetectionLog
+		return x.Detection
 	}
 	return false
 }
 
-func (x *RequestedOutputs) GetRuntimeEventLog() bool {
+func (x *RequestedOutputs) GetRuntimeEvent() bool {
 	if x != nil {
-		return x.RuntimeEventLog
+		return x.RuntimeEvent
 	}
 	return false
 }
@@ -269,12 +269,11 @@ var File_cicd_sensor_manager_v1_config_proto protoreflect.FileDescriptor
 
 const file_cicd_sensor_manager_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"#cicd_sensor/manager/v1/config.proto\x12\x16cicd_sensor.manager.v1\x1a\"cicd_sensor/manager/v1/types.proto\"\x84\x01\n" +
-	"\x10RequestedOutputs\x12\x1f\n" +
-	"\vsummary_log\x18\x01 \x01(\bR\n" +
-	"summaryLog\x12#\n" +
-	"\rdetection_log\x18\x02 \x01(\bR\fdetectionLog\x12*\n" +
-	"\x11runtime_event_log\x18\x03 \x01(\bR\x0fruntimeEventLog\"\xd4\x01\n" +
+	"#cicd_sensor/manager/v1/config.proto\x12\x16cicd_sensor.manager.v1\x1a\"cicd_sensor/manager/v1/types.proto\"o\n" +
+	"\x10RequestedOutputs\x12\x18\n" +
+	"\asummary\x18\x01 \x01(\bR\asummary\x12\x1c\n" +
+	"\tdetection\x18\x02 \x01(\bR\tdetection\x12#\n" +
+	"\rruntime_event\x18\x03 \x01(\bR\fruntimeEvent\"\xd4\x01\n" +
 	"\x12FetchConfigRequest\x12\x1f\n" +
 	"\vrunner_type\x18\x01 \x01(\tR\n" +
 	"runnerType\x12F\n" +

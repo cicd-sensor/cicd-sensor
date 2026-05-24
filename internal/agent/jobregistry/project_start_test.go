@@ -90,7 +90,7 @@ func TestJobRegistry_ApplyGitHubProjectStart_ManagerConfigIgnoresLocalProjectInp
 				Config: &managerv1.ServedConfig{
 					DefaultMaxAlertsPerRule: 29,
 					OutputSettings: &managerv1.OutputSettings{
-						SummaryLog: &managerv1.OutputSetting{Enabled: true},
+						Summary: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,

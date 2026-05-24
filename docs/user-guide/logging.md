@@ -8,11 +8,13 @@ The manager delivers each batch to the configured sink.
 
 ## Log types
 
-| Log type | Purpose | Timing |
-| --- | --- | --- |
-| `summary_log` | Final job summary. This is the entry point for reviewing runtime results per job. | Generated when the job finalizes. |
-| `detection_log` | Per-rule-hit log for real-time detection and triage. Includes both `detect` and `collect` actions. | Streamed while the job is running. |
-| `runtime_event_log` | Detailed runtime events for incident response and forensics. | Streamed while the job is running. |
+Each log entry's `log_type` field uses the dotted form `cicd_sensor.<short>`. This is the routing key for downstream consumers. Manager-side configuration keys and sink object paths use the short form (`summary`, `detection`, `runtime_event`).
+
+| `log_type` value | Short name | Purpose | Timing |
+| --- | --- | --- | --- |
+| `cicd_sensor.summary` | `summary` | Final job summary. Entry point for reviewing runtime results per job. | Generated when the job finalizes. |
+| `cicd_sensor.detection` | `detection` | Per-rule-hit log for real-time detection and triage. Includes both `detect` and `collect` actions. | Streamed while the job is running. |
+| `cicd_sensor.runtime_event` | `runtime_event` | Detailed runtime events for incident response and forensics. | Streamed while the job is running. |
 
 ## Common fields
 
@@ -21,9 +23,10 @@ Every log entry carries these top-level fields, regardless of log type.
 | Field | Description |
 | --- | --- |
 | `timestamp` | UTC, RFC 3339 |
-| `log_type` | One of the log types listed above |
+| `log_type` | One of the log types listed above (e.g. `cicd_sensor.summary`) |
+| `service_name` | Identifies the emitter of this log. Currently always `cicd-sensor` |
+| `service_version` | Component build version (e.g. `v0.0.27`) |
 | `schema_version` | Schema version of this `log_type`. Bumped on breaking changes |
-| `agent_version` | Agent build version |
 | `log_id` | UUID(v7) per log row |
 | `scope` | `host` for self-hosted configuration, `project` for GitHub Action invocations |
 | `runner_type` | Runner type, such as `machine` |
@@ -58,7 +61,7 @@ Other fields add useful context for search, reports, and triage.
 
 ## Runtime event format
 
-Both `detection_log` and `runtime_event_log` include an `event` object.
+Both the `detection` and `runtime_event` logs include an `event` object.
 This object describes the runtime behavior that triggered a rule hit or was emitted as a runtime event.
 
 | Field | Description |
@@ -83,10 +86,10 @@ This means a rule can match full argv content even when the corresponding log en
 
 | Question | First log to check |
 | --- | --- |
-| What happened across the job? | `summary_log` |
-| Which rules hit? | `detection_log` |
-| Which process / network / file events happened around a detection? | `runtime_event_log` |
-| How do I investigate the source event behind a SIEM alert? | Join `detection_log.event.id` with `runtime_event_log.event.id` |
+| What happened across the job? | `summary` |
+| Which rules hit? | `detection` |
+| Which process / network / file events happened around a detection? | `runtime_event` |
+| How do I investigate the source event behind a SIEM alert? | Join `detection.event.id` with `runtime_event.event.id` |
 
 When building a compatible log consumer, use the linked proto schema as the exact field reference.
 

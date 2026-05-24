@@ -153,9 +153,9 @@ sinks:
     project_id: cicd-sensor-prod
     topic: detections
 logs:
-  detection_log:
+  detection:
     sink: s3-prod
-  summary_log:
+  summary:
     sink: s3-prod
 `,
 			assertCfg: func(t *testing.T, cfg StartupConfig) {
@@ -163,7 +163,7 @@ logs:
 				if cfg.Sinks["s3-prod"].URI != "s3://cicd-sensor-prod/logs/" {
 					t.Fatalf("s3 uri: got %q", cfg.Sinks["s3-prod"].URI)
 				}
-				got := cfg.Logs["detection_log"].Sink
+				got := cfg.Logs["detection"].Sink
 				if got != "s3-prod" {
 					t.Fatalf("detection sink: got %q", got)
 				}
@@ -314,19 +314,19 @@ sinks:
     type: gcs
     uri: gs://bucket/logs
 logs:
-  detection_log:
+  detection:
     sink: ""
 `,
-			wantErr: "logs.detection_log.sink: sink name is required",
+			wantErr: "logs.detection.sink: sink name is required",
 		},
 		{
 			name: "logs_sink_references_missing_sink",
 			body: `
 logs:
-  detection_log:
+  detection:
     sink: missing
 `,
-			wantErr: `logs.detection_log.sink "missing" is not a defined sink name`,
+			wantErr: `logs.detection.sink "missing" is not a defined sink name`,
 		},
 		{
 			name: "old_output_key_is_rejected",
@@ -336,7 +336,7 @@ sinks:
     type: gcs
     uri: gs://bucket/logs
 output:
-  detection_log:
+  detection:
     destination: gcs-prod
 `,
 			wantErr: `field output not found`,
@@ -349,7 +349,7 @@ sinks:
     type: gcs
     uri: gs://bucket/logs
 logs:
-  detection_log:
+  detection:
     destination: gcs-prod
 `,
 			wantErr: `field destination not found`,

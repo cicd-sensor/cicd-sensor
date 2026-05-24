@@ -20,8 +20,8 @@ import (
 
 const (
 	stepSummaryHeaderDetected   = "https://raw.githubusercontent.com/cicd-sensor/cicd-sensor-action/refs/heads/main/assets/header-detected.svg"
-	stepSummaryHeaderNoAlert    = "https://raw.githubusercontent.com/cicd-sensor/cicd-sensor-action/refs/heads/main/assets/header-no-alert.svg"
-	stepSummaryHeaderTerminated = "https://raw.githubusercontent.com/cicd-sensor/cicd-sensor-action/refs/heads/main/assets/header-terminate.svg"
+	stepSummaryHeaderPassed     = "https://raw.githubusercontent.com/cicd-sensor/cicd-sensor-action/refs/heads/main/assets/header-passed.svg"
+	stepSummaryHeaderTerminated = "https://raw.githubusercontent.com/cicd-sensor/cicd-sensor-action/refs/heads/main/assets/header-terminated.svg"
 
 	stepSummaryTopN         = 5
 	stepSummaryProcessLimit = 5
@@ -29,7 +29,7 @@ const (
 
 var stepSummaryTemplate = template.Must(template.New("stepsummary").Parse(`<hr />
 
-{{if .HeaderLink}}<a href="{{.HeaderLink}}">{{end}}<img src="{{.HeaderURL}}" width="650" alt="cicd-sensor - {{.Verdict}}" />{{if .HeaderLink}}</a>{{end}}
+{{if .HeaderLink}}<a href="{{.HeaderLink}}">{{end}}<img src="{{.HeaderURL}}" width="650" alt="cicd-sensor - {{.OverallResult}}" />{{if .HeaderLink}}</a>{{end}}
 
 {{if .HealthFailed}}Agent health check failed during the post step. Counts and rule hits are unavailable for this run.
 
@@ -66,17 +66,17 @@ type reportStepSummaryOptions struct {
 }
 
 type stepSummaryView struct {
-	Verdict      string
-	HeaderURL    string
-	HeaderLink   string
-	HTMLURL      string
-	DebugURL     string
-	HealthFailed bool
-	RuleHits     []stepSummaryRuleHit
-	Domains      []stepSummaryDomain
-	Networks     []stepSummaryNetwork
-	TimelineURL  string
-	TotalEvents  int
+	OverallResult string
+	HeaderURL     string
+	HeaderLink    string
+	HTMLURL       string
+	DebugURL      string
+	HealthFailed  bool
+	RuleHits      []stepSummaryRuleHit
+	Domains       []stepSummaryDomain
+	Networks      []stepSummaryNetwork
+	TimelineURL   string
+	TotalEvents   int
 }
 
 type stepSummaryProcessList struct {
@@ -122,14 +122,14 @@ func runReportStepSummary(_ context.Context, args []string, stdin io.Reader, std
 		}
 	}
 
-	var summaryLog resultdoc.JobEventSummaryForReport
+	var projectResult resultdoc.JobEventSummaryForReport
 	if len(bytes.TrimSpace(input)) > 0 {
-		if err := json.Unmarshal(input, &summaryLog); err != nil {
-			return 1, fmt.Errorf("decode summary_log: %w", err)
+		if err := json.Unmarshal(input, &projectResult); err != nil {
+			return 1, fmt.Errorf("decode project result: %w", err)
 		}
 	}
 
-	body, err := renderStepSummaryMarkdown(summaryLog, opts)
+	body, err := renderStepSummaryMarkdown(projectResult, opts)
 	if err != nil {
 		return 1, err
 	}
@@ -147,7 +147,7 @@ func parseReportStepSummaryArgs(args []string, stderr io.Writer) (reportStepSumm
 		fmt.Fprintln(fs.Output(), "usage: cicd-sensorctl report stepsummary [flags]")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Input:")
-		fmt.Fprintln(fs.Output(), "  Reads summary_log JSON from stdin when available.")
+		fmt.Fprintln(fs.Output(), "  Reads project result JSON from stdin when available.")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintln(fs.Output(), "  --html-url URL")
@@ -173,7 +173,7 @@ func parseReportStepSummaryArgs(args []string, stderr io.Writer) (reportStepSumm
 	return opts, nil
 }
 
-func renderStepSummaryMarkdown(summaryLog resultdoc.JobEventSummaryForReport, opts reportStepSummaryOptions) ([]byte, error) {
+func renderStepSummaryMarkdown(projectResult resultdoc.JobEventSummaryForReport, opts reportStepSummaryOptions) ([]byte, error) {
 	htmlURL, err := trustedStepSummaryURL(opts.htmlURL)
 	if err != nil {
 		return nil, fmt.Errorf("html-url: %w", err)
@@ -183,29 +183,29 @@ func renderStepSummaryMarkdown(summaryLog resultdoc.JobEventSummaryForReport, op
 		return nil, fmt.Errorf("debug-url: %w", err)
 	}
 
-	verdict := resultdoc.ResultNoAlert
+	overallResult := resultdoc.ResultPassed
 	if opts.healthFailed {
-		verdict = "health_failed"
+		overallResult = "health_failed"
 	} else {
-		switch summaryLog.ResultSummary.Result {
-		case resultdoc.ResultNoAlert, resultdoc.ResultDetected, resultdoc.ResultTerminated:
-			verdict = summaryLog.ResultSummary.Result
+		switch projectResult.ResultSummary.Result {
+		case resultdoc.ResultPassed, resultdoc.ResultDetected, resultdoc.ResultTerminated:
+			overallResult = projectResult.ResultSummary.Result
 		}
 	}
 
 	view := stepSummaryView{
-		Verdict:      verdict,
-		HeaderURL:    stepSummaryHeaderURL(verdict),
-		HeaderLink:   htmlURL,
-		HTMLURL:      htmlURL,
-		DebugURL:     debugURL,
-		HealthFailed: opts.healthFailed,
+		OverallResult: overallResult,
+		HeaderURL:     stepSummaryHeaderURL(overallResult),
+		HeaderLink:    htmlURL,
+		HTMLURL:       htmlURL,
+		DebugURL:      debugURL,
+		HealthFailed:  opts.healthFailed,
 	}
 	if !opts.healthFailed {
-		view.RuleHits = topStepSummaryRuleHits(summaryLog.Hits, stepSummaryTopN)
-		view.Domains = topStepSummaryDomains(summaryLog.DomainObservations, stepSummaryTopN)
-		view.Networks = topStepSummaryNetworks(summaryLog.NetworkConnections, stepSummaryTopN)
-		view.TotalEvents = len(summaryLog.Hits) + len(summaryLog.DomainObservations) + len(summaryLog.NetworkConnections)
+		view.RuleHits = topStepSummaryRuleHits(projectResult.Hits, stepSummaryTopN)
+		view.Domains = topStepSummaryDomains(projectResult.DomainObservations, stepSummaryTopN)
+		view.Networks = topStepSummaryNetworks(projectResult.NetworkConnections, stepSummaryTopN)
+		view.TotalEvents = len(projectResult.Hits) + len(projectResult.DomainObservations) + len(projectResult.NetworkConnections)
 		if htmlURL != "" && view.TotalEvents > 0 {
 			view.TimelineURL = htmlURL + "#hits"
 		}
@@ -455,14 +455,14 @@ func stepSummaryActionEmoji(action string) string {
 	}
 }
 
-func stepSummaryHeaderURL(verdict string) string {
-	switch verdict {
+func stepSummaryHeaderURL(overallResult string) string {
+	switch overallResult {
 	case resultdoc.ResultDetected:
 		return stepSummaryHeaderDetected
 	case resultdoc.ResultTerminated, "health_failed":
 		return stepSummaryHeaderTerminated
 	default:
-		return stepSummaryHeaderNoAlert
+		return stepSummaryHeaderPassed
 	}
 }
 

@@ -34,7 +34,7 @@ func (jr *JobRegistry) FinalizeAll(ctx context.Context, reason kerneltracker.End
 			continue
 		}
 		if err := jr.finalizeTakenJobSync(ctx, job, reason, time.Now().UTC()); err != nil {
-			jr.logger.WarnContext(ctx, "summary_log_emit_failed",
+			jr.logger.WarnContext(ctx, "summary_emit_failed",
 				"job_identity", job.Identity(),
 				"error", err,
 			)
@@ -64,7 +64,7 @@ func (jr *JobRegistry) FinalizeExpiredJobs(ctx context.Context) {
 			continue
 		}
 		if err := jr.finalizeTakenJobSync(ctx, job, kerneltracker.EndTTL, time.Now().UTC()); err != nil {
-			jr.logger.WarnContext(ctx, "summary_log_emit_failed",
+			jr.logger.WarnContext(ctx, "summary_emit_failed",
 				"job_identity", job.Identity(),
 				"error", err,
 			)
@@ -94,7 +94,7 @@ func (jr *JobRegistry) OnJobEnded(jobID jobcontext.JobIdentity, reason kerneltra
 			return
 		}
 		if err := jr.finalizeTakenJobSync(ctx, job, reason, time.Now().UTC()); err != nil {
-			jr.logger.WarnContext(ctx, "summary_log_emit_failed",
+			jr.logger.WarnContext(ctx, "summary_emit_failed",
 				"job_identity", job.Identity(),
 				"error", err,
 			)

@@ -67,9 +67,9 @@ func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcon
 	if settings == nil {
 		return
 	}
-	detection := settings.GetDetectionLog()
-	runtimeEvent := settings.GetRuntimeEventLog()
-	summary := settings.GetSummaryLog()
+	detection := settings.GetDetection()
+	runtimeEvent := settings.GetRuntimeEvent()
+	summary := settings.GetSummary()
 	if !detection.GetEnabled() &&
 		!runtimeEvent.GetEnabled() &&
 		!summary.GetEnabled() {

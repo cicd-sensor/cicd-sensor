@@ -148,11 +148,11 @@ sinks:
     region: ap-northeast-1
 
 logs:
-  summary_log:
+  summary:
     sink: s3-out
-  detection_log:
+  detection:
     sink: s3-out
-  runtime_event_log:
+  runtime_event:
     sink: s3-out
 ```
 
@@ -184,29 +184,29 @@ sinks:
   pubsub-detection:
     type: pubsub
     project_id: security-prod
-    topic: cicd-sensor-detection-log
+    topic: cicd-sensor-detection
 
   pubsub-runtime-event:
     type: pubsub
     project_id: security-prod
-    topic: cicd-sensor-runtime-event-log
+    topic: cicd-sensor-runtime-event
 
 logs:
-  summary_log:
+  summary:
     sink: gcs-summary
-  detection_log:
+  detection:
     sink: pubsub-detection
-  runtime_event_log:
+  runtime_event:
     sink: pubsub-runtime-event
 ```
 
 Supported log types:
 
-| Log kind | Purpose |
+| Log type | Purpose |
 | --- | --- |
-| `summary_log` | Job summary generated at finalize time |
-| `detection_log` | Detection stream for rule hits |
-| `runtime_event_log` | Runtime events for incident response and forensics |
+| `summary` | Job summary generated at finalize time |
+| `detection` | Detection stream for rule hits |
+| `runtime_event` | Runtime events for incident response and forensics |
 
 Each log type takes one `sink`.
 Use this mapping to choose patterns such as storing all logs in one GCS destination, streaming only Detection Logs to Pub/Sub, or retaining Runtime Event Logs in object storage.
@@ -228,11 +228,11 @@ sinks:
     uri: gs://cicd-sensor-prod/cicd-sensor/
 
 logs:
-  summary_log:
+  summary:
     sink: gcs-prod
-  detection_log:
+  detection:
     sink: gcs-prod
-  runtime_event_log:
+  runtime_event:
     sink: gcs-prod
 ```
 
@@ -243,17 +243,17 @@ sinks:
   pubsub-detection:
     type: pubsub
     project_id: security-prod
-    topic: cicd-sensor-detection-log
+    topic: cicd-sensor-detection
 
   pubsub-runtime-event:
     type: pubsub
     project_id: security-prod
-    topic: cicd-sensor-runtime-event-log
+    topic: cicd-sensor-runtime-event
 
 logs:
-  detection_log:
+  detection:
     sink: pubsub-detection
-  runtime_event_log:
+  runtime_event:
     sink: pubsub-runtime-event
 ```
 

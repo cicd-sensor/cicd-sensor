@@ -339,7 +339,7 @@ func TestRender_TopbarVerdictAndLogoStyles(t *testing.T) {
 	html := renderString(t, &log)
 	for _, want := range []string{
 		"function verdictClass(result)",
-		"return 'no-alert'",
+		"return 'passed'",
 		"class: 'topbar-verdict ' + verdictClass",
 		".topbar-verdict.detected",
 		".topbar-verdict.terminated",

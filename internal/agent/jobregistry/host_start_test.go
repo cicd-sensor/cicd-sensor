@@ -186,7 +186,7 @@ func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 					ConfigRevision:          "sha256:test",
 					DefaultMaxAlertsPerRule: 27,
 					OutputSettings: &managerv1.OutputSettings{
-						DetectionLog: &managerv1.OutputSetting{Enabled: true},
+						Detection: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -214,7 +214,7 @@ func TestJobRegistry_ApplyGitHubHostStart_AppliesManagerConfig(t *testing.T) {
 	if got := job.HostScope().DefaultMaxAlertsPerRule; got != 27 {
 		t.Fatalf("host scope default_max_alerts_per_rule: got %d, want 27", got)
 	}
-	if !job.HostScope().OutputSettings.GetDetectionLog().GetEnabled() {
+	if !job.HostScope().OutputSettings.GetDetection().GetEnabled() {
 		t.Fatal("host scope detection output: got false, want true")
 	}
 }
@@ -235,7 +235,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 				Config: &managerv1.ServedConfig{
 					DefaultMaxAlertsPerRule: 99,
 					OutputSettings: &managerv1.OutputSettings{
-						DetectionLog: &managerv1.OutputSetting{Enabled: true},
+						Detection: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -290,7 +290,7 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 	if got := project.DefaultMaxAlertsPerRule; got != 7 {
 		t.Fatalf("project default_max_alerts_per_rule: got %d, want 7", got)
 	}
-	if project.OutputSettings.GetDetectionLog().GetEnabled() {
+	if project.OutputSettings.GetDetection().GetEnabled() {
 		t.Fatal("project detection output: got true, want false")
 	}
 }

@@ -147,7 +147,7 @@ func runHostEnd(args []string) {
 	defer stop()
 	if err := postGitHubHostEnd(ctx, socketPath, req); err != nil {
 		fmt.Fprintln(os.Stderr, formatAgentUnreachable(socketPath,
-			"The summary_log for this run cannot be emitted.", err))
+			"The summary log for this run cannot be emitted.", err))
 		os.Exit(1)
 	}
 }

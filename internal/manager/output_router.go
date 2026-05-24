@@ -107,9 +107,9 @@ func (r *OutputRouter) OutputSettings() *managerv1.OutputSettings {
 		return nil
 	}
 	return &managerv1.OutputSettings{
-		DetectionLog:    r.outputSetting(logtype.Detection),
-		RuntimeEventLog: r.outputSetting(logtype.RuntimeEvent),
-		SummaryLog:      r.outputSetting(logtype.Summary),
+		Detection:    r.outputSetting(logtype.Detection),
+		RuntimeEvent: r.outputSetting(logtype.RuntimeEvent),
+		Summary:      r.outputSetting(logtype.Summary),
 	}
 }
 

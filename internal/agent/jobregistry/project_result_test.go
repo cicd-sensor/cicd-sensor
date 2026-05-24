@@ -41,7 +41,7 @@ func TestJobRegistry_RequestGitHubProjectResult_ExistingJob(t *testing.T) {
 	}
 	var entry resultdoc.JobEventSummaryForReport
 	if err := json.Unmarshal(body, &entry); err != nil {
-		t.Fatalf("unmarshal summary_log: %v", err)
+		t.Fatalf("unmarshal summary: %v", err)
 	}
 	if entry.JobIdentity != id {
 		t.Fatalf("job_identity: got %#v, want %#v", entry.JobIdentity, id)

@@ -749,12 +749,12 @@ func (x *OutputSetting) GetFlushIntervalSeconds() uint32 {
 
 // OutputSettings tells the agent which logs should be sent to manager.
 type OutputSettings struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	DetectionLog    *OutputSetting         `protobuf:"bytes,1,opt,name=detection_log,json=detectionLog,proto3" json:"detection_log,omitempty"`
-	RuntimeEventLog *OutputSetting         `protobuf:"bytes,2,opt,name=runtime_event_log,json=runtimeEventLog,proto3" json:"runtime_event_log,omitempty"`
-	SummaryLog      *OutputSetting         `protobuf:"bytes,3,opt,name=summary_log,json=summaryLog,proto3" json:"summary_log,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Detection     *OutputSetting         `protobuf:"bytes,1,opt,name=detection,proto3" json:"detection,omitempty"`
+	RuntimeEvent  *OutputSetting         `protobuf:"bytes,2,opt,name=runtime_event,json=runtimeEvent,proto3" json:"runtime_event,omitempty"`
+	Summary       *OutputSetting         `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *OutputSettings) Reset() {
@@ -787,23 +787,23 @@ func (*OutputSettings) Descriptor() ([]byte, []int) {
 	return file_cicd_sensor_manager_v1_types_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *OutputSettings) GetDetectionLog() *OutputSetting {
+func (x *OutputSettings) GetDetection() *OutputSetting {
 	if x != nil {
-		return x.DetectionLog
+		return x.Detection
 	}
 	return nil
 }
 
-func (x *OutputSettings) GetRuntimeEventLog() *OutputSetting {
+func (x *OutputSettings) GetRuntimeEvent() *OutputSetting {
 	if x != nil {
-		return x.RuntimeEventLog
+		return x.RuntimeEvent
 	}
 	return nil
 }
 
-func (x *OutputSettings) GetSummaryLog() *OutputSetting {
+func (x *OutputSettings) GetSummary() *OutputSetting {
 	if x != nil {
-		return x.SummaryLog
+		return x.Summary
 	}
 	return nil
 }
@@ -890,12 +890,11 @@ const file_cicd_sensor_manager_v1_types_proto_rawDesc = "" +
 	"\rOutputSetting\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x122\n" +
 	"\x15flush_threshold_bytes\x18\x02 \x01(\rR\x13flushThresholdBytes\x124\n" +
-	"\x16flush_interval_seconds\x18\x03 \x01(\rR\x14flushIntervalSeconds\"\xf7\x01\n" +
-	"\x0eOutputSettings\x12J\n" +
-	"\rdetection_log\x18\x01 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\fdetectionLog\x12Q\n" +
-	"\x11runtime_event_log\x18\x02 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\x0fruntimeEventLog\x12F\n" +
-	"\vsummary_log\x18\x03 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\n" +
-	"summaryLogB\xf2\x01\n" +
+	"\x16flush_interval_seconds\x18\x03 \x01(\rR\x14flushIntervalSeconds\"\xe2\x01\n" +
+	"\x0eOutputSettings\x12C\n" +
+	"\tdetection\x18\x01 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\tdetection\x12J\n" +
+	"\rruntime_event\x18\x02 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\fruntimeEvent\x12?\n" +
+	"\asummary\x18\x03 \x01(\v2%.cicd_sensor.manager.v1.OutputSettingR\asummaryB\xf2\x01\n" +
 	"\x1acom.cicd_sensor.manager.v1B\n" +
 	"TypesProtoP\x01ZRgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1;managerv1\xa2\x02\x03CMX\xaa\x02\x15CicdSensor.Manager.V1\xca\x02\x15CicdSensor\\Manager\\V1\xe2\x02!CicdSensor\\Manager\\V1\\GPBMetadata\xea\x02\x17CicdSensor::Manager::V1b\x06proto3"
 
@@ -938,9 +937,9 @@ var file_cicd_sensor_manager_v1_types_proto_depIdxs = []int32{
 	2,  // 7: cicd_sensor.manager.v1.RuleModifier.add_target_exclude:type_name -> cicd_sensor.manager.v1.RuleTargetMatcher
 	5,  // 8: cicd_sensor.manager.v1.RuleSource.rule_sets:type_name -> cicd_sensor.manager.v1.RuleSet
 	7,  // 9: cicd_sensor.manager.v1.RuleSource.rule_modifiers:type_name -> cicd_sensor.manager.v1.RuleModifier
-	9,  // 10: cicd_sensor.manager.v1.OutputSettings.detection_log:type_name -> cicd_sensor.manager.v1.OutputSetting
-	9,  // 11: cicd_sensor.manager.v1.OutputSettings.runtime_event_log:type_name -> cicd_sensor.manager.v1.OutputSetting
-	9,  // 12: cicd_sensor.manager.v1.OutputSettings.summary_log:type_name -> cicd_sensor.manager.v1.OutputSetting
+	9,  // 10: cicd_sensor.manager.v1.OutputSettings.detection:type_name -> cicd_sensor.manager.v1.OutputSetting
+	9,  // 11: cicd_sensor.manager.v1.OutputSettings.runtime_event:type_name -> cicd_sensor.manager.v1.OutputSetting
+	9,  // 12: cicd_sensor.manager.v1.OutputSettings.summary:type_name -> cicd_sensor.manager.v1.OutputSetting
 	1,  // 13: cicd_sensor.manager.v1.RuleSet.ListsEntry.value:type_name -> cicd_sensor.manager.v1.StringList
 	14, // [14:14] is the sub-list for method output_type
 	14, // [14:14] is the sub-list for method input_type

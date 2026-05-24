@@ -131,17 +131,17 @@ func TestOutputRouter_OutputSettings_UsesSinkFlushPolicy(t *testing.T) {
 	})
 
 	got := router.OutputSettings()
-	if !got.GetDetectionLog().GetEnabled() ||
-		got.GetDetectionLog().GetFlushThresholdBytes() != 1 ||
-		got.GetDetectionLog().GetFlushIntervalSeconds() != 1 {
-		t.Fatalf("detection output setting: got %+v", got.GetDetectionLog())
+	if !got.GetDetection().GetEnabled() ||
+		got.GetDetection().GetFlushThresholdBytes() != 1 ||
+		got.GetDetection().GetFlushIntervalSeconds() != 1 {
+		t.Fatalf("detection output setting: got %+v", got.GetDetection())
 	}
-	if !got.GetRuntimeEventLog().GetEnabled() ||
-		got.GetRuntimeEventLog().GetFlushThresholdBytes() != 4*1024*1024 ||
-		got.GetRuntimeEventLog().GetFlushIntervalSeconds() != 60 {
-		t.Fatalf("runtime event output setting: got %+v", got.GetRuntimeEventLog())
+	if !got.GetRuntimeEvent().GetEnabled() ||
+		got.GetRuntimeEvent().GetFlushThresholdBytes() != 4*1024*1024 ||
+		got.GetRuntimeEvent().GetFlushIntervalSeconds() != 60 {
+		t.Fatalf("runtime event output setting: got %+v", got.GetRuntimeEvent())
 	}
-	if got.GetSummaryLog().GetEnabled() {
+	if got.GetSummary().GetEnabled() {
 		t.Fatalf("result output setting: got enabled")
 	}
 }
@@ -177,7 +177,7 @@ func TestBuildOutputs_ClosesCreatedSinksOnBuildFailure(t *testing.T) {
 			"second": {Type: "gcs", URI: "gs://second"},
 		},
 		LogsConfig{
-			"detection_log": {Sink: "first"},
+			"detection": {Sink: "first"},
 		},
 	)
 	if err == nil {

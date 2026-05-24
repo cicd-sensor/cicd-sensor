@@ -42,13 +42,16 @@ func TestMarshalRuntimeEventLogEntryStampsLogTypeAndVersions(t *testing.T) {
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.GetLogType() != string(logtype.RuntimeEvent) {
-		t.Errorf("log_type: got %q, want %q", got.GetLogType(), string(logtype.RuntimeEvent))
+	if got.GetLogType() != logtype.RuntimeEvent.Wire() {
+		t.Errorf("log_type: got %q, want %q", got.GetLogType(), logtype.RuntimeEvent.Wire())
+	}
+	if got.GetServiceName() != "cicd-sensor" {
+		t.Errorf("service_name: got %q, want %q", got.GetServiceName(), "cicd-sensor")
 	}
 	if got.GetSchemaVersion() != "v1" {
 		t.Errorf("schema_version: got %q, want %q", got.GetSchemaVersion(), "v1")
 	}
-	if got.GetAgentVersion() != version.Current {
-		t.Errorf("agent_version: got %q, want %q", got.GetAgentVersion(), version.Current)
+	if got.GetServiceVersion() != version.Current {
+		t.Errorf("service_version: got %q, want %q", got.GetServiceVersion(), version.Current)
 	}
 }

@@ -9,11 +9,13 @@ func TestParse(t *testing.T) {
 		want  LogType
 		ok    bool
 	}{
-		{name: "detection", input: "detection_log", want: Detection, ok: true},
-		{name: "runtime event", input: "runtime_event_log", want: RuntimeEvent, ok: true},
-		{name: "summary", input: "summary_log", want: Summary, ok: true},
-		{name: "unknown", input: "detection", ok: false},
+		{name: "detection", input: "detection", want: Detection, ok: true},
+		{name: "runtime event", input: "runtime_event", want: RuntimeEvent, ok: true},
+		{name: "summary", input: "summary", want: Summary, ok: true},
+		{name: "unknown", input: "no_such_log", ok: false},
 		{name: "empty", input: "", ok: false},
+		{name: "wire form rejected", input: "cicd_sensor.summary", ok: false},
+		{name: "legacy form rejected", input: "summary_log", ok: false},
 	}
 
 	for _, tt := range tests {

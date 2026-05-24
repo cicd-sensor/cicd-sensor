@@ -58,9 +58,9 @@ rule_modifiers:
 		ConfigRevision:          "sha256:config",
 		DefaultMaxAlertsPerRule: 23,
 		OutputSettings: &managerv1.OutputSettings{
-			SummaryLog:      &managerv1.OutputSetting{Enabled: true},
-			DetectionLog:    &managerv1.OutputSetting{Enabled: true},
-			RuntimeEventLog: &managerv1.OutputSetting{Enabled: true},
+			Summary:      &managerv1.OutputSetting{Enabled: true},
+			Detection:    &managerv1.OutputSetting{Enabled: true},
+			RuntimeEvent: &managerv1.OutputSetting{Enabled: true},
 		},
 	}
 
@@ -114,8 +114,8 @@ rule_modifiers:
 	if len(ruleModifiers) != 1 {
 		t.Fatalf("rule_sources[1].rule_modifiers: got %d, want 1", len(ruleModifiers))
 	}
-	if !result.OutputSettings.GetSummaryLog().GetEnabled() {
-		t.Fatal("output_settings.summary_log.enabled: got false, want true")
+	if !result.OutputSettings.GetSummary().GetEnabled() {
+		t.Fatal("output_settings.summary.enabled: got false, want true")
 	}
 
 	// Downstream: ApplyManagerConfig must resolve the delivered rules.
@@ -135,7 +135,7 @@ rule_modifiers:
 	if !resolvedRulesContain(scope, "detect_bash") {
 		t.Fatalf("resolved rules do not contain detect_bash")
 	}
-	if !scope.OutputSettings.GetSummaryLog().GetEnabled() {
+	if !scope.OutputSettings.GetSummary().GetEnabled() {
 		t.Fatal("expected scope to store output settings from manager response")
 	}
 }

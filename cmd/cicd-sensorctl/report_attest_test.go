@@ -14,7 +14,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 )
 
-func sampleSummaryLog() resultdoc.JobEventSummaryForReport {
+func sampleProjectResult() resultdoc.JobEventSummaryForReport {
 	return resultdoc.JobEventSummaryForReport{
 		JobIdentity: jobcontext.GitHubJobIdentity(
 			"github.com", "acme/example", "123", "build", "1", "runner-1",
@@ -49,7 +49,7 @@ func sampleSummaryLog() resultdoc.JobEventSummaryForReport {
 func TestRunReportAttest_StdinHappyPath(t *testing.T) {
 	t.Parallel()
 
-	body, err := json.Marshal(sampleSummaryLog())
+	body, err := json.Marshal(sampleProjectResult())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestRunReportAttest_OutputFile(t *testing.T) {
 
 	dir := t.TempDir()
 	outputFile := filepath.Join(dir, "attestation.json")
-	body, err := json.Marshal(sampleSummaryLog())
+	body, err := json.Marshal(sampleProjectResult())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestRunReportAttest_ReadError(t *testing.T) {
 func TestRunReportAttest_WriteError(t *testing.T) {
 	t.Parallel()
 
-	body, err := json.Marshal(sampleSummaryLog())
+	body, err := json.Marshal(sampleProjectResult())
 	if err != nil {
 		t.Fatalf("marshal sample: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestRunReportAttest_Help(t *testing.T) {
 	for _, want := range []string{
 		"usage: cicd-sensorctl report attest [flags]",
 		"Input:",
-		"Reads summary_log JSON from stdin.",
+		"Reads project result JSON from stdin.",
 		"Optional:",
 		"File to write runtime-trace attestation JSON to. Writes to stdout when empty.",
 		"--output-file",

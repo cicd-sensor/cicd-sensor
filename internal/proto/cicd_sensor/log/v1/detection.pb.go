@@ -24,25 +24,26 @@ const (
 )
 
 type DetectionLogEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	LogType       *string                `protobuf:"bytes,2,opt,name=log_type,proto3,oneof" json:"log_type,omitempty"`
-	SchemaVersion *string                `protobuf:"bytes,3,opt,name=schema_version,proto3,oneof" json:"schema_version,omitempty"`
-	AgentVersion  *string                `protobuf:"bytes,4,opt,name=agent_version,proto3,oneof" json:"agent_version,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Timestamp      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	LogType        *string                `protobuf:"bytes,2,opt,name=log_type,proto3,oneof" json:"log_type,omitempty"`
+	ServiceName    *string                `protobuf:"bytes,3,opt,name=service_name,proto3,oneof" json:"service_name,omitempty"`
+	ServiceVersion *string                `protobuf:"bytes,4,opt,name=service_version,proto3,oneof" json:"service_version,omitempty"`
+	SchemaVersion  *string                `protobuf:"bytes,5,opt,name=schema_version,proto3,oneof" json:"schema_version,omitempty"`
 	// UUIDv7 for this detection log row.
-	LogId               *string      `protobuf:"bytes,5,opt,name=log_id,proto3,oneof" json:"log_id,omitempty"`
-	Job                 *LogContext  `protobuf:"bytes,6,opt,name=job,proto3" json:"job,omitempty"`
-	Scope               *string      `protobuf:"bytes,7,opt,name=scope,proto3,oneof" json:"scope,omitempty"`
-	RunnerType          *string      `protobuf:"bytes,8,opt,name=runner_type,proto3,oneof" json:"runner_type,omitempty"`
-	RulesetId           *string      `protobuf:"bytes,9,opt,name=ruleset_id,proto3,oneof" json:"ruleset_id,omitempty"`
-	RuleId              *string      `protobuf:"bytes,10,opt,name=rule_id,proto3,oneof" json:"rule_id,omitempty"`
-	RulesetRevision     *string      `protobuf:"bytes,11,opt,name=ruleset_revision,proto3,oneof" json:"ruleset_revision,omitempty"`
-	RuleName            *string      `protobuf:"bytes,12,opt,name=rule_name,proto3,oneof" json:"rule_name,omitempty"`
-	RuleDescription     *string      `protobuf:"bytes,13,opt,name=rule_description,proto3,oneof" json:"rule_description,omitempty"`
-	Action              *string      `protobuf:"bytes,14,opt,name=action,proto3,oneof" json:"action,omitempty"`
-	RuleAlertTruncation *string      `protobuf:"bytes,15,opt,name=rule_alert_truncation,proto3,oneof" json:"rule_alert_truncation,omitempty"`
-	RuleTags            []string     `protobuf:"bytes,16,rep,name=rule_tags,proto3" json:"rule_tags,omitempty"`
-	Event               *EventRecord `protobuf:"bytes,17,opt,name=event,proto3" json:"event,omitempty"`
+	LogId               *string      `protobuf:"bytes,6,opt,name=log_id,proto3,oneof" json:"log_id,omitempty"`
+	Job                 *LogContext  `protobuf:"bytes,7,opt,name=job,proto3" json:"job,omitempty"`
+	Scope               *string      `protobuf:"bytes,8,opt,name=scope,proto3,oneof" json:"scope,omitempty"`
+	RunnerType          *string      `protobuf:"bytes,9,opt,name=runner_type,proto3,oneof" json:"runner_type,omitempty"`
+	RulesetId           *string      `protobuf:"bytes,10,opt,name=ruleset_id,proto3,oneof" json:"ruleset_id,omitempty"`
+	RuleId              *string      `protobuf:"bytes,11,opt,name=rule_id,proto3,oneof" json:"rule_id,omitempty"`
+	RulesetRevision     *string      `protobuf:"bytes,12,opt,name=ruleset_revision,proto3,oneof" json:"ruleset_revision,omitempty"`
+	RuleName            *string      `protobuf:"bytes,13,opt,name=rule_name,proto3,oneof" json:"rule_name,omitempty"`
+	RuleDescription     *string      `protobuf:"bytes,14,opt,name=rule_description,proto3,oneof" json:"rule_description,omitempty"`
+	Action              *string      `protobuf:"bytes,15,opt,name=action,proto3,oneof" json:"action,omitempty"`
+	RuleAlertTruncation *string      `protobuf:"bytes,16,opt,name=rule_alert_truncation,proto3,oneof" json:"rule_alert_truncation,omitempty"`
+	RuleTags            []string     `protobuf:"bytes,17,rep,name=rule_tags,proto3" json:"rule_tags,omitempty"`
+	Event               *EventRecord `protobuf:"bytes,18,opt,name=event,proto3" json:"event,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -91,16 +92,23 @@ func (x *DetectionLogEntry) GetLogType() string {
 	return ""
 }
 
-func (x *DetectionLogEntry) GetSchemaVersion() string {
-	if x != nil && x.SchemaVersion != nil {
-		return *x.SchemaVersion
+func (x *DetectionLogEntry) GetServiceName() string {
+	if x != nil && x.ServiceName != nil {
+		return *x.ServiceName
 	}
 	return ""
 }
 
-func (x *DetectionLogEntry) GetAgentVersion() string {
-	if x != nil && x.AgentVersion != nil {
-		return *x.AgentVersion
+func (x *DetectionLogEntry) GetServiceVersion() string {
+	if x != nil && x.ServiceVersion != nil {
+		return *x.ServiceVersion
+	}
+	return ""
+}
+
+func (x *DetectionLogEntry) GetSchemaVersion() string {
+	if x != nil && x.SchemaVersion != nil {
+		return *x.SchemaVersion
 	}
 	return ""
 }
@@ -200,33 +208,35 @@ var File_cicd_sensor_log_v1_detection_proto protoreflect.FileDescriptor
 
 const file_cicd_sensor_log_v1_detection_proto_rawDesc = "" +
 	"\n" +
-	"\"cicd_sensor/log/v1/detection.proto\x12\x12cicd_sensor.log.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fcicd_sensor/log/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa7\a\n" +
+	"\"cicd_sensor/log/v1/detection.proto\x12\x12cicd_sensor.log.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fcicd_sensor/log/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe7\a\n" +
 	"\x11DetectionLogEntry\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x1f\n" +
-	"\blog_type\x18\x02 \x01(\tH\x00R\blog_type\x88\x01\x01\x126\n" +
-	"\x0eschema_version\x18\x03 \x01(\tB\t\xbaH\x06r\x04\n" +
-	"\x02v1H\x01R\x0eschema_version\x88\x01\x01\x12)\n" +
-	"\ragent_version\x18\x04 \x01(\tH\x02R\ragent_version\x88\x01\x01\x12\x1b\n" +
-	"\x06log_id\x18\x05 \x01(\tH\x03R\x06log_id\x88\x01\x01\x120\n" +
-	"\x03job\x18\x06 \x01(\v2\x1e.cicd_sensor.log.v1.LogContextR\x03job\x12\x19\n" +
-	"\x05scope\x18\a \x01(\tH\x04R\x05scope\x88\x01\x01\x12%\n" +
-	"\vrunner_type\x18\b \x01(\tH\x05R\vrunner_type\x88\x01\x01\x12#\n" +
+	"\blog_type\x18\x02 \x01(\tH\x00R\blog_type\x88\x01\x01\x12'\n" +
+	"\fservice_name\x18\x03 \x01(\tH\x01R\fservice_name\x88\x01\x01\x12-\n" +
+	"\x0fservice_version\x18\x04 \x01(\tH\x02R\x0fservice_version\x88\x01\x01\x126\n" +
+	"\x0eschema_version\x18\x05 \x01(\tB\t\xbaH\x06r\x04\n" +
+	"\x02v1H\x03R\x0eschema_version\x88\x01\x01\x12\x1b\n" +
+	"\x06log_id\x18\x06 \x01(\tH\x04R\x06log_id\x88\x01\x01\x120\n" +
+	"\x03job\x18\a \x01(\v2\x1e.cicd_sensor.log.v1.LogContextR\x03job\x12\x19\n" +
+	"\x05scope\x18\b \x01(\tH\x05R\x05scope\x88\x01\x01\x12%\n" +
+	"\vrunner_type\x18\t \x01(\tH\x06R\vrunner_type\x88\x01\x01\x12#\n" +
 	"\n" +
-	"ruleset_id\x18\t \x01(\tH\x06R\n" +
+	"ruleset_id\x18\n" +
+	" \x01(\tH\aR\n" +
 	"ruleset_id\x88\x01\x01\x12\x1d\n" +
-	"\arule_id\x18\n" +
-	" \x01(\tH\aR\arule_id\x88\x01\x01\x12/\n" +
-	"\x10ruleset_revision\x18\v \x01(\tH\bR\x10ruleset_revision\x88\x01\x01\x12!\n" +
-	"\trule_name\x18\f \x01(\tH\tR\trule_name\x88\x01\x01\x12/\n" +
-	"\x10rule_description\x18\r \x01(\tH\n" +
-	"R\x10rule_description\x88\x01\x01\x12\x1b\n" +
-	"\x06action\x18\x0e \x01(\tH\vR\x06action\x88\x01\x01\x129\n" +
-	"\x15rule_alert_truncation\x18\x0f \x01(\tH\fR\x15rule_alert_truncation\x88\x01\x01\x12\x1c\n" +
-	"\trule_tags\x18\x10 \x03(\tR\trule_tags\x125\n" +
-	"\x05event\x18\x11 \x01(\v2\x1f.cicd_sensor.log.v1.EventRecordR\x05eventB\v\n" +
-	"\t_log_typeB\x11\n" +
-	"\x0f_schema_versionB\x10\n" +
-	"\x0e_agent_versionB\t\n" +
+	"\arule_id\x18\v \x01(\tH\bR\arule_id\x88\x01\x01\x12/\n" +
+	"\x10ruleset_revision\x18\f \x01(\tH\tR\x10ruleset_revision\x88\x01\x01\x12!\n" +
+	"\trule_name\x18\r \x01(\tH\n" +
+	"R\trule_name\x88\x01\x01\x12/\n" +
+	"\x10rule_description\x18\x0e \x01(\tH\vR\x10rule_description\x88\x01\x01\x12\x1b\n" +
+	"\x06action\x18\x0f \x01(\tH\fR\x06action\x88\x01\x01\x129\n" +
+	"\x15rule_alert_truncation\x18\x10 \x01(\tH\rR\x15rule_alert_truncation\x88\x01\x01\x12\x1c\n" +
+	"\trule_tags\x18\x11 \x03(\tR\trule_tags\x125\n" +
+	"\x05event\x18\x12 \x01(\v2\x1f.cicd_sensor.log.v1.EventRecordR\x05eventB\v\n" +
+	"\t_log_typeB\x0f\n" +
+	"\r_service_nameB\x12\n" +
+	"\x10_service_versionB\x11\n" +
+	"\x0f_schema_versionB\t\n" +
 	"\a_log_idB\b\n" +
 	"\x06_scopeB\x0e\n" +
 	"\f_runner_typeB\r\n" +

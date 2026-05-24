@@ -6,7 +6,7 @@ They are useful when a single event is only an investigative signal, but multipl
 For example, `curl` execution alone may be normal, and a credential file read alone may need context, but `curl` execution plus credential file access in the same job is much more important.
 
 Mark primitive signals as `collect`, then add a correlation rule with `detect` when the combination appears.
-`collect` is also emitted to `detection_log`, so you can review the primitive signals while treating only the stronger combination as a detection.
+`collect` is also emitted to `detection`, so you can review the primitive signals while treating only the stronger combination as a detection.
 
 ```yaml
 rule_sets:

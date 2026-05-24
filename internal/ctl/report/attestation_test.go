@@ -102,7 +102,7 @@ func TestRenderAttestation_PreservesEmptyArrays(t *testing.T) {
 	log := resultdoc.JobEventSummaryForReport{
 		JobIdentity: jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "9"),
 		ResultSummary: resultdoc.ResultSummary{
-			Result: resultdoc.ResultNoAlert,
+			Result: resultdoc.ResultPassed,
 		},
 	}
 	var buf bytes.Buffer

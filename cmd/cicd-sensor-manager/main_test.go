@@ -277,12 +277,12 @@ func TestBuildServedConfig(t *testing.T) {
 		DefaultMaxAlertsPerRule: 7,
 	}
 	settings := &managerv1.OutputSettings{
-		DetectionLog: &managerv1.OutputSetting{
+		Detection: &managerv1.OutputSetting{
 			Enabled:              true,
 			FlushThresholdBytes:  1,
 			FlushIntervalSeconds: 1,
 		},
-		SummaryLog: &managerv1.OutputSetting{
+		Summary: &managerv1.OutputSetting{
 			Enabled:              true,
 			FlushThresholdBytes:  1,
 			FlushIntervalSeconds: 1,
@@ -297,13 +297,13 @@ func TestBuildServedConfig(t *testing.T) {
 	if served.DefaultMaxAlertsPerRule != 7 {
 		t.Fatalf("DefaultMaxAlertsPerRule: got %d, want 7", served.DefaultMaxAlertsPerRule)
 	}
-	if !served.OutputSettings.GetDetectionLog().GetEnabled() {
+	if !served.OutputSettings.GetDetection().GetEnabled() {
 		t.Fatalf("detection settings: got false, want true")
 	}
-	if served.OutputSettings.GetRuntimeEventLog().GetEnabled() {
+	if served.OutputSettings.GetRuntimeEvent().GetEnabled() {
 		t.Fatalf("runtime event settings: got true, want false")
 	}
-	if !served.OutputSettings.GetSummaryLog().GetEnabled() {
+	if !served.OutputSettings.GetSummary().GetEnabled() {
 		t.Fatalf("summary settings: got false, want true")
 	}
 }

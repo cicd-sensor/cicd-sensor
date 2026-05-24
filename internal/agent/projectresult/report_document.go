@@ -32,16 +32,8 @@ func BuildJobEventSummaryForReport(in ReportDocumentInput) resultdoc.JobEventSum
 	}
 
 	hits := make([]resultdoc.HitRecord, 0)
-	result := resultdoc.ResultNoAlert
+	result := observations.OverallResult(in.Snapshot.Hits)
 	for _, hit := range in.Snapshot.Hits {
-		switch hit.Action {
-		case string(rule.RuleActionTerminate):
-			result = resultdoc.ResultTerminated
-		case string(rule.RuleActionDetect):
-			if result != resultdoc.ResultTerminated {
-				result = resultdoc.ResultDetected
-			}
-		}
 		dropped := hit.HitCount - int64(len(hit.AlertEventRecords))
 		for i, event := range hit.AlertEventRecords {
 			detail := ruleDetails[hit.Identity]

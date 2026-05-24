@@ -24,9 +24,9 @@ service ConfigService {
 // RequestedOutputs indicates which logs the caller will upload,
 // so the manager can tailor output policy for those types.
 message RequestedOutputs {
-  bool summary_log = 1;
-  bool detection_log = 2;
-  bool runtime_event_log = 3;
+  bool summary = 1;
+  bool detection = 2;
+  bool runtime_event = 3;
 }
 
 // FetchConfigRequest is the FetchConfig input. Auth is carried in headers,

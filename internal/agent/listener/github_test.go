@@ -735,7 +735,7 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 			return connect.NewResponse(&managerv1.FetchConfigResponse{
 				Config: &managerv1.ServedConfig{
 					OutputSettings: &managerv1.OutputSettings{
-						DetectionLog: &managerv1.OutputSetting{Enabled: true},
+						Detection: &managerv1.OutputSetting{Enabled: true},
 					},
 				},
 				RuleSources: sources,
@@ -777,7 +777,7 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 	if got := len(job.ProjectScope().ResolvedRules.Rules); got != 1 {
 		t.Fatalf("project manager rules: got %d, want 1", got)
 	}
-	if !job.ProjectScope().OutputSettings.GetDetectionLog().GetEnabled() {
+	if !job.ProjectScope().OutputSettings.GetDetection().GetEnabled() {
 		t.Fatal("project output detection: got false, want true")
 	}
 	if job.HostScope() != nil {
@@ -1308,8 +1308,8 @@ func TestListener_ProjectResult_ReturnsContent(t *testing.T) {
 	if got.JobIdentity.ProjectPath != "acme/example" {
 		t.Fatalf("project: got %q, want acme/example", got.JobIdentity.ProjectPath)
 	}
-	if got.ResultSummary.Result != resultdoc.ResultNoAlert {
-		t.Fatalf("result_summary.result: got %q, want %s", got.ResultSummary.Result, resultdoc.ResultNoAlert)
+	if got.ResultSummary.Result != resultdoc.ResultPassed {
+		t.Fatalf("result_summary.result: got %q, want %s", got.ResultSummary.Result, resultdoc.ResultPassed)
 	}
 	if body := readListenerDebugGzip(t, debugDir); !strings.Contains(body, "listener-project-result-debug") {
 		t.Fatalf("debug gzip not closed/readable after project result response: %s", body)

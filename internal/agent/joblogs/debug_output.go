@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-const DebugRuntimeEventLogFilename = "runtime_event_log.json.gz"
+const DebugRuntimeEventLogFilename = "runtime_event.json.gz"
 const GitHubActionsDebugOutputDir = "/home/runner/work/_temp/cicd_sensor_debug"
 
 // DebugOutput writes local best-effort debug artifacts for hosted standalone

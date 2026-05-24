@@ -160,6 +160,64 @@ func TestMarshalSummaryLogEntryEmitsExplicitZeroCounters(t *testing.T) {
 	}
 }
 
+func TestMarshalSummaryLogEntryResult(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		hits observations.HitSnapshot
+		want string
+	}{
+		{
+			name: "passed when no hits",
+			hits: nil,
+			want: "passed",
+		},
+		{
+			name: "passed when only collect actions",
+			hits: observations.HitSnapshot{
+				{Action: string(rule.RuleActionCollect)},
+			},
+			want: "passed",
+		},
+		{
+			name: "detected when a detect action fires",
+			hits: observations.HitSnapshot{
+				{Action: string(rule.RuleActionDetect)},
+				{Action: string(rule.RuleActionCollect)},
+			},
+			want: "detected",
+		},
+		{
+			name: "terminated takes precedence over detected",
+			hits: observations.HitSnapshot{
+				{Action: string(rule.RuleActionDetect)},
+				{Action: string(rule.RuleActionTerminate)},
+			},
+			want: "terminated",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload, err := MarshalSummaryLogEntry(SummaryLogInput{
+				ScopeLogContext: testScopeLogContext(),
+				Snapshot:        observations.StateSnapshot{Hits: tt.hits},
+			})
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			var got logv1.SummaryLogEntry
+			if err := protojson.Unmarshal(payload, &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if got.GetResult() != tt.want {
+				t.Fatalf("result: got %q, want %q", got.GetResult(), tt.want)
+			}
+		})
+	}
+}
+
 func TestMarshalSummaryLogEntryStampsLogTypeAndVersions(t *testing.T) {
 	t.Parallel()
 
@@ -171,14 +229,17 @@ func TestMarshalSummaryLogEntryStampsLogTypeAndVersions(t *testing.T) {
 	if err := protojson.Unmarshal(payload, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.GetLogType() != string(logtype.Summary) {
-		t.Errorf("log_type: got %q, want %q", got.GetLogType(), string(logtype.Summary))
+	if got.GetLogType() != logtype.Summary.Wire() {
+		t.Errorf("log_type: got %q, want %q", got.GetLogType(), logtype.Summary.Wire())
+	}
+	if got.GetServiceName() != "cicd-sensor" {
+		t.Errorf("service_name: got %q, want %q", got.GetServiceName(), "cicd-sensor")
 	}
 	if got.GetSchemaVersion() != "v1" {
 		t.Errorf("schema_version: got %q, want %q", got.GetSchemaVersion(), "v1")
 	}
-	if got.GetAgentVersion() != version.Current {
-		t.Errorf("agent_version: got %q, want %q", got.GetAgentVersion(), version.Current)
+	if got.GetServiceVersion() != version.Current {
+		t.Errorf("service_version: got %q, want %q", got.GetServiceVersion(), version.Current)
 	}
 }
 

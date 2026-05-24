@@ -45,7 +45,7 @@ func TestJobScopeState_ApplyManagerConfig_AppendsAndResolvesHostScope(t *testing
 			}},
 		}},
 		OutputSettings: &managerv1.OutputSettings{
-			SummaryLog: &managerv1.OutputSetting{Enabled: true},
+			Summary: &managerv1.OutputSetting{Enabled: true},
 		},
 	}
 
@@ -57,8 +57,8 @@ func TestJobScopeState_ApplyManagerConfig_AppendsAndResolvesHostScope(t *testing
 	if len(scope.RuleSets) != 2 {
 		t.Fatalf("rule_sets: got %d, want 2", len(scope.RuleSets))
 	}
-	if !scope.OutputSettings.GetSummaryLog().GetEnabled() {
-		t.Fatal("expected summary_log output settings to be set")
+	if !scope.OutputSettings.GetSummary().GetEnabled() {
+		t.Fatal("expected summary output settings to be set")
 	}
 	if len(scope.ResolvedRules.Rules) != 2 {
 		t.Fatalf("resolved rules: got %d, want 2", len(scope.ResolvedRules.Rules))

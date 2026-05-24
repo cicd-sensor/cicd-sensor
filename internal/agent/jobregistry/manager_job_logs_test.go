@@ -21,7 +21,7 @@ func TestStartManagerJobLogs_AttachesOnlyWhenOutputSettingsExist(t *testing.T) {
 
 	withOutputSettings := jobscope.NewProject()
 	withOutputSettings.OutputSettings = &managerv1.OutputSettings{
-		SummaryLog: &managerv1.OutputSetting{Enabled: true},
+		Summary: &managerv1.OutputSetting{Enabled: true},
 	}
 	jr.startManagerJobLogs(withOutputSettings, id, managerclient.Connection{
 		BaseURL: "https://manager.example.test",

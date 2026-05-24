@@ -11,7 +11,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 )
 
-// runReportAttest reads a summary_log JSON document (from stdin or the
+// runReportAttest reads a project result JSON document (from stdin or the
 // given file) and writes the runtime-trace attestation predicate as JSON
 // to stdout (or --output-file).
 func runReportAttest(_ context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
@@ -28,13 +28,13 @@ func runReportAttest(_ context.Context, args []string, stdin io.Reader, stdout, 
 		return 1, fmt.Errorf("read input: %w", err)
 	}
 
-	var summaryLog resultdoc.JobEventSummaryForReport
-	if err := json.Unmarshal(input, &summaryLog); err != nil {
-		return 1, fmt.Errorf("decode summary_log: %w", err)
+	var projectResult resultdoc.JobEventSummaryForReport
+	if err := json.Unmarshal(input, &projectResult); err != nil {
+		return 1, fmt.Errorf("decode project result: %w", err)
 	}
 
 	var buf bytes.Buffer
-	if err := report.RenderAttestation(&buf, &summaryLog); err != nil {
+	if err := report.RenderAttestation(&buf, &projectResult); err != nil {
 		return 1, fmt.Errorf("render attestation: %w", err)
 	}
 

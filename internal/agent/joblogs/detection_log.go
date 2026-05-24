@@ -39,9 +39,10 @@ func MarshalDetectionLogEntry(in DetectionLogInput) ([]byte, error) {
 	}
 	message := &logv1.DetectionLogEntry{
 		Timestamp:           timestamppb.New(timestamp.UTC()),
-		LogType:             proto.String(string(logtype.Detection)),
+		LogType:             proto.String(logtype.Detection.Wire()),
+		ServiceName:         proto.String(logtype.ServiceName),
+		ServiceVersion:      proto.String(version.Current),
 		SchemaVersion:       proto.String(logtype.DetectionSchemaVersion),
-		AgentVersion:        proto.String(version.Current),
 		LogId:               proto.String(newLogID()),
 		Job:                 protoconv.ToLogContext(in.Identity, in.Metadata),
 		Scope:               proto.String(string(in.Scope)),

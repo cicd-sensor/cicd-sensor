@@ -13,7 +13,7 @@ const (
 )
 
 const (
-	ResultNoAlert    = "no_alert"
+	ResultPassed     = "passed"
 	ResultDetected   = "detected"
 	ResultTerminated = "terminated"
 )
