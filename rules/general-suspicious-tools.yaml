@@ -1,0 +1,110 @@
+rule_sets:
+  - ruleset_id: cicd_sensor_baseline/general_suspicious_tools
+    lists:
+      supplychain_python_suffixes:
+        - "/python"
+        - "/python3"
+        - "/pip"
+        - "/pip3"
+        - "/poetry"
+      supplychain_user_systemd_fragments:
+        - "/.config/systemd/user/"
+    rules:
+      - rule_id: supplychain_github_cli_token_exposure
+        rule_name: "Supply-chain: GitHub CLI token exposure"
+        description: |
+          Detects commands that explicitly print or expose a GitHub CLI token,
+          such as gh auth token or gh auth status --show-token. This is
+          detected because supply-chain payloads use GitHub tokens for repository
+          exfiltration, workflow mutation, and propagation. Review the process
+          lineage, audit GitHub API activity, and rotate the token if the command
+          was not part of an approved release or diagnostic step.
+        event_type: process_exec
+        condition: |
+          process.exec_path.endsWith("/gh") &&
+          process.argv.exists(arg, arg == "auth") &&
+          (
+            process.argv.exists(arg, arg == "token") ||
+            process.argv.exists(arg, arg == "--show-token")
+          )
+        action: detect
+        tags:
+          category: credential-access
+
+      - rule_id: supplychain_systemctl_user_daemon_reload
+        rule_name: "Supply-chain: user systemd daemon reload"
+        description: |
+          Detects systemctl --user daemon-reload. This is detected because
+          malicious packages and Python payloads have used user systemd services
+          for persistence after installing a service unit. Review recent writes
+          under ~/.config/systemd/user, inspect the service contents, and disable
+          unexpected user services.
+        event_type: process_exec
+        condition: |
+          process.exec_path.endsWith("/systemctl") &&
+          process.argv.exists(arg, arg == "--user") &&
+          process.argv.exists(arg, arg == "daemon-reload")
+        action: detect
+        tags:
+          category: persistence
+
+      - rule_id: supplychain_user_systemd_service_write
+        rule_name: "Supply-chain: user systemd service write"
+        description: |
+          Detects writes to user systemd service files. This is detected because
+          a service unit can persist payload execution across sessions or jobs,
+          especially on self-hosted runners and developer machines. Review the
+          written service, remove unexpected units, and check whether package or
+          Python ancestry led to the write.
+        event_type: file_open
+        condition: |
+          is_write &&
+          path.endsWith(".service") &&
+          list.supplychain_user_systemd_fragments.exists(p, path.contains(p))
+        action: detect
+        tags:
+          category: persistence
+
+      - rule_id: supplychain_python_autoload_write
+        rule_name: "Supply-chain: Python startup autoload write"
+        description: |
+          Detects Python startup autoload writes such as site-packages .pth,
+          sitecustomize.py, or usercustomize.py below Python-related ancestry.
+          This is detected because these files can execute code on later Python
+          startup or import without an explicit command. Review the package that
+          wrote the file, compare it with the expected artifact, and remove or
+          quarantine unexpected autoload files.
+        event_type: file_open
+        condition: |
+          is_write &&
+          path.contains("/site-packages/") &&
+          (
+            path.endsWith(".pth") ||
+            path.endsWith("/sitecustomize.py") ||
+            path.endsWith("/usercustomize.py")
+          ) &&
+          process.ancestors.exists(a,
+            list.supplychain_python_suffixes.exists(p, a.exec_path.endsWith(p))
+          )
+        action: detect
+        tags:
+          category: persistence
+
+      - rule_id: supplychain_python_tmp_pyz_exec
+        rule_name: "Supply-chain: Python archive payload executed from /tmp"
+        description: |
+          Detects Python executing a .pyz archive from /tmp. This is detected
+          because import-time and install-time payloads may drop or download a
+          Python archive into a temporary path and execute it as a second stage.
+          Review the parent process, recover the archive if available, and check
+          for credential access or network egress around the execution.
+        event_type: process_exec
+        condition: |
+          (
+            process.exec_path.endsWith("/python") ||
+            process.exec_path.endsWith("/python3")
+          ) &&
+          process.argv.exists(arg, arg.contains("/tmp/") && arg.endsWith(".pyz"))
+        action: detect
+        tags:
+          category: execution

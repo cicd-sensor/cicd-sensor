@@ -1,5 +1,5 @@
 rule_sets:
-  - ruleset_id: cicd-sensor/testevent
+  - ruleset_id: cicd_sensor_baseline/testevent
     rules:
       - rule_id: testevent_domain_lookup
         rule_name: "Testevent: cicd-sensor canary domain looked up"
@@ -8,7 +8,6 @@ rule_sets:
         condition: domain == "testevent.cicd-sensor.com"
         action: detect
         tags:
-          severity: info
           category: self-test
 
       - rule_id: testevent_file_write
@@ -18,5 +17,4 @@ rule_sets:
         condition: is_write && path.endsWith("/cicd-sensor-testevent.txt")
         action: detect
         tags:
-          severity: info
           category: self-test
