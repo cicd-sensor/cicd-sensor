@@ -1,5 +1,6 @@
 rule_sets:
   - ruleset_id: cicd_sensor_baseline/generic_tracking_escape
+
     rules:
       - rule_id: supplychain_docker_upstream_socket_access
         rule_name: "Supply-chain: real Docker upstream socket access"

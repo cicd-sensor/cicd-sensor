@@ -1,5 +1,6 @@
 rule_sets:
   - ruleset_id: cicd_sensor_baseline/generic_execution
+
     rules:
       - rule_id: supplychain_python_tmp_pyz_exec
         rule_name: "Supply-chain: Python archive payload executed from /tmp"

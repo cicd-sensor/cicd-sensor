@@ -2,6 +2,7 @@ rule_sets:
   - ruleset_id: cicd_sensor_baseline/ioc
     # This file currently carries one example IOC. Add future short-lived,
     # high-confidence campaign indicators here.
+
     rules:
       - rule_id: ioc_mini_shaihulud_antv_c2_domain
         rule_name: "IOC: Mini Shai-Hulud AntV C2 domain"

@@ -7,14 +7,17 @@ rule_sets:
         - "/pip"
         - "/pip3"
         - "/poetry"
+
       supplychain_user_systemd_fragments:
         - "/.config/systemd/user/"
+
       supplychain_systemctl_user_persistence_verbs:
         - "daemon-reload"
         - "enable"
         - "link"
         - "restart"
         - "start"
+
     rules:
       - rule_id: supplychain_systemctl_user_persistence_operation
         rule_name: "Supply-chain: user systemd persistence operation"
