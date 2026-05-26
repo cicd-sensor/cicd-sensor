@@ -33,7 +33,8 @@ import (
 )
 
 const (
-	serverName = "buf-lsp"
+	serverName     = "buf-lsp"
+	lintSourceName = "buf lint"
 
 	maxSymbolResults = 1000
 )
@@ -168,7 +169,7 @@ func (s *server) Initialize(
 			DocumentLinkProvider:    &protocol.DocumentLinkOptions{},
 			CodeLensProvider:        &protocol.CodeLensOptions{},
 			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{
-				Commands: []string{commandUpdateAllDeps, commandCheckUpdates},
+				Commands: []string{commandUpdateAllDeps, commandCheckUpdates, CommandRunGenerate, CommandCheckPluginUpdates},
 			},
 		},
 		ServerInfo: info,
@@ -228,6 +229,7 @@ func (s *server) DidOpen(
 ) error {
 	if isBufYAMLURI(params.TextDocument.URI) {
 		s.bufYAMLManager.Track(params.TextDocument.URI, params.TextDocument.Text)
+		s.bufYAMLManager.CheckIgnorePaths(params.TextDocument.URI)
 		return nil
 	}
 	if isBufGenYAMLURI(params.TextDocument.URI) {
@@ -256,6 +258,7 @@ func (s *server) DidChange(
 ) error {
 	if isBufYAMLURI(params.TextDocument.URI) {
 		s.bufYAMLManager.Track(params.TextDocument.URI, params.ContentChanges[0].Text)
+		s.bufYAMLManager.CheckIgnorePaths(params.TextDocument.URI)
 		return nil
 	}
 	if isBufGenYAMLURI(params.TextDocument.URI) {
@@ -364,7 +367,7 @@ func (s *server) DidClose(
 		return nil
 	}
 	if isBufGenYAMLURI(params.TextDocument.URI) {
-		s.bufGenYAMLManager.Close(params.TextDocument.URI)
+		s.bufGenYAMLManager.Close(ctx, params.TextDocument.URI)
 		return nil
 	}
 	if isBufPolicyYAMLURI(params.TextDocument.URI) {
@@ -377,6 +380,33 @@ func (s *server) DidClose(
 	}
 	if file := s.fileManager.Get(params.TextDocument.URI); file != nil {
 		file.Close(ctx)
+	}
+	return nil
+}
+
+// DidDeleteFiles is called when files are deleted on disk (e.g. via the OS or
+// IDE file explorer). For each deleted file we close the corresponding tracked
+// resource so stale diagnostics are cleared from the client.
+func (s *server) DidDeleteFiles(
+	ctx context.Context,
+	params *protocol.DeleteFilesParams,
+) error {
+	for _, deleted := range params.Files {
+		uri := protocol.URI(deleted.URI)
+		switch {
+		case isBufYAMLURI(uri):
+			s.bufYAMLManager.Close(ctx, uri)
+		case isBufGenYAMLURI(uri):
+			s.bufGenYAMLManager.Close(ctx, uri)
+		case isBufPolicyYAMLURI(uri):
+			s.bufPolicyYAMLManager.Close(uri)
+		case isBufLockURI(uri):
+			s.bufLockManager.Close(uri)
+		default:
+			if file := s.fileManager.Get(uri); file != nil {
+				file.Close(ctx)
+			}
+		}
 	}
 	return nil
 }
@@ -605,15 +635,14 @@ func (s *server) CodeAction(ctx context.Context, params *protocol.CodeActionPara
 }
 
 // CodeLens is called when the client requests code lenses for a document.
-//
-// For buf.yaml files, this returns whole-file lenses on the deps: key line to
-// trigger dependency updates via the buf.dep.updateAll and buf.dep.checkUpdates
-// workspace commands.
 func (s *server) CodeLens(ctx context.Context, params *protocol.CodeLensParams) ([]protocol.CodeLens, error) {
-	if !isBufYAMLURI(params.TextDocument.URI) {
-		return nil, nil
+	if isBufYAMLURI(params.TextDocument.URI) {
+		return s.bufYAMLManager.GetCodeLenses(params.TextDocument.URI), nil
 	}
-	return s.bufYAMLManager.GetCodeLenses(params.TextDocument.URI), nil
+	if isBufGenYAMLURI(params.TextDocument.URI) {
+		return s.bufGenYAMLManager.GetCodeLenses(params.TextDocument.URI), nil
+	}
+	return nil, nil
 }
 
 // ExecuteCommand is called when the client invokes a workspace command registered
@@ -623,9 +652,12 @@ func (s *server) CodeLens(ctx context.Context, params *protocol.CodeLensParams) 
 //   - buf.dep.updateAll: update all dependencies in the buf.yaml at the given URI.
 //   - buf.dep.checkUpdates: check for newer versions of dependencies and publish
 //     informational diagnostics for any that are outdated.
+//   - buf.generate.run: run buf generate for the buf.gen.yaml at the given URI.
+//   - buf.generate.checkPluginUpdates: check for newer versions of remote plugins
+//     in the buf.gen.yaml and publish informational diagnostics for outdated ones.
 func (s *server) ExecuteCommand(ctx context.Context, params *protocol.ExecuteCommandParams) (any, error) {
 	if len(params.Arguments) < 1 {
-		return nil, fmt.Errorf("%s: expected at least 1 argument (buf.yaml URI), got %d", params.Command, len(params.Arguments))
+		return nil, fmt.Errorf("%s: expected at least 1 argument (file URI), got %d", params.Command, len(params.Arguments))
 	}
 	uriStr, ok := params.Arguments[0].(string)
 	if !ok {
@@ -640,6 +672,16 @@ func (s *server) ExecuteCommand(ctx context.Context, params *protocol.ExecuteCom
 		return nil, nil
 	case commandCheckUpdates:
 		if err := s.bufYAMLManager.ExecuteCheckUpdates(ctx, uri); err != nil {
+			return nil, fmt.Errorf("%s: %w", params.Command, err)
+		}
+		return nil, nil
+	case CommandRunGenerate:
+		if err := s.bufGenYAMLManager.ExecuteRunGenerate(ctx, uri); err != nil {
+			return nil, fmt.Errorf("%s: %w", params.Command, err)
+		}
+		return nil, nil
+	case CommandCheckPluginUpdates:
+		if err := s.bufGenYAMLManager.ExecuteCheckPluginUpdates(ctx, uri); err != nil {
 			return nil, fmt.Errorf("%s: %w", params.Command, err)
 		}
 		return nil, nil

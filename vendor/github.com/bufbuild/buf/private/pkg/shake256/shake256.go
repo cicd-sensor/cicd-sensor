@@ -39,7 +39,11 @@ func NewDigest(value []byte) (Digest, error) {
 // NewDigestForContent returns a new Digest for the content read from the Reader.
 func NewDigestForContent(reader io.Reader) (Digest, error) {
 	shakeHash := sha3.NewSHAKE256()
-	if _, err := io.Copy(shakeHash, reader); err != nil {
+	// Use a small fixed buffer instead of io.Copy's 32 KiB default. Proto
+	// files are typically small (median a few KiB), so 1 KiB reads most files
+	// in a few iterations while keeping per-call allocation minimal.
+	buf := make([]byte, 1024)
+	if _, err := io.CopyBuffer(shakeHash, reader, buf); err != nil {
 		return nil, err
 	}
 	value := make([]byte, shake256Length)
