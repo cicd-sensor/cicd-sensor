@@ -40,7 +40,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: cicd-sensor/cicd-sensor-action@e02b263ab3e3be401d9a390bc810681a37ed9d6f # v0.0.26
+      - uses: cicd-sensor/cicd-sensor-action@f162ae1fc26d687c85111df900ce60161fe53ae3 # v0.0.27
 ```
 
 ## Demo
