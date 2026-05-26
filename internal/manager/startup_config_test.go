@@ -145,11 +145,11 @@ func TestLoadStartupConfig_SinksAndLogs(t *testing.T) {
 			body: `
 sinks:
   s3-prod:
-    type: s3
+    type: aws_s3
     uri: s3://cicd-sensor-prod/logs/
     region: us-east-1
   pubsub-detect:
-    type: pubsub
+    type: google_pubsub
     project_id: cicd-sensor-prod
     topic: detections
 logs:
@@ -176,14 +176,14 @@ sinks:
   bad:
     type: stdout
 `,
-			wantErr: `sinks.bad.type "stdout" is not one of s3/gcs/pubsub`,
+			wantErr: `sinks.bad.type "stdout" is not one of aws_s3/google_storage/google_pubsub`,
 		},
 		{
 			name: "s3_sink_missing_uri",
 			body: `
 sinks:
   s3-prod:
-    type: s3
+    type: aws_s3
     region: us-east-1
 `,
 			wantErr: "sinks.s3-prod.uri is required",
@@ -193,7 +193,7 @@ sinks:
 			body: `
 sinks:
   s3-prod:
-    type: s3
+    type: aws_s3
     uri: gs://bucket/logs
     region: us-east-1
 `,
@@ -204,29 +204,29 @@ sinks:
 			body: `
 sinks:
   s3-prod:
-    type: s3
+    type: aws_s3
     uri: s3://bucket/logs
 `,
-			wantErr: "sinks.s3-prod.region is required for s3",
+			wantErr: "sinks.s3-prod.region is required for aws_s3",
 		},
 		{
 			name: "s3_sink_with_pubsub_fields",
 			body: `
 sinks:
   s3-prod:
-    type: s3
+    type: aws_s3
     uri: s3://bucket/logs
     region: us-east-1
     project_id: project
 `,
-			wantErr: "sinks.s3-prod: project_id and topic are only valid for pubsub",
+			wantErr: "sinks.s3-prod: project_id and topic are only valid for google_pubsub",
 		},
 		{
 			name: "gcs_sink_missing_uri",
 			body: `
 sinks:
   gcs-prod:
-    type: gcs
+    type: google_storage
 `,
 			wantErr: "sinks.gcs-prod.uri is required",
 		},
@@ -235,7 +235,7 @@ sinks:
 			body: `
 sinks:
   gcs-prod:
-    type: gcs
+    type: google_storage
     uri: s3://bucket/logs
 `,
 			wantErr: "sinks.gcs-prod.uri must start with gs://",
@@ -245,50 +245,50 @@ sinks:
 			body: `
 sinks:
   gcs-prod:
-    type: gcs
+    type: google_storage
     uri: gs://bucket/logs
     project_id: project
 `,
-			wantErr: "sinks.gcs-prod: region, project_id, and topic are not valid for gcs",
+			wantErr: "sinks.gcs-prod: region, project_id, and topic are not valid for google_storage",
 		},
 		{
 			name: "pubsub_sink_missing_project_id",
 			body: `
 sinks:
   pubsub-detect:
-    type: pubsub
+    type: google_pubsub
     topic: detections
 `,
-			wantErr: "sinks.pubsub-detect.project_id is required for pubsub",
+			wantErr: "sinks.pubsub-detect.project_id is required for google_pubsub",
 		},
 		{
 			name: "pubsub_sink_missing_topic",
 			body: `
 sinks:
   pubsub-detect:
-    type: pubsub
+    type: google_pubsub
     project_id: project
 `,
-			wantErr: "sinks.pubsub-detect.topic is required for pubsub",
+			wantErr: "sinks.pubsub-detect.topic is required for google_pubsub",
 		},
 		{
 			name: "pubsub_sink_with_object_storage_fields",
 			body: `
 sinks:
   pubsub-detect:
-    type: pubsub
+    type: google_pubsub
     project_id: project
     topic: detections
     uri: gs://bucket/logs
 `,
-			wantErr: "sinks.pubsub-detect: region and uri are not valid for pubsub",
+			wantErr: "sinks.pubsub-detect: region and uri are not valid for google_pubsub",
 		},
 		{
 			name: "sink_name_empty",
 			body: `
 sinks:
   "":
-    type: gcs
+    type: google_storage
     uri: gs://bucket/logs
 `,
 			wantErr: "sinks: name must not be empty",
@@ -298,7 +298,7 @@ sinks:
 			body: `
 sinks:
   gcs-prod:
-    type: gcs
+    type: google_storage
     uri: gs://bucket/logs
 logs:
   unknown:
@@ -311,7 +311,7 @@ logs:
 			body: `
 sinks:
   gcs-prod:
-    type: gcs
+    type: google_storage
     uri: gs://bucket/logs
 logs:
   detection:
@@ -333,7 +333,7 @@ logs:
 			body: `
 sinks:
   gcs-prod:
-    type: gcs
+    type: google_storage
     uri: gs://bucket/logs
 output:
   detection:
@@ -346,7 +346,7 @@ output:
 			body: `
 sinks:
   gcs-prod:
-    type: gcs
+    type: google_storage
     uri: gs://bucket/logs
 logs:
   detection:

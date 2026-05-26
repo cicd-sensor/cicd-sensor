@@ -173,8 +173,8 @@ func TestBuildOutputs_ClosesCreatedSinksOnBuildFailure(t *testing.T) {
 		context.Background(),
 		testLogger,
 		SinksConfig{
-			"first":  {Type: "gcs", URI: "gs://first"},
-			"second": {Type: "gcs", URI: "gs://second"},
+			"first":  {Type: "google_storage", URI: "gs://first"},
+			"second": {Type: "google_storage", URI: "gs://second"},
 		},
 		LogsConfig{
 			"detection": {Sink: "first"},

@@ -102,20 +102,20 @@ func validateSinks(sinks SinksConfig) error {
 			return fmt.Errorf("sinks: name must not be empty")
 		}
 		switch sc.Type {
-		case "s3":
+		case "aws_s3":
 			if err := validateS3Sink(name, sc); err != nil {
 				return err
 			}
-		case "gcs":
+		case "google_storage":
 			if err := validateGCSSink(name, sc); err != nil {
 				return err
 			}
-		case "pubsub":
+		case "google_pubsub":
 			if err := validatePubSubSink(name, sc); err != nil {
 				return err
 			}
 		default:
-			return fmt.Errorf("sinks.%s.type %q is not one of s3/gcs/pubsub", name, sc.Type)
+			return fmt.Errorf("sinks.%s.type %q is not one of aws_s3/google_storage/google_pubsub", name, sc.Type)
 		}
 	}
 	return nil
@@ -129,10 +129,10 @@ func validateS3Sink(name string, sc SinkConfig) error {
 		return fmt.Errorf("sinks.%s.uri must start with s3://", name)
 	}
 	if sc.Region == "" {
-		return fmt.Errorf("sinks.%s.region is required for s3", name)
+		return fmt.Errorf("sinks.%s.region is required for aws_s3", name)
 	}
 	if sc.ProjectID != "" || sc.Topic != "" {
-		return fmt.Errorf("sinks.%s: project_id and topic are only valid for pubsub", name)
+		return fmt.Errorf("sinks.%s: project_id and topic are only valid for google_pubsub", name)
 	}
 	return nil
 }
@@ -145,20 +145,20 @@ func validateGCSSink(name string, sc SinkConfig) error {
 		return fmt.Errorf("sinks.%s.uri must start with gs://", name)
 	}
 	if sc.Region != "" || sc.ProjectID != "" || sc.Topic != "" {
-		return fmt.Errorf("sinks.%s: region, project_id, and topic are not valid for gcs", name)
+		return fmt.Errorf("sinks.%s: region, project_id, and topic are not valid for google_storage", name)
 	}
 	return nil
 }
 
 func validatePubSubSink(name string, sc SinkConfig) error {
 	if sc.ProjectID == "" {
-		return fmt.Errorf("sinks.%s.project_id is required for pubsub", name)
+		return fmt.Errorf("sinks.%s.project_id is required for google_pubsub", name)
 	}
 	if sc.Topic == "" {
-		return fmt.Errorf("sinks.%s.topic is required for pubsub", name)
+		return fmt.Errorf("sinks.%s.topic is required for google_pubsub", name)
 	}
 	if sc.Region != "" || sc.URI != "" {
-		return fmt.Errorf("sinks.%s: region and uri are not valid for pubsub", name)
+		return fmt.Errorf("sinks.%s: region and uri are not valid for google_pubsub", name)
 	}
 	return nil
 }

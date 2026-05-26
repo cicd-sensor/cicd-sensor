@@ -90,11 +90,11 @@ func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, l
 
 func buildNamedSink(ctx context.Context, logger *slog.Logger, sc SinkConfig) (sink.Sink, error) {
 	switch sc.Type {
-	case "s3":
+	case "aws_s3":
 		return sink.NewS3(ctx, sc.URI, sc.Region)
-	case "gcs":
+	case "google_storage":
 		return sink.NewGCS(ctx, sc.URI)
-	case "pubsub":
+	case "google_pubsub":
 		return sink.NewPubSub(ctx, logger, sc.ProjectID, sc.Topic)
 	default:
 		return nil, fmt.Errorf("unknown sink type %q", sc.Type)

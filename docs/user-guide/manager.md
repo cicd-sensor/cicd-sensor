@@ -139,7 +139,7 @@ default_max_alerts_per_rule: 10
 
 sinks:
   s3-out:
-    type: s3
+    type: aws_s3
     uri: s3://cicd-sensor-prod/cicd-sensor/
     region: ap-northeast-1
 
@@ -174,16 +174,16 @@ When logs are aggregated through the manager, define `sinks` and `logs`.
 ```yaml
 sinks:
   gcs-summary:
-    type: gcs
+    type: google_storage
     uri: gs://cicd-sensor-prod/cicd-sensor/
 
   pubsub-detection:
-    type: pubsub
+    type: google_pubsub
     project_id: security-prod
     topic: cicd-sensor-detection
 
   pubsub-runtime-event:
-    type: pubsub
+    type: google_pubsub
     project_id: security-prod
     topic: cicd-sensor-runtime-event
 
@@ -211,16 +211,16 @@ Use this mapping to choose patterns such as storing all logs in one GCS destinat
 
 | Sink type | Required settings | Notes |
 | --- | --- | --- |
-| `gcs` | `uri` | `uri` is a `gs://...` object-storage URI. Include any desired object key path in the URI. |
-| `pubsub` | `project_id`, `topic` | Publishes one plain JSON record per message. |
-| `s3` | `uri`, `region` | `uri` is an `s3://...` object-storage URI. Include any desired object key path in the URI. |
+| `aws_s3` | `uri`, `region` | `uri` is an `s3://...` object-storage URI. Include any desired object key path in the URI. |
+| `google_storage` | `uri` | `uri` is a `gs://...` object-storage URI. Include any desired object key path in the URI. |
+| `google_pubsub` | `project_id`, `topic` | Publishes one plain JSON record per message. |
 
 Store logs in GCS:
 
 ```yaml
 sinks:
   gcs-prod:
-    type: gcs
+    type: google_storage
     uri: gs://cicd-sensor-prod/cicd-sensor/
 
 logs:
@@ -237,12 +237,12 @@ Send logs to Pub/Sub:
 ```yaml
 sinks:
   pubsub-detection:
-    type: pubsub
+    type: google_pubsub
     project_id: security-prod
     topic: cicd-sensor-detection
 
   pubsub-runtime-event:
-    type: pubsub
+    type: google_pubsub
     project_id: security-prod
     topic: cicd-sensor-runtime-event
 

@@ -86,7 +86,7 @@ bind:
 default_max_alerts_per_rule: 25
 sinks:
   test-sink:
-    type: gcs
+    type: google_storage
     uri: gs://test-bucket
 logs:
   summary:
