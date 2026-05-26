@@ -8,7 +8,8 @@ The source of truth for design is `docs/`.
 - `docs/index.md` — project goal and supported platforms
 - `docs/user-guide/overview.md` — runner environments and usage models
 - `docs/developer-guide/overview.md` — repository layout and subsystem reading order
-- `docs/developer-guide/agent.md` — Job / Scope / JobRegistry / KernelTracker model and the scope ownership rules
+- `docs/developer-guide/agent.md` — Job / Scope / JobRegistry / KernelTracker model
+- `docs/developer-guide/agent-ownership-boundaries.md` — Agent / JobRegistry / Job / JobScopeState ownership rules and per-Job evaluation rationale
 - `docs/developer-guide/ebpf-runtime.md` — cgroup v2 tracking, BPF map boundary, eBPF code style and contribution contract
 - `docs/developer-guide/manager.md` — config and log delivery boundary
 - `docs/developer-guide/rule-engine.md` — RuleSet / RuleModifier / CEL flow
@@ -67,7 +68,7 @@ The Agent is built from several components, each owning a different boundary. Be
 | `Docker proxy` | Mediates dockerd API and stages container cgroup basenames so jobs can track containers created through the host Docker socket. |
 | `Outputs` | Per-scope runtime summaries used for job logs, project results, reports, and attestations. |
 
-A single Job may carry one scope or both. Each scope owns its own rules, evaluation state, and outputs, and the two are isolated: neither operator can read or override the other's rules, and their outputs are emitted separately. This is the security boundary of the agent — see `docs/developer-guide/agent.md` (including the **Scope Ownership** section) for the design source of truth. For the kernel-side model, see `docs/developer-guide/ebpf-runtime.md`.
+A single Job may carry one scope or both. Each scope owns its own rules, evaluation state, and outputs, and the two are isolated: neither operator can read or override the other's rules, and their outputs are emitted separately. This is the security boundary of the agent — see `docs/developer-guide/agent.md` for the conceptual model and `docs/developer-guide/agent-ownership-boundaries.md` for the implementation ownership rules. For the kernel-side model, see `docs/developer-guide/ebpf-runtime.md`.
 
 ## Commits
 

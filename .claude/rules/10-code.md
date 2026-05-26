@@ -14,7 +14,7 @@ Component ownership is the security model. Misplacing a field is a boundary bug,
 - Before writing or moving code, identify which component owns the state, lifecycle, or interface you are touching. See `AGENTS.md` → **Agent components** for the map.
 - Do not let responsibilities leak across components.
 - Name fields and helpers so the owner is obvious at the call site.
-- For `internal/agent/**` or `cmd/cicd-sensor/**`, read the **Scope Ownership** section in `docs/developer-guide/agent.md` before adding fields to `JobRegistry`, `Job`, or `JobScopeState`. Host scope and project scope stay isolated.
+- For `internal/agent/**` or `cmd/cicd-sensor/**`, read `docs/developer-guide/agent-ownership-boundaries.md` before adding fields to `Agent`, `JobRegistry`, `Job`, or `JobScopeState`. Host scope and project scope stay isolated.
 
 ## Baseline
 
@@ -31,7 +31,7 @@ Component ownership is the security model. Misplacing a field is a boundary bug,
 
 The control socket's filesystem mode is permissive (`controlSocketMode = 0o777` in `internal/agent/listener/listener.go`). Authorization is enforced through `SO_PEERCRED` peer credentials and cgroup tracking, not filesystem ACLs.
 
-- **Hook / lifecycle endpoints** (GitHub `host/start`, `host/end`, `project/start`, `project/result`, `job/health`) read the peer PID from `SO_PEERCRED` and either **seed** Job cgroup tracking (host start: the hook process's cgroup becomes the Job's tracked-cgroups root) or **require** the peer to already belong to a tracked Job (`ErrPeerNotInJob` on miss). See `JobRegistry.FindJobForPeerPID` and siblings in `internal/agent/jobregistry/`, and **Agent, JobRegistry, Job, Scope** in `docs/developer-guide/agent.md`.
+- **Hook / lifecycle endpoints** (GitHub `host/start`, `host/end`, `project/start`, `project/result`, `job/health`) read the peer PID from `SO_PEERCRED` and either **seed** Job cgroup tracking (host start: the hook process's cgroup becomes the Job's tracked-cgroups root) or **require** the peer to already belong to a tracked Job (`ErrPeerNotInJob` on miss). See `JobRegistry.FindJobForPeerPID` and siblings in `internal/agent/jobregistry/`, and `docs/developer-guide/agent-ownership-boundaries.md` for the ownership rules.
 - **Agent-owner endpoints** (GitHub `staging/put`, GitLab `host/start`, GitLab `staging/put`) gate by `SO_PEERCRED` UID matching the agent process owner. See `requireRequestPeerUIDMatchesAgentOwner` in `internal/agent/listener/request_peer_linux.go`.
 
 A new socket endpoint picks one of these gates explicitly. Do not trust callers just because the socket file exists.

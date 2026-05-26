@@ -99,91 +99,7 @@ A **Scope** is the configuration / control surface attached to a Job. Two kinds 
 
 Each scope carries its own rules, evaluation state, and output destinations. The two are isolated: one scope cannot read or override the other's rules, and their outputs are emitted separately. This lets the host operator and the repository operator each configure cicd-sensor for their own concerns without interfering with each other — the host operator can enforce a baseline across all jobs on the host, while a repository can layer project-specific rules on top.
 
-## Implementation types: Agent, JobRegistry, Job, JobScopeState
-
-The Concepts above are realised by four Go types whose relationship is fixed. Misplacing a field across this boundary breaks the security model, so the structure is load-bearing.
-
-```mermaid
-classDiagram
-    direction LR
-    class Agent {
-        +hostManagerConn
-        +hostManagerClient
-        +socketPath
-        +provider
-        +runnerType
-        +Run()
-    }
-    class JobRegistry {
-        -jobs : map[JobIdentity]*Job
-        -kernelTracker
-        -baselineLoad
-        +ApplyGitHubHostStart()
-        +ApplyGitLabHostStart()
-        +ApplyProjectStart()
-    }
-    class Job {
-        -identity : JobIdentity
-        -metadata : JobMetadata
-        -host : *JobScopeState
-        -project : *JobScopeState
-        -eventCh
-    }
-    class JobScopeState {
-        +Type : ScopeType
-        +RuleSets
-        +RuleModifiers
-        +OutputSettings
-        +ResolvedRules
-        +Observations
-        +ConfigRevision
-        +DefaultMaxAlertsPerRule
-    }
-
-    Agent "1" --> "1" JobRegistry : owns
-    JobRegistry "1" --> "0..*" Job : catalogues
-    Job "1" --> "0..1" JobScopeState : host
-    Job "1" --> "0..1" JobScopeState : project
-    Agent ..> JobRegistry : passes hostManagerClient at start
-```
-
-A single agent process holds one `Agent`, one `JobRegistry`, many `Job`s, and up to two `JobScopeState`s per Job: a host one built by `ApplyGitHubHostStart` / `ApplyGitLabHostStart`, and a project one built by `ApplyGitHubProjectStart`. They never read or write each other. Rule actions, including `terminate`, only emit detections; the Job ends through external triggers (Runner termination, cgroup removal).
-
-### Where each type holds state
-
-`Agent` is the **top-level process-wide orchestrator** and the only natural home for dependencies that exist once per agent process — one host scope per process means those dependencies have nowhere else to live.
-
-| Holds | Does not hold |
-| --- | --- |
-| `hostManagerConn`, `hostManagerClient`, `socketPath`, `provider`, `runnerType`, agent lifecycle (shutdown / drain) | per-scope state, active job map, kernel tracking state |
-
-`JobRegistry` is the **active jobs catalog and KernelTracker binding**. Host-start methods (`ApplyGitHubHostStart`, `ApplyGitLabHostStart`) receive the host manager connection / client as parameters; `JobRegistry` does not hold them as fields.
-
-| Holds | Does not hold |
-| --- | --- |
-| `jobs` map (active Jobs by identity); KernelTracker binding; baseline loader; in-flight `starting` reservations | manager clients, per-scope `OutputSettings`, result log senders, manager output queues |
-
-`Job` holds **one CI Job's identity, metadata, lifecycle, and event worker**, plus pointers to up to two `JobScopeState`s (host, project). Per-scope config does not become a Job-level field — it lives on the referenced `JobScopeState`.
-
-`JobScopeState` holds **per-scope state for one Job**.
-
-| Holds | Does not hold |
-| --- | --- |
-| `Type` (host or project), `RuleSets`, `RuleModifiers`, `ConfigRevision`, `OutputSettings`, `ResolvedRules`, `Observations`, `DefaultMaxAlertsPerRule`, scope-local manager job-log routing | state that assumes host and project share it |
-
-If host and project could diverge in the future, the value is scope-local from the start. Equal values today are not a reason to hoist. Shared queues, connection reuse, and similar optimizations come after ownership is clear.
-
-### Naming and configuration flow
-
-Names expose the owner: `host*` for host-owned, `project*` for project-owned, `scope*` (or placement on `JobScopeState`) for scope-local. A wide, owner-free name on a shared struct is the sign of a placement bug.
-
-Configuration flows along the diagram's edges: host config from the host operator (`Agent` → `JobRegistry` host-start → the Job's host `JobScopeState`); project config from a project start request → the Job's project `JobScopeState`. `FetchConfig` results stay within the scope of the client that issued the fetch. The host operator does not override project rules, caps, or output destinations; adversarial project input is bounded by a global hard ceiling.
-
-### Event evaluation is per-Job
-
-Host scope and project scope are separate rule sets, but they normally overlap heavily in practice — both sides typically include the same Baseline rules independently. Evaluating the same compiled rule twice (once per scope) would scale the CEL hot path with the number of scopes for no behavioural gain.
-
-Rule evaluation is therefore done **per Job, not per scope**: `mergeEvaluationRules` de-duplicates rules across the Job's host and project `JobScopeState`s, `NewEvaluationState` compiles the merged set once, and each event is evaluated against that merged set in a single pass by the Job's one event worker. Per-rule `FeedHost` / `FeedProject` flags then route each hit back to the host `JobScopeState`, the project `JobScopeState`, or both. Scope isolation is preserved in the **output routing**, not by duplicating evaluation per scope.
+For implementation ownership boundaries, see [Agent Ownership Boundaries](agent-ownership-boundaries.md).
 
 ## Subsystems
 
@@ -237,13 +153,7 @@ Job tracking is expressed by JobRegistry composing KernelTracker primitives.
 GitHub can resolve the cgroup from the peer PID at start time, so it uses `RegisterJob + BindProcessCgroupToJob`.
 GitLab Docker executor registers a job from label identity evidence and waits for a later staging promote.
 
-## Design Notes
-
-- Job membership is determined by cgroup tracking. Process context is a fat node snapshot with `exec_path` / `argv` / `ancestors`; it is not used as the job boundary.
-- KernelTracker state is owned exclusively by its loop goroutine. `jobTrackingState` is not published externally.
-- Listener stays as the delivery layer. Provider differences are contained in handlers and JobRegistry primitive composition.
-- Output runtime is scope-local. Host / project output queues are not hoisted into JobRegistry.
-- JobRegistry owns lifecycle. It is not on the hot path for event routing.
-
 For kernel-side observation details, see [eBPF Runtime](ebpf-runtime.md).
-For the rule authoring surface, see [Rules](../user-guide/rules.md). For the internal implementation, see [Rule Engine](rule-engine.md).
+For Agent implementation ownership rules, see [Agent Ownership Boundaries](agent-ownership-boundaries.md).
+For the rule authoring surface, see [Rules](../user-guide/rules.md).
+For the rule implementation, see [Rule Engine](rule-engine.md).
