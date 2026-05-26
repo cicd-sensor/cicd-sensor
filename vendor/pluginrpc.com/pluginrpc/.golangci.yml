@@ -1,0 +1,62 @@
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  forbidigo:
+    forbid:
+      - '^fmt\.Print'
+      - '^log\.'
+      - '^print$'
+      - '^println$'
+      - '^panic$'
+  godox:
+    # TODO, OPT, etc. comments are fine to commit. Use FIXME comments for
+    # temporary hacks, and use godox to prevent committing them.
+    keywords: [FIXME]
+  varnamelen:
+    ignore-decls:
+      - T any
+      - i int
+      - wg sync.WaitGroup
+      - sb strings.Builder
+linters:
+  enable-all: true
+  disable:
+    - cyclop            # covered by gocyclo
+    - depguard          # unnecessary for small libraries
+    - err113            # dubious dynamic errors warnings
+    - exhaustruct       # many exceptions
+    - funlen            # rely on code review to limit function length
+    - gochecknoglobals  # many exceptions
+    - gocognit          # dubious "cognitive overhead" quantification
+    - gofumpt           # prefer standard gofmt
+    - goimports         # rely on gci instead
+    - gomnd             # some unnamed constants are okay
+    - ireturn           # "accept interfaces, return structs" isn't ironclad
+    - lll               # don't want hard limits for line length
+    - maintidx          # covered by gocyclo
+    - nilnil            # we allow this
+    - nlreturn          # generous whitespace violates house style
+    - tagalign          # false positives
+    - testpackage       # internal tests are fine
+    - thelper           # we want to print out the whole stack
+    - wrapcheck         # don't _always_ need to wrap errors
+    - wsl               # generous whitespace violates house style
+issues:
+  exclude-dirs-use-default: false
+  exclude-rules:
+    - linters:
+      - varnamelen
+      - goconst
+      path: cmd/protoc-gen-pluginrpc-go/main.go
+    - linters:
+      - varnamelen
+      path: pluginrpc_test.go
+    - linters:
+      - gosec
+      path: runner.go
+    - linters:
+      - gocritic
+      path: server.go
+    - linters:
+      - nestif
+      path: wire.go

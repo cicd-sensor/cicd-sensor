@@ -1,0 +1,84 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - cyclop            # covered by gocyclo
+    - exhaustive
+    - exhaustruct
+    - funlen            # rely on code review to limit function length
+    - gochecknoglobals
+    - gocognit          # dubious "cognitive overhead" quantification
+    - ireturn           # "accept interfaces, return structs" isn't ironclad
+    - lll               # don't want hard limits for line length
+    - maintidx          # covered by gocyclo
+    - mnd
+    - nlreturn          # generous whitespace violates house style
+    - nonamedreturns
+    - testpackage       # internal tests are fine
+    - wrapcheck         # don't _always_ need to wrap errors
+    - wsl               # generous whitespace violates house style
+  settings:
+    depguard:
+      rules:
+        Main:
+          files:
+            - $all
+            - '!$test'
+          allow:
+            - $gostd
+            - github.com/bufbuild/protoyaml-go/decode
+            - buf.build/gen/go/bufbuild/protovalidate
+            - buf.build/go/protovalidate
+            - google.golang.org/protobuf
+            - gopkg.in/yaml.v3
+    errcheck:
+      check-type-assertions: true
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print
+        - pattern: ^log\.
+        - pattern: ^print$
+        - pattern: ^println$
+        - pattern: ^panic$
+    gocyclo:
+      min-complexity: 15
+    godox:
+      keywords:
+        - FIXME
+    varnamelen:
+      ignore-decls:
+        - ok bool
+        - T any
+        - i int
+        - wg sync.WaitGroup
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - nestif
+        path: _test.go
+      - linters:
+          - depguard
+          - forbidigo
+          - revive
+        path: internal/*
+      - linters:
+          - gosec
+          - gosmopolitan
+          - prealloc
+        path: internal/protoyamltest/*
+      - path: (.+)\.go$
+        text: do not define dynamic errors.*
+issues:
+  max-same-issues: 0
+formatters:
+  enable:
+    - gci
+    - gofmt
+  exclusions:
+    generated: lax

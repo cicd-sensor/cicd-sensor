@@ -1,0 +1,426 @@
+// Copyright 2020-2026 Buf Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package bufmodulestore
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"log/slog"
+	"time"
+
+	"buf.build/go/standard/xlog/xslog"
+	"github.com/bufbuild/buf/private/bufpkg/bufmodule"
+	"github.com/bufbuild/buf/private/bufpkg/bufparse"
+	"github.com/bufbuild/buf/private/pkg/filelock"
+	"github.com/bufbuild/buf/private/pkg/normalpath"
+	"github.com/bufbuild/buf/private/pkg/storage"
+	"github.com/bufbuild/buf/private/pkg/syserror"
+	"github.com/bufbuild/buf/private/pkg/uuidutil"
+)
+
+var (
+	externalCommitVersion     = "v1"
+	externalCommitLockFileExt = ".lock"
+)
+
+// CommitStore reads and writes Commits.
+type CommitStore interface {
+	// GetCommitsForModuleKeys gets the Commits from the store for the ModuleKeys.
+	//
+	// Returns the found Commits, and the input IDs that were not found, each
+	// ordered by the order of the input IDs.
+	GetCommitsForModuleKeys(ctx context.Context, moduleKeys []bufmodule.ModuleKey) (
+		foundCommits []bufmodule.Commit,
+		notFoundModuleKeys []bufmodule.ModuleKey,
+		err error,
+	)
+	// GetCommitsForCommitKeys gets the Commits from the store for the CommitKeys.
+	//
+	// Returns the found Commits, and the input IDs that were not found, each
+	// ordered by the order of the input IDs.
+	GetCommitsForCommitKeys(ctx context.Context, commitKeys []bufmodule.CommitKey) (
+		foundCommits []bufmodule.Commit,
+		notFoundCommitKeys []bufmodule.CommitKey,
+		err error,
+	)
+	// PutCommits puts the Commits to the store.
+	PutCommits(ctx context.Context, commits []bufmodule.Commit) error
+}
+
+// NewCommitStore returns a new CommitStore for the given bucket.
+//
+// It is assumed that the CommitStore has complete control of the bucket.
+//
+// This is typically used to interact with a cache directory.
+func NewCommitStore(
+	logger *slog.Logger,
+	bucket storage.ReadWriteBucket,
+	locker filelock.Locker,
+) CommitStore {
+	return newCommitStore(logger, bucket, locker)
+}
+
+/// *** PRIVATE ***
+
+type commitStore struct {
+	logger *slog.Logger
+	bucket storage.ReadWriteBucket
+	locker filelock.Locker
+}
+
+func newCommitStore(
+	logger *slog.Logger,
+	bucket storage.ReadWriteBucket,
+	locker filelock.Locker,
+) *commitStore {
+	return &commitStore{
+		logger: logger,
+		bucket: bucket,
+		locker: locker,
+	}
+}
+
+func (p *commitStore) GetCommitsForModuleKeys(
+	ctx context.Context,
+	moduleKeys []bufmodule.ModuleKey,
+) ([]bufmodule.Commit, []bufmodule.ModuleKey, error) {
+	var foundCommits []bufmodule.Commit
+	var notFoundModuleKeys []bufmodule.ModuleKey
+	for _, moduleKey := range moduleKeys {
+		expectedDigest, err := moduleKey.Digest()
+		if err != nil {
+			return nil, nil, err
+		}
+		commitKey, err := bufmodule.ModuleKeyToCommitKey(moduleKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		commit, err := p.getCommitForCommitKey(ctx, commitKey, expectedDigest)
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return nil, nil, err
+			}
+			notFoundModuleKeys = append(notFoundModuleKeys, moduleKey)
+		} else {
+			foundCommits = append(foundCommits, commit)
+		}
+	}
+	return foundCommits, notFoundModuleKeys, nil
+}
+
+func (p *commitStore) GetCommitsForCommitKeys(
+	ctx context.Context,
+	commitKeys []bufmodule.CommitKey,
+) ([]bufmodule.Commit, []bufmodule.CommitKey, error) {
+	var foundCommits []bufmodule.Commit
+	var notFoundCommitKeys []bufmodule.CommitKey
+	for _, commitKey := range commitKeys {
+		commit, err := p.getCommitForCommitKey(ctx, commitKey, nil)
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return nil, nil, err
+			}
+			notFoundCommitKeys = append(notFoundCommitKeys, commitKey)
+		} else {
+			foundCommits = append(foundCommits, commit)
+		}
+	}
+	return foundCommits, notFoundCommitKeys, nil
+}
+
+func (p *commitStore) PutCommits(
+	ctx context.Context,
+	commits []bufmodule.Commit,
+) error {
+	for _, commit := range commits {
+		if err := p.putCommit(ctx, commit); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *commitStore) getCommitForCommitKey(
+	ctx context.Context,
+	commitKey bufmodule.CommitKey,
+	// may be nil
+	expectedDigest bufmodule.Digest,
+) (_ bufmodule.Commit, retErr error) {
+	bucket := p.getReadWriteBucketForDir(ctx, commitKey)
+	path := getCommitStoreFilePath(commitKey)
+	registryLockPath := getCommitStoreLockPath(commitKey)
+	data, err := p.readCommitData(ctx, bucket, path, registryLockPath)
+	p.logDebugCommitKey(
+		ctx,
+		commitKey,
+		"commit store get file",
+		slog.Bool("found", err == nil),
+		xslog.ErrorAttr(err),
+	)
+	if err != nil {
+		return nil, err
+	}
+	var invalidReason string
+	defer func() {
+		if retErr != nil {
+			retErr = p.deleteInvalidCommitFile(ctx, commitKey, bucket, path, invalidReason, retErr)
+		}
+	}()
+	var externalCommit externalCommit
+	if err := json.Unmarshal(data, &externalCommit); err != nil {
+		invalidReason = "corrupted"
+		return nil, err
+	}
+	if !externalCommit.isValid() {
+		invalidReason = "invalid"
+		return nil, fmt.Errorf("invalid commit cache entry for %s", path)
+	}
+	digest, err := bufmodule.ParseDigest(externalCommit.Digest)
+	if err != nil {
+		invalidReason = "invalid digest"
+		return nil, err
+	}
+	if commitKey.DigestType() != digest.Type() {
+		invalidReason = "mismatched digest type"
+		return nil, fmt.Errorf("mismatched digest type for %s: got %s, expected %s", path, digest.Type(), commitKey.DigestType())
+	}
+	moduleFullName, err := bufparse.NewFullName(
+		commitKey.Registry(),
+		externalCommit.Owner,
+		externalCommit.Module,
+	)
+	if err != nil {
+		invalidReason = "invalid module name"
+		return nil, err
+	}
+	moduleKey, err := bufmodule.NewModuleKey(
+		moduleFullName,
+		commitKey.CommitID(),
+		func() (bufmodule.Digest, error) {
+			return digest, nil
+		},
+	)
+	if err != nil {
+		invalidReason = "invalid module key"
+		return nil, err
+	}
+	return bufmodule.NewCommit(
+		moduleKey,
+		func() (time.Time, error) {
+			return externalCommit.CreateTime, nil
+		},
+		bufmodule.CommitWithExpectedDigest(expectedDigest),
+	), nil
+}
+
+func (p *commitStore) putCommit(
+	ctx context.Context,
+	commit bufmodule.Commit,
+) (retErr error) {
+	createTime, err := commit.CreateTime()
+	if err != nil {
+		return err
+	}
+	moduleKey := commit.ModuleKey()
+	digest, err := moduleKey.Digest()
+	if err != nil {
+		return err
+	}
+	commitKey, err := bufmodule.ModuleKeyToCommitKey(moduleKey)
+	if err != nil {
+		return err
+	}
+	bucket := p.getReadWriteBucketForDir(ctx, commitKey)
+	path := getCommitStoreFilePath(commitKey)
+	registryLockPath := getCommitStoreLockPath(commitKey)
+	// Check if the commit already exists under a shared lock before acquiring
+	// an exclusive lock.
+	exists, err := p.commitExistsUnderRLock(ctx, bucket, path, registryLockPath)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	unlocker, err := p.locker.Lock(ctx, registryLockPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		retErr = errors.Join(retErr, unlocker.Unlock())
+	}()
+	// Re-check after acquiring the exclusive lock, as another process may have
+	// written the commit between releasing the shared lock and acquiring the
+	// exclusive lock.
+	if _, err := bucket.Stat(ctx, path); err == nil {
+		return nil
+	}
+	externalCommit := externalCommit{
+		Version:    externalCommitVersion,
+		Owner:      moduleKey.FullName().Owner(),
+		Module:     moduleKey.FullName().Name(),
+		CreateTime: createTime,
+		Digest:     digest.String(),
+	}
+	if !externalCommit.isValid() {
+		return syserror.Newf("external commit is invalid: %+v", externalCommit)
+	}
+	data, err := json.Marshal(externalCommit)
+	if err != nil {
+		return err
+	}
+	return storage.PutPath(ctx, bucket, path, data, storage.PutWithAtomic())
+}
+
+func (p *commitStore) getReadWriteBucketForDir(ctx context.Context, commitKey bufmodule.CommitKey) storage.ReadWriteBucket {
+	dirPath := getCommitStoreDirPath(commitKey)
+	p.logDebugCommitKey(
+		ctx,
+		commitKey,
+		"commit store dir read write bucket",
+		slog.String("dirPath", dirPath),
+	)
+	return storage.MapReadWriteBucket(p.bucket, storage.MapOnPrefix(dirPath))
+}
+
+func (p *commitStore) readCommitData(
+	ctx context.Context,
+	bucket storage.ReadBucket,
+	path string,
+	registryLockPath string,
+) (_ []byte, retErr error) {
+	unlocker, err := p.locker.RLock(ctx, registryLockPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		retErr = errors.Join(retErr, unlocker.Unlock())
+	}()
+	return storage.ReadPath(ctx, bucket, path)
+}
+
+func (p *commitStore) commitExistsUnderRLock(
+	ctx context.Context,
+	bucket storage.ReadBucket,
+	path string,
+	registryLockPath string,
+) (_ bool, retErr error) {
+	unlocker, err := p.locker.RLock(ctx, registryLockPath)
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		retErr = errors.Join(retErr, unlocker.Unlock())
+	}()
+	if _, err := bucket.Stat(ctx, path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (p *commitStore) deleteInvalidCommitFile(
+	ctx context.Context,
+	commitKey bufmodule.CommitKey,
+	bucket storage.WriteBucket,
+	path string,
+	invalidReason string,
+	invalidErr error,
+) error {
+	p.logDebugCommitKey(
+		ctx,
+		commitKey,
+		fmt.Sprintf("commit store %s commit file", invalidReason),
+		slog.Any("error", invalidErr),
+	)
+	// Attempt to delete file as it is missing information.
+	if err := bucket.Delete(ctx, path); err != nil {
+		// Otherwise ignore error.
+		p.logDebugCommitKey(
+			ctx,
+			commitKey,
+			fmt.Sprintf("commit store could not delete %s commit file", invalidReason),
+			xslog.ErrorAttr(err),
+		)
+	}
+	// This will act as if the file is not found
+	return &fs.PathError{Op: "read", Path: path, Err: fs.ErrNotExist}
+}
+
+func (p *commitStore) logDebugCommitKey(ctx context.Context, commitKey bufmodule.CommitKey, message string, fields ...any) {
+	logDebugCommitKey(ctx, p.logger, commitKey, message, fields...)
+}
+
+// Returns the directory path within the store for the Commit.
+//
+// This is "digestType/registry, i.e. "b5/buf.build".
+func getCommitStoreDirPath(
+	commitKey bufmodule.CommitKey,
+) string {
+	return normalpath.Join(
+		commitKey.DigestType().String(),
+		commitKey.Registry(),
+	)
+}
+
+// Returns the file path within the directory.
+//
+// This is "dashlessCommitID.json", e.g. the commit "12345-abcde" will return "12345abcde.json".
+func getCommitStoreFilePath(commitKey bufmodule.CommitKey) string {
+	return uuidutil.ToDashless(commitKey.CommitID()) + ".json"
+}
+
+// Returns the lock file path for the commit's registry.
+//
+// This is "digestType/registry.lock", e.g. "shake256/buf.build.lock".
+func getCommitStoreLockPath(commitKey bufmodule.CommitKey) string {
+	return normalpath.Join(
+		commitKey.DigestType().String(),
+		commitKey.Registry()+externalCommitLockFileExt,
+	)
+}
+
+// externalCommit is the store representation of a Commit.
+//
+// We could use a protobuf Message for this.
+//
+// Note that we do not want to use registry-proto Commits. This would hard-link the API
+// and persistence layers, and a bufmodule.Commit does not have all the information that
+// a registry-proto Commit has.
+type externalCommit struct {
+	Version    string    `json:"version,omitempty" yaml:"version,omitempty"`
+	Owner      string    `json:"owner,omitempty" yaml:"owner,omitempty"`
+	Module     string    `json:"module,omitempty" yaml:"module,omitempty"`
+	CreateTime time.Time `json:"create_time" yaml:"create_time,omitempty"`
+	Digest     string    `json:"digest,omitempty" yaml:"digest,omitempty"`
+}
+
+// isValid returns true if all the information we currently expect to be on
+// an externalCommit is present, and the version matches.
+//
+// If we add to externalCommit over time or change the version, old values will be
+// incomplete, and we will auto-evict them from the store.
+func (e externalCommit) isValid() bool {
+	return e.Version == externalCommitVersion &&
+		e.Owner != "" &&
+		e.Module != "" &&
+		!e.CreateTime.IsZero() &&
+		e.Digest != ""
+}

@@ -1,0 +1,13 @@
+version: v2
+managed:
+  enabled: true
+  override:
+   - file_option: go_package_prefix
+     value: 'github.com/bufbuild/protocompile/internal/gen'
+   - path: internal/proto
+     file_option: go_package_prefix
+     value: 'github.com/bufbuild/protocompile/internal/gen/internal_'
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: internal/gen
+    opt: paths=source_relative

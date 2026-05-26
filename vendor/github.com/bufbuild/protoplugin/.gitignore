@@ -1,0 +1,8 @@
+/.tmp/
+*.pprof
+*.svg
+cover.out
+
+/internal/examples/protoc-gen-simple/protoc-gen-simple
+/internal/examples/protoc-gen-protogen-simple/protoc-gen-protogen-simple
+/internal/examples/protoc-gen-protoreflect-simple/protoc-gen-protoreflect-simple

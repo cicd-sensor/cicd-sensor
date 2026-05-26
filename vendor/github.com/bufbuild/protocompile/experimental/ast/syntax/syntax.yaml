@@ -1,0 +1,51 @@
+# Copyright 2020-2024 Buf Technologies, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Syntax
+  type: int32
+  docs: |
+    Syntax is a known syntax pragma.
+
+    Not only does this include "proto2" and "proto3", but also all of the
+    editions.
+    
+    The integer values of the constants correspond to their the values of
+    google.protobuf.Edition.
+  use_maps_for_lookup: true
+  methods:
+  - kind: string
+  - kind: go-string
+  - kind: from-string
+    name: Lookup
+    docs: |
+      Lookup looks up a syntax pragma by name.
+
+      If name does not name a known pragma, returns [Unknown].
+    skip: [Unknown]
+  values:
+    - {name: Unknown, string: "<unknown>", expr: "0"}
+    - {name: Proto2, string: proto2, expr: "998"}
+    - {name: Proto3, string: proto3, expr: "999"}
+    
+    - {name: Edition2023, string: "2023", expr: "1000"}
+    - {name: Edition2024, string: "2024", expr: "1001"}
+    
+    - {name: EditionLegacy, string: "buf/legacy", expr: "900"}
+    - {name: EditionTest1, string: "buf/1", expr: "1"}
+    - {name: EditionTest2, string: "buf/2", expr: "2"}
+    - {name: EditionTest99997, string: "buf/99997", expr: "99997"}
+    - {name: EditionTest99998, string: "buf/99998", expr: "99998"}
+    - {name: EditionTest99999, string: "buf/99999", expr: "99999"}
+    - {name: EditionMax, string: "buf/max", expr: "0x7fff_ffff"}
+  

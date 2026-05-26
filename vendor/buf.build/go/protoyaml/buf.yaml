@@ -1,0 +1,10 @@
+version: v2
+modules:
+  - path: internal/proto
+deps:
+  - buf.build/bufbuild/protovalidate
+lint:
+  except:
+    - FIELD_NOT_REQUIRED
+  ignore:
+    - internal/proto/bufext

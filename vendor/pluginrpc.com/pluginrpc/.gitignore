@@ -1,0 +1,10 @@
+/.tmp/
+*.pprof
+*.svg
+cover.out
+
+/cmd/protoc-gen-pluginrpc-go/protoc-gen-pluginrpc-go
+/internal/example/cmd/echo-error-client/echo-error-client
+/internal/example/cmd/echo-list-client/echo-list-client
+/internal/example/cmd/echo-plugin/echo-plugin
+/internal/example/cmd/echo-request-client/echo-request-client

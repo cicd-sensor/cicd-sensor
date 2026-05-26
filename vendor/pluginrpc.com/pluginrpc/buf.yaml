@@ -1,0 +1,15 @@
+version: v2
+modules:
+  - path: internal/example/proto
+deps:
+  - buf.build/pluginrpc/pluginrpc
+  - buf.build/bufbuild/protovalidate
+lint:
+  use:
+    - DEFAULT
+    - UNARY_RPC
+    - COMMENTS
+breaking:
+  use:
+    - WIRE_JSON
+  ignore_unstable_packages: true

@@ -1,0 +1,266 @@
+// Copyright 2020-2026 Buf Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package buflintvalidate
+
+import (
+	"fmt"
+	"strings"
+
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	celpv "buf.build/go/protovalidate/cel"
+	"github.com/bufbuild/buf/private/bufpkg/bufprotosource"
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
+)
+
+const (
+	// https://buf.build/bufbuild/protovalidate/docs/main:buf.validate#buf.validate.FieldRules
+	celFieldNumberInFieldRules = 23
+	// https://buf.build/bufbuild/protovalidate/docs/main:buf.validate#buf.validate.MessageRules
+	celFieldNumberInMessageRules = 3
+	// https://buf.build/bufbuild/protovalidate/docs/main:buf.validate#buf.validate.MessageRules
+	celExpressionFieldNumberInMessageRules = 5
+	// https://buf.build/bufbuild/protovalidate/docs/main:buf.validate#buf.validate.FieldRules
+	celExpressionFieldNumberInFieldRules = 29
+)
+
+func checkCELForMessage(
+	add func(bufprotosource.Descriptor, bufprotosource.Location, []bufprotosource.Location, string, ...any),
+	messageRules *validate.MessageRules,
+	messageDescriptor protoreflect.MessageDescriptor,
+	message bufprotosource.Message,
+) error {
+	if len(messageRules.GetCel()) == 0 && len(messageRules.GetCelExpression()) == 0 {
+		return nil
+	}
+	celEnv, err := cel.NewEnv(
+		cel.Lib(celpv.NewLibrary()),
+	)
+	if err != nil {
+		return err
+	}
+	celEnv, err = celEnv.Extend(
+		cel.Types(dynamicpb.NewMessage(messageDescriptor)),
+		cel.Variable("this", cel.ObjectType(string(messageDescriptor.FullName()))),
+	)
+	if err != nil {
+		return err
+	}
+	checkCEL(
+		celEnv,
+		messageRules.GetCel(),
+		fmt.Sprintf("message %q", message.Name()),
+		fmt.Sprintf("Message %q", message.Name()),
+		"(buf.validate.message).cel",
+		func(index int, format string, args ...any) {
+			messageRulesOptionLocation := message.OptionExtensionLocation(
+				validate.E_Message,
+				celFieldNumberInMessageRules,
+				int32(index),
+			)
+			add(message, messageRulesOptionLocation, nil, format, args...)
+		},
+		false, // isCELExpression
+	)
+	if len(messageRules.GetCelExpression()) > 0 {
+		celExpressionRules := make([]*validate.Rule, len(messageRules.GetCelExpression()))
+		for i, expr := range messageRules.GetCelExpression() {
+			celExpressionRules[i] = &validate.Rule{
+				Expression: &expr,
+			}
+		}
+		checkCEL(
+			celEnv,
+			celExpressionRules,
+			fmt.Sprintf("message %q", message.Name()),
+			fmt.Sprintf("Message %q", message.Name()),
+			"(buf.validate.message).cel_expression",
+			func(index int, format string, args ...any) {
+				messageRulesOptionLocation := message.OptionExtensionLocation(
+					validate.E_Message,
+					celExpressionFieldNumberInMessageRules,
+					int32(index),
+				)
+				add(message, messageRulesOptionLocation, nil, format, args...)
+			},
+			true, // isCELExpression
+		)
+	}
+	return nil
+}
+
+func checkCELForField(
+	adder *adder,
+	fieldRules *validate.FieldRules,
+	fieldDescriptor protoreflect.FieldDescriptor,
+	// forItems is true if the CEL rule is defined on a non-repeated field or on each item of a repeated field.
+	forItems bool,
+) error {
+	if len(fieldRules.GetCel()) == 0 && len(fieldRules.GetCelExpression()) == 0 {
+		return nil
+	}
+	celEnv, err := cel.NewEnv(
+		cel.Lib(celpv.NewLibrary()),
+	)
+	if err != nil {
+		return err
+	}
+	celEnv, err = celEnv.Extend(
+		append(
+			celpv.RequiredEnvOptions(fieldDescriptor),
+			cel.Variable("this", celpv.ProtoFieldToType(fieldDescriptor, false, forItems)),
+		)...,
+	)
+	if err != nil {
+		return err
+	}
+	checkCEL(
+		celEnv,
+		fieldRules.GetCel(),
+		fmt.Sprintf("field %q", adder.fieldName()),
+		fmt.Sprintf("Field %q", adder.fieldName()),
+		adder.getFieldRuleName(celFieldNumberInFieldRules),
+		func(index int, format string, args ...any) {
+			adder.addForPathf(
+				[]int32{celFieldNumberInFieldRules, int32(index)},
+				format,
+				args...,
+			)
+		},
+		false, // isCELExpression
+	)
+	if len(fieldRules.GetCelExpression()) > 0 {
+		celExpressionRules := make([]*validate.Rule, len(fieldRules.GetCelExpression()))
+		for i, expr := range fieldRules.GetCelExpression() {
+			celExpressionRules[i] = &validate.Rule{
+				Expression: &expr,
+			}
+		}
+		checkCEL(
+			celEnv,
+			celExpressionRules,
+			fmt.Sprintf("field %q", adder.fieldName()),
+			fmt.Sprintf("Field %q", adder.fieldName()),
+			adder.getFieldRuleName(celExpressionFieldNumberInFieldRules),
+			func(index int, format string, args ...any) {
+				adder.addForPathf(
+					[]int32{celExpressionFieldNumberInFieldRules, int32(index)},
+					format,
+					args...,
+				)
+			},
+			true, // isCELExpression
+		)
+	}
+	return nil
+}
+
+// Returns true only if all cel expressions compile
+func checkCEL(
+	celEnv *cel.Env,
+	celRules []*validate.Rule,
+	parentName string,
+	parentNameCapitalized string,
+	celName string,
+	add func(int, string, ...any),
+	isCELExpression bool,
+) bool {
+	allCelExpressionsCompile := true
+	idToConstraintIndices := make(map[string][]int, len(celRules))
+	expressionField := celName + ".expression"
+	if isCELExpression {
+		expressionField = celName
+	}
+	for i, celConstraint := range celRules {
+		if celID := celConstraint.GetId(); celID != "" {
+			for _, char := range celID {
+				if 'a' <= char && char <= 'z' {
+					continue
+				} else if 'A' <= char && char <= 'Z' {
+					continue
+				} else if '0' <= char && char <= '9' {
+					continue
+				} else if char == '_' || char == '-' || char == '.' {
+					continue
+				}
+				add(
+					i,
+					"%s has invalid characters for %s.id. IDs must contain only characters a-z, A-Z, 0-9, '.', '_', '-'.",
+					parentNameCapitalized,
+					celName,
+				)
+				break
+			}
+			idToConstraintIndices[celID] = append(idToConstraintIndices[celID], i)
+		}
+		if len(strings.TrimSpace(celConstraint.GetExpression())) == 0 {
+			add(i, "%s has an empty %s. Expressions should always be specified.", parentNameCapitalized, expressionField)
+			continue
+		}
+		ast, compileIssues := celEnv.Compile(celConstraint.GetExpression())
+		switch {
+		case ast.OutputType().IsAssignableType(cel.BoolType):
+		case ast.OutputType().IsAssignableType(cel.StringType):
+			if celConstraint.GetMessage() != "" {
+				add(
+					i,
+					"%s has a %s with an expression that evaluates to a string, and also has a message. The message is redundant - since the expression evaluates to a string, its result will be printed instead of the message, so the message should be removed.",
+					parentNameCapitalized,
+					celName,
+				)
+			}
+		case ast.OutputType().IsExactType(types.ErrorType):
+			// If the output type is error, it means compilation has failed and we
+			// only need to add the compilation issues.
+		default:
+			add(
+				i,
+				"%s on %s evaluates to a %s, only string and boolean are allowed.",
+				expressionField,
+				parentName,
+				cel.FormatCELType(ast.OutputType()),
+			)
+		}
+		if compileIssues.Err() != nil {
+			allCelExpressionsCompile = false
+			for _, celErr := range compileIssues.Errors() {
+				add(
+					i,
+					"%s on %s fails to compile: %s",
+					expressionField,
+					parentName,
+					strings.TrimPrefix(celErr.Message, "Syntax error: "),
+				)
+			}
+		}
+	}
+	for celID, constraintIndices := range idToConstraintIndices {
+		if len(constraintIndices) <= 1 {
+			continue
+		}
+		for _, constraintIndex := range constraintIndices {
+			add(
+				constraintIndex,
+				"%s.id (%q) is not unique within %s.",
+				celName,
+				celID,
+				parentName,
+			)
+		}
+	}
+	return allCelExpressionsCompile
+}

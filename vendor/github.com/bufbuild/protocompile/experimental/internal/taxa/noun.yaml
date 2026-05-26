@@ -1,0 +1,106 @@
+# Copyright 2020-2024 Buf Technologies, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Noun
+  type: int
+  total: nounCount
+  docs: |
+    Noun is a syntactic or semantic element within the grammar that can be
+    referred to within a diagnostic.
+
+    All [keyword.Keyword] values can be safely cast to [taxa.Noun].
+  methods:
+  - kind: string
+  - kind: go-string
+  values: 
+  - {name: Unrecognized, string: "unrecognized token", expr: "keywordCount + iota + 1"}
+  - {name: TopLevel, string: "file scope"}
+  - {name: EOF, string: "end-of-file"}
+
+  - {name: SyntaxMode, string: "syntax mode"}
+  - {name: EditionMode, string: "editions mode"}
+
+  - {name: Decl, string: "declaration"}
+  - {name: Empty, string: "empty declaration"}
+  - {name: Syntax, string: "`syntax` declaration"}
+  - {name: Edition, string: "`edition` declaration"}
+  - {name: Package, string: "`package` declaration"}
+  - {name: Import, string: "import"}
+  - {name: Extensions, string: "extension range"}
+  - {name: Reserved, string: "reserved range"}
+  - {name: Body, string: "definition body"}
+
+  - {name: Def, string: "definition"}
+  - {name: Message, string: "message definition"}
+  - {name: Enum, string: "enum definition"}
+  - {name: Service, string: "service definition"}
+  - {name: Extend, string: "message extension block"}
+  - {name: Oneof, string: "oneof definition"}
+  - {name: Group, string: "group definition"}
+
+  - {name: Option, string: "option setting"}
+  - {name: CustomOption, string: "custom option setting"}
+  - {name: FieldSelector, string: "field selector"}
+  - {name: PseudoOption, string: "pseudo-option"}
+
+  - {name: Field, string: "message field"}
+  - {name: Extension, string: "message extension"}
+  - {name: EnumValue, string: "enum value"}
+  - {name: Method, string: "service method"}
+
+  - {name: CompactOptions, string: "compact options"}
+  - {name: MethodIns, string: "method parameter list"}
+  - {name: MethodOuts, string: "method return type"}
+  - {name: Signature, string: "method signature"}
+
+  - {name: FieldTag, string: "message field tag"}
+  - {name: FieldNumber, string: "field number"}
+  - {name: MessageSetNumber, string: "message set extension number"}
+  - {name: FieldName, string: "message field name"}
+  - {name: OptionValue, string: "option setting value"}
+
+  - {name: QualifiedName, string: "qualified name"}
+  - {name: FullyQualifiedName, string: "fully qualified name"}
+  - {name: ExtensionName, string: "extension name"}
+  - {name: TypeURL, string: "`Any` type URL"}
+
+  - {name: Expr, string: "expression"}
+  - {name: Range, string: "range expression"}
+  - {name: Array, string: "array expression"}
+  - {name: Dict, string: "message expression"}
+  - {name: DictField, string: "message field value"}
+
+  - {name: Type, string: "type"}
+  - {name: TypePath, string: "type name"}
+  - {name: TypeParams, string: "type parameters"}
+  - {name: TypePrefix, string: "type modifier"}
+
+  - {name: MessageType, string: "message type"}
+  - {name: MessageSet, string: "message set type"}
+  - {name: EnumType, string: "enum type"}
+  - {name: ScalarType, string: "scalar type"}
+  - {name: EntryType, string: "map entry type"}
+
+  - {name: MapKey, string: "map key type"}
+  - {name: MapValue, string: "map value type"}
+
+  - {name: Whitespace, string: "whitespace"}
+  - {name: Comment, string: "comment"}
+  - {name: Ident, string: "identifier"}
+  - {name: String, string: "string literal"}
+  - {name: Float, string: "floating-point literal"}
+  - {name: Int, string: "integer literal"}
+  - {name: Number, string: "number literal"}
+
+  - {name: ReturnsParens, string: "`returns (...)`"}

@@ -1,0 +1,87 @@
+# Copyright 2020-2024 Buf Technologies, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: DeclKind
+  type: int8
+  docs: |
+    DeclKind is a kind of declaration. There is one value of DeclKind for each
+    Decl* type in this package.
+  methods:
+  - kind: string
+  - kind: go-string
+  values:
+  - name: DeclKindInvalid
+  - name: DeclKindEmpty
+  - name: DeclKindSyntax
+  - name: DeclKindPackage
+  - name: DeclKindImport
+  - name: DeclKindDef
+  - name: DeclKindBody
+  - name: DeclKindRange
+
+- name: DefKind
+  type: int8
+  docs: |
+    DefKind is the kind of definition a [DeclDef] contains.
+
+    See [DeclDef.Classify].
+  methods:
+  - kind: string
+  - kind: go-string
+  values:
+  - name: DefKindInvalid
+  - name: DefKindMessage
+  - name: DefKindEnum
+  - name: DefKindService
+  - name: DefKindExtend
+  - name: DefKindField
+  - name: DefKindOneof
+  - name: DefKindGroup
+  - name: DefKindEnumValue
+  - name: DefKindMethod
+  - name: DefKindOption
+
+- name: ExprKind
+  type: int8
+  docs: |
+    ExprKind is a kind of expression. There is one value of ExprKind for each
+    Expr* type in this package.
+  methods:
+  - kind: string
+  - kind: go-string
+  values:
+  - name: ExprKindInvalid
+  - name: ExprKindError
+  - name: ExprKindLiteral
+  - name: ExprKindPrefixed
+  - name: ExprKindPath
+  - name: ExprKindRange
+  - name: ExprKindArray
+  - name: ExprKindDict
+  - name: ExprKindField
+
+- name: TypeKind
+  type: int8
+  docs: |
+    TypeKind is a kind of type. There is one value of TypeKind for each
+    Type* type in this package.
+  methods:
+  - kind: string
+  - kind: go-string
+  values:
+  - name: TypeKindInvalid
+  - name: TypeKindError
+  - name: TypeKindPath
+  - name: TypeKindPrefixed
+  - name: TypeKindGeneric

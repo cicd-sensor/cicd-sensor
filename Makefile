@@ -2,7 +2,7 @@ SHELL := /bin/sh
 
 GO ?= go
 GO_MOD_FLAG ?= -mod=vendor
-BUF ?= buf
+BUF ?= $(GO) tool buf
 SUDO ?= sudo
 VERSION ?= dev
 
