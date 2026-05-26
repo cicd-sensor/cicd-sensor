@@ -10,7 +10,7 @@ buf.build/gen/go/bufbuild/protodescriptor/protocolbuffers/go/buf/descriptor/v1
 # buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1
 ## explicit; go 1.23
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate
-# buf.build/gen/go/bufbuild/registry/connectrpc/go v1.19.1-20260126144947-819582968857.2
+# buf.build/gen/go/bufbuild/registry/connectrpc/go v1.19.2-20260126144947-819582968857.1
 ## explicit; go 1.24
 buf.build/gen/go/bufbuild/registry/connectrpc/go/buf/registry/module/v1/modulev1connect
 buf.build/gen/go/bufbuild/registry/connectrpc/go/buf/registry/module/v1beta1/modulev1beta1connect
@@ -299,7 +299,7 @@ github.com/aws/smithy-go/waiter
 # github.com/blang/semver v3.5.1+incompatible
 ## explicit
 github.com/blang/semver
-# github.com/bufbuild/buf v1.68.3
+# github.com/bufbuild/buf v1.69.0
 ## explicit; go 1.25.6
 github.com/bufbuild/buf/cmd/buf
 github.com/bufbuild/buf/cmd/buf/internal/command/alpha/protoc
@@ -510,7 +510,7 @@ github.com/bufbuild/buf/private/pkg/transport/http/httpserver
 github.com/bufbuild/buf/private/pkg/uuidutil
 github.com/bufbuild/buf/private/pkg/verbose
 github.com/bufbuild/buf/private/pkg/wasm
-# github.com/bufbuild/protocompile v0.14.2-0.20260420203553-9e5399662822
+# github.com/bufbuild/protocompile v0.14.2-0.20260429155904-12ef1ef2ce91
 ## explicit; go 1.25.6
 github.com/bufbuild/protocompile
 github.com/bufbuild/protocompile/ast
@@ -988,7 +988,7 @@ github.com/letsencrypt/boulder/revocation
 # github.com/mattn/go-colorable v0.1.14
 ## explicit; go 1.18
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.21
+# github.com/mattn/go-isatty v0.0.22
 ## explicit; go 1.21
 github.com/mattn/go-isatty
 # github.com/moby/docker-image-spec v1.3.1
@@ -1786,8 +1786,6 @@ google.golang.org/protobuf/types/pluginpb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# gotest.tools/v3 v3.5.2
-## explicit; go 1.17
 # k8s.io/klog/v2 v2.130.1
 ## explicit; go 1.18
 k8s.io/klog/v2
