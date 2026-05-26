@@ -147,7 +147,7 @@ classDiagram
     Agent ..> JobRegistry : passes hostManagerClient at start
 ```
 
-A single agent process holds one `Agent`, one `JobRegistry`, many `Job`s, and up to two `JobScopeState`s per Job (one host, one project). Host scope and project scope are owned by different operators (host operator vs project / repository operator), and neither operator can read or override the other's `JobScopeState`. The host stopping a project runtime via `terminate` / kernel-completed block is the only exception.
+A single agent process holds one `Agent`, one `JobRegistry`, many `Job`s, and up to two `JobScopeState`s per Job: a host one built by `ApplyGitHubHostStart` / `ApplyGitLabHostStart`, and a project one built by `ApplyGitHubProjectStart`. They never read or write each other. Rule actions, including `terminate`, only emit detections; the Job ends through external triggers (Runner termination, cgroup removal).
 
 ### Where each type holds state
 
