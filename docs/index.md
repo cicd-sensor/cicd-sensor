@@ -76,6 +76,7 @@ For self-hosted runner fleets or GitLab CI/CD, choose a deployment path from the
 - **Runtime security logs**: provides Summary Logs, Detection Logs, and Runtime Event Logs for real-time detection, triage, incident response, and forensics.
 - **Runtime report and attestation**: generates a graphical report and an in-toto compatible runtime-trace attestation predicate so teams can review and verify CI/CD runtime activity.
 - **Centralized management**: cicd-sensor Manager distributes policy, config, and output routing across runner fleets.
+- **User-controlled runtime data**: keeps job runtime data under your control; it is not sent to servers operated by the cicd-sensor project.
 
 ## Supported CI/CD Pipelines
 
