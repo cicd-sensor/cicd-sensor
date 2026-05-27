@@ -13,17 +13,8 @@
   "minimumReleaseAge": "7 days",
   "separateMajorMinor": false,
   "separateMinorPatch": false,
-  // Route Renovate's Go module fetches through Flatt Security's Takumi Guard secure proxy.
+  // GOPROXY for Renovate's Go module fetches points to Flatt Security's Takumi Guard secure proxy.
   // https://shisho.dev/docs/t/guard/quickstart/golang/
-  "hostRules": [
-    {
-      "hostType": "go",
-      "matchHost": "https://golang.flatt.tech",
-    },
-  ],
-  "customEnvVariables": {
-    "GOPROXY": "https://golang.flatt.tech,direct",
-  },
   "packageRules": [
     {
       "description": "Group Go module updates",
