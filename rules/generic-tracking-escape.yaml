@@ -29,9 +29,8 @@ rule_sets:
             Most CI workloads do not talk to DBus. False positives appear when a workflow tests systemd/DBus features or invokes host tooling (hostnamectl, polkit, …) that talks to system services; add a tuned exception for those flows.
         event_type: unix_socket_connect
         condition: |
-          path == "/run/dbus/system_bus_socket" ||
-          path == "/var/run/dbus/system_bus_socket" ||
-          (path.startsWith("/run/user/") && path.endsWith("/bus"))
+          path.endsWith("/dbus/system_bus_socket") ||
+          (path.contains("/run/user/") && path.endsWith("/bus"))
         exceptions: |
           process.exec_path.endsWith("/systemctl") &&
           process.argv.exists(arg, arg == "is-active" || arg == "show") &&
