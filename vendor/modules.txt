@@ -133,8 +133,8 @@ cloud.google.com/go/storage/internal/apiv2/storagepb
 # connectrpc.com/authn v0.2.0
 ## explicit; go 1.21
 connectrpc.com/authn
-# connectrpc.com/connect v1.19.2
-## explicit; go 1.24.0
+# connectrpc.com/connect v1.20.0
+## explicit; go 1.25.0
 connectrpc.com/connect
 connectrpc.com/connect/cmd/protoc-gen-connect-go
 connectrpc.com/connect/internal/gen/connectext/grpc/status/v1
