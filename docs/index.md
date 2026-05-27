@@ -51,7 +51,7 @@ For self-hosted runner fleets or GitLab CI/CD, choose a deployment path from the
 
 CI/CD pipelines build, release, deploy, and manage cloud infrastructure — and they hold the cloud credentials, signing keys, and registry tokens to do it. Supply-chain attackers run inside those jobs and disappear with the evidence when the job ends.
 
-Every other runtime has its open-source defender — Falco, Tetragon, Tracee, Wazuh, OSQuery. CI/CD runtime has nothing. Sigstore proved *where* and *how* artifacts were built; cicd-sensor preserves *what actually ran* so teams can detect, respond, and audit.
+Every other runtime has its open-source defender — Falco, Tetragon, Tracee, Wazuh, OSQuery. Open-source coverage for CI/CD runtime has lagged behind. Sigstore proved *where* and *how* artifacts were built; cicd-sensor preserves *what actually ran* so teams can detect, respond, and audit.
 
 ## Supported CI/CD Pipelines
 
