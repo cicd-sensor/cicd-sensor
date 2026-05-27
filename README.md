@@ -26,10 +26,10 @@ Every other runtime has its open-source defender — Falco, Tetragon, Tracee, Wa
 **That is the gap. cicd-sensor is built to close it** — using eBPF inside the CI/CD Pipeline to make runtime visible, detect attacks while they happen, and preserve the evidence teams need to respond.
 
 - **Developers — OSS or commercial — should be able to see what their own pipelines actually do, and prove it later** — observing process, network, and file activity across build, release, deploy, and cloud infrastructure management, and proving it with a verifiable attestation predicate.
-- **Security teams — defending against supply chain attacks — need tools built for the runtime** — real-time detection plus the runtime logs they actually need, like Summary, Detection, and Runtime Event Logs, giving CI/CD the detection, incident response, and forensics environment it has been missing.
+- **Security teams — defending against supply chain attacks — need tools built for the runtime** — real-time detection plus the runtime logs they actually need, like Summary, Detection, and Runtime Event Logs, delivered through cloud services like S3 into the SIEM teams already run, giving CI/CD the detection, incident response, and forensics environment it has been missing.
 
 > [!NOTE]
-> **About the creator** — cicd-sensor is an independent open-source project created and maintained by [Hiroki Suezawa (@rung)](https://www.suezawa.net), author of the [Common Threat Matrix for CI/CD Pipeline](https://github.com/rung/threat-matrix-cicd), contributor to the [OWASP Top 10 CI/CD Security Risks](https://owasp.org/www-project-top-10-ci-cd-security-risks/), and early contributor to [OSC&R / pbom.dev](https://pbom.dev/). cicd-sensor is the runtime defender that work has been pointing to.
+> **About the creator** — cicd-sensor is a vendor-neutral open-source project, created and maintained by [Hiroki Suezawa (@rung)](https://www.suezawa.net) — author of the [Common Threat Matrix for CI/CD Pipeline](https://github.com/rung/threat-matrix-cicd), contributor to the [OWASP Top 10 CI/CD Security Risks](https://owasp.org/www-project-top-10-ci-cd-security-risks/), and early contributor to [OSC&R / pbom.dev](https://pbom.dev/). cicd-sensor was started as an individual project to stay close to the open-source community that is on the receiving end of supply-chain attacks.
 
 ## Quick start
 
@@ -55,13 +55,13 @@ jobs:
 
 ## Key features
 
-- **eBPF-powered observability** — observes process execution, network connections, and file access at the kernel level.
-- **Continuously updated detection baseline** — fetches baseline rules for CI/CD runtime detection, with local and managed rule layers for organization-specific needs.
-- **Correlation detection** — lets baseline and custom rules combine signals such as credential access plus suspicious execution, instead of relying only on single events.
-- **Runtime security logs** — emits Summary Logs, Detection Logs, and Runtime Event Logs for real-time detection, triage, incident response, and forensics.
-- **Runtime report and attestation** — generates a graphical report and an in-toto compatible runtime-trace attestation predicate so teams can review and verify CI/CD runtime activity.
-- **Centralized management** — cicd-sensor Manager distributes policy, config, and output routing across runner fleets.
-- **User-controlled runtime data** — keeps job runtime data under your control; it is not sent to servers operated by the cicd-sensor project.
+- **eBPF-powered observability** — kernel-level visibility into process, network, and file activity.
+- **Continuously updated detection baseline** — baseline rules stay current; layer your own org or project rules on top.
+- **Correlation detection** — combine multiple signals (e.g. credential read + suspicious exec) into a single detection, not just single events.
+- **Runtime security logs** — Summary, Detection, and Runtime Event Logs delivered to cloud services like S3 and into your SIEM for triage, incident response, and forensics.
+- **Runtime report and attestation** — per-job graphical report plus an in-toto runtime-trace attestation predicate for verifiable review.
+- **Centralized management** — cicd-sensor Manager distributes rules, config, and log routing across runner fleets.
+- **User-controlled runtime data** — runtime data stays in your infrastructure; nothing is sent to servers operated by the cicd-sensor project.
 
 ## Supported CI/CD pipelines
 
