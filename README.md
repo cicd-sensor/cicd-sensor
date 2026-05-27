@@ -6,7 +6,7 @@
   <img src="cicd-sensor.png" alt="cicd-sensor logo" width="160">
 </p>
 <h1 align="center">cicd-sensor</h1>
-<p align="center"><strong>Open-source eBPF-powered CI/CD runtime security sensor</strong><br>for GitHub Actions and GitLab CI/CD.<br>→ <a href="https://cicd-sensor.github.io/">Full documentation</a></p>
+<p align="center"><strong>Think EDR, but for CI/CD Pipelines.</strong><br>Open-source eBPF-powered runtime security sensor for GitHub Actions and GitLab CI/CD.<br>→ <a href="https://cicd-sensor.github.io/">Full documentation</a></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
