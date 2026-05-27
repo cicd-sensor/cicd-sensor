@@ -32,6 +32,10 @@ rule_sets:
           path == "/run/dbus/system_bus_socket" ||
           path == "/var/run/dbus/system_bus_socket" ||
           (path.startsWith("/run/user/") && path.endsWith("/bus"))
+        exceptions: |
+          process.exec_path.endsWith("/systemctl") &&
+          process.argv.exists(arg, arg == "is-active" || arg == "show") &&
+          process.argv.exists(arg, arg.startsWith("cicd-sensor-"))
         action: detect
         tags:
           mitre_tactic: defense-evasion,persistence
