@@ -54,7 +54,10 @@
         "custom.regex"
       ],
       "groupName": "github actions docs examples",
-      "minimumReleaseAge": "0 days"
+      "minimumReleaseAge": "0 days",
+      "semanticCommitType": "docs",
+      "semanticCommitScope": "examples",
+      "commitMessageTopic": "{{depName}} example"
     }
   ],
   "customManagers": [
