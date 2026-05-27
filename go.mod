@@ -24,7 +24,7 @@ require (
 	golang.org/x/net v0.54.0
 	golang.org/x/sys v0.44.0
 	golang.org/x/text v0.37.0
-	google.golang.org/api v0.279.0
+	google.golang.org/api v0.280.0
 	google.golang.org/protobuf v1.36.11
 )
 
