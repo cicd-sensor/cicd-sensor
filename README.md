@@ -30,9 +30,9 @@
 
 ## What cicd-sensor does
 
-**Detection** — Detects supply-chain attacks at runtime using process ancestry (e.g. credential access from a process descended from `npm install`) and correlation across signals (e.g. multiple credential categories read in one job). Baseline rules target patterns seen in real CI/CD attacks.
+**Detection:** Detects supply-chain attacks at runtime using process ancestry (e.g. credential access from a process descended from `npm install`) and correlation across signals (e.g. multiple credential categories read in one job). Baseline rules target patterns seen in real CI/CD attacks.
 
-**Logs and evidence** — Per run, cicd-sensor can emit logs for review, alerting, and forensics, routed through cicd-sensor Manager to cloud sinks like S3, GCS, and Pub/Sub. The cicd-sensor-action can also produce a graphical report and a build attestation per run. Your data stays under your control — cicd-sensor never sends anything to servers operated by the cicd-sensor project.
+**Logs and evidence:** Per run, cicd-sensor can emit logs for review, alerting, and forensics, routed through cicd-sensor Manager to cloud sinks like S3, GCS, and Pub/Sub. The cicd-sensor-action can also produce a graphical report and a build attestation per run. Your data stays under your control. cicd-sensor never sends anything to servers operated by the cicd-sensor project.
 
 ## Quick start
 
@@ -50,9 +50,9 @@ For self-hosted GitHub Actions or GitLab CI/CD, see the [User Guide](https://cic
 
 ## Why CI/CD runtime needs this
 
-CI/CD pipelines build, release, deploy, and manage cloud infrastructure — and they hold the cloud credentials, signing keys, and registry tokens to do it. Supply-chain attackers run inside those jobs and disappear with the evidence when the job ends.
+CI/CD pipelines build, release, deploy, and manage cloud infrastructure, and they hold the cloud credentials, signing keys, and registry tokens to do it. Supply-chain attackers run inside those jobs and disappear with the evidence when the job ends.
 
-Most other runtimes have their open-source defenders — Falco, Tetragon, Tracee, Wazuh, OSQuery. Open-source coverage for CI/CD runtime has lagged behind. Sigstore proved *where* and *how* artifacts were built; cicd-sensor preserves *what actually ran* so teams can detect, respond, and audit.
+Most other runtimes have their open-source defenders: Falco, Tetragon, Tracee, Wazuh, OSQuery. Open-source coverage for CI/CD runtime has lagged behind. Sigstore proved *where* and *how* artifacts were built; cicd-sensor preserves *what actually ran* so teams can detect, respond, and audit.
 
 ## Supported CI/CD pipelines
 
@@ -71,17 +71,17 @@ Linux kernel: 5.15 or later on `amd64`, 6.1 or later on `arm64`.
 
 ## Documentation
 
-- [Getting Started](https://cicd-sensor.github.io/) — what cicd-sensor is and how to start.
-- [User Guide](https://cicd-sensor.github.io/user-guide/overview.html) — deployment paths for GitHub Actions and GitLab CI/CD.
-- [Rules](https://cicd-sensor.github.io/user-guide/rules.html) — write detection, collection, and correlation rules.
-- [Logging](https://cicd-sensor.github.io/user-guide/logging.html) — log format delivered by the manager.
-- [Attestation predicate](https://cicd-sensor.github.io/user-guide/attestation-predicate.html) — runtime-trace predicate for CI/CD runtime evidence.
-- [Developer Guide](https://cicd-sensor.github.io/developer-guide/overview.html) — agent, eBPF runtime, manager, and rule engine internals.
+- [Getting Started](https://cicd-sensor.github.io/): what cicd-sensor is and how to start.
+- [User Guide](https://cicd-sensor.github.io/user-guide/overview.html): deployment paths for GitHub Actions and GitLab CI/CD.
+- [Rules](https://cicd-sensor.github.io/user-guide/rules.html): write detection, collection, and correlation rules.
+- [Logging](https://cicd-sensor.github.io/user-guide/logging.html): log format delivered by the manager.
+- [Attestation predicate](https://cicd-sensor.github.io/user-guide/attestation-predicate.html): runtime-trace predicate for CI/CD runtime evidence.
+- [Developer Guide](https://cicd-sensor.github.io/developer-guide/overview.html): agent, eBPF runtime, manager, and rule engine internals.
 
 ## About the project
 
 > [!NOTE]
-> **About the creator** — cicd-sensor is a vendor-neutral open-source project, created and maintained by [Hiroki Suezawa (@rung)](https://www.suezawa.net) — author of the [Common Threat Matrix for CI/CD Pipeline](https://github.com/rung/threat-matrix-cicd), contributor to the [OWASP Top 10 CI/CD Security Risks](https://owasp.org/www-project-top-10-ci-cd-security-risks/), and early contributor to [OSC&R / pbom.dev](https://pbom.dev/). cicd-sensor was started as an individual project to stay close to the open-source community that is on the receiving end of supply-chain attacks.
+> **About the creator:** cicd-sensor is a vendor-neutral open-source project, created and maintained by [Hiroki Suezawa (@rung)](https://www.suezawa.net), author of the [Common Threat Matrix for CI/CD Pipeline](https://github.com/rung/threat-matrix-cicd), contributor to the [OWASP Top 10 CI/CD Security Risks](https://owasp.org/www-project-top-10-ci-cd-security-risks/), and early contributor to [OSC&R / pbom.dev](https://pbom.dev/). cicd-sensor was started as an individual project to stay close to the open-source community that is on the receiving end of supply-chain attacks.
 
 A read-only official mirror is published at [gitlab.com/cicd-sensor/cicd-sensor](https://gitlab.com/cicd-sensor/cicd-sensor). GitHub is the canonical source; the GitLab mirror is synced periodically.
 
