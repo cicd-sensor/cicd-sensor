@@ -257,6 +257,9 @@ func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFla
 		if projectConfig.DefaultMaxAlertsPerRule != nil && *projectConfig.DefaultMaxAlertsPerRule != 0 {
 			req["default_max_alerts_per_rule"] = *projectConfig.DefaultMaxAlertsPerRule
 		}
+		if projectConfig.DisableBaselineRules {
+			req["disable_baseline_rules"] = true
+		}
 	}
 
 	if rulesFile != "" {

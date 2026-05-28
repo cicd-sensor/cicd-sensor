@@ -31,9 +31,11 @@ type fakeBaselineRuleSource struct {
 	rules    rulesource.LoadedRules
 	err      error
 	provider string
+	calls    int
 }
 
 func (s *fakeBaselineRuleSource) LoadForProvider(ctx context.Context, logger *slog.Logger, provider string) (rulesource.LoadedRules, error) {
+	s.calls++
 	s.provider = provider
 	return s.rules, s.err
 }
@@ -304,6 +306,94 @@ rule_sets:
 	}
 	if got := sources[1].RuleSets[0].RulesetID; got != "manual-set" {
 		t.Fatalf("second ruleset: got %q, want manual-set", got)
+	}
+}
+
+func TestConfigService_FetchConfig_DisableBaselineRulesSkipsBaseline(t *testing.T) {
+	baselineRules := &fakeBaselineRuleSource{
+		rules: rulesource.LoadedRules{
+			RuleSets: []rule.RuleSet{{RulesetID: "baseline-set"}},
+		},
+	}
+	dir := t.TempDir()
+	rulesPath := writeManagerRuleBundle(t, dir, map[string]string{
+		"manual.yaml": `
+rule_sets:
+  - ruleset_id: "manual-set"
+    rules:
+      - rule_id: "manual_detect"
+        event_type: "process_exec"
+        condition: 'process_name == "sh"'
+        action: "detect"
+`,
+	})
+	server := NewServer(testLogger, ":0", testManagerTokens, &ServedConfig{
+		ConfigRevision:       "rev",
+		DisableBaselineRules: true,
+	}, rulesPath, &StartupConfig{DisableBaselineRules: true}, nil)
+	server.baselineRules = baselineRules
+	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
+	defer ts.Close()
+
+	client := managerv1beta1connect.NewConfigServiceClient(ts.Client(), ts.URL)
+	req := connect.NewRequest(&managerv1beta1.FetchConfigRequest{JobIdentity: &managerv1beta1.JobIdentity{
+		Provider:               "github",
+		ProviderHost:           "github.com",
+		ProjectPath:            "acme/example",
+		GithubRunId:            "123",
+		GithubJob:              "build",
+		GithubRunAttempt:       "1",
+		GithubRunnerTrackingId: "runner-1",
+	}})
+	req.Header().Set("Authorization", managerBearer(testManagerSecret))
+
+	resp, err := client.FetchConfig(context.Background(), req)
+	if err != nil {
+		t.Fatalf("fetch config: %v", err)
+	}
+	if baselineRules.calls != 0 {
+		t.Fatalf("baseline loader calls: got %d, want 0", baselineRules.calls)
+	}
+	sources := protoconv.FromProtoRuleSources(resp.Msg.RuleSources)
+	if got := len(sources); got != 1 {
+		t.Fatalf("rule sources: got %d, want 1", got)
+	}
+	if got := sources[0].RuleSets[0].RulesetID; got != "manual-set" {
+		t.Fatalf("ruleset: got %q, want manual-set", got)
+	}
+}
+
+func TestConfigService_FetchConfig_DisableBaselineRulesAllowsEmptyRuleSources(t *testing.T) {
+	baselineRules := &fakeBaselineRuleSource{}
+	server := NewServer(testLogger, ":0", testManagerTokens, &ServedConfig{
+		ConfigRevision:       "rev",
+		DisableBaselineRules: true,
+	}, "", &StartupConfig{DisableBaselineRules: true}, nil)
+	server.baselineRules = baselineRules
+	ts := newManagerHTTPTestServer(t, server.httpServer.Handler)
+	defer ts.Close()
+
+	client := managerv1beta1connect.NewConfigServiceClient(ts.Client(), ts.URL)
+	req := connect.NewRequest(&managerv1beta1.FetchConfigRequest{JobIdentity: &managerv1beta1.JobIdentity{
+		Provider:               "github",
+		ProviderHost:           "github.com",
+		ProjectPath:            "acme/example",
+		GithubRunId:            "123",
+		GithubJob:              "build",
+		GithubRunAttempt:       "1",
+		GithubRunnerTrackingId: "runner-1",
+	}})
+	req.Header().Set("Authorization", managerBearer(testManagerSecret))
+
+	resp, err := client.FetchConfig(context.Background(), req)
+	if err != nil {
+		t.Fatalf("fetch config: %v", err)
+	}
+	if baselineRules.calls != 0 {
+		t.Fatalf("baseline loader calls: got %d, want 0", baselineRules.calls)
+	}
+	if got := len(resp.Msg.RuleSources); got != 0 {
+		t.Fatalf("rule sources: got %d, want 0", got)
 	}
 }
 

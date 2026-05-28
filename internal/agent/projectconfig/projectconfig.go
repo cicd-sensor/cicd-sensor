@@ -18,6 +18,7 @@ import (
 // ProjectConfig contains project-owned inputs accepted by project start.
 type ProjectConfig struct {
 	DefaultMaxAlertsPerRule *int `yaml:"default_max_alerts_per_rule,omitempty"`
+	DisableBaselineRules    bool `yaml:"disable_baseline_rules,omitempty"`
 }
 
 // Load reads a project config file and rejects unknown fields.

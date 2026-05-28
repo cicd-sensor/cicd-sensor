@@ -72,7 +72,7 @@ See [Correlation](rule-correlation.md) for details.
 | `condition` | yes | CEL expression that returns bool |
 | `action` | yes | `detect`, `collect`, or `terminate` |
 | `tags` | no | Metadata such as severity or category |
-| `target` | no | Repository / project scope where the rule applies |
+| `target` | no | Repository / project where the rule applies |
 | `max_alerts` | no | Maximum entries emitted to the Detection Log per job / rule |
 
 ## Actions

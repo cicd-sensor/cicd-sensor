@@ -44,17 +44,19 @@ func (h *configServiceHandler) FetchConfig(ctx context.Context, req *connect.Req
 		h.server.logger.ErrorContext(ctx, "manager_rules_load_failed", "error", err)
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("manager rules load failed: %w", err))
 	}
-	baselineSource, err := h.server.baselineRules.LoadForProvider(ctx, h.server.logger, string(identity.Provider))
-	if err != nil {
-		h.server.logger.ErrorContext(ctx, "baseline_fetch_failed", "error", err)
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("baseline fetch failed: %w", err))
+	if !config.DisableBaselineRules {
+		baselineSource, err := h.server.baselineRules.LoadForProvider(ctx, h.server.logger, string(identity.Provider))
+		if err != nil {
+			h.server.logger.ErrorContext(ctx, "baseline_fetch_failed", "error", err)
+			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("baseline fetch failed: %w", err))
+		}
+		// Baseline first, then manual --rules-file. Rule source boundaries are
+		// preserved so OCI/local revisions remain visible to the agent.
+		merged := make([]rulesource.LoadedRules, 0, len(sources)+1)
+		merged = append(merged, baselineSource)
+		merged = append(merged, sources...)
+		sources = merged
 	}
-	// Baseline first, then manual --rules-file. Rule source boundaries are
-	// preserved so OCI/local revisions remain visible to the agent.
-	merged := make([]rulesource.LoadedRules, 0, len(sources)+1)
-	merged = append(merged, baselineSource)
-	merged = append(merged, sources...)
-	sources = merged
 
 	out := &managerv1beta1.FetchConfigResponse{
 		Config: &managerv1beta1.ServedConfig{

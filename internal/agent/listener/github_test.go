@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -716,6 +717,55 @@ func TestListener_ProjectStart_AcceptsProjectRules(t *testing.T) {
 	}
 }
 
+func TestListener_ProjectStart_DisableBaselineRulesKeepsProjectRules(t *testing.T) {
+	client, jobRegistry, cleanup := setupListenerWithRegistry(t)
+	defer cleanup()
+	jobRegistry.SetBaselineLoadForTesting(func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+		t.Fatal("baseline loader should not be called when project start disables baseline rules")
+		return rulesource.LoadedRules{}, nil
+	})
+
+	body, _ := json.Marshal(map[string]any{
+		"provider":                  "github",
+		"provider_host":             "github.com",
+		"project_path":              "acme/example",
+		"github_run_id":             "123456789",
+		"github_job":                "build",
+		"github_run_attempt":        "1",
+		"github_runner_tracking_id": "github_tracking_disable_baseline",
+		"disable_baseline_rules":    true,
+		"rule_sources": []rulesource.LoadedRules{{
+			RuleSets: []rule.RuleSet{{
+				RulesetID: "project",
+				Rules: []rule.Rule{{
+					RuleID:    "project_exec",
+					EventType: jobevent.ProcessExec,
+					Condition: `process_name == "bash"`,
+					Action:    rule.RuleActionDetect,
+				}},
+			}},
+		}},
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/github/project/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123456789", "build", "1", "github_tracking_disable_baseline")
+	job := listenerRegisteredJob(jobRegistry, id)
+	if job == nil || job.ProjectScope() == nil {
+		t.Fatal("expected project scope to be created")
+	}
+	if got := len(job.ProjectScope().RuleSets); got != 1 {
+		t.Fatalf("project scope rule_sets: got %d, want 1", got)
+	}
+}
+
 func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 	managerBearerToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
 	svc := &fakeConfigService{
@@ -831,6 +881,43 @@ func TestListener_ProjectStart_ManagerModeIgnoresLocalDefaultMaxAlerts(t *testin
 	}
 	if got := job.ProjectScope().DefaultMaxAlertsPerRule; got != 31 {
 		t.Fatalf("project default_max_alerts_per_rule: got %d, want 31", got)
+	}
+}
+
+func TestListener_ProjectStart_RejectsProjectManagerWithDisableBaselineRules(t *testing.T) {
+	client, cleanup := setupListener(t)
+	defer cleanup()
+
+	body, _ := json.Marshal(map[string]any{
+		"provider":                  "github",
+		"provider_host":             "github.com",
+		"project_path":              "acme/example",
+		"github_run_id":             "123456789",
+		"github_job":                "build",
+		"github_run_attempt":        "1",
+		"github_runner_tracking_id": "github_tracking_manager_disable_baseline",
+		"manager_url":               "https://project-manager.example.com",
+		"manager_token":             managerauth.TokenPrefix + strings.Repeat("a", 64),
+		"disable_baseline_rules":    true,
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/github/project/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	var result struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Error != "disable_baseline_rules cannot be combined with manager_url" {
+		t.Fatalf("error: got %q, want %q", result.Error, "disable_baseline_rules cannot be combined with manager_url")
 	}
 }
 

@@ -89,18 +89,18 @@ func (l *Listener) handleGitHubProjectStart(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	_, err = l.jobRegistry.ApplyGitHubProjectStart(
-		r.Context(),
-		identity,
-		metadata,
-		l.runnerType,
-		peerPID,
-		req.DefaultMaxAlertsPerRule,
-		req.RuleSources,
-		managerConnection,
-		projectManagerClient,
-		req.DebugEnabled,
-	)
+	_, err = l.jobRegistry.ApplyGitHubProjectStart(r.Context(), jobregistry.GitHubProjectStartConfig{
+		Identity:                identity,
+		Metadata:                metadata,
+		RunnerType:              l.runnerType,
+		PeerPID:                 peerPID,
+		DefaultMaxAlertsPerRule: req.DefaultMaxAlertsPerRule,
+		DisableBaselineRules:    req.DisableBaselineRules,
+		RuleSources:             req.RuleSources,
+		ManagerConnection:       managerConnection,
+		ManagerClient:           projectManagerClient,
+		DebugEnabled:            req.DebugEnabled,
+	})
 	if err != nil {
 		if errors.Is(err, jobregistry.ErrPeerNotInJob) {
 			l.writeError(w, r, http.StatusForbidden, "peer not in job tracking set")

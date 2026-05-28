@@ -109,6 +109,21 @@ func TestBuildProjectStartRequest_LoadsProjectConfig(t *testing.T) {
 	}
 }
 
+func TestBuildProjectStartRequest_ConfigDisablesBaselineRules(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "project.yaml")
+	if err := os.WriteFile(configPath, []byte("disable_baseline_rules: true\n"), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	got, err := buildProjectStartRequest(githubIdentity(), jobMetadataFlags{}, configPath, "", managerConnectionConfig{}, false)
+	if err != nil {
+		t.Fatalf("buildProjectStartRequest: %v", err)
+	}
+	if got["disable_baseline_rules"] != true {
+		t.Fatalf("disable_baseline_rules: got %#v, want true", got["disable_baseline_rules"])
+	}
+}
+
 func TestBuildProjectStartRequest_EmptyProjectConfigOmitsDefaultMaxAlerts(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "project.yaml")
 	if err := os.WriteFile(configPath, []byte("{}\n"), 0o644); err != nil {

@@ -15,6 +15,7 @@ func TestLoad(t *testing.T) {
 		name        string
 		content     string
 		want        *int
+		wantDisable bool
 		wantErrText string
 	}{
 		{
@@ -27,6 +28,13 @@ func TestLoad(t *testing.T) {
 default_max_alerts_per_rule: 7
 `,
 			want: intPtr(7),
+		},
+		{
+			name: "disable baseline rules is loaded",
+			content: `
+disable_baseline_rules: true
+`,
+			wantDisable: true,
 		},
 		{
 			name: "negative default is rejected",
@@ -86,6 +94,9 @@ manager:
 				t.Fatalf("default max alerts: got %v, want %v", got.DefaultMaxAlertsPerRule, tt.want)
 			case *got.DefaultMaxAlertsPerRule != *tt.want:
 				t.Fatalf("default max alerts: got %d, want %d", *got.DefaultMaxAlertsPerRule, *tt.want)
+			}
+			if got.DisableBaselineRules != tt.wantDisable {
+				t.Fatalf("disable baseline rules: got %v, want %v", got.DisableBaselineRules, tt.wantDisable)
 			}
 		})
 	}
