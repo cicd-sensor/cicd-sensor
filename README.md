@@ -43,7 +43,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: cicd-sensor/cicd-sensor-action@6ee257338e68af2b279b321b3346fe5f385aa498 # v0.0.29
+      - uses: cicd-sensor/cicd-sensor-action@9d2ab8067f0f33294519128dc93193faa1cdebe7 # v0.0.30
 ```
 
 For self-hosted GitHub Actions or GitLab CI/CD, see the [User Guide](https://cicd-sensor.github.io/user-guide/overview.html).
