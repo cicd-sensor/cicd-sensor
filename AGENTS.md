@@ -70,6 +70,8 @@ The Agent is built from several components, each owning a different boundary. Be
 
 A single Job may carry one scope or both. Each scope owns its own rules, evaluation state, and outputs, and the two are isolated: neither operator can read or override the other's rules, and their outputs are emitted separately. This is the security boundary of the agent — see `docs/developer-guide/agent.md` for the conceptual model and `docs/developer-guide/agent-ownership-boundaries.md` for the implementation ownership rules. For the kernel-side model, see `docs/developer-guide/ebpf-runtime.md`.
 
+Host scope and project scope are internal Agent implementation boundaries. User-facing docs should describe the user-visible deployment path and configuration owner instead: installed runner, GitHub Action, project-local config, or manager config. GitHub Action can run with `manager-url`, so do not imply that Action configuration and manager configuration are mutually exclusive. Do not expose host/project scope mechanics in user docs unless the page is specifically explaining Agent architecture or a log field that uses scope to distinguish emitted records.
+
 ## Commits
 
 - Conventional Commits. English. One-line title.

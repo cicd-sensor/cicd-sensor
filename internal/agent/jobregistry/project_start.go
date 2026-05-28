@@ -11,66 +11,61 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
+// GitHubProjectStartConfig carries the inputs for a GitHub project/start request.
+type GitHubProjectStartConfig struct {
+	Identity                jobcontext.JobIdentity
+	Metadata                jobcontext.JobMetadata
+	RunnerType              string
+	PeerPID                 int32
+	DefaultMaxAlertsPerRule int
+	DisableBaselineRules    bool
+	RuleSources             []rulesource.LoadedRules
+	ManagerConnection       managerclient.Connection
+	ManagerClient           ManagerConfigFetcher
+	DebugEnabled            bool
+}
+
 // ApplyGitHubProjectStart registers the GitHub project scope. Hosted jobs can
 // start here; self-hosted jobs attach to an existing GitHub host scope.
-func (jr *JobRegistry) ApplyGitHubProjectStart(
-	ctx context.Context,
-	identity jobcontext.JobIdentity,
-	metadata jobcontext.JobMetadata,
-	runnerType string,
-	peerPID int32,
-	projectDefaultMaxAlertsPerRule int,
-	projectRuleSources []rulesource.LoadedRules,
-	projectManagerConnection managerclient.Connection,
-	projectManagerClient ManagerConfigFetcher,
-	debugEnabled bool,
-) (*job.Job, error) {
+func (jr *JobRegistry) ApplyGitHubProjectStart(ctx context.Context, cfg GitHubProjectStartConfig) (*job.Job, error) {
 	// Project/start peer authorization lives here because existing-host and
 	// hosted project-only flows use different Job/BPF state.
-	reservation := jr.reserveJobStart(identity)
+	reservation := jr.reserveJobStart(cfg.Identity)
 	if reservation.existing != nil {
-		return jr.attachGitHubProjectScopeToExistingJob(ctx, reservation.existing, identity, metadata, runnerType, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, debugEnabled)
+		return jr.attachGitHubProjectScopeToExistingJob(ctx, reservation.existing, cfg)
 	}
 	if reservation.inFlight() {
 		return nil, ErrJobAlreadyRegistered
 	}
 	defer reservation.done()
 
-	return jr.startGitHubProjectOnlyJob(ctx, identity, metadata, runnerType, peerPID, projectDefaultMaxAlertsPerRule, projectRuleSources, projectManagerConnection, projectManagerClient, debugEnabled)
+	return jr.startGitHubProjectOnlyJob(ctx, cfg)
 }
 
 func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
 	ctx context.Context,
 	existing *job.Job,
-	identity jobcontext.JobIdentity,
-	metadata jobcontext.JobMetadata,
-	runnerType string,
-	peerPID int32,
-	projectDefaultMaxAlertsPerRule int,
-	projectRuleSources []rulesource.LoadedRules,
-	projectManagerConnection managerclient.Connection,
-	projectManagerClient ManagerConfigFetcher,
-	debugEnabled bool,
+	cfg GitHubProjectStartConfig,
 ) (*job.Job, error) {
 	if existing.ProjectScope() != nil {
 		return nil, job.ErrProjectScopeAlreadySet
 	}
-	if err := jr.verifyPeerPIDBelongsToJob(ctx, peerPID, identity); err != nil {
+	if err := jr.verifyPeerPIDBelongsToJob(ctx, cfg.PeerPID, cfg.Identity); err != nil {
 		return nil, err
 	}
 
 	// Self-hosted GitHub builds project scope, then attaches it to the host-created Job.
 	var projectScope *jobscope.JobScopeState
 	var err error
-	if projectManagerClient != nil {
-		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, identity, metadata, runnerType, projectManagerConnection, projectManagerClient)
+	if cfg.ManagerClient != nil {
+		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, cfg.Identity, cfg.Metadata, cfg.RunnerType, cfg.ManagerConnection, cfg.ManagerClient)
 	} else {
-		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, identity, projectDefaultMaxAlertsPerRule, projectRuleSources)
+		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, cfg.Identity, cfg.DefaultMaxAlertsPerRule, cfg.DisableBaselineRules, cfg.RuleSources)
 	}
 	if err != nil {
 		return nil, err
 	}
-	jr.attachDebugOutput(ctx, projectScope, debugEnabled)
+	jr.attachDebugOutput(ctx, projectScope, cfg.DebugEnabled)
 	// SetProjectScope swaps in the host+project evaluation bundle atomically.
 	if err := existing.SetProjectScope(ctx, projectScope); err != nil {
 		return nil, err
@@ -80,30 +75,22 @@ func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
 
 func (jr *JobRegistry) startGitHubProjectOnlyJob(
 	ctx context.Context,
-	identity jobcontext.JobIdentity,
-	metadata jobcontext.JobMetadata,
-	runnerType string,
-	peerPID int32,
-	projectDefaultMaxAlertsPerRule int,
-	projectRuleSources []rulesource.LoadedRules,
-	projectManagerConnection managerclient.Connection,
-	projectManagerClient ManagerConfigFetcher,
-	debugEnabled bool,
+	cfg GitHubProjectStartConfig,
 ) (*job.Job, error) {
 	var projectScope *jobscope.JobScopeState
 	var err error
-	if projectManagerClient != nil {
-		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, identity, metadata, runnerType, projectManagerConnection, projectManagerClient)
+	if cfg.ManagerClient != nil {
+		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, cfg.Identity, cfg.Metadata, cfg.RunnerType, cfg.ManagerConnection, cfg.ManagerClient)
 	} else {
-		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, identity, projectDefaultMaxAlertsPerRule, projectRuleSources)
+		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, cfg.Identity, cfg.DefaultMaxAlertsPerRule, cfg.DisableBaselineRules, cfg.RuleSources)
 	}
 	if err != nil {
 		return nil, err
 	}
-	jr.attachDebugOutput(ctx, projectScope, debugEnabled)
+	jr.attachDebugOutput(ctx, projectScope, cfg.DebugEnabled)
 
 	// Hosted Actions without host/start create the Job runtime here.
-	job, err := jr.registerJobRuntime(ctx, identity, metadata, runnerType)
+	job, err := jr.registerJobRuntime(ctx, cfg.Identity, cfg.Metadata, cfg.RunnerType)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +101,7 @@ func (jr *JobRegistry) startGitHubProjectOnlyJob(
 	}
 	if jr.kernelTracker != nil {
 		// project_start peer is the root cgroup for hosted project-only jobs.
-		if err := jr.bindStartProcessCgroupToJob(ctx, identity, peerPID, "github_project_start"); err != nil {
+		if err := jr.bindStartProcessCgroupToJob(ctx, cfg.Identity, cfg.PeerPID, "github_project_start"); err != nil {
 			return nil, err
 		}
 	}
@@ -152,14 +139,16 @@ func (jr *JobRegistry) buildProjectScopeFromManagerConfig(ctx context.Context, i
 }
 
 // buildProjectScopeFromLocalConfig builds a resolved project scope from project-local config.
-func (jr *JobRegistry) buildProjectScopeFromLocalConfig(ctx context.Context, identity jobcontext.JobIdentity, projectDefaultMaxAlertsPerRule int, projectRuleSources []rulesource.LoadedRules) (*jobscope.JobScopeState, error) {
+func (jr *JobRegistry) buildProjectScopeFromLocalConfig(ctx context.Context, identity jobcontext.JobIdentity, projectDefaultMaxAlertsPerRule int, disableBaselineRules bool, projectRuleSources []rulesource.LoadedRules) (*jobscope.JobScopeState, error) {
 	projectScope := jobscope.NewProject()
-	baselineSource, err := jr.loadBaselineRules(ctx, identity)
-	if err != nil {
-		return nil, err
-	}
-	if err := projectScope.ApplyBaselineRules(baselineSource); err != nil {
-		return nil, err
+	if !disableBaselineRules {
+		baselineSource, err := jr.loadBaselineRules(ctx, identity)
+		if err != nil {
+			return nil, err
+		}
+		if err := projectScope.ApplyBaselineRules(baselineSource); err != nil {
+			return nil, err
+		}
 	}
 	if err := projectScope.ApplyProjectLocalConfig(jobscope.ProjectLocalConfig{
 		RuleSources:             projectRuleSources,

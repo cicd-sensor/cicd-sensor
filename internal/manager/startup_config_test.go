@@ -15,6 +15,7 @@ func TestLoadStartupConfig(t *testing.T) {
 		wantPort    int
 		wantBind    string
 		wantDefault int
+		wantDisable bool
 		wantErrText string
 	}{
 		{
@@ -29,6 +30,16 @@ default_max_alerts_per_rule: 25
 			wantPort:    7443,
 			wantBind:    "127.0.0.1:7443",
 			wantDefault: 25,
+		},
+		{
+			name: "disable baseline rules is loaded",
+			content: `
+disable_baseline_rules: true
+`,
+			wantAddress: "0.0.0.0",
+			wantPort:    8080,
+			wantBind:    "0.0.0.0:8080",
+			wantDisable: true,
 		},
 		{
 			name: "missing bind address uses default",
@@ -125,6 +136,9 @@ unexpected_field: true
 			}
 			if got.DefaultMaxAlertsPerRule != tt.wantDefault {
 				t.Fatalf("default_max_alerts_per_rule: got %d, want %d", got.DefaultMaxAlertsPerRule, tt.wantDefault)
+			}
+			if got.DisableBaselineRules != tt.wantDisable {
+				t.Fatalf("disable_baseline_rules: got %v, want %v", got.DisableBaselineRules, tt.wantDisable)
 			}
 			if !strings.HasPrefix(got.Revision, "sha256:") {
 				t.Fatalf("revision: got %q, want sha256 prefix", got.Revision)

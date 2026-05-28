@@ -64,7 +64,7 @@ repo/
       b.yaml
 ```
 
-Even when project-local rules are not present, [Baseline Rules](baseline-rules.md) still apply.
+Even when project-local rules are not present, [Baseline Rules](baseline-rules.md) still apply by default.
 Use project-local files only for repository-specific tuning or additional detections.
 
 ### config.yaml
@@ -73,11 +73,13 @@ Use project-local files only for repository-specific tuning or additional detect
 
 ```yaml
 default_max_alerts_per_rule: 20
+disable_baseline_rules: false
 ```
 
 | Field | Meaning |
 | --- | --- |
 | `default_max_alerts_per_rule` | Default Detection Log limit for rules that do not set `max_alerts`. Allowed values are 1-100. |
+| `disable_baseline_rules` | Disable cicd-sensor baseline rules for standalone project-local mode. Defaults to `false`. |
 
 See [RuleSet max_alerts](rule-set.md#max_alerts) for per-rule limits.
 
@@ -117,6 +119,7 @@ In this mode, the cicd-sensor Agent can still generate the HTML report and attes
 Important: when `manager-url` is set, repository-local `.cicd-sensor/config.yaml` and `.cicd-sensor/rules/` are not used.
 Config and rules are fetched from the manager.
 Repository-local rules and manager rules are not merged together.
+Baseline policy is also owned by the manager, not by repository-local config.
 
 ```yaml
 jobs:

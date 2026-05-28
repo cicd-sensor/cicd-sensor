@@ -275,6 +275,7 @@ func TestBuildServedConfig(t *testing.T) {
 	startup := manager.StartupConfig{
 		Revision:                "sha256:config",
 		DefaultMaxAlertsPerRule: 7,
+		DisableBaselineRules:    true,
 	}
 	settings := &managerv1beta1.OutputSettings{
 		Detection: &managerv1beta1.OutputSetting{
@@ -296,6 +297,9 @@ func TestBuildServedConfig(t *testing.T) {
 	}
 	if served.DefaultMaxAlertsPerRule != 7 {
 		t.Fatalf("DefaultMaxAlertsPerRule: got %d, want 7", served.DefaultMaxAlertsPerRule)
+	}
+	if !served.DisableBaselineRules {
+		t.Fatalf("DisableBaselineRules: got false, want true")
 	}
 	if !served.OutputSettings.GetDetection().GetEnabled() {
 		t.Fatalf("detection settings: got false, want true")

@@ -54,6 +54,8 @@ The Manager exposes two endpoints to Agents.
 
 Agents fetch config and rules with `ConfigService.FetchConfig`.
 In manager mode, repository-local `.cicd-sensor/config.yaml` and `.cicd-sensor/rules/` are not used.
+The manager config owns manager-backed baseline policy, default alert caps, and output policy.
+For the user-facing `manager.yaml` setting reference, see [Manager](../user-guide/manager.md#manageryaml).
 
 Startup config is read once at process start.
 Rules are checked on each `FetchConfig` request: if the rule bundle file's modification time or size has changed, it is re-parsed; otherwise the cached parse is reused.
@@ -66,7 +68,8 @@ The Manager process accepts file locations through either CLI flags or environme
 | Startup config | `--config-file` | `CICD_SENSOR_MANAGER_CONFIG_FILE` | Read at process start |
 | Rule bundle | `--rules-file` | `CICD_SENSOR_MANAGER_RULES_FILE` | Rechecked on each `FetchConfig` request |
 
-Only file locations are part of this startup interface.
+Only file locations are accepted through this CLI / environment interface.
+The settings themselves live in `manager.yaml`; custom rules live in the rule bundle file.
 
 Rule sources returned by the Manager are merged and compiled by the Agent.
 The Manager holds the rule bundle, but it does not evaluate runtime events.

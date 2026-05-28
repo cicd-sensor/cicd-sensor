@@ -254,22 +254,28 @@ func TestJobRegistry_ManagerConfigDoesNotApplyToProjectScope(t *testing.T) {
 		t.Fatalf("apply host start: %v", err)
 	}
 	collect := rule.RuleActionCollect
-	job, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 7, []rulesource.LoadedRules{{
-		RuleSets: []rule.RuleSet{{
-			RulesetID: "project",
-			Rules: []rule.Rule{{
-				RuleID:    "project-only",
-				EventType: jobevent.ProcessExec,
-				Condition: `process_name == "go"`,
-				Action:    rule.RuleActionDetect,
+	job, err := jr.ApplyGitHubProjectStart(testCtx, jobregistry.GitHubProjectStartConfig{
+		Identity:                id,
+		Metadata:                meta,
+		RunnerType:              "machine",
+		DefaultMaxAlertsPerRule: 7,
+		RuleSources: []rulesource.LoadedRules{{
+			RuleSets: []rule.RuleSet{{
+				RulesetID: "project",
+				Rules: []rule.Rule{{
+					RuleID:    "project-only",
+					EventType: jobevent.ProcessExec,
+					Condition: `process_name == "go"`,
+					Action:    rule.RuleActionDetect,
+				}},
+			}},
+			RuleModifiers: []rule.RuleModifier{{
+				ModifierID:     "project-mod",
+				Targets:        []rule.RuleModifierTarget{{RulesetID: "project", RuleID: "project-only"}},
+				OverrideAction: &collect,
 			}},
 		}},
-		RuleModifiers: []rule.RuleModifier{{
-			ModifierID:     "project-mod",
-			Targets:        []rule.RuleModifierTarget{{RulesetID: "project", RuleID: "project-only"}},
-			OverrideAction: &collect,
-		}},
-	}}, managerclient.Connection{}, nil, false)
+	})
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
@@ -343,7 +349,11 @@ func TestJobRegistry_ApplyGitHubHostStart_RejectsAfterProjectOnly(t *testing.T) 
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	projectJob, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false)
+	projectJob, err := jr.ApplyGitHubProjectStart(testCtx, jobregistry.GitHubProjectStartConfig{
+		Identity:   id,
+		Metadata:   meta,
+		RunnerType: "machine",
+	})
 	if err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}

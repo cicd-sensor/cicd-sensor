@@ -228,6 +228,7 @@ func buildServedConfig(startup manager.StartupConfig, outputSettings *managerv1b
 	return &manager.ServedConfig{
 		ConfigRevision:          startup.Revision,
 		DefaultMaxAlertsPerRule: startup.DefaultMaxAlertsPerRule,
+		DisableBaselineRules:    startup.DisableBaselineRules,
 		OutputSettings:          outputSettings,
 	}
 }

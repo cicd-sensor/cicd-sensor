@@ -25,7 +25,11 @@ func TestJobRegistry_RequestGitHubProjectResult_ExistingJob(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	if _, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false); err != nil {
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, jobregistry.GitHubProjectStartConfig{
+		Identity:   id,
+		Metadata:   meta,
+		RunnerType: "machine",
+	}); err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
 
@@ -53,7 +57,11 @@ func TestJobRegistry_RequestGitHubProjectResult_ClosesDebugOutputBeforeReturn(t 
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 
-	if _, err := jr.ApplyGitHubProjectStart(testCtx, id, meta, "machine", 0, 0, nil, managerclient.Connection{}, nil, false); err != nil {
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, jobregistry.GitHubProjectStartConfig{
+		Identity:   id,
+		Metadata:   meta,
+		RunnerType: "machine",
+	}); err != nil {
 		t.Fatalf("apply project start: %v", err)
 	}
 	job := registeredJob(jr, id)
