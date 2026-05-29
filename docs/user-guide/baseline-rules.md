@@ -6,6 +6,8 @@ They are maintained with current CI/CD supply-chain attack patterns in mind and 
 The operating model is baseline first, customization second.
 Most users should start with the baseline rule set, then add custom RuleSets or RuleModifiers only where their environment needs additional coverage or tuning.
 
+> 📄 This page explains how the baseline works, not every individual rule. For the actual rule definitions, see [`rules/`](https://github.com/cicd-sensor/cicd-sensor/tree/main/rules) and the released baseline rules artifact.
+
 ## Default-on baseline
 
 Baseline Rules are applied by default in every supported deployment mode.
@@ -24,8 +26,3 @@ Use them to add organization-specific or repository-specific detections.
 
 Use RuleModifiers when you want to tune baseline behavior.
 This keeps your deployment aligned with future baseline updates while still letting you adjust local policy.
-
-## Where to see the shipped rules
-
-This page describes the operating model, not every individual baseline rule.
-The source of truth for shipped rules is the [`rules/` directory in the cicd-sensor repository](https://github.com/cicd-sensor/cicd-sensor/tree/main/rules) and the released baseline rules artifact.
