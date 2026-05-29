@@ -21,8 +21,8 @@ require (
 	github.com/sigstore/cosign/v3 v3.0.6
 	github.com/sigstore/sigstore-go v1.1.4
 	go.yaml.in/yaml/v4 v4.0.0-rc.4
-	golang.org/x/net v0.54.0
-	golang.org/x/sys v0.44.0
+	golang.org/x/net v0.55.0
+	golang.org/x/sys v0.45.0
 	golang.org/x/text v0.37.0
 	google.golang.org/api v0.280.0
 	google.golang.org/protobuf v1.36.11
