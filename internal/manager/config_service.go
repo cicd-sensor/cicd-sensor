@@ -52,10 +52,10 @@ func (h *configServiceHandler) FetchConfig(ctx context.Context, req *connect.Req
 		}
 		// Baseline first, then manual --rules-file. Rule source boundaries are
 		// preserved so OCI/local revisions remain visible to the agent.
-		merged := make([]rulesource.LoadedRules, 0, len(sources)+1)
-		merged = append(merged, baselineSource)
-		merged = append(merged, sources...)
-		sources = merged
+		sourcesWithBaseline := make([]rulesource.LoadedRules, 0, len(sources)+1)
+		sourcesWithBaseline = append(sourcesWithBaseline, baselineSource)
+		sourcesWithBaseline = append(sourcesWithBaseline, sources...)
+		sources = sourcesWithBaseline
 	}
 
 	out := &managerv1beta1.FetchConfigResponse{

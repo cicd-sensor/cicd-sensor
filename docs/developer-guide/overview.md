@@ -13,7 +13,7 @@ The goal is to understand the main subsystem responsibilities and boundaries.
 | `cmd/cicd-sensor-manager` | Manager server |
 | `cmd/cicd-sensorctl` | Utility CLI for reports, attestations, rule validation, and related tasks |
 | `internal/agent` | Agent runtime that observes CI/CD job runtime |
-| `internal/rule` | RuleSet / RuleModifier schema, merge, CEL compile, and evaluation |
+| `internal/rule` | RuleSet / RuleModifier schema, resolution, CEL compile, and evaluation |
 | `internal/manager` | Config service, collector ingest, and output routing |
 | `internal/ctl` | Report and attestation generation |
 

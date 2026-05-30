@@ -21,7 +21,7 @@ type EvaluationState struct {
 	Correlations []celengine.CompiledCorrelation
 }
 
-// NewEvaluationState merges host/project rules and compiles CEL programs.
+// NewEvaluationState merges scope-resolved host/project rules and compiles CEL programs.
 // Compile warnings are written back to the originating ResolvedRules.
 func NewEvaluationState(host, project *rule.ResolvedRules) *EvaluationState {
 	dropPreviousCompileWarnings(host)
