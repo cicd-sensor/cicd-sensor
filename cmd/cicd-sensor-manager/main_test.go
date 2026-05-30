@@ -276,6 +276,7 @@ func TestBuildServedConfig(t *testing.T) {
 		Revision:                "sha256:config",
 		DefaultMaxAlertsPerRule: 7,
 		DisableBaselineRules:    true,
+		MonitorMode:             true,
 	}
 	settings := &managerv1beta1.OutputSettings{
 		Detection: &managerv1beta1.OutputSetting{
@@ -300,6 +301,9 @@ func TestBuildServedConfig(t *testing.T) {
 	}
 	if !served.DisableBaselineRules {
 		t.Fatalf("DisableBaselineRules: got false, want true")
+	}
+	if !served.MonitorMode {
+		t.Fatalf("MonitorMode: got false, want true")
 	}
 	if !served.OutputSettings.GetDetection().GetEnabled() {
 		t.Fatalf("detection settings: got false, want true")

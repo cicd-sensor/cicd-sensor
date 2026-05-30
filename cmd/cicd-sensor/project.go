@@ -260,6 +260,9 @@ func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFla
 		if projectConfig.DisableBaselineRules {
 			req["disable_baseline_rules"] = true
 		}
+		if projectConfig.MonitorMode {
+			req["monitor_mode"] = true
+		}
 	}
 
 	if rulesFile != "" {

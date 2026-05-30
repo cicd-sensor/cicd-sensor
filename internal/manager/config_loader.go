@@ -16,6 +16,7 @@ type ServedConfig struct {
 	ConfigRevision          string
 	DefaultMaxAlertsPerRule int
 	DisableBaselineRules    bool
+	MonitorMode             bool
 	OutputSettings          *managerv1beta1.OutputSettings
 }
 

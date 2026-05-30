@@ -11,6 +11,7 @@ type MergeInput struct {
 	RuleSets                []RuleSet
 	RuleModifiers           []RuleModifier
 	DefaultMaxAlertsPerRule int
+	MonitorMode             bool
 	ProviderHost            string
 	ProjectPath             string
 }
@@ -22,6 +23,7 @@ func Merge(in MergeInput) ResolvedRules {
 	warnings = append(warnings, modifierWarnings...)
 	rules = applyModifiers(rules, validModifiers)
 	rules = applyTargetFilter(rules, in.ProviderHost, in.ProjectPath)
+	rules = applyMonitorMode(rules, in.MonitorMode)
 	rules, maxAlertWarnings := applyMaxAlertsDefaultsAndCeiling(rules, in.DefaultMaxAlertsPerRule)
 	warnings = append(warnings, maxAlertWarnings...)
 	return ResolvedRules{
@@ -132,6 +134,20 @@ func applyModifiers(rules []ResolvedRule, mods []RuleModifier) []ResolvedRule {
 		if !disabled {
 			out = append(out, resolvedRule)
 		}
+	}
+	return out
+}
+
+func applyMonitorMode(rules []ResolvedRule, enabled bool) []ResolvedRule {
+	if !enabled {
+		return rules
+	}
+	out := make([]ResolvedRule, 0, len(rules))
+	for _, resolvedRule := range rules {
+		if resolvedRule.Rule.Action == RuleActionTerminate {
+			resolvedRule.Rule.Action = RuleActionDetect
+		}
+		out = append(out, resolvedRule)
 	}
 	return out
 }

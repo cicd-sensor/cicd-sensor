@@ -19,6 +19,7 @@ import (
 type ProjectConfig struct {
 	DefaultMaxAlertsPerRule *int `yaml:"default_max_alerts_per_rule,omitempty"`
 	DisableBaselineRules    bool `yaml:"disable_baseline_rules,omitempty"`
+	MonitorMode             bool `yaml:"monitor_mode,omitempty"`
 }
 
 // Load reads a project config file and rejects unknown fields.

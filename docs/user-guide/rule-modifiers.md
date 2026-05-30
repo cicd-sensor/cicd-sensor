@@ -51,6 +51,7 @@ targets:
 
 Use this when you want to change how a rule is displayed or handled as `detect`, `collect`, or `terminate`.
 Both `detect` and `collect` are emitted to the Detection Log, but they appear as different actions in reports and logs.
+When `monitor_mode` is enabled, `override_action: terminate` is treated as `detect`.
 
 ```yaml
 rule_modifiers:

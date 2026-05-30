@@ -45,6 +45,7 @@ message ServedConfig {
   string config_revision = 1;
   int32 default_max_alerts_per_rule = 2;
   OutputSettings output_settings = 3;
+  bool monitor_mode = 4;
 }
 
 // FetchConfigResponse is the FetchConfig output.

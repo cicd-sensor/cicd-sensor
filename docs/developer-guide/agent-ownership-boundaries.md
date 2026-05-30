@@ -47,7 +47,7 @@ Each `Job` owns its own scope states: up to one host `JobScopeState` built by `A
 
 Scope state is therefore **per Job**, not shared across the registry.
 Host and project scope states attached to a Job never read or write each other.
-Rule actions, including `terminate`, only emit detections; the Job ends through external triggers (Runner termination, cgroup removal).
+Rule actions are resolved per scope before per-Job evaluation; `monitor_mode` must be applied before evaluation merging so a scope can downgrade its own `terminate` rules without changing another scope's policy.
 
 ## Where each type holds state
 
@@ -87,7 +87,7 @@ Per-scope config does not become a Job-level field: it lives on the referenced `
 
 | Holds | Does not hold |
 | --- | --- |
-| <ul><li>`Type`: host or project</li><li>`RuleSets`</li><li>`RuleModifiers`</li><li>`ConfigRevision`</li><li>`OutputSettings`</li><li>`ResolvedRules`</li><li>`Observations`</li><li>`DefaultMaxAlertsPerRule`</li><li>scope-local manager job-log routing</li></ul> | <ul><li>state that assumes host and project share it</li></ul> |
+| <ul><li>`Type`: host or project</li><li>`RuleSets`</li><li>`RuleModifiers`</li><li>`ConfigRevision`</li><li>`OutputSettings`</li><li>`ResolvedRules`</li><li>`Observations`</li><li>`DefaultMaxAlertsPerRule`</li><li>`MonitorMode`</li><li>scope-local manager job-log routing</li></ul> | <ul><li>state that assumes host and project share it</li></ul> |
 
 If host and project could diverge in the future, the value is scope-local from the start. Equal values today are not a reason to hoist. Shared queues, connection reuse, and similar optimizations come after ownership is clear.
 

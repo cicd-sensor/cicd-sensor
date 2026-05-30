@@ -74,12 +74,14 @@ Use project-local files only for repository-specific tuning or additional detect
 ```yaml
 default_max_alerts_per_rule: 20
 disable_baseline_rules: false
+monitor_mode: true
 ```
 
 | Field | Meaning |
 | --- | --- |
 | `default_max_alerts_per_rule` | Default Detection Log limit for rules that do not set `max_alerts`. Allowed values are 1-100. |
 | `disable_baseline_rules` | Disable cicd-sensor baseline rules for standalone project-local mode. Defaults to `false`. |
+| `monitor_mode` | Treat `terminate` rules as `detect` rules. Recommended for first rollout. Defaults to `false`. |
 
 See [RuleSet max_alerts](rule-set.md#max_alerts) for per-rule limits.
 

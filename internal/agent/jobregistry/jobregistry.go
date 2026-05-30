@@ -233,6 +233,7 @@ func managerConfigFromFetchResult(result *managerclient.FetchResult) jobscope.Ma
 		ConfigRevision:          result.ConfigRevision,
 		OutputSettings:          result.OutputSettings,
 		DefaultMaxAlertsPerRule: result.DefaultMaxAlertsPerRule,
+		MonitorMode:             result.MonitorMode,
 	}
 }
 

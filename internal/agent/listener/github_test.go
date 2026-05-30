@@ -717,6 +717,56 @@ func TestListener_ProjectStart_AcceptsProjectRules(t *testing.T) {
 	}
 }
 
+func TestListener_ProjectStart_MonitorModeDowngradesTerminate(t *testing.T) {
+	client, jobRegistry, cleanup := setupListenerWithRegistry(t)
+	defer cleanup()
+
+	body, _ := json.Marshal(map[string]any{
+		"provider":                  "github",
+		"provider_host":             "github.com",
+		"project_path":              "acme/example",
+		"github_run_id":             "123456789",
+		"github_job":                "build",
+		"github_run_attempt":        "1",
+		"github_runner_tracking_id": "github_tracking_monitor_mode",
+		"disable_baseline_rules":    true,
+		"monitor_mode":              true,
+		"rule_sources": []rulesource.LoadedRules{{
+			RuleSets: []rule.RuleSet{{
+				RulesetID: "project",
+				Rules: []rule.Rule{{
+					RuleID:    "terminate_exec",
+					EventType: jobevent.ProcessExec,
+					Condition: `process_name == "bash"`,
+					Action:    rule.RuleActionTerminate,
+				}},
+			}},
+		}},
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/github/project/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123456789", "build", "1", "github_tracking_monitor_mode")
+	job := listenerRegisteredJob(jobRegistry, id)
+	if job == nil || job.ProjectScope() == nil {
+		t.Fatal("expected project scope to be created")
+	}
+	resolved, ok := job.ProjectScope().ResolvedRules.Lookup(rule.RuleIdentity{RulesetID: "project", RuleID: "terminate_exec"})
+	if !ok {
+		t.Fatal("terminate_exec rule was not resolved")
+	}
+	if got := resolved.Rule.Action; got != rule.RuleActionDetect {
+		t.Fatalf("resolved action: got %q, want %q", got, rule.RuleActionDetect)
+	}
+}
+
 func TestListener_ProjectStart_DisableBaselineRulesKeepsProjectRules(t *testing.T) {
 	client, jobRegistry, cleanup := setupListenerWithRegistry(t)
 	defer cleanup()
@@ -779,11 +829,12 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 					RuleID:    "project-manager-rule",
 					EventType: jobevent.ProcessExec,
 					Condition: `process_name == "bash"`,
-					Action:    rule.RuleActionDetect,
+					Action:    rule.RuleActionTerminate,
 				}},
 			}}, nil)
 			return connect.NewResponse(&managerv1beta1.FetchConfigResponse{
 				Config: &managerv1beta1.ServedConfig{
+					MonitorMode: true,
 					OutputSettings: &managerv1beta1.OutputSettings{
 						Detection: &managerv1beta1.OutputSetting{Enabled: true},
 					},
@@ -826,6 +877,13 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 	}
 	if got := len(job.ProjectScope().ResolvedRules.Rules); got != 1 {
 		t.Fatalf("project manager rules: got %d, want 1", got)
+	}
+	resolved, ok := job.ProjectScope().ResolvedRules.Lookup(rule.RuleIdentity{RulesetID: "project-manager", RuleID: "project-manager-rule"})
+	if !ok {
+		t.Fatal("project-manager-rule was not resolved")
+	}
+	if got := resolved.Rule.Action; got != rule.RuleActionDetect {
+		t.Fatalf("project manager action: got %q, want %q", got, rule.RuleActionDetect)
 	}
 	if !job.ProjectScope().OutputSettings.GetDetection().GetEnabled() {
 		t.Fatal("project output detection: got false, want true")
@@ -918,6 +976,43 @@ func TestListener_ProjectStart_RejectsProjectManagerWithDisableBaselineRules(t *
 	}
 	if result.Error != "disable_baseline_rules cannot be combined with manager_url" {
 		t.Fatalf("error: got %q, want %q", result.Error, "disable_baseline_rules cannot be combined with manager_url")
+	}
+}
+
+func TestListener_ProjectStart_RejectsProjectManagerWithMonitorMode(t *testing.T) {
+	client, cleanup := setupListener(t)
+	defer cleanup()
+
+	body, _ := json.Marshal(map[string]any{
+		"provider":                  "github",
+		"provider_host":             "github.com",
+		"project_path":              "acme/example",
+		"github_run_id":             "123456789",
+		"github_job":                "build",
+		"github_run_attempt":        "1",
+		"github_runner_tracking_id": "github_tracking_manager_monitor_mode",
+		"manager_url":               "https://project-manager.example.com",
+		"manager_token":             managerauth.TokenPrefix + strings.Repeat("a", 64),
+		"monitor_mode":              true,
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/github/project/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	var result struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Error != "monitor_mode cannot be combined with manager_url" {
+		t.Fatalf("error: got %q, want %q", result.Error, "monitor_mode cannot be combined with manager_url")
 	}
 }
 

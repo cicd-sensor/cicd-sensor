@@ -160,6 +160,84 @@ func TestMerge_ModifierCanEscalateAction(t *testing.T) {
 	}
 }
 
+func TestMerge_MonitorModeDowngradesTerminateActions(t *testing.T) {
+	tests := []struct {
+		name       string
+		monitor    bool
+		rule       rule.Rule
+		modifier   *rule.RuleModifier
+		wantAction rule.RuleAction
+	}{
+		{
+			name:       "disabled leaves terminate rule unchanged",
+			rule:       testRule("r1", jobevent.ProcessExec, rule.RuleActionTerminate),
+			wantAction: rule.RuleActionTerminate,
+		},
+		{
+			name:       "enabled downgrades terminate rule to detect",
+			monitor:    true,
+			rule:       testRule("r1", jobevent.ProcessExec, rule.RuleActionTerminate),
+			wantAction: rule.RuleActionDetect,
+		},
+		{
+			name:       "enabled leaves detect rule unchanged",
+			monitor:    true,
+			rule:       testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect),
+			wantAction: rule.RuleActionDetect,
+		},
+		{
+			name:       "enabled leaves collect rule unchanged",
+			monitor:    true,
+			rule:       testRule("r1", jobevent.ProcessExec, rule.RuleActionCollect),
+			wantAction: rule.RuleActionCollect,
+		},
+		{
+			name:    "enabled downgrades modifier escalation",
+			monitor: true,
+			rule:    testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect),
+			modifier: &rule.RuleModifier{
+				ModifierID:     "local/escalate",
+				Targets:        []rule.RuleModifierTarget{{RulesetID: "s1"}},
+				OverrideAction: actionPtr(rule.RuleActionTerminate),
+			},
+			wantAction: rule.RuleActionDetect,
+		},
+		{
+			name:    "enabled downgrades terminate correlation rule",
+			monitor: true,
+			rule: rule.Rule{
+				RuleID:    "r1",
+				Type:      "correlation",
+				Condition: `rule.a.total_count > 0`,
+				Action:    rule.RuleActionTerminate,
+			},
+			wantAction: rule.RuleActionDetect,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := rule.MergeInput{
+				MonitorMode: tt.monitor,
+				RuleSets: []rule.RuleSet{
+					testSet("s1", tt.rule),
+				},
+			}
+			if tt.modifier != nil {
+				in.RuleModifiers = []rule.RuleModifier{*tt.modifier}
+			}
+
+			got := rule.Merge(in)
+			if len(got.Rules) != 1 {
+				t.Fatalf("rules: got %d, want 1", len(got.Rules))
+			}
+			if got.Rules[0].Rule.Action != tt.wantAction {
+				t.Fatalf("action: got %q, want %q", got.Rules[0].Rule.Action, tt.wantAction)
+			}
+		})
+	}
+}
+
 func TestMerge_InvalidEmptyOverrideActionIsSkippedWithWarning(t *testing.T) {
 	empty := rule.RuleAction("")
 	got := rule.Merge(rule.MergeInput{
