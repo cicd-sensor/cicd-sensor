@@ -68,7 +68,7 @@ func TestBuildJobEventSummaryForReportBuildsPassSummary(t *testing.T) {
 				resolvedRule("set", "curl_token", "Curl token"),
 				resolvedRule("set", "bash_exec", "Bash exec"),
 			},
-			Warnings: []rule.MergeWarning{{Kind: "duplicate_rule"}},
+			Warnings: []rule.ResolveWarning{{Kind: "duplicate_rule"}},
 		},
 		Snapshot: observations.StateSnapshot{
 			ObservationDomain: observations.DomainObservationSnapshot{Records: []observations.DomainObservationRecord{{

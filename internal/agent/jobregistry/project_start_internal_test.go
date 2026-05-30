@@ -27,17 +27,20 @@ func TestBuildProjectScopeFromLocalConfigCanAddBaselineFallback(t *testing.T) {
 		}}}, nil
 	})
 
-	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, 7, false, []rulesource.LoadedRules{{
-		RuleSets: []rule.RuleSet{{
-			RulesetID: "project",
-			Rules: []rule.Rule{{
-				RuleID:    "project_exec",
-				EventType: jobevent.ProcessExec,
-				Condition: `process_name == "go"`,
-				Action:    rule.RuleActionDetect,
+	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, GitHubProjectStartConfig{
+		DefaultMaxAlertsPerRule: 7,
+		RuleSources: []rulesource.LoadedRules{{
+			RuleSets: []rule.RuleSet{{
+				RulesetID: "project",
+				Rules: []rule.Rule{{
+					RuleID:    "project_exec",
+					EventType: jobevent.ProcessExec,
+					Condition: `process_name == "go"`,
+					Action:    rule.RuleActionDetect,
+				}},
 			}},
 		}},
-	}})
+	})
 	if err != nil {
 		t.Fatalf("buildProjectScopeFromLocalConfig: %v", err)
 	}
@@ -67,17 +70,19 @@ func TestBuildProjectScopeFromLocalConfigKeepsBaselineFirst(t *testing.T) {
 		}}}, nil
 	})
 
-	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, 0, false, []rulesource.LoadedRules{{
-		RuleSets: []rule.RuleSet{{
-			RulesetID: "shared",
-			Rules: []rule.Rule{{
-				RuleID:    "duplicate",
-				EventType: jobevent.ProcessExec,
-				Condition: `process_name == "project"`,
-				Action:    rule.RuleActionDetect,
+	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, GitHubProjectStartConfig{
+		RuleSources: []rulesource.LoadedRules{{
+			RuleSets: []rule.RuleSet{{
+				RulesetID: "shared",
+				Rules: []rule.Rule{{
+					RuleID:    "duplicate",
+					EventType: jobevent.ProcessExec,
+					Condition: `process_name == "project"`,
+					Action:    rule.RuleActionDetect,
+				}},
 			}},
 		}},
-	}})
+	})
 	if err != nil {
 		t.Fatalf("buildProjectScopeFromLocalConfig: %v", err)
 	}
@@ -98,17 +103,21 @@ func TestBuildProjectScopeFromLocalConfigCanDisableBaseline(t *testing.T) {
 		return rulesource.LoadedRules{}, nil
 	})
 
-	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, 7, true, []rulesource.LoadedRules{{
-		RuleSets: []rule.RuleSet{{
-			RulesetID: "project",
-			Rules: []rule.Rule{{
-				RuleID:    "project_exec",
-				EventType: jobevent.ProcessExec,
-				Condition: `process_name == "go"`,
-				Action:    rule.RuleActionDetect,
+	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, GitHubProjectStartConfig{
+		DefaultMaxAlertsPerRule: 7,
+		DisableBaselineRules:    true,
+		RuleSources: []rulesource.LoadedRules{{
+			RuleSets: []rule.RuleSet{{
+				RulesetID: "project",
+				Rules: []rule.Rule{{
+					RuleID:    "project_exec",
+					EventType: jobevent.ProcessExec,
+					Condition: `process_name == "go"`,
+					Action:    rule.RuleActionDetect,
+				}},
 			}},
 		}},
-	}})
+	})
 	if err != nil {
 		t.Fatalf("buildProjectScopeFromLocalConfig: %v", err)
 	}
@@ -123,6 +132,41 @@ func TestBuildProjectScopeFromLocalConfigCanDisableBaseline(t *testing.T) {
 	}
 	if got := len(scope.ResolvedRules.Rules); got != 1 {
 		t.Fatalf("resolved rules: got %d, want 1", got)
+	}
+}
+
+func TestBuildProjectScopeFromLocalConfigMonitorModeDowngradesTerminate(t *testing.T) {
+	jr := newTestJobRegistry()
+	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "1", "build", "1", "runner-1")
+	jr.SetBaselineLoadForTesting(func(context.Context, *slog.Logger, string) (rulesource.LoadedRules, error) {
+		t.Fatal("baseline loader should not be called when baseline rules are disabled")
+		return rulesource.LoadedRules{}, nil
+	})
+
+	scope, err := jr.buildProjectScopeFromLocalConfig(testCtx, id, GitHubProjectStartConfig{
+		DisableBaselineRules: true,
+		MonitorMode:          true,
+		RuleSources: []rulesource.LoadedRules{{
+			RuleSets: []rule.RuleSet{{
+				RulesetID: "project",
+				Rules: []rule.Rule{{
+					RuleID:    "project_exec",
+					EventType: jobevent.ProcessExec,
+					Condition: `process_name == "go"`,
+					Action:    rule.RuleActionTerminate,
+				}},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("buildProjectScopeFromLocalConfig: %v", err)
+	}
+	resolved, ok := scope.ResolvedRules.Lookup(rule.RuleIdentity{RulesetID: "project", RuleID: "project_exec"})
+	if !ok {
+		t.Fatal("project rule was not resolved")
+	}
+	if got := resolved.Rule.Action; got != rule.RuleActionDetect {
+		t.Fatalf("action: got %q, want %q", got, rule.RuleActionDetect)
 	}
 }
 

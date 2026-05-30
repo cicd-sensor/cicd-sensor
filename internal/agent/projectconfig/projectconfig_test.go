@@ -16,6 +16,7 @@ func TestLoad(t *testing.T) {
 		content     string
 		want        *int
 		wantDisable bool
+		wantMonitor bool
 		wantErrText string
 	}{
 		{
@@ -35,6 +36,19 @@ default_max_alerts_per_rule: 7
 disable_baseline_rules: true
 `,
 			wantDisable: true,
+		},
+		{
+			name: "monitor mode is loaded",
+			content: `
+monitor_mode: true
+`,
+			wantMonitor: true,
+		},
+		{
+			name: "monitor mode false is accepted",
+			content: `
+monitor_mode: false
+`,
 		},
 		{
 			name: "negative default is rejected",
@@ -97,6 +111,9 @@ manager:
 			}
 			if got.DisableBaselineRules != tt.wantDisable {
 				t.Fatalf("disable baseline rules: got %v, want %v", got.DisableBaselineRules, tt.wantDisable)
+			}
+			if got.MonitorMode != tt.wantMonitor {
+				t.Fatalf("monitor mode: got %v, want %v", got.MonitorMode, tt.wantMonitor)
 			}
 		})
 	}

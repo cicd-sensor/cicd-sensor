@@ -10,13 +10,13 @@ This page explains how that surface maps to the implementation.
 ```mermaid
 flowchart LR
     SRC["Rule sources<br/>baseline / local / manager"]
-    MERGE["RuleSet / RuleModifier merge"]
+    RESOLVE["RuleSet / RuleModifier resolution"]
     COMPILE["CEL compile"]
     EVAL["EvaluationState"]
     EVENT["Runtime EventRecord"]
     LOGS["Detection / runtime event logs"]
 
-    SRC --> MERGE --> COMPILE --> EVAL
+    SRC --> RESOLVE --> COMPILE --> EVAL
     EVENT --> EVAL --> LOGS
 ```
 
@@ -25,7 +25,7 @@ flowchart LR
 | Area | Responsibility |
 | --- | --- |
 | Schema | YAML schema validation for RuleSet / RuleModifier |
-| Merge | Merge baseline, local, and manager rule sources with modifiers |
+| Resolution | Resolve rule sources with modifiers |
 | CEL | Build activations per event type and compile conditions / correlations |
 | Evaluation | Evaluate runtime events against rules and apply actions / tags / max alerts |
 | Correlation | Multi-signal detection with `rule.<rule_id>.total_count` |

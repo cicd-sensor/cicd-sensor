@@ -83,6 +83,8 @@ See [Correlation](rule-correlation.md) for details.
 | `collect` | Record as a signal for investigation or correlation | emitted |
 | `terminate` | Attempt to stop the job | emitted |
 
+When `monitor_mode` is enabled, `terminate` rules are treated as `detect`.
+
 Today, the difference between `detect` and `collect` is how they are displayed in reports and logs.
 Both are emitted to the Detection Log.
 

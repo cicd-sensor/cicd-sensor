@@ -31,8 +31,10 @@ type JobScopeState struct {
 	Observations   *observations.State
 	managerJobLogs joblogs.ManagerJobLogs
 	debugOutput    *joblogs.DebugOutput
-	// Zero means this scope did not configure a default; rule.Merge uses the system fallback.
+	// Zero means this scope did not configure a default; rule.Resolve uses the system fallback.
 	DefaultMaxAlertsPerRule int
+	// MonitorMode downgrades terminate actions to detect when rules are resolved.
+	MonitorMode bool
 }
 
 // ProjectLocalConfig is only for project-local mode. Manager-backed project
@@ -40,6 +42,7 @@ type JobScopeState struct {
 type ProjectLocalConfig struct {
 	RuleSources             []rulesource.LoadedRules
 	DefaultMaxAlertsPerRule int
+	MonitorMode             bool
 }
 
 // ManagerConfig is the config payload returned by cicd-sensor-manager.
@@ -48,6 +51,7 @@ type ManagerConfig struct {
 	ConfigRevision          string
 	OutputSettings          *managerv1beta1.OutputSettings
 	DefaultMaxAlertsPerRule int
+	MonitorMode             bool
 }
 
 func NewHost() *JobScopeState {
@@ -87,6 +91,7 @@ func (s *JobScopeState) ApplyProjectLocalConfig(cfg ProjectLocalConfig) error {
 	if cfg.DefaultMaxAlertsPerRule != 0 {
 		s.DefaultMaxAlertsPerRule = cfg.DefaultMaxAlertsPerRule
 	}
+	s.MonitorMode = cfg.MonitorMode
 	return nil
 }
 
@@ -103,6 +108,7 @@ func (s *JobScopeState) ApplyManagerConfig(cfg ManagerConfig) error {
 	if cfg.DefaultMaxAlertsPerRule != 0 {
 		s.DefaultMaxAlertsPerRule = cfg.DefaultMaxAlertsPerRule
 	}
+	s.MonitorMode = cfg.MonitorMode
 	return nil
 }
 
@@ -116,10 +122,11 @@ func (s *JobScopeState) ApplyBaselineRules(source rulesource.LoadedRules) error 
 }
 
 func (s *JobScopeState) ResolveRules(identity jobcontext.JobIdentity) {
-	s.ResolvedRules = rule.Merge(rule.MergeInput{
+	s.ResolvedRules = rule.Resolve(rule.ResolveInput{
 		RuleSets:                s.RuleSets,
 		RuleModifiers:           s.RuleModifiers,
 		DefaultMaxAlertsPerRule: s.DefaultMaxAlertsPerRule,
+		MonitorMode:             s.MonitorMode,
 		ProviderHost:            identity.ProviderHost,
 		ProjectPath:             identity.ProjectPath,
 	})

@@ -1,11 +1,11 @@
-// Package rule holds rule types, validation, and merge logic.
+// Package rule holds rule types, validation, and resolution logic.
 package rule
 
 import (
 	"slices"
 )
 
-// ResolvedRule is a scope-local rule after merge. Rule.RuleID remains the
+// ResolvedRule is a scope-local rule after resolution. Rule.RuleID remains the
 // author-facing local ID; CanonicalRuleID is the runtime key
 // "<ruleset_id>/<rule_id>" used by evaluation and summaries.
 type ResolvedRule struct {
@@ -23,25 +23,25 @@ func (r ResolvedRule) Identity() RuleIdentity {
 }
 
 // ResolvedExceptionClause is one additional exception clause attached during
-// rule merge from a modifier's add_exceptions field.
+// rule resolution from a modifier's add_exceptions field.
 type ResolvedExceptionClause struct {
 	Source           string `json:"source"`
 	ModifierIdentity string `json:"modifier_identity,omitempty"`
 }
 
-// MergeWarning records a collision or skip during rule merge.
-type MergeWarning struct {
+// ResolveWarning records a collision or skip during rule resolution.
+type ResolveWarning struct {
 	Kind       string       `json:"kind"`
 	Identity   RuleIdentity `json:"identity,omitempty"`
 	EntryLabel string       `json:"entry_label,omitempty"`
 	Reason     string       `json:"reason,omitempty"`
 }
 
-// ResolvedRules is the agent-side output of merging all sets and modifiers.
+// ResolvedRules is the agent-side output of resolving all sets and modifiers.
 // The manager never produces it.
 type ResolvedRules struct {
-	Rules    []ResolvedRule `json:"rules"`
-	Warnings []MergeWarning `json:"warnings,omitempty"`
+	Rules    []ResolvedRule   `json:"rules"`
+	Warnings []ResolveWarning `json:"warnings,omitempty"`
 }
 
 func (r ResolvedRules) Lookup(identity RuleIdentity) (ResolvedRule, bool) {

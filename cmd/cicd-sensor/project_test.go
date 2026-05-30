@@ -124,6 +124,21 @@ func TestBuildProjectStartRequest_ConfigDisablesBaselineRules(t *testing.T) {
 	}
 }
 
+func TestBuildProjectStartRequest_ConfigEnablesMonitorMode(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "project.yaml")
+	if err := os.WriteFile(configPath, []byte("monitor_mode: true\n"), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	got, err := buildProjectStartRequest(githubIdentity(), jobMetadataFlags{}, configPath, "", managerConnectionConfig{}, false)
+	if err != nil {
+		t.Fatalf("buildProjectStartRequest: %v", err)
+	}
+	if got["monitor_mode"] != true {
+		t.Fatalf("monitor_mode: got %#v, want true", got["monitor_mode"])
+	}
+}
+
 func TestBuildProjectStartRequest_EmptyProjectConfigOmitsDefaultMaxAlerts(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "project.yaml")
 	if err := os.WriteFile(configPath, []byte("{}\n"), 0o644); err != nil {
@@ -136,6 +151,9 @@ func TestBuildProjectStartRequest_EmptyProjectConfigOmitsDefaultMaxAlerts(t *tes
 	}
 	if _, ok := got["default_max_alerts_per_rule"]; ok {
 		t.Fatalf("default_max_alerts_per_rule: got unexpected field %#v", got["default_max_alerts_per_rule"])
+	}
+	if _, ok := got["monitor_mode"]; ok {
+		t.Fatalf("monitor_mode: got unexpected field %#v", got["monitor_mode"])
 	}
 }
 
@@ -151,6 +169,21 @@ func TestBuildProjectStartRequest_ZeroDefaultMaxAlertsIsUnset(t *testing.T) {
 	}
 	if _, ok := got["default_max_alerts_per_rule"]; ok {
 		t.Fatalf("default_max_alerts_per_rule: got unexpected field %#v", got["default_max_alerts_per_rule"])
+	}
+}
+
+func TestBuildProjectStartRequest_FalseMonitorModeIsUnset(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "project.yaml")
+	if err := os.WriteFile(configPath, []byte("monitor_mode: false\n"), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	got, err := buildProjectStartRequest(githubIdentity(), jobMetadataFlags{}, configPath, "", managerConnectionConfig{}, false)
+	if err != nil {
+		t.Fatalf("buildProjectStartRequest: %v", err)
+	}
+	if _, ok := got["monitor_mode"]; ok {
+		t.Fatalf("monitor_mode: got unexpected field %#v", got["monitor_mode"])
 	}
 }
 

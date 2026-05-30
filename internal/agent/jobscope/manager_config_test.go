@@ -31,6 +31,7 @@ func TestJobScopeState_ApplyManagerConfig_AppendsAndResolvesHostScope(t *testing
 
 	cfg := jobscope.ManagerConfig{
 		ConfigRevision: "sha256:test",
+		MonitorMode:    true,
 		RuleSources: []rulesource.LoadedRules{{
 			RuleSets: []rule.RuleSet{{
 				RulesetID: "manager-set",
@@ -62,6 +63,13 @@ func TestJobScopeState_ApplyManagerConfig_AppendsAndResolvesHostScope(t *testing
 	}
 	if len(scope.ResolvedRules.Rules) != 2 {
 		t.Fatalf("resolved rules: got %d, want 2", len(scope.ResolvedRules.Rules))
+	}
+	resolved, ok := scope.ResolvedRules.Lookup(rule.RuleIdentity{RulesetID: "manager-set", RuleID: "manager-rule"})
+	if !ok {
+		t.Fatal("manager rule was not resolved")
+	}
+	if got := resolved.Rule.Action; got != rule.RuleActionDetect {
+		t.Fatalf("manager rule action: got %q, want %q", got, rule.RuleActionDetect)
 	}
 }
 
@@ -110,6 +118,7 @@ func TestJobScopeState_ApplyProjectLocalConfig(t *testing.T) {
 
 	err := scope.ApplyProjectLocalConfig(jobscope.ProjectLocalConfig{
 		DefaultMaxAlertsPerRule: 12,
+		MonitorMode:             true,
 		RuleSources: []rulesource.LoadedRules{{
 			RuleSets: []rule.RuleSet{{RulesetID: "project-set"}},
 		}},
@@ -122,6 +131,9 @@ func TestJobScopeState_ApplyProjectLocalConfig(t *testing.T) {
 	}
 	if len(scope.RuleSets) != 1 || scope.RuleSets[0].RulesetID != "project-set" {
 		t.Fatalf("project rule sets: %#v", scope.RuleSets)
+	}
+	if !scope.MonitorMode {
+		t.Fatal("monitor mode: got false, want true")
 	}
 }
 

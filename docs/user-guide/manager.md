@@ -137,6 +137,7 @@ bind:
 
 default_max_alerts_per_rule: 10
 disable_baseline_rules: false
+monitor_mode: false
 
 sinks:
   s3-out:
@@ -164,6 +165,7 @@ For richer routing (per-log-kind destinations, multiple sinks), see
 | `bind` | Manager listen address and port. `bind.port` must be in 0-65535. | `address: "0.0.0.0"`, `port: 8080` | Manager restart |
 | `default_max_alerts_per_rule` | Default per-rule Detection Log limit for rules that do not set `max_alerts`. Use 1-100 to set a value; omit it or set 0 to use the system default. | `10` | Manager restart |
 | `disable_baseline_rules` | Disable cicd-sensor baseline rule fetch/prepend when using the manager. Custom rule bundles from `--rules-file` are still served. | `false` | Manager restart |
+| `monitor_mode` | Treat `terminate` rules as `detect` rules. Use this for first rollout or collection-only operation without job stopping. | `false` | Manager restart |
 | `sinks` | Physical cloud output destinations, such as S3, GCS, or Pub/Sub. | none | Manager restart |
 | `logs` | Mapping from each manager-ingested `log_type` to one configured sink. | none | Manager restart |
 

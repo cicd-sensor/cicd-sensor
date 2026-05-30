@@ -19,6 +19,7 @@ type GitHubProjectStartConfig struct {
 	PeerPID                 int32
 	DefaultMaxAlertsPerRule int
 	DisableBaselineRules    bool
+	MonitorMode             bool
 	RuleSources             []rulesource.LoadedRules
 	ManagerConnection       managerclient.Connection
 	ManagerClient           ManagerConfigFetcher
@@ -60,7 +61,7 @@ func (jr *JobRegistry) attachGitHubProjectScopeToExistingJob(
 	if cfg.ManagerClient != nil {
 		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, cfg.Identity, cfg.Metadata, cfg.RunnerType, cfg.ManagerConnection, cfg.ManagerClient)
 	} else {
-		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, cfg.Identity, cfg.DefaultMaxAlertsPerRule, cfg.DisableBaselineRules, cfg.RuleSources)
+		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, cfg.Identity, cfg)
 	}
 	if err != nil {
 		return nil, err
@@ -82,7 +83,7 @@ func (jr *JobRegistry) startGitHubProjectOnlyJob(
 	if cfg.ManagerClient != nil {
 		projectScope, err = jr.buildProjectScopeFromManagerConfig(ctx, cfg.Identity, cfg.Metadata, cfg.RunnerType, cfg.ManagerConnection, cfg.ManagerClient)
 	} else {
-		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, cfg.Identity, cfg.DefaultMaxAlertsPerRule, cfg.DisableBaselineRules, cfg.RuleSources)
+		projectScope, err = jr.buildProjectScopeFromLocalConfig(ctx, cfg.Identity, cfg)
 	}
 	if err != nil {
 		return nil, err
@@ -139,9 +140,9 @@ func (jr *JobRegistry) buildProjectScopeFromManagerConfig(ctx context.Context, i
 }
 
 // buildProjectScopeFromLocalConfig builds a resolved project scope from project-local config.
-func (jr *JobRegistry) buildProjectScopeFromLocalConfig(ctx context.Context, identity jobcontext.JobIdentity, projectDefaultMaxAlertsPerRule int, disableBaselineRules bool, projectRuleSources []rulesource.LoadedRules) (*jobscope.JobScopeState, error) {
+func (jr *JobRegistry) buildProjectScopeFromLocalConfig(ctx context.Context, identity jobcontext.JobIdentity, cfg GitHubProjectStartConfig) (*jobscope.JobScopeState, error) {
 	projectScope := jobscope.NewProject()
-	if !disableBaselineRules {
+	if !cfg.DisableBaselineRules {
 		baselineSource, err := jr.loadBaselineRules(ctx, identity)
 		if err != nil {
 			return nil, err
@@ -151,8 +152,9 @@ func (jr *JobRegistry) buildProjectScopeFromLocalConfig(ctx context.Context, ide
 		}
 	}
 	if err := projectScope.ApplyProjectLocalConfig(jobscope.ProjectLocalConfig{
-		RuleSources:             projectRuleSources,
-		DefaultMaxAlertsPerRule: projectDefaultMaxAlertsPerRule,
+		RuleSources:             cfg.RuleSources,
+		DefaultMaxAlertsPerRule: cfg.DefaultMaxAlertsPerRule,
+		MonitorMode:             cfg.MonitorMode,
 	}); err != nil {
 		return nil, err
 	}

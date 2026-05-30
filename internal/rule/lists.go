@@ -2,7 +2,7 @@ package rule
 
 // PredefinedLists holds rule-set-defined lists after lowercasing and NFC
 // normalization. It is rule data, not a CEL list<T> value, and lives in the
-// rule domain package so rule merge and CEL engine can both depend on it
+// rule domain package so rule resolution and CEL engine can both depend on it
 // without forming a cycle.
 type PredefinedLists map[string][]string
 

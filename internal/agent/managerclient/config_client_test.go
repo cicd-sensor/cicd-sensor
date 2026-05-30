@@ -42,6 +42,7 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 				Config: &managerv1beta1.ServedConfig{
 					ConfigRevision:          "sha256:test",
 					DefaultMaxAlertsPerRule: 17,
+					MonitorMode:             true,
 					OutputSettings: &managerv1beta1.OutputSettings{
 						Summary:      &managerv1beta1.OutputSetting{Enabled: true},
 						Detection:    &managerv1beta1.OutputSetting{Enabled: true},
@@ -76,6 +77,9 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 	}
 	if result.DefaultMaxAlertsPerRule != 17 {
 		t.Fatalf("default_max_alerts_per_rule: got %d, want 17", result.DefaultMaxAlertsPerRule)
+	}
+	if !result.MonitorMode {
+		t.Fatalf("monitor_mode: got false, want true")
 	}
 	if result.OutputSettings == nil ||
 		!result.OutputSettings.GetSummary().GetEnabled() ||

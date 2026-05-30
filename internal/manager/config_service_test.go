@@ -65,6 +65,7 @@ func TestConfigService_FetchConfig(t *testing.T) {
 		wantRuleSets int
 		wantManager  bool
 		wantDefault  int32
+		wantMonitor  bool
 	}{
 		{
 			name:  "valid request returns cached config response",
@@ -86,6 +87,7 @@ bind:
   address: 127.0.0.1
   port: 0
 default_max_alerts_per_rule: 25
+monitor_mode: true
 sinks:
   test-sink:
     type: google_storage
@@ -97,6 +99,7 @@ logs:
 			wantRuleSets: 2,
 			wantManager:  true,
 			wantDefault:  25,
+			wantMonitor:  true,
 		},
 		{
 			name:      "baseline response is allowed when no rules file is configured",
@@ -160,6 +163,7 @@ bind:
 			config := &ServedConfig{
 				ConfigRevision:          startupCfg.Revision,
 				DefaultMaxAlertsPerRule: startupCfg.DefaultMaxAlertsPerRule,
+				MonitorMode:             startupCfg.MonitorMode,
 			}
 			var rulesPath string
 			if len(tt.ruleFiles) > 0 {
@@ -229,6 +233,9 @@ bind:
 			}
 			if resp.Msg.GetConfig().GetDefaultMaxAlertsPerRule() != tt.wantDefault {
 				t.Fatalf("default_max_alerts_per_rule: got %d, want %d", resp.Msg.GetConfig().GetDefaultMaxAlertsPerRule(), tt.wantDefault)
+			}
+			if resp.Msg.GetConfig().GetMonitorMode() != tt.wantMonitor {
+				t.Fatalf("monitor_mode: got %v, want %v", resp.Msg.GetConfig().GetMonitorMode(), tt.wantMonitor)
 			}
 			hasManager := resp.Msg.GetConfig().GetOutputSettings().GetSummary().GetEnabled()
 			if hasManager != tt.wantManager {

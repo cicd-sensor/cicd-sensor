@@ -71,7 +71,7 @@ The Manager process accepts file locations through either CLI flags or environme
 Only file locations are accepted through this CLI / environment interface.
 The settings themselves live in `manager.yaml`; custom rules live in the rule bundle file.
 
-Rule sources returned by the Manager are merged and compiled by the Agent.
+Rule sources returned by the Manager are resolved into scope-local rules and compiled by the Agent.
 The Manager holds the rule bundle, but it does not evaluate runtime events.
 
 ## Log ingest and outputs

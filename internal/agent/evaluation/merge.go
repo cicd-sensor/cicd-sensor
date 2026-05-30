@@ -30,7 +30,7 @@ func mergeEvaluationRules(host, project *rule.ResolvedRules) []compiledRuleEntry
 		projectRules = project.Rules
 	}
 
-	// Scope-local duplicates are resolved by rule.Merge. This tracks the first
+	// Scope-local duplicates are resolved by rule.Resolve. This tracks the first
 	// out index for each canonical ID so equivalent host/project rules share CEL.
 	sharedEvalIndexByCanonical := make(map[rule.CanonicalRuleID]int)
 	out := make([]compiledRuleEntry, 0, len(hostRules)+len(projectRules))

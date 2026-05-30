@@ -47,7 +47,7 @@ Each `Job` owns its own scope states: up to one host `JobScopeState` built by `A
 
 Scope state is therefore **per Job**, not shared across the registry.
 Host and project scope states attached to a Job never read or write each other.
-Rule actions, including `terminate`, only emit detections; the Job ends through external triggers (Runner termination, cgroup removal).
+Rule actions are resolved per scope before per-Job evaluation; `monitor_mode` must be applied before cross-scope evaluation merging so a scope can downgrade its own `terminate` rules without changing another scope's policy.
 
 ## Where each type holds state
 
@@ -87,7 +87,7 @@ Per-scope config does not become a Job-level field: it lives on the referenced `
 
 | Holds | Does not hold |
 | --- | --- |
-| <ul><li>`Type`: host or project</li><li>`RuleSets`</li><li>`RuleModifiers`</li><li>`ConfigRevision`</li><li>`OutputSettings`</li><li>`ResolvedRules`</li><li>`Observations`</li><li>`DefaultMaxAlertsPerRule`</li><li>scope-local manager job-log routing</li></ul> | <ul><li>state that assumes host and project share it</li></ul> |
+| <ul><li>`Type`: host or project</li><li>`RuleSets`</li><li>`RuleModifiers`</li><li>`ConfigRevision`</li><li>`OutputSettings`</li><li>`ResolvedRules`</li><li>`Observations`</li><li>`DefaultMaxAlertsPerRule`</li><li>`MonitorMode`</li><li>scope-local manager job-log routing</li></ul> | <ul><li>state that assumes host and project share it</li></ul> |
 
 If host and project could diverge in the future, the value is scope-local from the start. Equal values today are not a reason to hoist. Shared queues, connection reuse, and similar optimizations come after ownership is clear.
 
@@ -101,7 +101,7 @@ Configuration flows along the diagram's edges: host config from the host operato
 
 Host scope and project scope are separate rule sets, but they normally overlap heavily in practice: both sides typically include the same Baseline rules independently. Evaluating the same compiled rule twice (once per scope) would scale the CEL hot path with the number of scopes for no behavioural gain.
 
-Rule evaluation is therefore done **per Job, not per scope**: `mergeEvaluationRules` de-duplicates rules across the Job's host and project `JobScopeState`s, `NewEvaluationState` compiles the merged set once, and each event is evaluated against that merged set in a single pass by the Job's one event worker. Per-rule `FeedHost` / `FeedProject` flags then route each hit back to the host `JobScopeState`, the project `JobScopeState`, or both. Scope isolation is preserved in the **output routing**, not by duplicating evaluation per scope.
+Rule evaluation is therefore done **per Job, not per scope**: `mergeEvaluationRules` de-duplicates scope-resolved rules across the Job's host and project `JobScopeState`s, `NewEvaluationState` compiles the evaluation-merged set once, and each event is evaluated against that evaluation-merged set in a single pass by the Job's one event worker. Per-rule `FeedHost` / `FeedProject` flags then route each hit back to the host `JobScopeState`, the project `JobScopeState`, or both. Scope isolation is preserved in the **output routing**, not by duplicating evaluation per scope.
 
 For job lifecycle and tracking entrypoints, see [Agent Architecture](agent.md).
 For kernel-side observation details, see [eBPF Runtime](ebpf-runtime.md).

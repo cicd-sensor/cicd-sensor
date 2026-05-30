@@ -452,7 +452,7 @@ func TestEvaluateEvent_CorrelationAggregatesIdentityCollisionHits(t *testing.T) 
 				RulesetID: "shared-set",
 			},
 		},
-		Warnings: []rule.MergeWarning{{
+		Warnings: []rule.ResolveWarning{{
 			Kind:     "duplicate_identity_diff_content",
 			Identity: rule.RuleIdentity{RulesetID: "shared-set", RuleID: "x"},
 		}},
