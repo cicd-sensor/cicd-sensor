@@ -120,7 +120,7 @@ In this mode, the cicd-sensor Agent can still generate the HTML report and attes
 
 Important: when `manager-url` is set, repository-local `.cicd-sensor/config.yaml` and `.cicd-sensor/rules/` are not used.
 Config and rules are fetched from the manager.
-Repository-local rules and manager rules are not merged together.
+Repository-local rules and manager rules are not combined.
 Baseline policy is also owned by the manager, not by repository-local config.
 
 ```yaml

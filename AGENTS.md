@@ -43,7 +43,7 @@ The files below add detail that only applies when touching specific paths. **The
 | `cmd/cicd-sensor-manager` | Manager server |
 | `cmd/cicd-sensorctl` | Report / attestation / rule validation CLI |
 | `internal/agent` | Agent runtime (Listener, JobRegistry, Job, Scope, KernelTracker) |
-| `internal/rule` | RuleSet / RuleModifier schema, merge, CEL compile and evaluate |
+| `internal/rule` | RuleSet / RuleModifier schema, resolution, CEL compile and evaluate |
 | `internal/manager` | Config service, collector ingest, output routing |
 | `internal/ctl` | Report and attestation generation |
 | `proto/` | Connect / protobuf wire schema |
