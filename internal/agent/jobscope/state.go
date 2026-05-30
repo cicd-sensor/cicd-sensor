@@ -31,7 +31,7 @@ type JobScopeState struct {
 	Observations   *observations.State
 	managerJobLogs joblogs.ManagerJobLogs
 	debugOutput    *joblogs.DebugOutput
-	// Zero means this scope did not configure a default; rule.Merge uses the system fallback.
+	// Zero means this scope did not configure a default; rule.Resolve uses the system fallback.
 	DefaultMaxAlertsPerRule int
 	// MonitorMode downgrades terminate actions to detect when rules are resolved.
 	MonitorMode bool
@@ -122,7 +122,7 @@ func (s *JobScopeState) ApplyBaselineRules(source rulesource.LoadedRules) error 
 }
 
 func (s *JobScopeState) ResolveRules(identity jobcontext.JobIdentity) {
-	s.ResolvedRules = rule.Merge(rule.MergeInput{
+	s.ResolvedRules = rule.Resolve(rule.ResolveInput{
 		RuleSets:                s.RuleSets,
 		RuleModifiers:           s.RuleModifiers,
 		DefaultMaxAlertsPerRule: s.DefaultMaxAlertsPerRule,

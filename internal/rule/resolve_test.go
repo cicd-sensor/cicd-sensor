@@ -27,8 +27,8 @@ func boolPtr(v bool) *bool                         { return &v }
 func intPtr(v int) *int                            { return &v }
 func actionPtr(v rule.RuleAction) *rule.RuleAction { return &v }
 
-func TestMerge_FlattenSingleSet(t *testing.T) {
-	in := rule.MergeInput{
+func TestResolve_FlattenSingleSet(t *testing.T) {
+	in := rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect),
@@ -36,7 +36,7 @@ func TestMerge_FlattenSingleSet(t *testing.T) {
 			),
 		},
 	}
-	got := rule.Merge(in)
+	got := rule.Resolve(in)
 	if len(got.Rules) != 2 {
 		t.Fatalf("got %d rules, want 2", len(got.Rules))
 	}
@@ -51,9 +51,9 @@ func TestMerge_FlattenSingleSet(t *testing.T) {
 	}
 }
 
-func TestMerge_CanonicalRuleIDCollision_SameContent_SilentDedupe(t *testing.T) {
+func TestResolve_CanonicalRuleIDCollision_SameContent_SilentDedupe(t *testing.T) {
 	r := testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect)
-	got := rule.Merge(rule.MergeInput{
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1", r),
 			testSet("s1", r),
@@ -67,10 +67,10 @@ func TestMerge_CanonicalRuleIDCollision_SameContent_SilentDedupe(t *testing.T) {
 	}
 }
 
-func TestMerge_CanonicalRuleIDCollision_DifferentContent_WarnsAndKeepsFirst(t *testing.T) {
+func TestResolve_CanonicalRuleIDCollision_DifferentContent_WarnsAndKeepsFirst(t *testing.T) {
 	r1 := testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect)
 	r2 := testRule("r1", jobevent.ProcessExec, rule.RuleActionTerminate)
-	got := rule.Merge(rule.MergeInput{
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1", r1),
 			testSet("s1", r2),
@@ -93,8 +93,8 @@ func TestMerge_CanonicalRuleIDCollision_DifferentContent_WarnsAndKeepsFirst(t *t
 	}
 }
 
-func TestMerge_ModifierDisable(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_ModifierDisable(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect),
@@ -117,8 +117,8 @@ func TestMerge_ModifierDisable(t *testing.T) {
 	}
 }
 
-func TestMerge_ModifierOverrideAction(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_ModifierOverrideAction(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				testRule("r1", jobevent.ProcessExec, rule.RuleActionTerminate),
@@ -140,8 +140,8 @@ func TestMerge_ModifierOverrideAction(t *testing.T) {
 	}
 }
 
-func TestMerge_ModifierCanEscalateAction(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_ModifierCanEscalateAction(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect),
@@ -160,7 +160,7 @@ func TestMerge_ModifierCanEscalateAction(t *testing.T) {
 	}
 }
 
-func TestMerge_MonitorModeDowngradesTerminateActions(t *testing.T) {
+func TestResolve_MonitorModeDowngradesTerminateActions(t *testing.T) {
 	tests := []struct {
 		name       string
 		monitor    bool
@@ -217,7 +217,7 @@ func TestMerge_MonitorModeDowngradesTerminateActions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			in := rule.MergeInput{
+			in := rule.ResolveInput{
 				MonitorMode: tt.monitor,
 				RuleSets: []rule.RuleSet{
 					testSet("s1", tt.rule),
@@ -227,7 +227,7 @@ func TestMerge_MonitorModeDowngradesTerminateActions(t *testing.T) {
 				in.RuleModifiers = []rule.RuleModifier{*tt.modifier}
 			}
 
-			got := rule.Merge(in)
+			got := rule.Resolve(in)
 			if len(got.Rules) != 1 {
 				t.Fatalf("rules: got %d, want 1", len(got.Rules))
 			}
@@ -238,9 +238,9 @@ func TestMerge_MonitorModeDowngradesTerminateActions(t *testing.T) {
 	}
 }
 
-func TestMerge_InvalidEmptyOverrideActionIsSkippedWithWarning(t *testing.T) {
+func TestResolve_InvalidEmptyOverrideActionIsSkippedWithWarning(t *testing.T) {
 	empty := rule.RuleAction("")
-	got := rule.Merge(rule.MergeInput{
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect),
@@ -271,8 +271,8 @@ func TestMerge_InvalidEmptyOverrideActionIsSkippedWithWarning(t *testing.T) {
 	}
 }
 
-func TestMerge_InvalidModifierIsSkippedWithWarning(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_InvalidModifierIsSkippedWithWarning(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect),
@@ -312,8 +312,8 @@ func TestMerge_InvalidModifierIsSkippedWithWarning(t *testing.T) {
 	}
 }
 
-func TestMerge_ModifierMaxAlertsAndExceptions(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_ModifierMaxAlertsAndExceptions(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				rule.Rule{
@@ -352,8 +352,8 @@ func TestMerge_ModifierMaxAlertsAndExceptions(t *testing.T) {
 	}
 }
 
-func TestMerge_ModifierAddsTargetExclude(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_ModifierAddsTargetExclude(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1", rule.Rule{
 				RuleID:    "r1",
@@ -388,8 +388,8 @@ func TestMerge_ModifierAddsTargetExclude(t *testing.T) {
 	}
 }
 
-func TestMerge_AppliesScopeDefaultMaxAlertsWhenRuleOmitsValue(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_AppliesScopeDefaultMaxAlertsWhenRuleOmitsValue(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		DefaultMaxAlertsPerRule: 7,
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
@@ -402,10 +402,10 @@ func TestMerge_AppliesScopeDefaultMaxAlertsWhenRuleOmitsValue(t *testing.T) {
 	}
 }
 
-func TestMerge_KeepsRuleMaxAlertsWhenPresent(t *testing.T) {
+func TestResolve_KeepsRuleMaxAlertsWhenPresent(t *testing.T) {
 	r := testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect)
 	r.MaxAlerts = 5
-	got := rule.Merge(rule.MergeInput{
+	got := rule.Resolve(rule.ResolveInput{
 		DefaultMaxAlertsPerRule: 7,
 		RuleSets: []rule.RuleSet{
 			testSet("s1", r),
@@ -416,7 +416,7 @@ func TestMerge_KeepsRuleMaxAlertsWhenPresent(t *testing.T) {
 	}
 }
 
-func TestMerge_TargetFilter(t *testing.T) {
+func TestResolve_TargetFilter(t *testing.T) {
 	tests := []struct {
 		name      string
 		target    rule.RuleTarget
@@ -620,7 +620,7 @@ func TestMerge_TargetFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := rule.Merge(rule.MergeInput{
+			got := rule.Resolve(rule.ResolveInput{
 				RuleSets: []rule.RuleSet{
 					testSet("s1", rule.Rule{
 						RuleID:    "r1",
@@ -640,8 +640,8 @@ func TestMerge_TargetFilter(t *testing.T) {
 	}
 }
 
-func TestMerge_AppliesSystemDefaultMaxAlertsWhenScopeDefaultMissing(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_AppliesSystemDefaultMaxAlertsWhenScopeDefaultMissing(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				testRule("r1", jobevent.ProcessExec, rule.RuleActionDetect),
@@ -653,11 +653,11 @@ func TestMerge_AppliesSystemDefaultMaxAlertsWhenScopeDefaultMissing(t *testing.T
 	}
 }
 
-func TestMerge_FallsBackToDefaultWhenResolvedMaxAlertsOutOfRange(t *testing.T) {
+func TestResolve_FallsBackToDefaultWhenResolvedMaxAlertsOutOfRange(t *testing.T) {
 	// configured default > ceiling is a defensive case: upstream Validate*
-	// functions should reject it, but if it slips through merge keeps the
+	// functions should reject it, but if it slips through resolution keeps the
 	// rule alive at the system default rather than dropping it.
-	got := rule.Merge(rule.MergeInput{
+	got := rule.Resolve(rule.ResolveInput{
 		DefaultMaxAlertsPerRule: rule.MaxAlertsHardCeiling + 1,
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
@@ -682,8 +682,8 @@ func TestMerge_FallsBackToDefaultWhenResolvedMaxAlertsOutOfRange(t *testing.T) {
 	}
 }
 
-func TestMerge_ModifierExceptionClausesPreserveOrder(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_ModifierExceptionClausesPreserveOrder(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1",
 				rule.Rule{
@@ -720,8 +720,8 @@ func TestMerge_ModifierExceptionClausesPreserveOrder(t *testing.T) {
 	}
 }
 
-func TestMerge_PredefinedListsParticipateInContentEquality(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_PredefinedListsParticipateInContentEquality(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			{
 				RulesetID: "s1",
@@ -750,7 +750,7 @@ func TestMerge_PredefinedListsParticipateInContentEquality(t *testing.T) {
 	}
 }
 
-func TestMerge_RuleTargetParticipatesInContentEquality(t *testing.T) {
+func TestResolve_RuleTargetParticipatesInContentEquality(t *testing.T) {
 	left := rule.Rule{
 		RuleID:    "r1",
 		EventType: jobevent.NetworkConnect,
@@ -765,7 +765,7 @@ func TestMerge_RuleTargetParticipatesInContentEquality(t *testing.T) {
 		Exclude: []rule.RuleTargetMatcher{{Path: "acme/sandbox"}},
 	}
 
-	got := rule.Merge(rule.MergeInput{
+	got := rule.Resolve(rule.ResolveInput{
 		ProviderHost: "github.com",
 		ProjectPath:  "acme/repo",
 		RuleSets: []rule.RuleSet{
@@ -787,7 +787,7 @@ func TestMerge_RuleTargetParticipatesInContentEquality(t *testing.T) {
 	}
 }
 
-func TestMerge_RuleTagsParticipateInContentEquality(t *testing.T) {
+func TestResolve_RuleTagsParticipateInContentEquality(t *testing.T) {
 	left := rule.Rule{
 		RuleID:    "r1",
 		EventType: jobevent.NetworkConnect,
@@ -798,7 +798,7 @@ func TestMerge_RuleTagsParticipateInContentEquality(t *testing.T) {
 	right := left
 	right.Tags = map[string]string{"severity": "high"}
 
-	got := rule.Merge(rule.MergeInput{
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1", left),
 			testSet("s1", right),
@@ -818,8 +818,8 @@ func TestMerge_RuleTagsParticipateInContentEquality(t *testing.T) {
 	}
 }
 
-func TestMerge_PredefinedListsDifferentKeyCountWarns(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_PredefinedListsDifferentKeyCountWarns(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			{
 				RulesetID: "s1",
@@ -853,8 +853,8 @@ func TestMerge_PredefinedListsDifferentKeyCountWarns(t *testing.T) {
 	}
 }
 
-func TestMerge_PredefinedListsSliceOrderParticipatesInContentEquality(t *testing.T) {
-	got := rule.Merge(rule.MergeInput{
+func TestResolve_PredefinedListsSliceOrderParticipatesInContentEquality(t *testing.T) {
+	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			{
 				RulesetID: "s1",

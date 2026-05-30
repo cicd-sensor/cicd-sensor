@@ -39,11 +39,11 @@ func runRuleValidate(_ context.Context, args []string, stdout, stderr io.Writer)
 		printValidationErrors(stderr, []validationError{{Path: "bundle", Message: err.Error()}})
 		return 1, fmt.Errorf("rule validate: bundle failed validation")
 	}
-	merged := rule.Merge(rule.MergeInput{
+	resolved := rule.Resolve(rule.ResolveInput{
 		RuleSets:      loaded.RuleSets,
 		RuleModifiers: loaded.RuleModifiers,
 	})
-	printMergeWarnings(stderr, merged.Warnings)
+	printResolveWarnings(stderr, resolved.Warnings)
 
 	env, err := celengine.NewEnv()
 	if err != nil {
@@ -112,7 +112,7 @@ func printValidationErrors(stderr io.Writer, failures []validationError) {
 	}
 }
 
-func printMergeWarnings(stderr io.Writer, warnings []rule.MergeWarning) {
+func printResolveWarnings(stderr io.Writer, warnings []rule.ResolveWarning) {
 	for _, warning := range warnings {
 		if warning.Identity.RulesetID != "" && warning.Identity.RuleID != "" {
 			fmt.Fprintf(stderr, "warning: bundle: ruleset_id=%s rule_id=%s: %s\n", warning.Identity.RulesetID, warning.Identity.RuleID, warning.Kind)

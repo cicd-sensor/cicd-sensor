@@ -11,7 +11,7 @@ import (
 func compileRuleExceptions(env *celengine.Env, resolved rule.ResolvedRule) ([]celengine.CompiledException, error) {
 	var out []celengine.CompiledException
 
-	// resolved is scope-local after rule.Merge. Shared host/project entries
+	// resolved is scope-local after rule.Resolve. Shared host/project entries
 	// reach here only when their exception clauses are content-equivalent.
 	if strings.TrimSpace(resolved.Rule.Exceptions) != "" {
 		prog, err := env.Compile(resolved.CanonicalRuleID.String(), resolved.Rule.EventType, resolved.Rule.Exceptions, resolved.PredefinedLists)
@@ -50,7 +50,7 @@ func compileAndMergeEvaluationCorrelations(host, project *rule.ResolvedRules, en
 
 	// Correlations compile per scope because rule refs resolve against that
 	// scope's enabled rules, then equivalent host/project correlations share CEL.
-	// Scope-local duplicates are resolved by rule.Merge. This tracks the first
+	// Scope-local duplicates are resolved by rule.Resolve. This tracks the first
 	// out index for each canonical ID so equivalent correlations share CEL.
 	sharedEvalIndexByCanonical := make(map[rule.CanonicalRuleID]int)
 	out := make([]compiledCorrelationEntry, 0)
@@ -138,8 +138,8 @@ func dropPreviousCompileWarnings(rr *rule.ResolvedRules) {
 		return
 	}
 
-	// Rebuilds reuse scope state, so preserve merge warnings and refresh only
-	// compile warnings.
+	// Rebuilds reuse scope state, so preserve resolution warnings and refresh
+	// only compile warnings.
 	filtered := rr.Warnings[:0]
 	for _, warning := range rr.Warnings {
 		if warning.Kind == "compile_error" {
@@ -164,7 +164,7 @@ func appendCompileWarning(rr *rule.ResolvedRules, resolvedRule rule.ResolvedRule
 		return
 	}
 
-	rr.Warnings = append(rr.Warnings, rule.MergeWarning{
+	rr.Warnings = append(rr.Warnings, rule.ResolveWarning{
 		Kind:     "compile_error",
 		Identity: resolvedRule.Identity(),
 		Reason:   reason,

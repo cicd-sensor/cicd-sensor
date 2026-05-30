@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// MergeInput collects all sets and modifiers to be merged into ResolvedRules.
-type MergeInput struct {
+// ResolveInput collects all sets and modifiers to be resolved into ResolvedRules.
+type ResolveInput struct {
 	RuleSets                []RuleSet
 	RuleModifiers           []RuleModifier
 	DefaultMaxAlertsPerRule int
@@ -16,8 +16,8 @@ type MergeInput struct {
 	ProjectPath             string
 }
 
-// Merge flattens sets, applies modifiers, and produces ResolvedRules.
-func Merge(in MergeInput) ResolvedRules {
+// Resolve flattens sets, applies modifiers, and produces ResolvedRules.
+func Resolve(in ResolveInput) ResolvedRules {
 	rules, warnings := flattenRules(in.RuleSets)
 	validModifiers, modifierWarnings := filterValidModifiers(in.RuleModifiers)
 	warnings = append(warnings, modifierWarnings...)
@@ -32,7 +32,7 @@ func Merge(in MergeInput) ResolvedRules {
 	}
 }
 
-func flattenRules(sets []RuleSet) ([]ResolvedRule, []MergeWarning) {
+func flattenRules(sets []RuleSet) ([]ResolvedRule, []ResolveWarning) {
 	type seen struct {
 		rule      Rule
 		lists     PredefinedLists
@@ -41,7 +41,7 @@ func flattenRules(sets []RuleSet) ([]ResolvedRule, []MergeWarning) {
 
 	index := map[CanonicalRuleID]seen{}
 	var out []ResolvedRule
-	var warnings []MergeWarning
+	var warnings []ResolveWarning
 
 	for _, s := range sets {
 		predefinedLists := NormalizePredefinedLists(s.Lists)
@@ -52,7 +52,7 @@ func flattenRules(sets []RuleSet) ([]ResolvedRule, []MergeWarning) {
 				if isRuleContentEqual(prev.rule, r) && isPredefinedListsEqual(prev.lists, predefinedLists) {
 					continue
 				}
-				warnings = append(warnings, MergeWarning{
+				warnings = append(warnings, ResolveWarning{
 					Kind:     "duplicate_identity_diff_content",
 					Identity: identity,
 				})
@@ -78,12 +78,12 @@ func flattenRules(sets []RuleSet) ([]ResolvedRule, []MergeWarning) {
 	return out, warnings
 }
 
-func filterValidModifiers(mods []RuleModifier) ([]RuleModifier, []MergeWarning) {
+func filterValidModifiers(mods []RuleModifier) ([]RuleModifier, []ResolveWarning) {
 	valid := make([]RuleModifier, 0, len(mods))
-	var warnings []MergeWarning
+	var warnings []ResolveWarning
 	for _, modifier := range mods {
 		if err := ValidateRuleModifier(&modifier); err != nil {
-			warnings = append(warnings, MergeWarning{
+			warnings = append(warnings, ResolveWarning{
 				Kind:       "invalid_modifier_skipped",
 				EntryLabel: modifier.ModifierID,
 				Reason:     err.Error(),
@@ -109,7 +109,7 @@ func applyModifiers(rules []ResolvedRule, mods []RuleModifier) []ResolvedRule {
 				resolvedRule.AppliedModifiers = append(resolvedRule.AppliedModifiers, modifier.ModifierID)
 				continue
 			}
-			// Validation already rejects override_action: "". Keep merge
+			// Validation already rejects override_action: "". Keep resolution
 			// defensive so a bypassed invalid bundle does not silently disable
 			// the rule or overwrite its action with an empty value.
 			if modifier.OverrideAction != nil && *modifier.OverrideAction != "" {
@@ -188,16 +188,16 @@ func targetMatcherMatches(matcher RuleTargetMatcher, providerHost, projectPath s
 
 // applyMaxAlertsDefaultsAndCeiling bakes the final max_alerts cap into each
 // rule. Rule-local max_alerts wins, then the host/project configured default,
-// then the system fallback. Out-of-range values should be rejected before merge,
-// but this stays defensive and falls back with a warning instead of dropping
-// the rule.
+// then the system fallback. Out-of-range values should be rejected before
+// resolution, but this stays defensive and falls back with a warning instead
+// of dropping the rule.
 //
 // The function builds a fresh out slice so the caller's input is left
-// untouched. Merge is called once per host/project start, so the extra
+// untouched. Resolve is called once per host/project start, so the extra
 // allocation is not on a hot path.
-func applyMaxAlertsDefaultsAndCeiling(rules []ResolvedRule, configuredDefault int) ([]ResolvedRule, []MergeWarning) {
+func applyMaxAlertsDefaultsAndCeiling(rules []ResolvedRule, configuredDefault int) ([]ResolvedRule, []ResolveWarning) {
 	out := make([]ResolvedRule, 0, len(rules))
-	var warnings []MergeWarning
+	var warnings []ResolveWarning
 	for _, r := range rules {
 		final, fellBack := ResolveMaxAlertsCap(r.Rule.MaxAlerts, configuredDefault)
 		r.Rule.MaxAlerts = final
@@ -205,7 +205,7 @@ func applyMaxAlertsDefaultsAndCeiling(rules []ResolvedRule, configuredDefault in
 		if !fellBack {
 			continue
 		}
-		warnings = append(warnings, MergeWarning{
+		warnings = append(warnings, ResolveWarning{
 			Kind:     "max_alerts_out_of_range",
 			Identity: r.Identity(),
 			Reason: fmt.Sprintf(
