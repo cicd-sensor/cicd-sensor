@@ -89,6 +89,7 @@ func warnIfInsecureManagerURL(logger *slog.Logger, parsed *url.URL, raw string) 
 type FetchResult struct {
 	ConfigRevision          string
 	DefaultMaxAlertsPerRule int
+	MonitorMode             bool
 	RuleSources             []rulesource.LoadedRules
 	OutputSettings          *managerv1beta1.OutputSettings
 }
@@ -134,6 +135,7 @@ func (c *ConfigClient) FetchConfig(ctx context.Context, req *managerv1beta1.Fetc
 	return &FetchResult{
 		ConfigRevision:          config.GetConfigRevision(),
 		DefaultMaxAlertsPerRule: int(config.GetDefaultMaxAlertsPerRule()),
+		MonitorMode:             config.GetMonitorMode(),
 		RuleSources:             ruleSources,
 		OutputSettings:          config.GetOutputSettings(),
 	}, nil

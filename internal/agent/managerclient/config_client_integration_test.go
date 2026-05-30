@@ -57,6 +57,7 @@ rule_modifiers:
 	served := &manager.ServedConfig{
 		ConfigRevision:          "sha256:config",
 		DefaultMaxAlertsPerRule: 23,
+		MonitorMode:             true,
 		OutputSettings: &managerv1beta1.OutputSettings{
 			Summary:      &managerv1beta1.OutputSetting{Enabled: true},
 			Detection:    &managerv1beta1.OutputSetting{Enabled: true},
@@ -97,6 +98,9 @@ rule_modifiers:
 	if result.DefaultMaxAlertsPerRule != 23 {
 		t.Fatalf("default_max_alerts_per_rule: got %d, want 23", result.DefaultMaxAlertsPerRule)
 	}
+	if !result.MonitorMode {
+		t.Fatalf("monitor_mode: got false, want true")
+	}
 	if len(result.RuleSources) != 2 {
 		t.Fatalf("rule_sources: got %d, want 2", len(result.RuleSources))
 	}
@@ -125,6 +129,7 @@ rule_modifiers:
 		ConfigRevision:          result.ConfigRevision,
 		OutputSettings:          result.OutputSettings,
 		DefaultMaxAlertsPerRule: result.DefaultMaxAlertsPerRule,
+		MonitorMode:             result.MonitorMode,
 	}); err != nil {
 		t.Fatalf("ApplyManagerConfig: %v", err)
 	}

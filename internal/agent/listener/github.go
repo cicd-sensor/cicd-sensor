@@ -96,6 +96,7 @@ func (l *Listener) handleGitHubProjectStart(w http.ResponseWriter, r *http.Reque
 		PeerPID:                 peerPID,
 		DefaultMaxAlertsPerRule: req.DefaultMaxAlertsPerRule,
 		DisableBaselineRules:    req.DisableBaselineRules,
+		MonitorMode:             req.MonitorMode,
 		RuleSources:             req.RuleSources,
 		ManagerConnection:       managerConnection,
 		ManagerClient:           projectManagerClient,

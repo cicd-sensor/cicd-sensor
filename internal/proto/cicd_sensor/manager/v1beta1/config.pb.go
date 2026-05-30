@@ -157,6 +157,7 @@ type ServedConfig struct {
 	ConfigRevision          string                 `protobuf:"bytes,1,opt,name=config_revision,json=configRevision,proto3" json:"config_revision,omitempty"`
 	DefaultMaxAlertsPerRule int32                  `protobuf:"varint,2,opt,name=default_max_alerts_per_rule,json=defaultMaxAlertsPerRule,proto3" json:"default_max_alerts_per_rule,omitempty"`
 	OutputSettings          *OutputSettings        `protobuf:"bytes,3,opt,name=output_settings,json=outputSettings,proto3" json:"output_settings,omitempty"`
+	MonitorMode             bool                   `protobuf:"varint,4,opt,name=monitor_mode,json=monitorMode,proto3" json:"monitor_mode,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -210,6 +211,13 @@ func (x *ServedConfig) GetOutputSettings() *OutputSettings {
 		return x.OutputSettings
 	}
 	return nil
+}
+
+func (x *ServedConfig) GetMonitorMode() bool {
+	if x != nil {
+		return x.MonitorMode
+	}
+	return false
 }
 
 // FetchConfigResponse is the FetchConfig output.
@@ -278,11 +286,12 @@ const file_cicd_sensor_manager_v1beta1_config_proto_rawDesc = "" +
 	"\vrunner_type\x18\x01 \x01(\tR\n" +
 	"runnerType\x12K\n" +
 	"\fjob_identity\x18\x02 \x01(\v2(.cicd_sensor.manager.v1beta1.JobIdentityR\vjobIdentity\x12Z\n" +
-	"\x11requested_outputs\x18\x03 \x01(\v2-.cicd_sensor.manager.v1beta1.RequestedOutputsR\x10requestedOutputs\"\xcb\x01\n" +
+	"\x11requested_outputs\x18\x03 \x01(\v2-.cicd_sensor.manager.v1beta1.RequestedOutputsR\x10requestedOutputs\"\xee\x01\n" +
 	"\fServedConfig\x12'\n" +
 	"\x0fconfig_revision\x18\x01 \x01(\tR\x0econfigRevision\x12<\n" +
 	"\x1bdefault_max_alerts_per_rule\x18\x02 \x01(\x05R\x17defaultMaxAlertsPerRule\x12T\n" +
-	"\x0foutput_settings\x18\x03 \x01(\v2+.cicd_sensor.manager.v1beta1.OutputSettingsR\x0eoutputSettings\"\xa4\x01\n" +
+	"\x0foutput_settings\x18\x03 \x01(\v2+.cicd_sensor.manager.v1beta1.OutputSettingsR\x0eoutputSettings\x12!\n" +
+	"\fmonitor_mode\x18\x04 \x01(\bR\vmonitorMode\"\xa4\x01\n" +
 	"\x13FetchConfigResponse\x12A\n" +
 	"\x06config\x18\x01 \x01(\v2).cicd_sensor.manager.v1beta1.ServedConfigR\x06config\x12J\n" +
 	"\frule_sources\x18\x02 \x03(\v2'.cicd_sensor.manager.v1beta1.RuleSourceR\vruleSources2\x81\x01\n" +

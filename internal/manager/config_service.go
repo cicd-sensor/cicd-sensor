@@ -62,6 +62,7 @@ func (h *configServiceHandler) FetchConfig(ctx context.Context, req *connect.Req
 		Config: &managerv1beta1.ServedConfig{
 			ConfigRevision:          config.ConfigRevision,
 			DefaultMaxAlertsPerRule: int32(config.DefaultMaxAlertsPerRule),
+			MonitorMode:             config.MonitorMode,
 			OutputSettings:          config.OutputSettings,
 		},
 		RuleSources: protoconv.ToProtoRuleSources(sources),

@@ -30,6 +30,7 @@ type StartupConfig struct {
 	Bind                    startupBindConfig `yaml:"bind"`
 	DefaultMaxAlertsPerRule int               `yaml:"default_max_alerts_per_rule,omitempty"`
 	DisableBaselineRules    bool              `yaml:"disable_baseline_rules,omitempty"`
+	MonitorMode             bool              `yaml:"monitor_mode,omitempty"`
 	Sinks                   SinksConfig       `yaml:"sinks,omitempty"`
 	Logs                    LogsConfig        `yaml:"logs,omitempty"`
 }

@@ -16,6 +16,7 @@ func TestLoadStartupConfig(t *testing.T) {
 		wantBind    string
 		wantDefault int
 		wantDisable bool
+		wantMonitor bool
 		wantErrText string
 	}{
 		{
@@ -40,6 +41,25 @@ disable_baseline_rules: true
 			wantPort:    8080,
 			wantBind:    "0.0.0.0:8080",
 			wantDisable: true,
+		},
+		{
+			name: "monitor mode is loaded",
+			content: `
+monitor_mode: true
+`,
+			wantAddress: "0.0.0.0",
+			wantPort:    8080,
+			wantBind:    "0.0.0.0:8080",
+			wantMonitor: true,
+		},
+		{
+			name: "monitor mode false is accepted",
+			content: `
+monitor_mode: false
+`,
+			wantAddress: "0.0.0.0",
+			wantPort:    8080,
+			wantBind:    "0.0.0.0:8080",
 		},
 		{
 			name: "missing bind address uses default",
@@ -139,6 +159,9 @@ unexpected_field: true
 			}
 			if got.DisableBaselineRules != tt.wantDisable {
 				t.Fatalf("disable_baseline_rules: got %v, want %v", got.DisableBaselineRules, tt.wantDisable)
+			}
+			if got.MonitorMode != tt.wantMonitor {
+				t.Fatalf("monitor_mode: got %v, want %v", got.MonitorMode, tt.wantMonitor)
 			}
 			if !strings.HasPrefix(got.Revision, "sha256:") {
 				t.Fatalf("revision: got %q, want sha256 prefix", got.Revision)

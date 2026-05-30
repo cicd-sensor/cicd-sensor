@@ -229,6 +229,7 @@ func buildServedConfig(startup manager.StartupConfig, outputSettings *managerv1b
 		ConfigRevision:          startup.Revision,
 		DefaultMaxAlertsPerRule: startup.DefaultMaxAlertsPerRule,
 		DisableBaselineRules:    startup.DisableBaselineRules,
+		MonitorMode:             startup.MonitorMode,
 		OutputSettings:          outputSettings,
 	}
 }
