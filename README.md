@@ -87,12 +87,12 @@ Based on public information as of May 2026. Corrections welcome.
 
 | Platform | Environment | Status |
 | --- | --- | --- |
-| GitHub Actions | GitHub-hosted runner | Supported |
-| GitHub Actions | Self-hosted Machine Runner | Supported |
-| GitHub Actions | Actions Runner Controller on Kubernetes | Planned |
-| GitLab CI/CD | Self-hosted Docker executor | Supported |
-| GitLab CI/CD | Self-hosted Kubernetes executor | Planned |
-| GitLab CI/CD | GitLab-hosted runner | Not supported (technical constraints) |
+| GitHub Actions | GitHub-hosted runner | ✅ Supported |
+| GitHub Actions | Self-hosted Machine Runner | ✅ Supported |
+| GitHub Actions | Actions Runner Controller on Kubernetes | 🚧 Planned |
+| GitLab CI/CD | Self-hosted Docker executor | ✅ Supported |
+| GitLab CI/CD | Self-hosted Kubernetes executor | 🚧 Planned |
+| GitLab CI/CD | GitLab-hosted runner | ❌ Not supported (technical constraints) |
 
 Works on both public and private repositories, with no third-party SaaS dependency.
 
