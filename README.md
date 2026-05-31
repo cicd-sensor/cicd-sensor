@@ -50,10 +50,6 @@ jobs:
 
 For self-hosted GitHub Actions or GitLab CI/CD, see the [User Guide](https://cicd-sensor.github.io/user-guide/overview.html).
 
-## Rules
-
-cicd-sensor ships with a set of baseline rules. See the [Baseline Rules guide](https://cicd-sensor.github.io/user-guide/baseline-rules.html) for how they work; the rule definitions themselves live in [`rules/`](rules/). You can also write your own rules, or turn the baseline off entirely.
-
 ## Why CI/CD runtime needs this
 
 CI/CD pipelines build, release, deploy, and manage cloud infrastructure, and they hold the cloud credentials, signing keys, and registry tokens to do it. Supply-chain attackers run inside those jobs and disappear with the evidence when the job ends.
@@ -62,26 +58,25 @@ Most other runtimes have their open-source defenders: Falco, Tetragon, Tracee, W
 
 ## Feature comparison
 
-| Capability | cicd-sensor | Harden-Runner (Free) |
-| --- | --- | --- |
-| **Licensing & deployment** | | |
-| Open source | ✅ Yes | ✅ Yes |
-| No SaaS required | ✅ Yes | ❌ No |
-| **Platform coverage** | | |
-| Private repos | ✅ Yes | ❌ No |
-| Self-hosted runners | ✅ Yes | ❌ No |
-| GitHub Actions support | ✅ Yes | ✅ Yes |
-| GitLab CI/CD support | ✅ Yes | ❌ No |
-| **Capabilities** | | |
-| Detection rules | ✅ Yes | ✅ Yes |
-| Network blocking | 🔶 Partial | ✅ Yes |
-| Log export | ✅ Yes | ❌ No |
+| Capability | cicd-sensor | Harden-Runner (Free) | Comment |
+| --- | --- | --- | --- |
+| **Licensing & deployment** | | | |
+| Open source | ✅ Yes | ✅ Yes | |
+| No SaaS required | ✅ Yes | ❌ No | |
+| **Platform coverage** | | | |
+| Private repos | ✅ Yes | ❌ No | |
+| Self-hosted runners | ✅ Yes | ❌ No | |
+| GitHub Actions support | ✅ Yes | ✅ Yes | |
+| GitLab CI/CD support | ✅ Yes | ❌ No | |
+| **Capabilities** | | | |
+| Detection rules | ✅ Yes | ✅ Yes | |
+| Flexible custom rules | ✅ Yes | 🔶 Limited | cicd-sensor rules cover process ancestry, file access, and correlation across signals; Harden-Runner is mainly a network egress allowlist. |
+| Network blocking | 🔶 Partial | ✅ Yes | cicd-sensor kills the process and stops the job on detection instead of filtering traffic like a firewall. |
+| Log export | ✅ Yes | ❌ No | |
 
-cicd-sensor's network blocking is "Partial": it does not filter traffic like a firewall. Instead, on detection it immediately kills the process and stops the job.
+<sub>This table compares the free version of Harden-Runner. StepSecurity's paid platform adds more, such as private repository and self-hosted runner support, dashboards, and policy management.</sub>
 
-This table compares the free version of Harden-Runner. StepSecurity's paid platform adds more, such as private repository and self-hosted runner support, dashboards, and policy management.
-
-Based on public information as of May 2026. Corrections welcome.
+<sub>Based on public information as of May 2026. Corrections welcome.</sub>
 
 ## Supported CI/CD pipelines
 
@@ -97,6 +92,10 @@ Based on public information as of May 2026. Corrections welcome.
 Works on both public and private repositories, with no third-party SaaS dependency.
 
 Linux kernel: 5.15 or later on `amd64`, 6.1 or later on `arm64`.
+
+## Rules
+
+cicd-sensor ships with a set of baseline rules. See the [Baseline Rules guide](https://cicd-sensor.github.io/user-guide/baseline-rules.html) for how they work; the rule definitions themselves live in [`rules/`](rules/). You can also write your own rules, or turn the baseline off entirely.
 
 ## Documentation
 
