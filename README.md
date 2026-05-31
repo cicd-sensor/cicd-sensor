@@ -71,9 +71,9 @@ Most other runtimes have their open-source defenders: Falco, Tetragon, Tracee, W
 | Network blocking | Partial | Yes |
 | Log export | Yes | No |
 
-Network blocking is "Partial" for cicd-sensor: it does not filter egress traffic at the network layer like a firewall, the way Harden-Runner does. Instead, when a rule matches, it kills the offending process immediately and stops the job, halting the activity at its source.
+cicd-sensor's network blocking is "Partial": it does not filter traffic like a firewall. Instead, on detection it immediately kills the process and stops the job.
 
-Harden-Runner (Free) is compared here in its open-source public-repository path. StepSecurity also offers broader paid platform features such as private repository support, self-hosted runner support, posture checks, policy management, dashboards, richer runtime visibility, and export integrations. Some non-free or TLS/eBPF agent paths are release-only or proprietary and are outside this table.
+This table compares the free version of Harden-Runner. StepSecurity's paid platform adds more, such as private repository and self-hosted runner support, dashboards, and policy management.
 
 ## Supported CI/CD pipelines
 
