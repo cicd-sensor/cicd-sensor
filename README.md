@@ -62,14 +62,18 @@ Most other runtimes have their open-source defenders: Falco, Tetragon, Tracee, W
 
 | Capability | cicd-sensor | Harden-Runner (Free) |
 | --- | --- | --- |
-| Open source | Yes | Yes |
-| No SaaS required | Yes | No |
-| Private repos | Yes | No |
-| Self-hosted runners | Yes | No |
-| GitLab CI/CD | Yes | No |
-| Detection rules | Yes | Unconfirmed |
-| Network blocking | Partial | Yes |
-| Log export | Yes | No |
+| **Licensing & deployment** | | |
+| Open source | ✅ Yes | ✅ Yes |
+| No SaaS required | ✅ Yes | ❌ No |
+| **Platform coverage** | | |
+| Private repos | ✅ Yes | ❌ No |
+| Self-hosted runners | ✅ Yes | ❌ No |
+| GitHub Actions support | ✅ Yes | ✅ Yes |
+| GitLab CI/CD support | ✅ Yes | ❌ No |
+| **Capabilities** | | |
+| Detection rules | ✅ Yes | ❓ Unconfirmed |
+| Network blocking | 🔶 Partial | ✅ Yes |
+| Log export | ✅ Yes | ❌ No |
 
 cicd-sensor's network blocking is "Partial": it does not filter traffic like a firewall. Instead, on detection it immediately kills the process and stops the job.
 
