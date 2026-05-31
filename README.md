@@ -58,6 +58,21 @@ CI/CD pipelines build, release, deploy, and manage cloud infrastructure, and the
 
 Most other runtimes have their open-source defenders: Falco, Tetragon, Tracee, Wazuh, OSQuery. Open-source coverage for CI/CD runtime has lagged behind. Sigstore proved *where* and *how* artifacts were built; cicd-sensor preserves *what actually ran* so teams can detect, respond, and audit.
 
+## How cicd-sensor compares
+
+| Capability | cicd-sensor | Harden-Runner Free |
+| --- | --- | --- |
+| Open source | Yes | Yes |
+| No SaaS required | Yes | No |
+| Private repos | Yes | No |
+| Self-hosted runners | Yes | No |
+| GitLab CI/CD | Yes | No |
+| Detection rules | Yes | Unconfirmed |
+| Network blocking | Partial | Yes |
+| Log export | Yes | No |
+
+Harden-Runner Free is compared here in its open-source public-repository path. StepSecurity also offers broader paid platform features such as private repository support, self-hosted runner support, posture checks, policy management, dashboards, richer runtime visibility, and export integrations. Some non-free or TLS/eBPF agent paths are release-only or proprietary and are outside this table.
+
 ## Supported CI/CD pipelines
 
 | Platform | Environment | Status |
