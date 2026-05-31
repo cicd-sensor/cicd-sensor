@@ -30,7 +30,7 @@
 
 ## What cicd-sensor does
 
-When a supply-chain attack runs inside a CI/CD job, teams often can't see it happen or tell what it did. cicd-sensor is an open-source sensor that gives them both.
+When a supply-chain attack runs inside a CI/CD job, teams often can't see it happen or tell what it did. cicd-sensor is an open-source sensor that lets every team do both.
 
 **Detection:** Detects supply-chain attacks at runtime using process ancestry (e.g. credential access from a process descended from `npm install`) and correlation across signals (e.g. multiple credential categories read in one job). Baseline rules target patterns seen in real CI/CD attacks, and are opt-out: turn them off if you only want the logs and evidence below.
 
