@@ -73,7 +73,7 @@ Most other runtimes have their open-source defenders: Falco, Tetragon, Tracee, W
 | GitHub Actions support | ✅ Yes | ✅ Yes |
 | GitLab CI/CD support | ✅ Yes | ❌ No |
 | **Capabilities** | | |
-| Detection rules | ✅ Yes | ❓ Unconfirmed |
+| Detection rules | ✅ Yes | ✅ Yes |
 | Network blocking | 🔶 Partial | ✅ Yes |
 | Log export | ✅ Yes | ❌ No |
 
