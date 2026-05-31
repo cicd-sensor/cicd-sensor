@@ -81,6 +81,8 @@ cicd-sensor's network blocking is "Partial": it does not filter traffic like a f
 
 This table compares the free version of Harden-Runner. StepSecurity's paid platform adds more, such as private repository and self-hosted runner support, dashboards, and policy management.
 
+Based on public information as of May 2026. Corrections welcome.
+
 ## Supported CI/CD pipelines
 
 | Platform | Environment | Status |
