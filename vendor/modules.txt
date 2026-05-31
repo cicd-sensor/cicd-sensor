@@ -627,6 +627,20 @@ github.com/containerd/errdefs
 ## explicit; go 1.22
 github.com/containerd/errdefs/pkg/errhttp
 github.com/containerd/errdefs/pkg/internal/cause
+# github.com/containerd/log v0.1.0
+## explicit; go 1.20
+github.com/containerd/log
+# github.com/containerd/nri v0.12.0
+## explicit; go 1.24.0
+github.com/containerd/nri/pkg/api
+github.com/containerd/nri/pkg/log
+github.com/containerd/nri/pkg/net
+github.com/containerd/nri/pkg/net/multiplex
+github.com/containerd/nri/pkg/stub
+github.com/containerd/nri/pkg/version
+# github.com/containerd/ttrpc v1.2.7
+## explicit; go 1.19
+github.com/containerd/ttrpc
 # github.com/coreos/go-oidc/v3 v3.17.0
 ## explicit; go 1.24.0
 github.com/coreos/go-oidc/v3/oidc
@@ -978,6 +992,9 @@ github.com/klauspost/compress/zstd/internal/xxhash
 # github.com/klauspost/pgzip v1.2.6
 ## explicit
 github.com/klauspost/pgzip
+# github.com/knqyf263/go-plugin v0.9.0
+## explicit; go 1.24.0
+github.com/knqyf263/go-plugin/wasm
 # github.com/letsencrypt/boulder v0.20260223.0
 ## explicit; go 1.25.0
 github.com/letsencrypt/boulder/core
@@ -1042,6 +1059,9 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
+# github.com/opencontainers/runtime-spec v1.3.0
+## explicit
+github.com/opencontainers/runtime-spec/specs-go
 # github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81
 ## explicit; go 1.17
 github.com/petermattis/goid
