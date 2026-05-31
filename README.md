@@ -30,7 +30,7 @@
 
 ## What cicd-sensor does
 
-When a supply-chain attack runs inside a CI/CD job, teams often can't see it happen or tell what it did. cicd-sensor is an open-source sensor that lets every team do both.
+When a compromised dependency in a CI/CD job steals your cloud credentials and leaks them, would you catch it? Would you have the logs to investigate afterward? cicd-sensor is an open-source sensor that lets every team answer both.
 
 **Detection:** Detects supply-chain attacks at runtime using process ancestry (e.g. credential access from a process descended from `npm install`) and correlation across signals (e.g. multiple credential categories read in one job). Baseline rules target patterns seen in real CI/CD attacks, and are opt-out: turn them off if you only want the logs and evidence below.
 
@@ -65,7 +65,7 @@ Most other runtimes have their open-source defenders: Falco, Tetragon, Tracee, W
 | No SaaS required | ✅ Yes | ❌ No | |
 | **Platform coverage** | | | |
 | Private repos | ✅ Yes | ❌ No | |
-| Self-hosted runners | ✅ Yes | ❌ No | |
+| Self-hosted runners | ✅ Yes | ❌ No | Enforcing self-hosted runners enables organization-wide log collection across every job. |
 | GitHub Actions support | ✅ Yes | ✅ Yes | |
 | GitLab CI/CD support | ✅ Yes | ❌ No | |
 | **Capabilities** | | | |
