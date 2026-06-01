@@ -28,6 +28,8 @@ func main() {
 		runProjectSubcommand(os.Args[2:])
 	case "proxy":
 		runProxySubcommand(os.Args[2:])
+	case "nri":
+		runNRISubcommand(os.Args[2:])
 	default:
 		printUsage()
 		os.Exit(2)
@@ -43,4 +45,5 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  cicd-sensor project start [flags]")
 	fmt.Fprintln(os.Stderr, "  cicd-sensor project result [flags]")
 	fmt.Fprintln(os.Stderr, "  cicd-sensor proxy dockerd [flags]")
+	fmt.Fprintln(os.Stderr, "  cicd-sensor nri [flags]")
 }
