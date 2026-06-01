@@ -40,11 +40,12 @@ const (
 
 // A dependency graph.
 type Graph struct {
-	state              protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Commits *[]*Commit             `protobuf:"bytes,1,rep,name=commits,proto3"`
-	xxx_hidden_Edges   *[]*Graph_Edge         `protobuf:"bytes,2,rep,name=edges,proto3"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                        protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_Commits           *[]*Commit                 `protobuf:"bytes,1,rep,name=commits,proto3"`
+	xxx_hidden_Edges             *[]*Graph_Edge             `protobuf:"bytes,2,rep,name=edges,proto3"`
+	xxx_hidden_RegistryCommitIds *[]*Graph_RegistryCommitID `protobuf:"bytes,3,rep,name=registry_commit_ids,json=registryCommitIds,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *Graph) Reset() {
@@ -90,12 +91,25 @@ func (x *Graph) GetEdges() []*Graph_Edge {
 	return nil
 }
 
+func (x *Graph) GetRegistryCommitIds() []*Graph_RegistryCommitID {
+	if x != nil {
+		if x.xxx_hidden_RegistryCommitIds != nil {
+			return *x.xxx_hidden_RegistryCommitIds
+		}
+	}
+	return nil
+}
+
 func (x *Graph) SetCommits(v []*Commit) {
 	x.xxx_hidden_Commits = &v
 }
 
 func (x *Graph) SetEdges(v []*Graph_Edge) {
 	x.xxx_hidden_Edges = &v
+}
+
+func (x *Graph) SetRegistryCommitIds(v []*Graph_RegistryCommitID) {
+	x.xxx_hidden_RegistryCommitIds = &v
 }
 
 type Graph_builder struct {
@@ -105,6 +119,11 @@ type Graph_builder struct {
 	Commits []*Commit
 	// The edges of the graph.
 	Edges []*Graph_Edge
+	// The registry/commit ID pairs for registries other than the callee.
+	//
+	// The pairs will be unique by commit ID, that is there will be only one
+	// RegistryCommitID for a given commit ID.
+	RegistryCommitIds []*Graph_RegistryCommitID
 }
 
 func (b0 Graph_builder) Build() *Graph {
@@ -113,6 +132,7 @@ func (b0 Graph_builder) Build() *Graph {
 	_, _ = b, x
 	x.xxx_hidden_Commits = &b.Commits
 	x.xxx_hidden_Edges = &b.Edges
+	x.xxx_hidden_RegistryCommitIds = &b.RegistryCommitIds
 	return m0
 }
 
@@ -271,37 +291,124 @@ func (b0 Graph_Edge_builder) Build() *Graph_Edge {
 	return m0
 }
 
+// A registry and Commit ID pair.
+//
+// Used when federation is enabled to link a commit ID to another registry.
+//
+// Only commits that are *not* the registry that returned this Graph are present.
+// For example, say buf.example.com/foo/bar depends on buf.build/googleapis/googleapis.
+// If we made a GetGraph call against buf.example.com, only the registry for buf.build
+// and the Commit ID for buf.build/googleapis/googleapis will be present.
+type Graph_RegistryCommitID struct {
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_CommitId string                 `protobuf:"bytes,1,opt,name=commit_id,json=commitId,proto3"`
+	xxx_hidden_Registry string                 `protobuf:"bytes,2,opt,name=registry,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *Graph_RegistryCommitID) Reset() {
+	*x = Graph_RegistryCommitID{}
+	mi := &file_buf_registry_module_v1_graph_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Graph_RegistryCommitID) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Graph_RegistryCommitID) ProtoMessage() {}
+
+func (x *Graph_RegistryCommitID) ProtoReflect() protoreflect.Message {
+	mi := &file_buf_registry_module_v1_graph_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Graph_RegistryCommitID) GetCommitId() string {
+	if x != nil {
+		return x.xxx_hidden_CommitId
+	}
+	return ""
+}
+
+func (x *Graph_RegistryCommitID) GetRegistry() string {
+	if x != nil {
+		return x.xxx_hidden_Registry
+	}
+	return ""
+}
+
+func (x *Graph_RegistryCommitID) SetCommitId(v string) {
+	x.xxx_hidden_CommitId = v
+}
+
+func (x *Graph_RegistryCommitID) SetRegistry(v string) {
+	x.xxx_hidden_Registry = v
+}
+
+type Graph_RegistryCommitID_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The commit ID.
+	CommitId string
+	// The registry hostname.
+	Registry string
+}
+
+func (b0 Graph_RegistryCommitID_builder) Build() *Graph_RegistryCommitID {
+	m0 := &Graph_RegistryCommitID{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CommitId = b.CommitId
+	x.xxx_hidden_Registry = b.Registry
+	return m0
+}
+
 var File_buf_registry_module_v1_graph_proto protoreflect.FileDescriptor
 
 const file_buf_registry_module_v1_graph_proto_rawDesc = "" +
 	"\n" +
-	"\"buf/registry/module/v1/graph.proto\x12\x16buf.registry.module.v1\x1a#buf/registry/module/v1/commit.proto\x1a3buf/registry/priv/extension/v1beta1/extension.proto\x1a\x1bbuf/validate/validate.proto\"\xd6\x02\n" +
+	"\"buf/registry/module/v1/graph.proto\x12\x16buf.registry.module.v1\x1a#buf/registry/module/v1/commit.proto\x1a3buf/registry/priv/extension/v1beta1/extension.proto\x1a\x1bbuf/validate/validate.proto\"\x98\x04\n" +
 	"\x05Graph\x12B\n" +
 	"\acommits\x18\x01 \x03(\v2\x1e.buf.registry.module.v1.CommitB\b\xbaH\x05\x92\x01\x02\b\x01R\acommits\x128\n" +
-	"\x05edges\x18\x02 \x03(\v2\".buf.registry.module.v1.Graph.EdgeR\x05edges\x1a0\n" +
+	"\x05edges\x18\x02 \x03(\v2\".buf.registry.module.v1.Graph.EdgeR\x05edges\x12^\n" +
+	"\x13registry_commit_ids\x18\x03 \x03(\v2..buf.registry.module.v1.Graph.RegistryCommitIDR\x11registryCommitIds\x1a0\n" +
 	"\x04Node\x12(\n" +
 	"\tcommit_id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\x88\x02\x01R\bcommitId\x1a\x94\x01\n" +
 	"\x04Edge\x12G\n" +
 	"\tfrom_node\x18\x01 \x01(\v2\".buf.registry.module.v1.Graph.NodeB\x06\xbaH\x03\xc8\x01\x01R\bfromNode\x12C\n" +
-	"\ato_node\x18\x02 \x01(\v2\".buf.registry.module.v1.Graph.NodeB\x06\xbaH\x03\xc8\x01\x01R\x06toNode:\x06\xea\xc5+\x02\x10\x01BWZUbuf.build/gen/go/bufbuild/registry/protocolbuffers/go/buf/registry/module/v1;modulev1b\x06proto3"
+	"\ato_node\x18\x02 \x01(\v2\".buf.registry.module.v1.Graph.NodeB\x06\xbaH\x03\xc8\x01\x01R\x06toNode\x1a`\n" +
+	"\x10RegistryCommitID\x12(\n" +
+	"\tcommit_id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\x88\x02\x01R\bcommitId\x12\"\n" +
+	"\bregistry\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bregistry:\x06\xea\xc5+\x02\x10\x01BWZUbuf.build/gen/go/bufbuild/registry/protocolbuffers/go/buf/registry/module/v1;modulev1b\x06proto3"
 
-var file_buf_registry_module_v1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_buf_registry_module_v1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_buf_registry_module_v1_graph_proto_goTypes = []any{
-	(*Graph)(nil),      // 0: buf.registry.module.v1.Graph
-	(*Graph_Node)(nil), // 1: buf.registry.module.v1.Graph.Node
-	(*Graph_Edge)(nil), // 2: buf.registry.module.v1.Graph.Edge
-	(*Commit)(nil),     // 3: buf.registry.module.v1.Commit
+	(*Graph)(nil),                  // 0: buf.registry.module.v1.Graph
+	(*Graph_Node)(nil),             // 1: buf.registry.module.v1.Graph.Node
+	(*Graph_Edge)(nil),             // 2: buf.registry.module.v1.Graph.Edge
+	(*Graph_RegistryCommitID)(nil), // 3: buf.registry.module.v1.Graph.RegistryCommitID
+	(*Commit)(nil),                 // 4: buf.registry.module.v1.Commit
 }
 var file_buf_registry_module_v1_graph_proto_depIdxs = []int32{
-	3, // 0: buf.registry.module.v1.Graph.commits:type_name -> buf.registry.module.v1.Commit
+	4, // 0: buf.registry.module.v1.Graph.commits:type_name -> buf.registry.module.v1.Commit
 	2, // 1: buf.registry.module.v1.Graph.edges:type_name -> buf.registry.module.v1.Graph.Edge
-	1, // 2: buf.registry.module.v1.Graph.Edge.from_node:type_name -> buf.registry.module.v1.Graph.Node
-	1, // 3: buf.registry.module.v1.Graph.Edge.to_node:type_name -> buf.registry.module.v1.Graph.Node
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	3, // 2: buf.registry.module.v1.Graph.registry_commit_ids:type_name -> buf.registry.module.v1.Graph.RegistryCommitID
+	1, // 3: buf.registry.module.v1.Graph.Edge.from_node:type_name -> buf.registry.module.v1.Graph.Node
+	1, // 4: buf.registry.module.v1.Graph.Edge.to_node:type_name -> buf.registry.module.v1.Graph.Node
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_buf_registry_module_v1_graph_proto_init() }
@@ -316,7 +423,7 @@ func file_buf_registry_module_v1_graph_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_buf_registry_module_v1_graph_proto_rawDesc), len(file_buf_registry_module_v1_graph_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

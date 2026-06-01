@@ -764,8 +764,6 @@ type CreateModulesRequest_Value struct {
 	// The name of the default Label of the Module.
 	//
 	// If not set, the default Label will be named "main" upon creation.
-	//
-	// This may point to an archived Label.
 	DefaultLabelName string `protobuf:"bytes,6,opt,name=default_label_name,json=defaultLabelName,proto3" json:"default_label_name,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -892,8 +890,6 @@ type CreateModulesRequest_Value_builder struct {
 	// The name of the default Label of the Module.
 	//
 	// If not set, the default Label will be named "main" upon creation.
-	//
-	// This may point to an archived Label.
 	DefaultLabelName string
 }
 
@@ -924,8 +920,6 @@ type UpdateModulesRequest_Value struct {
 	// The configurable URL in the description of the module.
 	Url *string `protobuf:"bytes,6,opt,name=url,proto3,oneof" json:"url,omitempty"`
 	// The name of the default Label of the Module.
-	//
-	// This Label may not yet exist.
 	//
 	// This may not point to an archived Label.
 	DefaultLabelName *string `protobuf:"bytes,7,opt,name=default_label_name,json=defaultLabelName,proto3,oneof" json:"default_label_name,omitempty"`
@@ -1104,8 +1098,6 @@ type UpdateModulesRequest_Value_builder struct {
 	// The configurable URL in the description of the module.
 	Url *string
 	// The name of the default Label of the Module.
-	//
-	// This Label may not yet exist.
 	//
 	// This may not point to an archived Label.
 	DefaultLabelName *string

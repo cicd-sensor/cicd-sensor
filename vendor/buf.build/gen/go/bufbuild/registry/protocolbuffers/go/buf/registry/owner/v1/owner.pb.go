@@ -414,10 +414,10 @@ const file_buf_registry_owner_v1_owner_proto_rawDesc = "" +
 	"\x05Owner\x121\n" +
 	"\x04user\x18\x01 \x01(\v2\x1b.buf.registry.owner.v1.UserH\x00R\x04user\x12I\n" +
 	"\forganization\x18\x02 \x01(\v2#.buf.registry.owner.v1.OrganizationH\x00R\forganization:\x06\xea\xc5+\x02\x10\x01B\x0e\n" +
-	"\x05value\x12\x05\xbaH\x02\b\x01\"z\n" +
+	"\x05value\x12\x05\xbaH\x02\b\x01\"}\n" +
 	"\bOwnerRef\x12\x1a\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x88\x02\x01H\x00R\x02id\x12:\n" +
-	"\x04name\x18\x02 \x01(\tB$\xbaH!r\x1f\x10\x02\x18 2\x19^[a-z][a-z0-9-]*[a-z0-9]$H\x00R\x04name:\x06\xea\xc5+\x02\b\x01B\x0e\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x88\x02\x01H\x00R\x02id\x12=\n" +
+	"\x04name\x18\x02 \x01(\tB'\xbaH$r\"\x10\x01\x18 2\x1c^[a-z]([a-z0-9-]*[a-z0-9])?$H\x00R\x04name:\x06\xea\xc5+\x02\b\x01B\x0e\n" +
 	"\x05value\x12\x05\xbaH\x02\b\x01BUZSbuf.build/gen/go/bufbuild/registry/protocolbuffers/go/buf/registry/owner/v1;ownerv1b\x06proto3"
 
 var file_buf_registry_owner_v1_owner_proto_msgTypes = make([]protoimpl.MessageInfo, 2)

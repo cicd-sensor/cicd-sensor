@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"buf.build/go/protovalidate"
+	"go.yaml.in/yaml/v3"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -32,7 +33,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -222,7 +222,7 @@ func (u *unmarshaler) addError(node *yaml.Node, err error) {
 		line:  u.lines[node.Line-1],
 	})
 }
-func (u *unmarshaler) addErrorf(node *yaml.Node, format string, args ...interface{}) {
+func (u *unmarshaler) addErrorf(node *yaml.Node, format string, args ...any) {
 	u.addError(node, fmt.Errorf(format, args...))
 }
 

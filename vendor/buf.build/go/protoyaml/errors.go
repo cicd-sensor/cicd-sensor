@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"buf.build/go/protovalidate"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // nodeError is an error that occurred while processing a specific yaml.Node.
@@ -39,12 +39,12 @@ func (n *nodeError) Unwrap() error {
 // the lines of the source code are provided.
 func (n *nodeError) Error() string {
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("%s:%d:%d %s\n", n.Path, n.Node.Line, n.Node.Column, n.Unwrap().Error()))
+	fmt.Fprintf(&result, "%s:%d:%d %s\n", n.Path, n.Node.Line, n.Node.Column, n.Unwrap().Error())
 	if n.line != "" {
 		lineNum := fmt.Sprintf("%4d", n.Node.Line)
-		result.WriteString(fmt.Sprintf("%s | %s\n", lineNum, n.line))
+		fmt.Fprintf(&result, "%s | %s\n", lineNum, n.line)
 		marker := strings.Repeat(".", n.Node.Column-1) + "^"
-		result.WriteString(fmt.Sprintf("%s | %s\n", lineNum, marker))
+		fmt.Fprintf(&result, "%s | %s\n", lineNum, marker)
 	}
 	return result.String()
 }

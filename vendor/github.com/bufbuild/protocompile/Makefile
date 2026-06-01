@@ -9,7 +9,7 @@ MAKEFLAGS += --no-print-directory
 BIN ?= $(abspath .tmp/bin)
 CACHE := $(abspath .tmp/cache)
 COPYRIGHT_YEARS := 2020-2026
-LICENSE_IGNORE := -E -e "/testdata/|^wellknownimports/google/protobuf/"
+LICENSE_IGNORE := -E -e "/testdata/|^wellknownimports/google/protobuf/|^[^/]+\.ya?ml$$|^\.github/"
 # Set to use a different compiler. For example, `GO=go1.18rc1 make test`.
 GO ?= go
 TOOLS_MOD_DIR := ./internal/tools
@@ -105,7 +105,7 @@ generate: $(BIN)/license-header $(BIN)/goyacc wellknownimports test-descriptors 
 
 .PHONY: generate-golden
 generate-golden: generate
-	PATH="$(BIN)$(PATH_SEP)$(PATH)" PROTOCOMPILE_REFRESH=** $(GO) test  ./... -run 'TestSourceCodeInfoOptions|TestIR|TestLexer|TestParse|TestRender' || true
+	PATH="$(BIN)$(PATH_SEP)$(PATH)" PROTOCOMPILE_REFRESH=** $(GO) test  ./... -run 'TestSourceCodeInfoOptions|TestIR|TestLexer|TestParse|TestRender|TestFormat|TestEdits' || true
 
 .PHONY: upgrade
 upgrade: ## Upgrade dependencies

@@ -85,6 +85,8 @@ type LabelServiceClient interface {
 	// Archive existing Labels.
 	//
 	// This operation is atomic. Either all Labels are archived or an error is returned.
+	//
+	// It is an error to archive the default Label.
 	ArchiveLabels(context.Context, *connect.Request[v1beta1.ArchiveLabelsRequest]) (*connect.Response[v1beta1.ArchiveLabelsResponse], error)
 	// Unarchive existing Labels.
 	//
@@ -208,6 +210,8 @@ type LabelServiceHandler interface {
 	// Archive existing Labels.
 	//
 	// This operation is atomic. Either all Labels are archived or an error is returned.
+	//
+	// It is an error to archive the default Label.
 	ArchiveLabels(context.Context, *connect.Request[v1beta1.ArchiveLabelsRequest]) (*connect.Response[v1beta1.ArchiveLabelsResponse], error)
 	// Unarchive existing Labels.
 	//

@@ -873,8 +873,6 @@ type CreateModulesRequest_Value_builder struct {
 	// The name of the default Label of the Module.
 	//
 	// If not set, the default Label will be named "main" upon creation.
-	//
-	// This may point to an archived Label.
 	DefaultLabelName string
 }
 
@@ -1100,8 +1098,6 @@ type UpdateModulesRequest_Value_builder struct {
 	// The configurable URL in the description of the module.
 	Url *string
 	// The name of the default Label of the Module.
-	//
-	// This Label may not yet exist.
 	//
 	// This may not point to an archived Label.
 	DefaultLabelName *string

@@ -459,20 +459,20 @@ var File_buf_registry_owner_v1_organization_proto protoreflect.FileDescriptor
 
 const file_buf_registry_owner_v1_organization_proto_rawDesc = "" +
 	"\n" +
-	"(buf/registry/owner/v1/organization.proto\x12\x15buf.registry.owner.v1\x1a3buf/registry/priv/extension/v1beta1/extension.proto\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbd\x03\n" +
+	"(buf/registry/owner/v1/organization.proto\x12\x15buf.registry.owner.v1\x1a3buf/registry/priv/extension/v1beta1/extension.proto\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc0\x03\n" +
 	"\fOrganization\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\x88\x02\x01R\x02id\x12C\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"createTime\x12C\n" +
 	"\vupdate_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"updateTime\x12;\n" +
-	"\x04name\x18\x04 \x01(\tB'\xbaH$\xc8\x01\x01r\x1f\x10\x02\x18 2\x19^[a-z][a-z0-9-]*[a-z0-9]$R\x04name\x12*\n" +
+	"updateTime\x12>\n" +
+	"\x04name\x18\x04 \x01(\tB*\xbaH'\xc8\x01\x01r\"\x10\x01\x18 2\x1c^[a-z]([a-z0-9-]*[a-z0-9])?$R\x04name\x12*\n" +
 	"\vdescription\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\xde\x02R\vdescription\x12 \n" +
 	"\x03url\x18\x06 \x01(\tB\x0e\xbaH\v\xd8\x01\x01r\x06\x18\xff\x01\x88\x01\x01R\x03url\x12s\n" +
-	"\x13verification_status\x18\a \x01(\x0e25.buf.registry.owner.v1.OrganizationVerificationStatusB\v\xbaH\b\xc8\x01\x01\x82\x01\x02\x10\x01R\x12verificationStatus:\x06\xea\xc5+\x02\x10\x01\"\x81\x01\n" +
+	"\x13verification_status\x18\a \x01(\x0e25.buf.registry.owner.v1.OrganizationVerificationStatusB\v\xbaH\b\xc8\x01\x01\x82\x01\x02\x10\x01R\x12verificationStatus:\x06\xea\xc5+\x02\x10\x01\"\x84\x01\n" +
 	"\x0fOrganizationRef\x12\x1a\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x88\x02\x01H\x00R\x02id\x12:\n" +
-	"\x04name\x18\x02 \x01(\tB$\xbaH!r\x1f\x10\x02\x18 2\x19^[a-z][a-z0-9-]*[a-z0-9]$H\x00R\x04name:\x06\xea\xc5+\x02\b\x01B\x0e\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x88\x02\x01H\x00R\x02id\x12=\n" +
+	"\x04name\x18\x02 \x01(\tB'\xbaH$r\"\x10\x01\x18 2\x1c^[a-z]([a-z0-9-]*[a-z0-9])?$H\x00R\x04name:\x06\xea\xc5+\x02\b\x01B\x0e\n" +
 	"\x05value\x12\x05\xbaH\x02\b\x01*\xe1\x01\n" +
 	"\x1eOrganizationVerificationStatus\x120\n" +
 	",ORGANIZATION_VERIFICATION_STATUS_UNSPECIFIED\x10\x00\x12/\n" +

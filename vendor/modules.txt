@@ -10,14 +10,14 @@ buf.build/gen/go/bufbuild/protodescriptor/protocolbuffers/go/buf/descriptor/v1
 # buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1
 ## explicit; go 1.23
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate
-# buf.build/gen/go/bufbuild/registry/connectrpc/go v1.19.2-20260126144947-819582968857.1
-## explicit; go 1.24
+# buf.build/gen/go/bufbuild/registry/connectrpc/go v1.20.0-20260507063250-43b0c5a6cd08.1
+## explicit; go 1.25
 buf.build/gen/go/bufbuild/registry/connectrpc/go/buf/registry/module/v1/modulev1connect
 buf.build/gen/go/bufbuild/registry/connectrpc/go/buf/registry/module/v1beta1/modulev1beta1connect
 buf.build/gen/go/bufbuild/registry/connectrpc/go/buf/registry/owner/v1/ownerv1connect
 buf.build/gen/go/bufbuild/registry/connectrpc/go/buf/registry/plugin/v1beta1/pluginv1beta1connect
 buf.build/gen/go/bufbuild/registry/connectrpc/go/buf/registry/policy/v1beta1/policyv1beta1connect
-# buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.36.11-20260126144947-819582968857.1
+# buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.36.11-20260507063250-43b0c5a6cd08.1
 ## explicit; go 1.23
 buf.build/gen/go/bufbuild/registry/protocolbuffers/go/buf/registry/module/v1
 buf.build/gen/go/bufbuild/registry/protocolbuffers/go/buf/registry/module/v1beta1
@@ -55,8 +55,8 @@ buf.build/go/interrupt
 ## explicit; go 1.24.0
 buf.build/go/protovalidate
 buf.build/go/protovalidate/cel
-# buf.build/go/protoyaml v0.6.0
-## explicit; go 1.23.0
+# buf.build/go/protoyaml v0.7.0
+## explicit; go 1.25.0
 buf.build/go/protoyaml
 # buf.build/go/spdx v0.2.0
 ## explicit; go 1.21
@@ -300,8 +300,8 @@ github.com/aws/smithy-go/waiter
 # github.com/blang/semver v3.5.1+incompatible
 ## explicit
 github.com/blang/semver
-# github.com/bufbuild/buf v1.69.0
-## explicit; go 1.25.6
+# github.com/bufbuild/buf v1.70.0
+## explicit; go 1.25.10
 github.com/bufbuild/buf/cmd/buf
 github.com/bufbuild/buf/cmd/buf/internal/command/alpha/protoc
 github.com/bufbuild/buf/cmd/buf/internal/command/alpha/registry/token/tokendelete
@@ -511,7 +511,7 @@ github.com/bufbuild/buf/private/pkg/transport/http/httpserver
 github.com/bufbuild/buf/private/pkg/uuidutil
 github.com/bufbuild/buf/private/pkg/verbose
 github.com/bufbuild/buf/private/pkg/wasm
-# github.com/bufbuild/protocompile v0.14.2-0.20260429155904-12ef1ef2ce91
+# github.com/bufbuild/protocompile v0.14.2-0.20260522222248-64e6ad034132
 ## explicit; go 1.25.6
 github.com/bufbuild/protocompile
 github.com/bufbuild/protocompile/ast
@@ -645,7 +645,7 @@ github.com/digitorus/timestamp
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
 github.com/distribution/reference
-# github.com/docker/cli v29.5.1+incompatible
+# github.com/docker/cli v29.5.2+incompatible
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
@@ -1063,7 +1063,7 @@ github.com/planetscale/vtprotobuf/types/known/wrapperspb
 # github.com/quic-go/qpack v0.6.0
 ## explicit; go 1.24
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.59.0
+# github.com/quic-go/quic-go v0.59.1
 ## explicit; go 1.24
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/http3
@@ -1411,7 +1411,7 @@ go.opentelemetry.io/otel/trace/noop
 # go.uber.org/multierr v1.11.0
 ## explicit; go 1.19
 go.uber.org/multierr
-# go.uber.org/zap v1.27.1
+# go.uber.org/zap v1.28.0
 ## explicit; go 1.19
 go.uber.org/zap
 go.uber.org/zap/buffer
@@ -1429,7 +1429,7 @@ go.yaml.in/yaml/v3
 ## explicit; go 1.18
 go.yaml.in/yaml/v4
 go.yaml.in/yaml/v4/internal/libyaml
-# golang.org/x/crypto v0.51.0
+# golang.org/x/crypto v0.52.0
 ## explicit; go 1.25.0
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blowfish
@@ -1556,7 +1556,7 @@ google.golang.org/genproto/googleapis/type/calendarperiod
 google.golang.org/genproto/googleapis/type/date
 google.golang.org/genproto/googleapis/type/expr
 google.golang.org/genproto/googleapis/type/timeofday
-# google.golang.org/genproto/googleapis/api v0.0.0-20260519071638-aa98bba5eb94
+# google.golang.org/genproto/googleapis/api v0.0.0-20260523011958-0a33c5d7ca68
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/api
 google.golang.org/genproto/googleapis/api/annotations
@@ -1566,7 +1566,7 @@ google.golang.org/genproto/googleapis/api/httpbody
 google.golang.org/genproto/googleapis/api/label
 google.golang.org/genproto/googleapis/api/metric
 google.golang.org/genproto/googleapis/api/monitoredres
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20260519071638-aa98bba5eb94
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260523011958-0a33c5d7ca68
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/errdetails

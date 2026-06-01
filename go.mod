@@ -31,14 +31,14 @@ require (
 require (
 	buf.build/gen/go/bufbuild/bufplugin/protocolbuffers/go v1.36.11-20250718181942-e35f9b667443.1 // indirect
 	buf.build/gen/go/bufbuild/protodescriptor/protocolbuffers/go v1.36.11-20250109164928-1da0de137947.1 // indirect
-	buf.build/gen/go/bufbuild/registry/connectrpc/go v1.19.2-20260126144947-819582968857.1 // indirect
-	buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.36.11-20260126144947-819582968857.1 // indirect
+	buf.build/gen/go/bufbuild/registry/connectrpc/go v1.20.0-20260507063250-43b0c5a6cd08.1 // indirect
+	buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.36.11-20260507063250-43b0c5a6cd08.1 // indirect
 	buf.build/gen/go/pluginrpc/pluginrpc/protocolbuffers/go v1.36.11-20241007202033-cf42259fcbfc.1 // indirect
 	buf.build/go/app v0.2.1-0.20260407195847-833f8f978cda // indirect
 	buf.build/go/bufplugin v0.10.0 // indirect
 	buf.build/go/bufprivateusage v0.1.0 // indirect
 	buf.build/go/interrupt v1.1.0 // indirect
-	buf.build/go/protoyaml v0.6.0 // indirect
+	buf.build/go/protoyaml v0.7.0 // indirect
 	buf.build/go/spdx v0.2.0 // indirect
 	buf.build/go/standard v0.1.1-0.20260325175353-2b287e071df5 // indirect
 	cel.dev/expr v0.25.2 // indirect
@@ -71,8 +71,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
-	github.com/bufbuild/buf v1.69.0 // indirect
-	github.com/bufbuild/protocompile v0.14.2-0.20260429155904-12ef1ef2ce91 // indirect
+	github.com/bufbuild/buf v1.70.0 // indirect
+	github.com/bufbuild/protocompile v0.14.2-0.20260522222248-64e6ad034132 // indirect
 	github.com/bufbuild/protoplugin v0.0.0-20260414125817-25d1d281b46b // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -86,7 +86,7 @@ require (
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/cli v29.5.1+incompatible // indirect
+	github.com/docker/cli v29.5.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.7 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -152,7 +152,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.0 // indirect
+	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
@@ -193,9 +193,9 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.1 // indirect
+	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
@@ -203,8 +203,8 @@ require (
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto v0.0.0-20260519071638-aa98bba5eb94 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260519071638-aa98bba5eb94 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260519071638-aa98bba5eb94 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260523011958-0a33c5d7ca68 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260523011958-0a33c5d7ca68 // indirect
 	google.golang.org/grpc v1.81.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect

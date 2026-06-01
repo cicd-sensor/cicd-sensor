@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,10 +18,10 @@ import (
 	"bytes"
 	"encoding/json"
 
+	"go.yaml.in/yaml/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"gopkg.in/yaml.v3"
 )
 
 // Marshal marshals the given message to YAML.
@@ -82,7 +82,7 @@ func (o MarshalOptions) Marshal(message proto.Message) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func jsonDataToYAML(data []byte) (interface{}, error) {
+func jsonDataToYAML(data []byte) (any, error) {
 	// YAML unmarshal preserves the order of fields, but is more restrictive than JSON.
 	// Prefer it if the data is valid YAML.
 	jsonNode := &yaml.Node{}
@@ -96,7 +96,7 @@ func jsonDataToYAML(data []byte) (interface{}, error) {
 
 	// If the data is not valid YAML (e.g. a string contains control characters),
 	// fall back to JSON unmarshal, which loses field order, but is more permissive.
-	var jsonValue interface{}
+	var jsonValue any
 	if err := json.Unmarshal(data, &jsonValue); err != nil {
 		return nil, err
 	}

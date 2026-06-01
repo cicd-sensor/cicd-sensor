@@ -162,8 +162,6 @@ type Module struct {
 	// This Label may not yet exist. When a Module is created, it has no Commits, and Labels
 	// must have a Commit, so this Label is not created when a Module is created. Additionally,
 	// a User may modify the name of the default Label without this Label yet being created.
-	//
-	// This could also be the name of an archived Label.
 	DefaultLabelName string `protobuf:"bytes,10,opt,name=default_label_name,json=defaultLabelName,proto3" json:"default_label_name,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -354,8 +352,6 @@ type Module_builder struct {
 	// This Label may not yet exist. When a Module is created, it has no Commits, and Labels
 	// must have a Commit, so this Label is not created when a Module is created. Additionally,
 	// a User may modify the name of the default Label without this Label yet being created.
-	//
-	// This could also be the name of an archived Label.
 	DefaultLabelName string
 }
 

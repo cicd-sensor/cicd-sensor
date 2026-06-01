@@ -1038,11 +1038,11 @@ const file_buf_registry_owner_v1_organization_service_proto_rawDesc = "" +
 	"\x15ORDER_CREATE_TIME_ASC\x10\x02\"\x98\x01\n" +
 	"\x19ListOrganizationsResponse\x120\n" +
 	"\x0fnext_page_token\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\rnextPageToken\x12I\n" +
-	"\rorganizations\x18\x02 \x03(\v2#.buf.registry.owner.v1.OrganizationR\rorganizations\"\x81\x03\n" +
+	"\rorganizations\x18\x02 \x03(\v2#.buf.registry.owner.v1.OrganizationR\rorganizations\"\x84\x03\n" +
 	"\x1aCreateOrganizationsRequest\x12\\\n" +
-	"\x06values\x18\x01 \x03(\v27.buf.registry.owner.v1.CreateOrganizationsRequest.ValueB\v\xbaH\b\x92\x01\x05\b\x01\x10\xfa\x01R\x06values\x1a\x84\x02\n" +
-	"\x05Value\x12;\n" +
-	"\x04name\x18\x01 \x01(\tB'\xbaH$\xc8\x01\x01r\x1f\x10\x02\x18 2\x19^[a-z][a-z0-9-]*[a-z0-9]$R\x04name\x12*\n" +
+	"\x06values\x18\x01 \x03(\v27.buf.registry.owner.v1.CreateOrganizationsRequest.ValueB\v\xbaH\b\x92\x01\x05\b\x01\x10\xfa\x01R\x06values\x1a\x87\x02\n" +
+	"\x05Value\x12>\n" +
+	"\x04name\x18\x01 \x01(\tB*\xbaH'\xc8\x01\x01r\"\x10\x01\x18 2\x1c^[a-z]([a-z0-9-]*[a-z0-9])?$R\x04name\x12*\n" +
 	"\vdescription\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\xde\x02R\vdescription\x12 \n" +
 	"\x03url\x18\x03 \x01(\tB\x0e\xbaH\v\xd8\x01\x01r\x06\x18\xff\x01\x88\x01\x01R\x03url\x12p\n" +
 	"\x13verification_status\x18\x04 \x01(\x0e25.buf.registry.owner.v1.OrganizationVerificationStatusB\b\xbaH\x05\x82\x01\x02\x10\x01R\x12verificationStatus\"r\n" +
