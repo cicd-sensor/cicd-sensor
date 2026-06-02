@@ -108,7 +108,7 @@ jobs:
       # at job end, which the downstream sign-tarballs and image
       # jobs sign with actions/attest as a runtime-trace attestation.
       - name: Start cicd-sensor (self-monitoring)
-        uses: cicd-sensor/cicd-sensor-action@d58c75bd4a482ae7ba2aa73588eaa081828cb81a # v0.0.20
+        uses: cicd-sensor/cicd-sensor-action@e02b263ab3e3be401d9a390bc810681a37ed9d6f # v0.0.26
 
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
