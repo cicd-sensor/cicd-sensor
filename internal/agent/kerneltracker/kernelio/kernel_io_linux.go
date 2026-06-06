@@ -90,7 +90,14 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	} {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})
 		if err != nil {
-			return nil, fmt.Errorf("attach %s tracing program: %w", attach.name, err)
+			// Custom kernels (e.g. Blacksmith CI runners, kernel 6.5.13) do not
+			// expose some LSM hook functions as fentry-attachable, so AttachTracing
+			// fails for those programs. A single unsupported probe must not abort the
+			// whole agent: warn, skip it, and keep the probes that do attach.
+			// Coverage degrades but the agent starts. (Experimental fallback.)
+			kernelIO.logger.Warn("skipping tracing program not attachable on this kernel",
+				"program", attach.name, "error", err.Error())
+			continue
 		}
 		kernelIO.links = append(kernelIO.links, attached)
 	}
@@ -113,10 +120,18 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			Program: attach.program,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("attach %s program: %w", attach.name, err)
+			// Same experimental fallback as the tracing loop above: don't abort the
+			// agent if a cgroup program cannot attach on this kernel.
+			kernelIO.logger.Warn("skipping cgroup program not attachable on this kernel",
+				"program", attach.name, "error", err.Error())
+			continue
 		}
 		kernelIO.links = append(kernelIO.links, attached)
 	}
+
+	// Surface how many probes actually attached so a degraded (custom-kernel)
+	// start is visible in the agent log.
+	kernelIO.logger.Info("kernel probes attached", "count", len(kernelIO.links))
 
 	reader, err := ringbuf.NewReader(kernelIO.objs.Events)
 	if err != nil {
