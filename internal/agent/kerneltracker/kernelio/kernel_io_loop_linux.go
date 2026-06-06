@@ -142,12 +142,11 @@ func (kernelIO *LinuxKernelIO) Close() error {
 			}
 		}
 	}
-	if err := kernelIO.objs.Close(); err != nil {
-		if firstErr == nil {
-			firstErr = err
-		} else {
-			kernelIO.logger.Warn("bpf_objects_close_failed", "error", err)
-		}
+	// coll owns all program/map FDs (objs only holds aliases into coll.Maps, so
+	// closing coll is enough and avoids a double close). Collection.Close has no
+	// return value.
+	if kernelIO.coll != nil {
+		kernelIO.coll.Close()
 	}
 
 	return firstErr
