@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cicd-sensor-github-arc-kubernetes-mode-hook-wrapper
+  namespace: arc-runners
+data:
+  arc-hook-wrapper.js: |
+    #!/usr/bin/env node
+
+    const fs = require("fs");
+    const os = require("os");
+    const path = require("path");
+    const { spawn } = require("child_process");
+
+    const IDENTITY_ANNOTATION = "cicd-sensor.github.io/identity";
+    const METADATA_ANNOTATION = "cicd-sensor.github.io/metadata";
+    const DEFAULT_K8S_HOOK = "/home/runner/k8s/index.js";
+
+    function readStdin() {
+      return new Promise((resolve, reject) => {
+        let input = "";
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", chunk => {
+          input += chunk;
+        });
+        process.stdin.on("end", () => resolve(input));
+        process.stdin.on("error", reject);
+      });
+    }
+
+    function pickEnv(names) {
+      const values = {};
+      for (const name of names) {
+        const value = process.env[name];
+        if (value) {
+          values[name] = value;
+        }
+      }
+      return values;
+    }
+
+    function buildIdentity() {
+      return {
+        provider: "github",
+        repository: process.env.GITHUB_REPOSITORY || "",
+        run_id: process.env.GITHUB_RUN_ID || "",
+        run_attempt: process.env.GITHUB_RUN_ATTEMPT || "",
+        job: process.env.GITHUB_JOB || "",
+      };
+    }
+
+    function buildMetadata() {
+      const env = pickEnv([
+        "GITHUB_WORKFLOW",
+        "GITHUB_WORKFLOW_REF",
+        "GITHUB_WORKFLOW_SHA",
+        "GITHUB_SHA",
+        "GITHUB_REF",
+        "GITHUB_ACTOR",
+        "GITHUB_ACTOR_ID",
+        "RUNNER_NAME",
+      ]);
+      return {
+        workflow: env.GITHUB_WORKFLOW || "",
+        workflow_ref: env.GITHUB_WORKFLOW_REF || "",
+        workflow_sha: env.GITHUB_WORKFLOW_SHA || "",
+        sha: env.GITHUB_SHA || "",
+        ref: env.GITHUB_REF || "",
+        actor: env.GITHUB_ACTOR || "",
+        actor_id: env.GITHUB_ACTOR_ID || "",
+        runner_name: env.RUNNER_NAME || "",
+      };
+    }
+
+    function shouldInject(command) {
+      return command === "prepare_job" || command === "run_container_step";
+    }
+
+    function hasRequiredIdentity(identity) {
+      return Boolean(
+        identity.repository &&
+        identity.run_id &&
+        identity.run_attempt &&
+        identity.job
+      );
+    }
+
+    function yamlString(value) {
+      return JSON.stringify(String(value));
+    }
+
+    function templateYaml(identity, metadata) {
+      return [
+        "metadata:",
+        "  annotations:",
+        `    ${IDENTITY_ANNOTATION}: ${yamlString(JSON.stringify(identity))}`,
+        `    ${METADATA_ANNOTATION}: ${yamlString(JSON.stringify(metadata))}`,
+        "",
+      ].join("\n");
+    }
+
+    function writeTemplate(identity, metadata) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cicd-sensor-arc-hook-"));
+      const file = path.join(dir, `hook-template-${process.pid}-${Date.now()}.yaml`);
+      fs.writeFileSync(file, templateYaml(identity, metadata), { mode: 0o600 });
+      return file;
+    }
+
+    function runOfficialHook(input, env) {
+      return new Promise((resolve, reject) => {
+        const hookPath = process.env.CICD_SENSOR_OFFICIAL_K8S_HOOK || DEFAULT_K8S_HOOK;
+        const child = spawn(process.execPath, [hookPath, ...process.argv.slice(2)], {
+          stdio: ["pipe", "inherit", "inherit"],
+          env,
+        });
+        child.stdin.end(input);
+        child.on("error", reject);
+        child.on("exit", (code, signal) => {
+          if (signal) {
+            reject(new Error(`official hook exited by signal ${signal}`));
+            return;
+          }
+          resolve(code || 0);
+        });
+      });
+    }
+
+    async function main() {
+      const input = await readStdin();
+      let parsed;
+      try {
+        parsed = JSON.parse(input);
+      } catch (err) {
+        console.error(`cicd-sensor hook wrapper: invalid hook input JSON: ${err.message}`);
+        process.exit(1);
+      }
+
+      const env = { ...process.env };
+      if (shouldInject(parsed.command)) {
+        const identity = buildIdentity();
+        if (hasRequiredIdentity(identity)) {
+          env.ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE = writeTemplate(identity, buildMetadata());
+        } else {
+          console.error("cicd-sensor hook wrapper: GitHub identity is incomplete; delegating without annotations");
+        }
+      }
+
+      const code = await runOfficialHook(input, env);
+      process.exit(code);
+    }
+
+    main().catch(err => {
+      console.error(`cicd-sensor hook wrapper: ${err.stack || err.message}`);
+      process.exit(1);
+    });

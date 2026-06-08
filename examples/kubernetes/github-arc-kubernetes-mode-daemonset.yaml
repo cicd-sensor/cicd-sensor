@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cicd-sensor-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cicd-sensor
+  namespace: cicd-sensor-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cicd-sensor-manager
+  namespace: cicd-sensor-system
+type: Opaque
+stringData:
+  token: sk_cs_replace_me
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cicd-sensor
+  namespace: cicd-sensor-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cicd-sensor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cicd-sensor
+    spec:
+      serviceAccountName: cicd-sensor
+      hostPID: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: agent
+          image: ghcr.io/cicd-sensor/cicd-sensor-agent:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - start
+            - --provider
+            - github
+            - --runner
+            - kubernetes
+            - --manager-url
+            - $(CICD_SENSOR_MANAGER_URL)
+          env:
+            - name: CICD_SENSOR_MANAGER_URL
+              value: https://cicd-sensor-manager.example.com
+            - name: CICD_SENSOR_MANAGER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cicd-sensor-manager
+                  key: token
+            - name: CICD_SENSOR_GITHUB_K8S_RUNNER_MODE
+              value: kubernetes
+            - name: CICD_SENSOR_GITHUB_K8S_START_SOCKET
+              value: /run/cicd-sensor/github-k8s/start.sock
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: true
+          volumeMounts:
+            - name: run
+              mountPath: /run/cicd-sensor
+            - name: cgroupfs
+              mountPath: /sys/fs/cgroup
+              readOnly: true
+        - name: nri
+          image: ghcr.io/cicd-sensor/cicd-sensor-agent:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - nri
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: run
+              mountPath: /run/cicd-sensor
+            - name: nri-socket
+              mountPath: /var/run/nri/nri.sock
+      volumes:
+        - name: run
+          hostPath:
+            path: /run/cicd-sensor
+            type: DirectoryOrCreate
+        - name: nri-socket
+          hostPath:
+            path: /var/run/nri/nri.sock
+            type: Socket
+        - name: cgroupfs
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory

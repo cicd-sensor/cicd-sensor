@@ -18,7 +18,11 @@ cicd-sensor does not require a GitLab-specific hook in this mode.
 
 Install cicd-sensor as a node-level DaemonSet with NRI enabled:
 
-- `examples/kubernetes/cicd-sensor-daemonset.yaml`
+- `examples/kubernetes/gitlab-runner-kubernetes-executor-daemonset.yaml`
+
+Configure GitLab Runner Kubernetes executor with:
+
+- `examples/kubernetes/gitlab-runner-kubernetes-executor-values.yaml`
 
 GitLab job Pods do not mount host `containerd`, CRI, NRI, or cicd-sensor staging sockets.
 

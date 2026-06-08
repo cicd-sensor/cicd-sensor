@@ -72,11 +72,7 @@ Kubernetes runner deployments use:
 
 ## YAML
 
-The shared node-level install starts from:
-
-- `examples/kubernetes/cicd-sensor-daemonset.yaml`
-
-Provider-specific runner YAML or Helm values are listed on the [GitHub ARC runner scale sets](github-arc.md) and [GitLab Runner Kubernetes executor](gitlab-runner.md) pages.
+Use the mode-specific examples listed on the [GitHub ARC runner scale sets](github-arc.md) and [GitLab Runner Kubernetes executor](gitlab-runner.md) pages.
 
 ## Security notes
 
