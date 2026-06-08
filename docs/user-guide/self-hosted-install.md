@@ -1,10 +1,10 @@
-# Self-hosted Machine install
+# Machine runner install
 
-This page covers the host-side setup shared by GitHub Actions Self-hosted Machine Runners and GitLab CI/CD Self-hosted Docker executors.
+This page covers the host-side setup shared by GitHub Actions self-hosted runners on machines and GitLab Runner Docker executor hosts.
 
-In self-hosted deployments, install the cicd-sensor Agent and Docker proxy on the runner host and operate them with cicd-sensor Manager.
-For GitHub Actions-specific hook setup, see [GitHub Actions self-hosted](github-self-hosted.md).
-For the GitLab CI/CD runner model, see [GitLab CI/CD self-hosted](gitlab-ci.md).
+For these machine-based deployments, install the cicd-sensor Agent and Docker proxy on the runner host and operate them with cicd-sensor Manager.
+For GitHub Actions-specific hook setup, see [GitHub Actions machine runner](github-self-hosted.md).
+For the GitLab Runner Docker executor model, see [GitLab Runner Docker executor](gitlab-ci.md).
 
 ## OS / Linux prerequisites
 
@@ -85,8 +85,8 @@ Set `--provider` for the target environment.
 
 | Environment | `--provider` | `--runner` |
 | --- | --- | --- |
-| GitHub Actions Self-hosted Machine Runner | `github` | `machine` |
-| GitLab CI/CD Self-hosted Docker executor | `gitlab` | `machine` |
+| GitHub Actions self-hosted runner on a machine | `github` | `machine` |
+| GitLab Runner Docker executor | `gitlab` | `machine` |
 
 ```ini
 # /etc/systemd/system/cicd-sensor-agent.service
@@ -131,7 +131,7 @@ Remove it if your maintenance workflow normally uses stop / restart.
 
 ## Docker proxy
 
-Self-hosted Machine Runners assume dockerd.
+Machine runner deployments assume dockerd.
 Place `cicd-sensor proxy dockerd` in front of the Docker socket so cicd-sensor can observe container creation.
 
 After installation, workflows and runner-side Docker clients still connect to `/run/docker.sock`.

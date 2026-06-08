@@ -45,7 +45,7 @@ jobs:
 ```
 
 See [GitHub-hosted runner](user-guide/github-hosted.md) for details.
-For self-hosted runner fleets or GitLab CI/CD, choose a deployment path from the [User Guide](user-guide/overview.md).
+For machine runners, ARC runner scale sets, or GitLab Runner executors, choose a deployment path from the [User Guide](user-guide/overview.md).
 
 ## Why CI/CD runtime needs this
 

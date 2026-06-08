@@ -25,7 +25,7 @@ flowchart LR
 
 The Manager is the only path that ships logs off the runner and the single point of central, real-time fleet management.
 
-- **Required** for any self-hosted runner deployment (Self-hosted Machine Runner, GitLab Runner). Config, rules, and log delivery all go through the Manager.
+- **Required** for machine runner and Kubernetes runner deployments. Config, rules, and log delivery all go through the Manager.
 - **Required** to ship Summary, Detection, or Runtime Event Logs anywhere — including from GitHub-hosted runners — and to distribute organization-wide rules from a central source.
 - **Optional** only in GitHub-hosted runner standalone mode, which produces report and attestation artifacts in the job itself with repository-local config.
 

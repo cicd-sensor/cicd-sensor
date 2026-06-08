@@ -117,9 +117,9 @@ For implementation ownership boundaries, see [Agent Ownership Boundaries](agent-
 | Provider | Runner | Start entrypoint | cgroup seed |
 | --- | --- | --- | --- |
 | GitHub Actions | GitHub-hosted runner | `/v1/github/project/start` | cgroup of the project start peer PID |
-| GitHub Actions | Self-hosted Machine Runner | `/v1/github/host/start` | cgroup of the hook peer PID |
-| GitLab CI/CD | Self-hosted Docker executor | `/v1/gitlab/staging/put` -> lazy `/v1/gitlab/host/start` | Docker label evidence and staging promote |
-| GitHub ARC / GitLab Kubernetes executor | Planned | TBD | NRI / Pod metadata and similar options are under consideration |
+| GitHub Actions | Self-hosted runner on a machine | `/v1/github/host/start` | cgroup of the hook peer PID |
+| GitLab CI/CD | GitLab Runner Docker executor | `/v1/gitlab/staging/put` -> lazy `/v1/gitlab/host/start` | Docker label evidence and staging promote |
+| GitHub Actions / GitLab CI/CD | ARC runner scale set / GitLab Runner Kubernetes executor | Planned | NRI and hooks are under consideration |
 
 The agent process selects one provider at startup.
 The Listener mounts either `/v1/github/*` or `/v1/gitlab/*`, not both.

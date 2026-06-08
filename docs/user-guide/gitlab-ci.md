@@ -1,16 +1,16 @@
-# GitLab CI/CD self-hosted
+# GitLab Runner Docker executor
 
-For GitLab CI/CD, the primary supported target is a self-hosted GitLab Runner using the Docker executor.
+For GitLab CI/CD, the primary supported target is GitLab Runner using the Docker executor.
 
-Complete [Self-hosted Machine install](self-hosted-install.md) first.
+Complete [Machine runner install](self-hosted-install.md) first.
 Unlike GitHub Actions, GitLab CI/CD does not require workflow steps or project-side job hooks. The runner host-side Agent and Docker proxy monitor the job runtime.
 
 ## Support status
 
 | Environment | Status |
 | --- | --- |
-| Self-hosted Docker executor | Supported target |
-| Self-hosted Kubernetes executor | Planned |
+| GitLab Runner Docker executor | Supported target |
+| GitLab Runner Kubernetes executor | In development |
 | Self-hosted Shell executor | Not planned |
 | GitLab-hosted runner | Not supported due to technical constraints |
 
@@ -43,7 +43,7 @@ flowchart LR
 
 ## Install notes
 
-In the [Self-hosted Machine install](self-hosted-install.md) systemd units, use these options for GitLab CI/CD.
+In the [Machine runner install](self-hosted-install.md) systemd units, use these options for GitLab CI/CD.
 
 | Component | Option |
 | --- | --- |
