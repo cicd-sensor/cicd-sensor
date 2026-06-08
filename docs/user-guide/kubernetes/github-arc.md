@@ -38,12 +38,12 @@ The runner Pod is created before GitHub assigns a job, so NRI cannot build the j
 
 | Requirement | Default mode |
 | --- | --- |
-| Node install | `examples/kubernetes/github-arc-default-mode-daemonset.yaml` |
+| Node install | `examples/kubernetes/github-arc/default-mode/daemonset.yaml` |
 | Job hook | `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner container. |
-| Job hook ConfigMap | `examples/kubernetes/github-arc-job-hook-configmap.yaml` |
+| Job hook ConfigMap | `examples/kubernetes/github-arc/common/job-hook-configmap.yaml` |
 | GitHub k8s start socket | Required in the runner container so the job hook can start monitoring and bind the runner cgroup. |
 | NRI | Required in the node-level DaemonSet, but not used to identify the GitHub job in this mode. |
-| ARC values | `examples/kubernetes/github-arc-default-mode-values.yaml` |
+| ARC values | `examples/kubernetes/github-arc/default-mode/values.yaml` |
 
 ### dind mode
 
@@ -51,12 +51,12 @@ In dind mode, ARC creates a runner container and a privileged dind sidecar in th
 
 | Requirement | dind mode |
 | --- | --- |
-| Node install | `examples/kubernetes/github-arc-dind-mode-daemonset.yaml` |
+| Node install | `examples/kubernetes/github-arc/dind-mode/daemonset.yaml` |
 | Job hook | `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner container. |
-| Job hook ConfigMap | `examples/kubernetes/github-arc-job-hook-configmap.yaml` |
+| Job hook ConfigMap | `examples/kubernetes/github-arc/common/job-hook-configmap.yaml` |
 | GitHub k8s start socket | Required in the runner container so the job hook can start monitoring and bind the runner plus dind sidecar cgroups. |
 | NRI | Required in the node-level DaemonSet, but host NRI does not see inner Docker lifecycle created by dind. |
-| ARC values | `examples/kubernetes/github-arc-dind-mode-values.yaml` |
+| ARC values | `examples/kubernetes/github-arc/dind-mode/values.yaml` |
 
 dind is a compatibility mode.
 It supports existing Docker-heavy workflows, but privileged dind materially increases the risk of host compromise compared with ordinary Kubernetes job containers.
@@ -67,13 +67,13 @@ In Kubernetes mode, ARC uses GitHub's container hooks to create workflow job con
 
 | Requirement | Kubernetes mode |
 | --- | --- |
-| Node install | `examples/kubernetes/github-arc-kubernetes-mode-daemonset.yaml` |
+| Node install | `examples/kubernetes/github-arc/kubernetes-mode/daemonset.yaml` |
 | Job hook | `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner container. |
-| Job hook ConfigMap | `examples/kubernetes/github-arc-job-hook-configmap.yaml` |
+| Job hook ConfigMap | `examples/kubernetes/github-arc/common/job-hook-configmap.yaml` |
 | GitHub k8s start socket | Required in the runner container so the job hook can start monitoring and bind the runner cgroup. |
-| Container customization hook wrapper | Required. Use `examples/kubernetes/github-arc-kubernetes-mode-hook-wrapper-configmap.yaml`. |
+| Container customization hook wrapper | Required. Use `examples/kubernetes/github-arc/kubernetes-mode/container-hook-wrapper-configmap.yaml`. |
 | NRI | Required. NRI reads injected Pod annotations and runtime cgroup paths for workflow job, service, and container-action Pods. |
-| ARC values | `examples/kubernetes/github-arc-kubernetes-mode-values.yaml` |
+| ARC values | `examples/kubernetes/github-arc/kubernetes-mode/values.yaml` |
 
 Do not mount cicd-sensor sockets into workflow-created job, service, or step containers.
 
@@ -83,13 +83,13 @@ Current Kubernetes examples:
 
 | File | Use |
 | --- | --- |
-| `examples/kubernetes/github-arc-default-mode-daemonset.yaml` | Node-level install for ARC default mode. |
-| `examples/kubernetes/github-arc-default-mode-values.yaml` | ARC default mode runner scale set values. |
-| `examples/kubernetes/github-arc-dind-mode-daemonset.yaml` | Node-level install for ARC dind mode. |
-| `examples/kubernetes/github-arc-dind-mode-values.yaml` | ARC dind mode runner scale set values. |
-| `examples/kubernetes/github-arc-job-hook-configmap.yaml` | Job hook script used by all ARC modes. |
-| `examples/kubernetes/github-arc-kubernetes-mode-daemonset.yaml` | Node-level install for ARC Kubernetes mode. |
-| `examples/kubernetes/github-arc-kubernetes-mode-hook-wrapper-configmap.yaml` | ARC Kubernetes mode container customization hook wrapper. |
-| `examples/kubernetes/github-arc-kubernetes-mode-values.yaml` | ARC Kubernetes mode Helm values snippet. |
+| `examples/kubernetes/github-arc/default-mode/daemonset.yaml` | Node-level install for ARC default mode. |
+| `examples/kubernetes/github-arc/default-mode/values.yaml` | ARC default mode runner scale set values. |
+| `examples/kubernetes/github-arc/dind-mode/daemonset.yaml` | Node-level install for ARC dind mode. |
+| `examples/kubernetes/github-arc/dind-mode/values.yaml` | ARC dind mode runner scale set values. |
+| `examples/kubernetes/github-arc/common/job-hook-configmap.yaml` | Job hook script used by all ARC modes. |
+| `examples/kubernetes/github-arc/kubernetes-mode/daemonset.yaml` | Node-level install for ARC Kubernetes mode. |
+| `examples/kubernetes/github-arc/kubernetes-mode/container-hook-wrapper-configmap.yaml` | ARC Kubernetes mode container customization hook wrapper. |
+| `examples/kubernetes/github-arc/kubernetes-mode/values.yaml` | ARC Kubernetes mode Helm values snippet. |
 
 For implementation details, see [Kubernetes Runtime](../../developer-guide/kubernetes-runtime.md).
