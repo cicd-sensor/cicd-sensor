@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	defaultSocketPath               = "/run/cicd-sensor/agent.sock"
-	defaultGitHubK8sStartSocketPath = "/run/cicd-sensor/github-k8s/start.sock"
+	defaultSocketPath                = "/run/cicd-sensor/agent.sock"
+	defaultGitHubK8sRunnerSocketPath = "/run/cicd-sensor/github-k8s/runner.sock"
 )
 
 func main() {

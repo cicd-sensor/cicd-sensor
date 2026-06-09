@@ -353,6 +353,10 @@ func TestResolve_ModifierMaxAlertsAndExceptions(t *testing.T) {
 }
 
 func TestResolve_ModifierAddsTargetExclude(t *testing.T) {
+	backing := []rule.RuleTargetMatcher{
+		{ProviderHost: "github.com"},
+		{Path: "sentinel"},
+	}
 	got := rule.Resolve(rule.ResolveInput{
 		RuleSets: []rule.RuleSet{
 			testSet("s1", rule.Rule{
@@ -361,9 +365,7 @@ func TestResolve_ModifierAddsTargetExclude(t *testing.T) {
 				Condition: `process_name == "bash"`,
 				Action:    rule.RuleActionDetect,
 				Target: rule.RuleTarget{
-					Exclude: []rule.RuleTargetMatcher{{
-						ProviderHost: "github.com",
-					}},
+					Exclude: backing[:1],
 				},
 			}),
 		},
@@ -385,6 +387,9 @@ func TestResolve_ModifierAddsTargetExclude(t *testing.T) {
 	}
 	if exclude[0].ProviderHost != "github.com" || exclude[1].Path != "/acme/private" {
 		t.Fatalf("exclude: got %#v", exclude)
+	}
+	if got := backing[1].Path; got != "sentinel" {
+		t.Fatalf("input target exclude backing array was mutated: got %q, want sentinel", got)
 	}
 }
 

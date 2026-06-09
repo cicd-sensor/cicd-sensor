@@ -125,9 +125,11 @@ func (l *Listener) handleGitLabStagingPut(w http.ResponseWriter, r *http.Request
 	l.writeJSON(r.Context(), w, http.StatusOK, map[string]string{"status": status})
 }
 
-// handleGitLabK8sStagingPut records NRI-discovered Kubernetes containers. It
-// stages only; NRI uses the same 404 -> host/start -> retry flow as the Docker
-// proxy so GitLab Job lifecycle creation stays on /v1/gitlab/host/start.
+// handleGitLabK8sStagingPut records NRI-discovered Kubernetes containers.
+// Unlike the Docker proxy socket flow, Kubernetes/NRI does not do
+// staging -> host/start -> staging across separate requests. NRI runs in
+// containerd's callback path, so this local handler owns lazy Job creation and
+// must not force NRI through an extra host/start round trip.
 func (l *Listener) handleGitLabK8sStagingPut(w http.ResponseWriter, r *http.Request) {
 	if !l.requireRequestPeerUIDMatchesAgentOwner(w, r) {
 		return
@@ -152,7 +154,7 @@ func (l *Listener) handleGitLabK8sStagingPut(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	status, ok := l.stageGitLabBasename(w, r, req.Basename, identity)
+	status, ok := l.stageGitLabK8sBasename(w, r, req.Basename, identity, req.Metadata)
 	if !ok {
 		return
 	}
@@ -163,6 +165,33 @@ func (l *Listener) handleGitLabK8sStagingPut(w http.ResponseWriter, r *http.Requ
 		"status", status,
 	)
 	l.writeJSON(r.Context(), w, http.StatusOK, map[string]string{"status": status})
+}
+
+func (l *Listener) stageGitLabK8sBasename(w http.ResponseWriter, r *http.Request, basename string, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) (status string, ok bool) {
+	if err := l.jobRegistry.StageCgroupBasenameForJob(r.Context(), basename, identity); err == nil {
+		return "staged", true
+	} else if !errors.Is(err, jobregistry.ErrJobNotFound) {
+		l.logger.ErrorContext(r.Context(), "gitlab_k8s_staging_put_failed", "error", err)
+		l.writeError(w, r, http.StatusInternalServerError, "internal error")
+		return "", false
+	}
+
+	// Kubernetes/NRI has identity and cgroup basename in one request. Create
+	// the GitLab host Job locally, then retry staging before returning to NRI.
+	if _, err := l.jobRegistry.ApplyGitLabHostStart(r.Context(), identity, metadata, l.runnerType, l.hostManagerConn, l.hostManagerClient); err != nil {
+		l.writeStartError(w, r, "gitlab_k8s_host_start_failed", err)
+		return "", false
+	}
+	if err := l.jobRegistry.StageCgroupBasenameForJob(r.Context(), basename, identity); err != nil {
+		if errors.Is(err, jobregistry.ErrJobNotFound) {
+			l.writeError(w, r, http.StatusNotFound, "job_not_found")
+			return "", false
+		}
+		l.logger.ErrorContext(r.Context(), "gitlab_k8s_staging_put_failed", "error", err)
+		l.writeError(w, r, http.StatusInternalServerError, "internal error")
+		return "", false
+	}
+	return "staged", true
 }
 
 func (l *Listener) stageGitLabBasename(w http.ResponseWriter, r *http.Request, basename string, identity jobcontext.JobIdentity) (status string, ok bool) {

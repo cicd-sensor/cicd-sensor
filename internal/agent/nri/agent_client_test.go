@@ -54,15 +54,13 @@ func TestAgentClient_StageGitLabWithIdentityAndMetadata(t *testing.T) {
 	}
 }
 
-func TestAgentClient_StageGitLabLazyCreatesAfterJobNotFound(t *testing.T) {
+func TestAgentClient_StageGitLabDoesNotCallHostStartOnJobNotFound(t *testing.T) {
 	var calls []string
-	stageCalls := 0
 	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
 	socket := startNRIUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.URL.Path)
 		switch r.URL.Path {
 		case "/v1/gitlab/k8s/staging/put":
-			stageCalls++
 			var req jobcontext.GitLabK8sStagingPutRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("decode staging: %v", err)
@@ -70,25 +68,10 @@ func TestAgentClient_StageGitLabLazyCreatesAfterJobNotFound(t *testing.T) {
 			if req.Basename != "cri-containerd-build.scope" || req.JobIdentity != identity {
 				t.Fatalf("staging request: %+v", req)
 			}
-			if stageCalls == 1 {
-				http.Error(w, "job_not_found", http.StatusNotFound)
-				return
-			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"staged"}`))
-		case "/v1/gitlab/host/start":
-			var req jobcontext.GitLabHostStartRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				t.Fatalf("decode host start: %v", err)
-			}
-			if req.JobIdentity != identity {
-				t.Fatalf("host start identity: %+v", req.JobIdentity)
-			}
 			if req.Metadata.CommitSHA != "abc123" {
-				t.Fatalf("host start metadata: %+v", req.Metadata)
+				t.Fatalf("staging metadata: %+v", req.Metadata)
 			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"ok"}`))
+			http.Error(w, "job_not_found", http.StatusNotFound)
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -101,14 +84,10 @@ func TestAgentClient_StageGitLabLazyCreatesAfterJobNotFound(t *testing.T) {
 		Metadata: jobcontext.JobMetadata{CommitSHA: "abc123"},
 	}
 
-	if err := client.stage(context.Background(), decision); err != nil {
-		t.Fatalf("stage: %v", err)
+	if err := client.stage(context.Background(), decision); err == nil {
+		t.Fatal("stage error is nil")
 	}
-	wantCalls := []string{
-		"/v1/gitlab/k8s/staging/put",
-		"/v1/gitlab/host/start",
-		"/v1/gitlab/k8s/staging/put",
-	}
+	wantCalls := []string{"/v1/gitlab/k8s/staging/put"}
 	if len(calls) != len(wantCalls) {
 		t.Fatalf("calls: got %#v, want %#v", calls, wantCalls)
 	}

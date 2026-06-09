@@ -121,7 +121,7 @@ For implementation ownership boundaries, see [Agent Ownership Boundaries](agent-
 | GitLab CI/CD | GitLab Runner Docker executor | `/v1/gitlab/staging/put` -> lazy `/v1/gitlab/host/start` | Docker label evidence and staging promote |
 | GitHub Actions | ARC default / dind mode | `/v1/github/k8s/start` | cgroup of the job hook peer PID; dind also binds the Pod cgroup tree |
 | GitHub Actions | ARC Kubernetes mode | `/v1/github/k8s/start` + `/v1/github/k8s/staging/put` | job hook peer PID plus NRI-provided container cgroup basenames |
-| GitLab CI/CD | GitLab Runner Kubernetes executor | `/v1/gitlab/k8s/staging/put` -> lazy `/v1/gitlab/host/start` | GitLab Pod metadata and NRI-provided container cgroup basenames |
+| GitLab CI/CD | GitLab Runner Kubernetes executor | `/v1/gitlab/k8s/staging/put` | GitLab Pod metadata and NRI-provided container cgroup basenames |
 
 The agent process selects one provider at startup.
 The Listener mounts either `/v1/github/*` or `/v1/gitlab/*`, not both.
@@ -142,11 +142,15 @@ The normal agent control socket exposes the provider route family selected at ag
 | GitHub | `/v1/github/project/result` | project action | Read project result data for reports and attestations. |
 | GitHub | `/v1/github/staging/put` | Docker proxy | Stage Docker-created container cgroup basenames by peer PID. |
 | GitHub | `/v1/github/k8s/staging/put` | host-side NRI observer | Stage Kubernetes-created container cgroup basenames by injected GitHub identity. |
-| GitLab | `/v1/gitlab/host/start` | Docker proxy / NRI lazy start | Create GitLab host Job state from runner metadata. |
+| GitLab | `/v1/gitlab/host/start` | Docker proxy lazy start | Create GitLab host Job state from runner metadata. |
 | GitLab | `/v1/gitlab/staging/put` | Docker proxy | Stage Docker-created container cgroup basenames by peer PID. |
-| GitLab | `/v1/gitlab/k8s/staging/put` | host-side NRI observer | Stage Kubernetes-created container cgroup basenames by GitLab identity. |
+| GitLab | `/v1/gitlab/k8s/staging/put` | host-side NRI observer | Create missing GitLab Kubernetes Jobs from cached host config, then stage container cgroup basenames. |
 
-GitHub ARC also uses a separate start-only socket mounted into the runner container:
+GitLab Kubernetes staging intentionally differs from the Docker proxy flow.
+The Docker proxy uses separate `staging -> /v1/gitlab/host/start -> staging` requests, while the Kubernetes/NRI endpoint performs lazy Job creation inside `/v1/gitlab/k8s/staging/put` so the NRI callback does not make multiple agent calls.
+Moving the Docker proxy to the same listener-owned lazy creation model is a follow-up cleanup, not part of the Kubernetes runtime change.
+
+GitHub ARC also uses a separate runner socket mounted into the runner container:
 
 | Endpoint | Caller | Purpose |
 | --- | --- | --- |
@@ -168,8 +172,9 @@ The control socket is mode `0o777`; request identification uses `SO_PEERCRED`:
 
 GitHub `project/start` is the mixed case: on a self-hosted runner the peer must already belong to the host Job (it attaches project scope); on a hosted runner no prior Job exists, so the peer's cgroup seeds a new project-only Job. Co-resident untrusted local users are out of scope.
 
-Kubernetes support keeps the GitHub k8s start endpoint on a separate start-only socket because the caller is inside the ARC runner container, while the normal control socket and NRI staging callers are host-side agent components.
+Kubernetes support keeps the GitHub k8s start endpoint on a separate runner socket because the caller is inside the ARC runner container, while the normal control socket and NRI staging callers are host-side agent components.
 This keeps the container-visible surface to job start only and preserves the boundary between runner container code and host-side staging / runtime control.
+The same runner socket may later carry GitHub Kubernetes project start/result endpoints, but the normal agent control socket should not be mounted into workflow containers.
 
 ## KernelTracker Primitives
 

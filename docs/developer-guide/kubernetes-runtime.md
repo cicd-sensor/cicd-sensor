@@ -8,7 +8,7 @@ Runner modes are install recipes; the runtime implementation uses NRI and hooks 
 | Mechanism | Used by | Responsibility |
 | --- | --- | --- |
 | NRI | GitLab Runner Kubernetes executor, GitHub ARC Kubernetes mode | Receives containerd `CreateContainer` events and stages Kubernetes-created container cgroups when job identity is available. |
-| Job hook | GitHub ARC default, dind, Kubernetes mode | Runs after GitHub job assignment and calls the GitHub k8s start socket so cicd-sensor can bind the runner cgroup. |
+| Job hook | GitHub ARC default, dind, Kubernetes mode | Runs after GitHub job assignment and calls the GitHub Kubernetes runner socket so cicd-sensor can bind the runner cgroup. |
 | Container customization hook wrapper | GitHub ARC Kubernetes mode | Wraps `ACTIONS_RUNNER_CONTAINER_HOOKS` and injects GitHub identity into workflow Pod annotations before ARC creates Kubernetes workflow containers. |
 
 References:
@@ -36,12 +36,16 @@ Container environment variables such as `CI_PROJECT_PATH`, `CI_PIPELINE_ID`, `CI
 `helper` and `init-permissions` are GitLab Runner infrastructure containers and are skipped by default.
 Containers without enough trusted Pod metadata to build a job identity are skipped.
 
+GitLab Kubernetes staging is a single local agent call.
+If the Job does not exist yet, the staging handler creates it from the cached host manager config and then stages the cgroup basename.
+The NRI observer does not call `/v1/gitlab/host/start` and does not fetch manager config remotely.
+
 ## GitHub ARC default mode
 
 When `containerMode` is unset, the job runs in the ARC runner container.
 The job hook is the identity point.
 NRI sees the runner container before job assignment, so it cannot create the GitHub job identity for default mode.
-The hook start request calls the GitHub k8s start socket, creates the job record, and binds the runner cgroup before workflow steps run.
+The hook start request calls the GitHub Kubernetes runner socket, creates the job record, and binds the runner cgroup before workflow steps run.
 
 ## GitHub ARC dind mode
 
@@ -49,7 +53,7 @@ In dind mode, ARC creates a runner container and a privileged dind sidecar in th
 Host NRI can see the runner and dind Kubernetes containers, but it does not see the inner Docker lifecycle managed by the dind daemon, so cicd-sensor does not use NRI for this mode.
 
 cicd-sensor uses the job hook as the identity point.
-At start time, the hook calls the GitHub k8s start socket.
+At start time, the hook calls the GitHub Kubernetes runner socket.
 The agent reads the hook peer PID's cgroup path, finds the kubelet-created Pod cgroup ancestor, and binds the Pod cgroup tree so the dind sidecar is tracked as part of the job.
 Once the dind sidecar cgroup is tracked, inner Docker cgroups created below it are picked up by the existing cgroup propagation path.
 
@@ -99,9 +103,17 @@ That basename is inserted into staging state using the same promotion model as t
 
 Kubernetes job Pods must not receive host `containerd`, CRI, NRI, or cicd-sensor staging sockets.
 The NRI staging endpoint is used by the host-side NRI observer.
-The GitHub k8s start socket is mounted only into GitHub ARC runner containers and exposes only start behavior.
+The GitHub Kubernetes runner socket is mounted only into GitHub ARC runner containers and currently exposes only start behavior.
 The container customization hook wrapper does not need cicd-sensor socket access.
+Future GitHub Kubernetes project start/result endpoints may use the same runner socket; the normal agent control socket should remain host-side only.
 For the exact Agent socket endpoints, see [Agent Architecture](agent.md#listener-endpoints).
+
+## Host manager config cache
+
+Kubernetes support uses manager-owned host config.
+The Agent fetches host manager config before exposing Kubernetes listeners and refreshes it in the background.
+Host start and K8s staging paths build host scope from that memory cache.
+This keeps containerd NRI callbacks local and bounded; manager unavailability after a successful fetch leaves the last known-good config in use.
 
 ## NRI availability
 

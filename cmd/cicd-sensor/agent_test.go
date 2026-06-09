@@ -113,23 +113,23 @@ func TestResolveAgentStartOptions(t *testing.T) {
 		wantSocket string
 	}{
 		{
-			name:       "github kubernetes uses default start socket",
+			name:       "github kubernetes uses default runner socket",
 			opts:       valid,
-			wantSocket: defaultGitHubK8sStartSocketPath,
+			wantSocket: defaultGitHubK8sRunnerSocketPath,
 		},
 		{
-			name:       "github kubernetes keeps explicit start socket",
-			opts:       withGitHubK8sStartSocket(valid, "/tmp/start.sock"),
-			wantSocket: "/tmp/start.sock",
+			name:       "github kubernetes keeps explicit runner socket",
+			opts:       withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"),
+			wantSocket: "/tmp/runner.sock",
 		},
 		{
-			name:       "github machine ignores start socket",
-			opts:       withAgentRunner(withGitHubK8sStartSocket(valid, "/tmp/start.sock"), "machine"),
+			name:       "github machine ignores runner socket",
+			opts:       withAgentRunner(withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"), "machine"),
 			wantSocket: "",
 		},
 		{
-			name:       "gitlab kubernetes ignores start socket",
-			opts:       withAgentProvider(withGitHubK8sStartSocket(valid, "/tmp/start.sock"), "gitlab"),
+			name:       "gitlab kubernetes ignores runner socket",
+			opts:       withAgentProvider(withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"), "gitlab"),
 			wantSocket: "",
 		},
 	}
@@ -137,8 +137,8 @@ func TestResolveAgentStartOptions(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := resolveAgentStartOptions(tc.opts)
-			if got.GitHubK8sStartSocketPath != tc.wantSocket {
-				t.Fatalf("github k8s start socket: got %q, want %q", got.GitHubK8sStartSocketPath, tc.wantSocket)
+			if got.GitHubK8sRunnerSocketPath != tc.wantSocket {
+				t.Fatalf("github k8s runner socket: got %q, want %q", got.GitHubK8sRunnerSocketPath, tc.wantSocket)
 			}
 		})
 	}
@@ -159,7 +159,7 @@ func withAgentShutdownGrace(opts agentStartOptions, shutdownGrace time.Duration)
 	return opts
 }
 
-func withGitHubK8sStartSocket(opts agentStartOptions, socketPath string) agentStartOptions {
-	opts.GitHubK8sStartSocketPath = socketPath
+func withGitHubK8sRunnerSocket(opts agentStartOptions, socketPath string) agentStartOptions {
+	opts.GitHubK8sRunnerSocketPath = socketPath
 	return opts
 }

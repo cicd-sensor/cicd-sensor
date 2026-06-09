@@ -25,13 +25,13 @@ const (
 )
 
 type agentStartOptions struct {
-	Provider                 string
-	Runner                   string
-	ManagerURL               string
-	ManagerToken             string
-	SocketPath               string
-	GitHubK8sStartSocketPath string
-	ShutdownGrace            time.Duration
+	Provider                  string
+	Runner                    string
+	ManagerURL                string
+	ManagerToken              string
+	SocketPath                string
+	GitHubK8sRunnerSocketPath string
+	ShutdownGrace             time.Duration
 }
 
 func runAgentSubcommand(args []string) {
@@ -55,10 +55,13 @@ func runAgentStart(args []string) {
 	var runner string
 	var managerURL string
 	var managerTokenFilePath string
-	var githubK8sStartSocketPath string
+	var githubK8sRunnerSocketPath string
 	var shutdownGrace time.Duration
 	socketPath = defaultSocketPath
-	githubK8sStartSocketPath = os.Getenv("CICD_SENSOR_GITHUB_K8S_START_SOCKET")
+	githubK8sRunnerSocketPath = os.Getenv("CICD_SENSOR_GITHUB_K8S_RUNNER_SOCKET")
+	if githubK8sRunnerSocketPath == "" {
+		githubK8sRunnerSocketPath = os.Getenv("CICD_SENSOR_GITHUB_K8S_START_SOCKET")
+	}
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), agentStartUsage)
 		fmt.Fprintln(fs.Output())
@@ -70,7 +73,7 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintf(fs.Output(), "  --socket PATH\n        Agent control socket path. (default %q)\n", defaultSocketPath)
-		fmt.Fprintf(fs.Output(), "  --github-k8s-start-socket PATH\n        GitHub Kubernetes start-only socket path. Defaults to %q for --provider github --runner kubernetes.\n", defaultGitHubK8sStartSocketPath)
+		fmt.Fprintf(fs.Output(), "  --github-k8s-start-socket PATH\n        GitHub Kubernetes runner socket path. Defaults to %q for --provider github --runner kubernetes.\n", defaultGitHubK8sRunnerSocketPath)
 		fmt.Fprintln(fs.Output(), "  --manager-url URL")
 		fmt.Fprintln(fs.Output(), "        Host scope manager URL. Required for host/start.")
 		fmt.Fprintln(fs.Output(), "  CICD_SENSOR_MANAGER_TOKEN or --manager-token-file PATH")
@@ -79,7 +82,7 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output(), "        Best-effort drain window used after SIGTERM. (default 8s)")
 	}
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
-	fs.StringVar(&githubK8sStartSocketPath, "github-k8s-start-socket", githubK8sStartSocketPath, "GitHub Kubernetes start-only socket path.")
+	fs.StringVar(&githubK8sRunnerSocketPath, "github-k8s-start-socket", githubK8sRunnerSocketPath, "GitHub Kubernetes runner socket path.")
 	fs.StringVar(&provider, "provider", "", "CI provider this host runs (github or gitlab).")
 	fs.StringVar(&runner, "runner", "", "Runner type (machine or kubernetes).")
 	fs.StringVar(&managerURL, "manager-url", "", "Host scope manager URL.")
@@ -100,12 +103,12 @@ func runAgentStart(args []string) {
 	slog.SetDefault(logger)
 
 	opts := agentStartOptions{
-		Provider:                 provider,
-		Runner:                   runner,
-		ManagerURL:               managerURL,
-		SocketPath:               socketPath,
-		GitHubK8sStartSocketPath: githubK8sStartSocketPath,
-		ShutdownGrace:            shutdownGrace,
+		Provider:                  provider,
+		Runner:                    runner,
+		ManagerURL:                managerURL,
+		SocketPath:                socketPath,
+		GitHubK8sRunnerSocketPath: githubK8sRunnerSocketPath,
+		ShutdownGrace:             shutdownGrace,
 	}
 	if err := validateAgentStartRequiredOptions(opts); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -116,7 +119,7 @@ func runAgentStart(args []string) {
 	slog.InfoContext(ctx, "agent_started",
 		"version", version.Current,
 		"socket", opts.SocketPath,
-		"github_k8s_start_socket", opts.GitHubK8sStartSocketPath,
+		"github_k8s_runner_socket", opts.GitHubK8sRunnerSocketPath,
 		"provider", opts.Provider,
 		"runner", opts.Runner,
 	)
@@ -148,7 +151,7 @@ func runAgentStart(args []string) {
 
 	a := agent.NewAgent(logger, opts.SocketPath, jobcontext.Provider(opts.Provider), opts.Runner, hostManager, hostManagerClient)
 	a.SetShutdownGrace(opts.ShutdownGrace)
-	a.SetGitHubK8sStartSocketPath(opts.GitHubK8sStartSocketPath)
+	a.SetGitHubK8sRunnerSocketPath(opts.GitHubK8sRunnerSocketPath)
 	if err := a.Run(ctx); err != nil {
 		if errors.Is(err, listener.ErrAlreadyRunning) {
 			slog.InfoContext(ctx, "agent_already_running", "socket", opts.SocketPath)
@@ -199,12 +202,12 @@ func validateAgentStartRequiredOptions(opts agentStartOptions) error {
 
 func resolveAgentStartOptions(opts agentStartOptions) agentStartOptions {
 	if opts.Provider == "github" && opts.Runner == "kubernetes" {
-		if opts.GitHubK8sStartSocketPath == "" {
-			opts.GitHubK8sStartSocketPath = defaultGitHubK8sStartSocketPath
+		if opts.GitHubK8sRunnerSocketPath == "" {
+			opts.GitHubK8sRunnerSocketPath = defaultGitHubK8sRunnerSocketPath
 		}
 		return opts
 	}
-	opts.GitHubK8sStartSocketPath = ""
+	opts.GitHubK8sRunnerSocketPath = ""
 	return opts
 }
 

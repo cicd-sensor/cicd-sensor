@@ -112,7 +112,7 @@ func setupGitHubK8sStartListener(t *testing.T) (*http.Client, *jobregistry.JobRe
 
 	dir := newTestSocketDir(t, "cicd-sensor-github-k8s-start-test-")
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	sock := filepath.Join(dir, "start.sock")
+	sock := filepath.Join(dir, "runner.sock")
 
 	registry := jobregistry.New(testLogger)
 	l := listener.NewGitHubK8sStart(listener.Config{

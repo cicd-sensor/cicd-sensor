@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,8 +15,6 @@ import (
 )
 
 const agentPostTimeout = 5 * time.Second
-
-var errGitLabJobNotFound = errors.New("gitlab job not found")
 
 type agentClient struct {
 	socketPath string
@@ -57,22 +54,6 @@ func (c *agentClient) postGitHubStaging(ctx context.Context, basename string, id
 }
 
 func (c *agentClient) postGitLabStaging(ctx context.Context, basename string, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) error {
-	// Match the Docker proxy flow: staging owns cgroup registration, while
-	// host/start remains the GitLab Job lifecycle entrypoint on a 404 miss.
-	err := c.postGitLabK8sStaging(ctx, basename, identity, metadata)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, errGitLabJobNotFound) {
-		return err
-	}
-	if err := c.postGitLabHostStart(ctx, identity, metadata); err != nil {
-		return fmt.Errorf("host_start: %w", err)
-	}
-	return c.postGitLabK8sStaging(ctx, basename, identity, metadata)
-}
-
-func (c *agentClient) postGitLabK8sStaging(ctx context.Context, basename string, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) error {
 	body, err := json.Marshal(jobcontext.GitLabK8sStagingPutRequest{
 		Basename:    basename,
 		JobIdentity: identity,
@@ -88,29 +69,9 @@ func (c *agentClient) postGitLabK8sStaging(ctx context.Context, basename string,
 	switch status {
 	case http.StatusOK:
 		return nil
-	case http.StatusNotFound:
-		return errGitLabJobNotFound
 	default:
 		return fmt.Errorf("agent /v1/gitlab/k8s/staging/put returned %d: %s", status, respBody)
 	}
-}
-
-func (c *agentClient) postGitLabHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) error {
-	body, err := json.Marshal(jobcontext.GitLabHostStartRequest{
-		JobIdentity: identity,
-		Metadata:    metadata,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal gitlab host start request: %w", err)
-	}
-	status, respBody, err := c.post(ctx, "/v1/gitlab/host/start", body)
-	if err != nil {
-		return err
-	}
-	if status != http.StatusOK {
-		return fmt.Errorf("agent /v1/gitlab/host/start returned %d: %s", status, respBody)
-	}
-	return nil
 }
 
 func (c *agentClient) post(ctx context.Context, path string, body []byte) (int, string, error) {

@@ -20,6 +20,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 func gitlabRegisteredJob(registry *jobregistry.JobRegistry, identity jobcontext.JobIdentity) *jobpkg.Job {
@@ -33,6 +34,12 @@ func gitlabRegisteredJob(registry *jobregistry.JobRegistry, identity jobcontext.
 
 func jobIdentityPointer(identity jobcontext.JobIdentity) *jobcontext.JobIdentity {
 	return &identity
+}
+
+type cacheMissManagerFetcher struct{}
+
+func (cacheMissManagerFetcher) FetchConfig(context.Context, *managerv1beta1.FetchConfigRequest) (*managerclient.FetchResult, error) {
+	return nil, managerclient.ErrConfigCacheNotReady
 }
 
 func requireLinuxPeerPIDLookup(t *testing.T) {
@@ -664,11 +671,46 @@ func TestGitLabK8sStagingPut_StagesWhenJobExists(t *testing.T) {
 	}
 }
 
-func TestGitLabK8sStagingPut_ReturnsJobNotFoundWhenJobMissing(t *testing.T) {
+func TestGitLabK8sStagingPut_CreatesMissingJobAndStages(t *testing.T) {
 	requireLinuxPeerPIDLookup(t)
 	matchAgentOwnerUIDToPeerCred(t)
 
-	client, _, cleanup := setupGitLabListener(t)
+	client, registry, cleanup := setupGitLabListener(t)
+	defer cleanup()
+
+	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	body := mustMarshal(t, jobcontext.GitLabK8sStagingPutRequest{
+		Basename:    "cri-containerd-build.scope",
+		JobIdentity: identity,
+		Metadata:    jobcontext.JobMetadata{CommitSHA: "abc123"},
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/gitlab/k8s/staging/put", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, dump)
+	}
+	job := gitlabRegisteredJob(registry, identity)
+	if job == nil {
+		t.Fatal("expected job to be registered")
+	}
+	if job.HostScope() == nil {
+		t.Fatal("expected host scope to be set")
+	}
+	if job.Metadata().CommitSHA != "abc123" {
+		t.Fatalf("metadata commit_sha: got %q, want abc123", job.Metadata().CommitSHA)
+	}
+}
+
+func TestGitLabK8sStagingPut_ReturnsUnavailableWhenHostConfigCacheMissing(t *testing.T) {
+	requireLinuxPeerPIDLookup(t)
+	matchAgentOwnerUIDToPeerCred(t)
+
+	client, _, cleanup := setupGitLabListenerWithHostManager(t, cacheMissManagerFetcher{})
 	defer cleanup()
 
 	body := mustMarshal(t, jobcontext.GitLabK8sStagingPutRequest{
@@ -681,13 +723,13 @@ func TestGitLabK8sStagingPut_ReturnsJobNotFoundWhenJobMissing(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
+	if resp.StatusCode != http.StatusServiceUnavailable {
 		dump, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusNotFound, dump)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusServiceUnavailable, dump)
 	}
 	dump, _ := io.ReadAll(resp.Body)
-	if !bytes.Contains(dump, []byte("job_not_found")) {
-		t.Fatalf("body should contain job_not_found, got %s", dump)
+	if !bytes.Contains(dump, []byte(managerclient.ErrConfigCacheNotReady.Error())) {
+		t.Fatalf("body should contain cache error, got %s", dump)
 	}
 }
 

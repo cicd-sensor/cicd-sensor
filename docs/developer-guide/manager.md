@@ -57,6 +57,10 @@ In manager mode, repository-local `.cicd-sensor/config.yaml` and `.cicd-sensor/r
 The manager config owns manager-backed baseline policy, default alert caps, and output policy.
 For the user-facing `manager.yaml` setting reference, see [Manager](../user-guide/manager.md#manageryaml).
 
+`FetchConfig` output is host-scope policy.
+It may depend on provider and manager-global config, but it must not depend on job-specific fields such as project path, workflow name, or CI job ID.
+Agents may cache host-scope `FetchConfig` results node-wide and apply the real job identity later during rule resolution and log emission.
+
 Startup config is read once at process start.
 Rules are checked on each `FetchConfig` request: if the rule bundle file's modification time or size has changed, it is re-parsed; otherwise the cached parse is reused.
 Rule updates therefore take effect by replacing the file on disk, without restarting the Manager.

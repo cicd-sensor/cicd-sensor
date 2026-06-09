@@ -82,9 +82,8 @@ func New(cfg Config) *Listener {
 	return l
 }
 
-// NewGitHubK8sStart creates a listener that exposes only the Kubernetes
-// GitHub start endpoint. This socket is mounted into runner Pods and must not
-// inherit the full control API.
+// NewGitHubK8sStart creates the GitHub Kubernetes runner-socket listener. It
+// currently exposes only start and must not inherit the full control API.
 func NewGitHubK8sStart(cfg Config) *Listener {
 	cfg.Provider = jobcontext.ProviderGitHub
 	l := newBase(cfg)

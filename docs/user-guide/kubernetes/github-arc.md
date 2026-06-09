@@ -10,9 +10,9 @@ Install the shared [Kubernetes runner setup](index.md) first, then configure the
 
 | ARC mode | What runs where | cicd-sensor setup | Notes |
 | --- | --- | --- | --- |
-| [`containerMode` unset](#default-mode) | The job runs in the runner container. | Job hook + GitHub k8s start socket. | Best for script, JavaScript action, and composite action workflows. |
-| [`containerMode.type: dind`](#dind-mode) | The runner talks to a privileged dind sidecar. | Job hook + GitHub k8s start socket. | Highest compatibility with Docker workflows, but higher security risk. |
-| [`containerMode.type: kubernetes`](#kubernetes-mode) | Job containers, services, and container actions become Kubernetes Pods. | Job hook + GitHub k8s start socket + container customization hook wrapper. | Kubernetes-native and avoids dind, but Docker daemon workflows need alternatives. |
+| [`containerMode` unset](#default-mode) | The job runs in the runner container. | Job hook + GitHub Kubernetes runner socket. | Best for script, JavaScript action, and composite action workflows. |
+| [`containerMode.type: dind`](#dind-mode) | The runner talks to a privileged dind sidecar. | Job hook + GitHub Kubernetes runner socket. | Highest compatibility with Docker workflows, but higher security risk. |
+| [`containerMode.type: kubernetes`](#kubernetes-mode) | Job containers, services, and container actions become Kubernetes Pods. | Job hook + GitHub Kubernetes runner socket + container customization hook wrapper + NRI. | Kubernetes-native and avoids dind, but Docker daemon workflows need alternatives. |
 
 ## Hook types
 
@@ -20,7 +20,7 @@ GitHub ARC support uses two different GitHub runner hook mechanisms:
 
 | Hook mechanism | GitHub setting | When it runs | cicd-sensor use |
 | --- | --- | --- | --- |
-| [Job hook](https://docs.github.com/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job) | `ACTIONS_RUNNER_HOOK_JOB_STARTED` | After a job is assigned to the runner and before workflow steps run. | Calls the GitHub k8s start socket to start monitoring and bind the runner cgroup. |
+| [Job hook](https://docs.github.com/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job) | `ACTIONS_RUNNER_HOOK_JOB_STARTED` | After a job is assigned to the runner and before workflow steps run. | Calls the GitHub Kubernetes runner socket to start monitoring and bind the runner cgroup. |
 | [Container customization hook wrapper](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/customize-containers) | `ACTIONS_RUNNER_CONTAINER_HOOKS` | During GitHub's container customization flow, such as `prepare_job` and `run_container_step`. | Kubernetes mode only: injects GitHub identity into Pod annotations before ARC creates workflow job, service, and container-action Pods. |
 
 The job hook is the job lifecycle hook.
@@ -41,7 +41,7 @@ The runner Pod is created before GitHub assigns a job, so NRI cannot build the j
 | Node install | [`examples/kubernetes/github-arc/default-mode/daemonset.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/default-mode/daemonset.yaml) |
 | Job hook | `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner container. |
 | Job hook ConfigMap | [`examples/kubernetes/github-arc/common/job-hook-configmap.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/common/job-hook-configmap.yaml) |
-| GitHub k8s start socket | Required in the runner container so the job hook can start monitoring and bind the runner cgroup. |
+| GitHub Kubernetes runner socket | Required in the runner container so the job hook can start monitoring and bind the runner cgroup. |
 | NRI | Not used in this mode. |
 | ARC values | [`examples/kubernetes/github-arc/default-mode/values.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/default-mode/values.yaml) |
 
@@ -54,7 +54,7 @@ In dind mode, ARC creates a runner container and a privileged dind sidecar in th
 | Node install | [`examples/kubernetes/github-arc/dind-mode/daemonset.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/dind-mode/daemonset.yaml) |
 | Job hook | `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner container. |
 | Job hook ConfigMap | [`examples/kubernetes/github-arc/common/job-hook-configmap.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/common/job-hook-configmap.yaml) |
-| GitHub k8s start socket | Required in the runner container so the job hook can start monitoring and bind the runner plus dind sidecar cgroups. |
+| GitHub Kubernetes runner socket | Required in the runner container so the job hook can start monitoring and bind the runner plus dind sidecar cgroups. |
 | NRI | Not used in this mode. Host NRI does not see inner Docker lifecycle created by dind. |
 | ARC values | [`examples/kubernetes/github-arc/dind-mode/values.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/dind-mode/values.yaml) |
 
@@ -70,7 +70,7 @@ In Kubernetes mode, ARC uses GitHub's container hooks to create workflow job con
 | Node install | [`examples/kubernetes/github-arc/kubernetes-mode/daemonset.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/kubernetes-mode/daemonset.yaml) |
 | Job hook | `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner container. |
 | Job hook ConfigMap | [`examples/kubernetes/github-arc/common/job-hook-configmap.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/common/job-hook-configmap.yaml) |
-| GitHub k8s start socket | Required in the runner container so the job hook can start monitoring and bind the runner cgroup. |
+| GitHub Kubernetes runner socket | Required in the runner container so the job hook can start monitoring and bind the runner cgroup. |
 | Container customization hook wrapper | Required. Use [`examples/kubernetes/github-arc/kubernetes-mode/container-hook-wrapper-configmap.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/kubernetes-mode/container-hook-wrapper-configmap.yaml). |
 | NRI | Required. NRI reads injected Pod annotations and runtime cgroup paths for workflow job, service, and container-action Pods. |
 | ARC values | [`examples/kubernetes/github-arc/kubernetes-mode/values.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/kubernetes-mode/values.yaml) |
