@@ -7,7 +7,10 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
 
-const defaultSocketPath = "/run/cicd-sensor/agent.sock"
+const (
+	defaultSocketPath               = "/run/cicd-sensor/agent.sock"
+	defaultGitHubK8sStartSocketPath = "/run/cicd-sensor/github-k8s/start.sock"
+)
 
 func main() {
 	if len(os.Args) < 2 {

@@ -49,7 +49,9 @@ In dind mode, ARC creates a runner container and a privileged dind sidecar in th
 Host NRI sees the Kubernetes containers, but it does not see the inner Docker lifecycle managed by the dind daemon.
 
 cicd-sensor uses the job hook as the identity point.
-At start time, the hook calls the GitHub k8s start socket and the agent binds the hook peer cgroup and same-Pod sibling cgroups so the dind sidecar is tracked as part of the job.
+At start time, the hook calls the GitHub k8s start socket.
+The agent reads the hook peer PID's cgroup path, finds the kubelet-created Pod cgroup ancestor, and binds the Pod cgroup tree so the dind sidecar is tracked as part of the job.
+Once the dind sidecar cgroup is tracked, inner Docker cgroups created below it are picked up by the existing cgroup propagation path.
 
 ## GitHub ARC Kubernetes mode
 

@@ -57,6 +57,20 @@ func (jr *JobRegistry) ApplyGitHubHostStart(ctx context.Context, identity jobcon
 	return job, nil
 }
 
+// ApplyGitHubK8sStart starts a GitHub Kubernetes job from the runner job hook.
+// It binds the hook process first, then best-effort binds the Kubernetes Pod
+// cgroup tree so same-Pod sidecars such as ARC dind are tracked.
+func (jr *JobRegistry) ApplyGitHubK8sStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, rootPID int32, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*job.Job, error) {
+	job, err := jr.ApplyGitHubHostStart(ctx, identity, metadata, runnerType, rootPID, hostManagerConnection, hostManagerClient)
+	if err != nil {
+		return nil, err
+	}
+	if jr.kernelTracker != nil {
+		jr.bindPodCgroupTreeForProcess(ctx, identity, rootPID)
+	}
+	return job, nil
+}
+
 // ApplyGitLabHostStart lazily creates the GitLab host scope from docker proxy labels.
 func (jr *JobRegistry) ApplyGitLabHostStart(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, hostManagerConnection managerclient.Connection, hostManagerClient ManagerConfigFetcher) (*job.Job, error) {
 	// Docker proxy calls can race; wait for any in-flight lazy create, then

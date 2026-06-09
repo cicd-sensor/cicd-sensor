@@ -49,6 +49,43 @@ func (l *Listener) handleGitHubHostStart(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// handleGitHubK8sStart creates the host scope from a GitHub Kubernetes runner
+// hook and seeds tracking before the hook returns to the runner.
+func (l *Listener) handleGitHubK8sStart(w http.ResponseWriter, r *http.Request) {
+	var req githubHostStartRequest
+	if err := l.decodeJSONBody(w, r, &req); err != nil {
+		l.writeError(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	identity := req.JobIdentity
+	if identity.Provider != jobcontext.ProviderGitHub {
+		l.writeError(w, r, http.StatusBadRequest, "provider must be github")
+		return
+	}
+	if err := identity.Validate(); err != nil {
+		l.writeError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+	rootPID, err := requestPeerPID(r.Context())
+	if err != nil {
+		l.logger.WarnContext(r.Context(), "peer_pid_unavailable", "error", err)
+		l.writeError(w, r, http.StatusBadRequest, "peer pid unavailable")
+		return
+	}
+
+	_, err = l.jobRegistry.ApplyGitHubK8sStart(r.Context(), identity, req.Metadata, l.runnerType, rootPID, l.hostManagerConn, l.hostManagerClient)
+	if err != nil {
+		l.writeStartError(w, r, "github_k8s_start_failed", err)
+		return
+	}
+
+	l.logger.InfoContext(r.Context(), "github_k8s_start_accepted", "job_identity", identity)
+	l.writeJSON(r.Context(), w, http.StatusOK, map[string]any{
+		"job_identity": identity,
+		"status":       "ok",
+	})
+}
+
 // handleGitHubProjectStart attaches project rules to an existing host Job, or
 // creates a project-only Job for hosted runners.
 func (l *Listener) handleGitHubProjectStart(w http.ResponseWriter, r *http.Request) {

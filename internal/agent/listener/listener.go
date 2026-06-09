@@ -62,19 +62,7 @@ type Config struct {
 
 // New creates a listener bound to cfg.SocketPath.
 func New(cfg Config) *Listener {
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-	l := &Listener{
-		logger:            logger.With("component", "listener"),
-		jobRegistry:       cfg.JobRegistry,
-		socketPath:        cfg.SocketPath,
-		hostManagerConn:   cfg.HostManagerConnection,
-		hostManagerClient: cfg.HostManagerClient,
-		runnerType:        cfg.RunnerType,
-		provider:          cfg.Provider,
-	}
+	l := newBase(cfg)
 	mux := http.NewServeMux()
 	switch cfg.Provider {
 	case jobcontext.ProviderGitHub:
@@ -88,6 +76,39 @@ func New(cfg Config) *Listener {
 		mux.HandleFunc("POST /v1/gitlab/host/start", l.handleGitLabHostStart)
 		mux.HandleFunc("POST /v1/gitlab/staging/put", l.handleGitLabStagingPut)
 	}
+	l.setMux(mux)
+	return l
+}
+
+// NewGitHubK8sStart creates a listener that exposes only the Kubernetes
+// GitHub start endpoint. This socket is mounted into runner Pods and must not
+// inherit the full control API.
+func NewGitHubK8sStart(cfg Config) *Listener {
+	cfg.Provider = jobcontext.ProviderGitHub
+	l := newBase(cfg)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/github/k8s/start", l.handleGitHubK8sStart)
+	l.setMux(mux)
+	return l
+}
+
+func newBase(cfg Config) *Listener {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Listener{
+		logger:            logger.With("component", "listener"),
+		jobRegistry:       cfg.JobRegistry,
+		socketPath:        cfg.SocketPath,
+		hostManagerConn:   cfg.HostManagerConnection,
+		hostManagerClient: cfg.HostManagerClient,
+		runnerType:        cfg.RunnerType,
+		provider:          cfg.Provider,
+	}
+}
+
+func (l *Listener) setMux(mux *http.ServeMux) {
 	l.server = &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: listenerReadHeaderTimeout,
@@ -98,7 +119,6 @@ func New(cfg Config) *Listener {
 			return context.WithValue(ctx, unixConnKey{}, connection)
 		},
 	}
-	return l
 }
 
 // Serve starts the Unix socket listener.

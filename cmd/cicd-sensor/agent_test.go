@@ -101,6 +101,49 @@ func TestValidateAgentStartOptionsRequiresManagerToken(t *testing.T) {
 	}
 }
 
+func TestResolveAgentStartOptions(t *testing.T) {
+	valid := agentStartOptions{
+		Provider:      "github",
+		Runner:        "kubernetes",
+		ShutdownGrace: time.Second,
+	}
+	tests := []struct {
+		name       string
+		opts       agentStartOptions
+		wantSocket string
+	}{
+		{
+			name:       "github kubernetes uses default start socket",
+			opts:       valid,
+			wantSocket: defaultGitHubK8sStartSocketPath,
+		},
+		{
+			name:       "github kubernetes keeps explicit start socket",
+			opts:       withGitHubK8sStartSocket(valid, "/tmp/start.sock"),
+			wantSocket: "/tmp/start.sock",
+		},
+		{
+			name:       "github machine ignores start socket",
+			opts:       withAgentRunner(withGitHubK8sStartSocket(valid, "/tmp/start.sock"), "machine"),
+			wantSocket: "",
+		},
+		{
+			name:       "gitlab kubernetes ignores start socket",
+			opts:       withAgentProvider(withGitHubK8sStartSocket(valid, "/tmp/start.sock"), "gitlab"),
+			wantSocket: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveAgentStartOptions(tc.opts)
+			if got.GitHubK8sStartSocketPath != tc.wantSocket {
+				t.Fatalf("github k8s start socket: got %q, want %q", got.GitHubK8sStartSocketPath, tc.wantSocket)
+			}
+		})
+	}
+}
+
 func withAgentProvider(opts agentStartOptions, provider string) agentStartOptions {
 	opts.Provider = provider
 	return opts
@@ -113,5 +156,10 @@ func withAgentRunner(opts agentStartOptions, runner string) agentStartOptions {
 
 func withAgentShutdownGrace(opts agentStartOptions, shutdownGrace time.Duration) agentStartOptions {
 	opts.ShutdownGrace = shutdownGrace
+	return opts
+}
+
+func withGitHubK8sStartSocket(opts agentStartOptions, socketPath string) agentStartOptions {
+	opts.GitHubK8sStartSocketPath = socketPath
 	return opts
 }
