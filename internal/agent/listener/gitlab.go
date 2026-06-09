@@ -45,8 +45,9 @@ func (l *Listener) handleGitLabHostStart(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// handleGitLabStagingPut selects the Job from evidence sent by the proxy:
-// peer PID first, labels identity only when peer lookup misses.
+// handleGitLabStagingPut stages Docker proxy-discovered containers. The proxy
+// can identify an existing Job by peer PID, or use the 404 response to
+// lazy-create the Job and retry when it has GitLab runner metadata.
 func (l *Listener) handleGitLabStagingPut(w http.ResponseWriter, r *http.Request) {
 	if !l.requireRequestPeerUIDMatchesAgentOwner(w, r) {
 		return
@@ -119,6 +120,46 @@ func (l *Listener) handleGitLabStagingPut(w http.ResponseWriter, r *http.Request
 		"basename", req.Basename,
 		"peer_pid", req.PeerPID,
 		"job_identity", labelsIdentity,
+		"status", status,
+	)
+	l.writeJSON(r.Context(), w, http.StatusOK, map[string]string{"status": status})
+}
+
+// handleGitLabK8sStagingPut records NRI-discovered Kubernetes containers. It
+// stages only; NRI uses the same 404 -> host/start -> retry flow as the Docker
+// proxy so GitLab Job lifecycle creation stays on /v1/gitlab/host/start.
+func (l *Listener) handleGitLabK8sStagingPut(w http.ResponseWriter, r *http.Request) {
+	if !l.requireRequestPeerUIDMatchesAgentOwner(w, r) {
+		return
+	}
+
+	var req jobcontext.GitLabK8sStagingPutRequest
+	if err := l.decodeJSONBody(w, r, &req); err != nil {
+		l.writeError(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Basename == "" {
+		l.writeError(w, r, http.StatusBadRequest, "basename is required")
+		return
+	}
+	identity := req.JobIdentity
+	if identity.Provider != jobcontext.ProviderGitLab {
+		l.writeError(w, r, http.StatusBadRequest, "job_identity.provider must be gitlab")
+		return
+	}
+	if err := identity.Validate(); err != nil {
+		l.writeError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	status, ok := l.stageGitLabBasename(w, r, req.Basename, identity)
+	if !ok {
+		return
+	}
+
+	l.logger.InfoContext(r.Context(), "gitlab_k8s_staging_put",
+		"basename", req.Basename,
+		"job_identity", identity,
 		"status", status,
 	)
 	l.writeJSON(r.Context(), w, http.StatusOK, map[string]string{"status": status})

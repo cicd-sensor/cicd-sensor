@@ -120,6 +120,103 @@ func TestGitHubStagingPut_NoCgroupHitIgnored(t *testing.T) {
 	}
 }
 
+func TestGitHubK8sStagingPut_StagesByJobIdentity(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("KernelTracker cgroup staging is Linux-only")
+	}
+	matchAgentOwnerUIDToPeerCred(t)
+
+	client, registry, cleanup := setupGitHubStagingListener(t)
+	defer cleanup()
+
+	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	if _, err := registry.ApplyGitHubHostStart(
+		context.Background(),
+		identity,
+		jobcontext.JobMetadata{},
+		"kubernetes",
+		int32(os.Getpid()),
+		managerclient.Connection{},
+		staticManagerFetcher{},
+	); err != nil {
+		t.Fatalf("host start: %v", err)
+	}
+
+	body := mustMarshal(t, jobcontext.GitHubK8sStagingPutRequest{
+		Basename:    "cri-containerd-cafef00d.scope",
+		JobIdentity: identity,
+	})
+
+	resp, err := client.Post("http://cicd-sensor/v1/github/k8s/staging/put", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, dump)
+	}
+
+	var got struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status != "staged" {
+		t.Fatalf("status: got %q, want %q", got.Status, "staged")
+	}
+}
+
+func TestGitHubK8sStagingPut_JobIdentityErrors(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("KernelTracker cgroup staging is Linux-only")
+	}
+	matchAgentOwnerUIDToPeerCred(t)
+
+	client, _, cleanup := setupGitHubStagingListener(t)
+	defer cleanup()
+
+	cases := []struct {
+		name string
+		body jobcontext.GitHubK8sStagingPutRequest
+		want int
+	}{
+		{
+			name: "missing job",
+			body: jobcontext.GitHubK8sStagingPutRequest{
+				Basename:    "cri-containerd-cafef00d.scope",
+				JobIdentity: jobcontext.GitHubJobIdentity("github.com", "acme/example", "999", "build", "1", "runner-1"),
+			},
+			want: http.StatusNotFound,
+		},
+		{
+			name: "provider mismatch",
+			body: jobcontext.GitHubK8sStagingPutRequest{
+				Basename:    "cri-containerd-cafef00d.scope",
+				JobIdentity: jobcontext.GitLabJobIdentity("gitlab.com", "acme/example", "123"),
+			},
+			want: http.StatusBadRequest,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Post("http://cicd-sensor/v1/github/k8s/staging/put", "application/json", bytes.NewReader(mustMarshal(t, tc.body)))
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.want {
+				dump, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, tc.want, dump)
+			}
+		})
+	}
+}
+
 func TestGitHubStagingPut_WrongUIDForbidden(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("SO_PEERCRED owner gate is enforced only on linux")
@@ -285,6 +382,7 @@ func TestGitHubHandlers_RejectGitLabProviderInBody(t *testing.T) {
 		"http://cicd-sensor/v1/github/host/end",
 		"http://cicd-sensor/v1/github/project/start",
 		"http://cicd-sensor/v1/github/project/result",
+		"http://cicd-sensor/v1/github/k8s/staging/put",
 	}
 	for _, url := range cases {
 		t.Run(url, func(t *testing.T) {
@@ -312,6 +410,7 @@ func TestListener_GitHubProvider_RejectsGitLabRoutes(t *testing.T) {
 	cases := []string{
 		"http://cicd-sensor/v1/gitlab/host/start",
 		"http://cicd-sensor/v1/gitlab/staging/put",
+		"http://cicd-sensor/v1/gitlab/k8s/staging/put",
 	}
 	for _, url := range cases {
 		t.Run(url, func(t *testing.T) {

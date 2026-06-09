@@ -16,6 +16,11 @@ data:
     const METADATA_ANNOTATION = "cicd-sensor.github.io/metadata";
     const DEFAULT_K8S_HOOK = "/home/runner/k8s/index.js";
 
+    function providerHost() {
+      const raw = process.env.GITHUB_SERVER_URL || "https://github.com";
+      return raw.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "").replace(/\.$/, "").toLowerCase();
+    }
+
     function readStdin() {
       return new Promise((resolve, reject) => {
         let input = "";
@@ -42,10 +47,12 @@ data:
     function buildIdentity() {
       return {
         provider: "github",
-        repository: process.env.GITHUB_REPOSITORY || "",
-        run_id: process.env.GITHUB_RUN_ID || "",
-        run_attempt: process.env.GITHUB_RUN_ATTEMPT || "",
-        job: process.env.GITHUB_JOB || "",
+        provider_host: providerHost(),
+        project_path: process.env.GITHUB_REPOSITORY || "",
+        github_run_id: process.env.GITHUB_RUN_ID || "",
+        github_job: process.env.GITHUB_JOB || "",
+        github_run_attempt: process.env.GITHUB_RUN_ATTEMPT || "",
+        github_runner_tracking_id: process.env.RUNNER_TRACKING_ID || process.env.RUNNER_NAME || "",
       };
     }
 
@@ -55,20 +62,22 @@ data:
         "GITHUB_WORKFLOW_REF",
         "GITHUB_WORKFLOW_SHA",
         "GITHUB_SHA",
+        "GITHUB_REF_NAME",
         "GITHUB_REF",
+        "GITHUB_EVENT_NAME",
         "GITHUB_ACTOR",
         "GITHUB_ACTOR_ID",
         "RUNNER_NAME",
       ]);
       return {
-        workflow: env.GITHUB_WORKFLOW || "",
-        workflow_ref: env.GITHUB_WORKFLOW_REF || "",
-        workflow_sha: env.GITHUB_WORKFLOW_SHA || "",
-        sha: env.GITHUB_SHA || "",
-        ref: env.GITHUB_REF || "",
-        actor: env.GITHUB_ACTOR || "",
+        commit_sha: env.GITHUB_SHA || "",
+        ref_name: env.GITHUB_REF_NAME || env.GITHUB_REF || "",
+        trigger: env.GITHUB_EVENT_NAME || "",
         actor_id: env.GITHUB_ACTOR_ID || "",
-        runner_name: env.RUNNER_NAME || "",
+        actor_name: env.GITHUB_ACTOR || "",
+        github_workflow_ref: env.GITHUB_WORKFLOW_REF || "",
+        github_workflow_sha: env.GITHUB_WORKFLOW_SHA || "",
+        github_workflow: env.GITHUB_WORKFLOW || "",
       };
     }
 
@@ -78,10 +87,12 @@ data:
 
     function hasRequiredIdentity(identity) {
       return Boolean(
-        identity.repository &&
-        identity.run_id &&
-        identity.run_attempt &&
-        identity.job
+        identity.provider_host &&
+        identity.project_path &&
+        identity.github_run_id &&
+        identity.github_job &&
+        identity.github_run_attempt &&
+        identity.github_runner_tracking_id
       );
     }
 

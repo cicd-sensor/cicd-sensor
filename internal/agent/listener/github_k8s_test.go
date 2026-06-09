@@ -86,6 +86,25 @@ func TestGitHubK8sStart_ExposesOnlyStartRoute(t *testing.T) {
 		dump, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusNotFound, dump)
 	}
+
+	for _, url := range []string{
+		"http://cicd-sensor/v1/github/k8s/staging/put",
+		"http://cicd-sensor/v1/gitlab/staging/put",
+		"http://cicd-sensor/v1/gitlab/k8s/staging/put",
+	} {
+		t.Run(url, func(t *testing.T) {
+			resp, err = client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("k8s staging request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusNotFound {
+				dump, _ := io.ReadAll(resp.Body)
+				t.Fatalf("k8s staging status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusNotFound, dump)
+			}
+		})
+	}
 }
 
 func setupGitHubK8sStartListener(t *testing.T) (*http.Client, *jobregistry.JobRegistry, func()) {

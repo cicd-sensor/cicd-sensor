@@ -46,7 +46,7 @@ The hook start request calls the GitHub k8s start socket, creates the job record
 ## GitHub ARC dind mode
 
 In dind mode, ARC creates a runner container and a privileged dind sidecar in the same Pod.
-Host NRI sees the Kubernetes containers, but it does not see the inner Docker lifecycle managed by the dind daemon.
+Host NRI can see the runner and dind Kubernetes containers, but it does not see the inner Docker lifecycle managed by the dind daemon, so cicd-sensor does not use NRI for this mode.
 
 cicd-sensor uses the job hook as the identity point.
 At start time, the hook calls the GitHub k8s start socket.

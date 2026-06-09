@@ -74,6 +74,8 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - nri
+            - --provider
+            - gitlab
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false

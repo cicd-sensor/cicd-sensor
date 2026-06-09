@@ -270,8 +270,8 @@ func (l *Listener) handleGitHubProjectResult(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// handleGitHubStagingPut records proxy-discovered containers after resolving
-// their peer PID back to a tracked Job.
+// handleGitHubStagingPut records dockerd proxy-discovered containers after
+// resolving their peer PID back to a tracked Job.
 func (l *Listener) handleGitHubStagingPut(w http.ResponseWriter, r *http.Request) {
 	if !l.requireRequestPeerUIDMatchesAgentOwner(w, r) {
 		return
@@ -314,6 +314,49 @@ func (l *Listener) handleGitHubStagingPut(w http.ResponseWriter, r *http.Request
 		"status", status,
 	)
 	l.writeJSON(r.Context(), w, http.StatusOK, map[string]string{"status": status})
+}
+
+// handleGitHubK8sStagingPut records NRI-discovered Kubernetes containers. NRI
+// runs as a host-side plugin outside the job process tree, so it provides the
+// injected GitHub identity instead of relying on peer PID lookup.
+func (l *Listener) handleGitHubK8sStagingPut(w http.ResponseWriter, r *http.Request) {
+	if !l.requireRequestPeerUIDMatchesAgentOwner(w, r) {
+		return
+	}
+
+	var req jobcontext.GitHubK8sStagingPutRequest
+	if err := l.decodeJSONBody(w, r, &req); err != nil {
+		l.writeError(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Basename == "" {
+		l.writeError(w, r, http.StatusBadRequest, "basename is required")
+		return
+	}
+	identity := req.JobIdentity
+	if identity.Provider != jobcontext.ProviderGitHub {
+		l.writeError(w, r, http.StatusBadRequest, "job_identity.provider must be github")
+		return
+	}
+	if err := identity.Validate(); err != nil {
+		l.writeError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := l.jobRegistry.StageCgroupBasenameForJob(r.Context(), req.Basename, identity); err != nil {
+		if errors.Is(err, jobregistry.ErrJobNotFound) {
+			l.writeError(w, r, http.StatusNotFound, "job_not_found")
+			return
+		}
+		l.logger.ErrorContext(r.Context(), "github_k8s_staging_put_failed", "error", err)
+		l.writeError(w, r, http.StatusInternalServerError, "internal error")
+		return
+	}
+	l.logger.InfoContext(r.Context(), "github_k8s_staging_put",
+		"basename", req.Basename,
+		"job_identity", identity,
+		"status", "staged",
+	)
+	l.writeJSON(r.Context(), w, http.StatusOK, map[string]string{"status": "staged"})
 }
 
 // decodeGitHubJobIdentity keeps identity-only GitHub routes on the same

@@ -72,9 +72,11 @@ func New(cfg Config) *Listener {
 		mux.HandleFunc("POST /v1/github/project/start", l.handleGitHubProjectStart)
 		mux.HandleFunc("POST /v1/github/project/result", l.handleGitHubProjectResult)
 		mux.HandleFunc("POST /v1/github/staging/put", l.handleGitHubStagingPut)
+		mux.HandleFunc("POST /v1/github/k8s/staging/put", l.handleGitHubK8sStagingPut)
 	case jobcontext.ProviderGitLab:
 		mux.HandleFunc("POST /v1/gitlab/host/start", l.handleGitLabHostStart)
 		mux.HandleFunc("POST /v1/gitlab/staging/put", l.handleGitLabStagingPut)
+		mux.HandleFunc("POST /v1/gitlab/k8s/staging/put", l.handleGitLabK8sStagingPut)
 	}
 	l.setMux(mux)
 	return l

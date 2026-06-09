@@ -42,7 +42,7 @@ The runner Pod is created before GitHub assigns a job, so NRI cannot build the j
 | Job hook | `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner container. |
 | Job hook ConfigMap | `examples/kubernetes/github-arc/common/job-hook-configmap.yaml` |
 | GitHub k8s start socket | Required in the runner container so the job hook can start monitoring and bind the runner cgroup. |
-| NRI | Required in the node-level DaemonSet, but not used to identify the GitHub job in this mode. |
+| NRI | Not used in this mode. |
 | ARC values | `examples/kubernetes/github-arc/default-mode/values.yaml` |
 
 ### dind mode
@@ -55,7 +55,7 @@ In dind mode, ARC creates a runner container and a privileged dind sidecar in th
 | Job hook | `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner container. |
 | Job hook ConfigMap | `examples/kubernetes/github-arc/common/job-hook-configmap.yaml` |
 | GitHub k8s start socket | Required in the runner container so the job hook can start monitoring and bind the runner plus dind sidecar cgroups. |
-| NRI | Required in the node-level DaemonSet, but host NRI does not see inner Docker lifecycle created by dind. |
+| NRI | Not used in this mode. Host NRI does not see inner Docker lifecycle created by dind. |
 | ARC values | `examples/kubernetes/github-arc/dind-mode/values.yaml` |
 
 dind is a compatibility mode.

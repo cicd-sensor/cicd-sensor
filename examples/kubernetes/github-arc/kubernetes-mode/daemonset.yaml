@@ -59,8 +59,6 @@ spec:
                 secretKeyRef:
                   name: cicd-sensor-manager
                   key: token
-            - name: CICD_SENSOR_GITHUB_K8S_RUNNER_MODE
-              value: kubernetes
             - name: CICD_SENSOR_GITHUB_K8S_START_SOCKET
               value: /run/cicd-sensor/github-k8s/start.sock
           securityContext:
@@ -78,6 +76,8 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - nri
+            - --provider
+            - github
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false

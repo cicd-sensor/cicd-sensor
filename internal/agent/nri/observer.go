@@ -10,6 +10,8 @@ import (
 
 	nriapi "github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
 const (
@@ -22,13 +24,18 @@ const (
 
 // Options configures the NRI observer process.
 type Options struct {
-	SocketPath string
-	Logger     *slog.Logger
+	SocketPath      string
+	AgentSocketPath string
+	Provider        jobcontext.Provider
+	Logger          *slog.Logger
 }
 
-// Observer logs CreateContainer requests and returns no runtime adjustments.
+// Observer logs CreateContainer requests, stages known CI/CD containers, and
+// returns no runtime adjustments.
 type Observer struct {
-	logger *slog.Logger
+	logger   *slog.Logger
+	agent    *agentClient
+	provider jobcontext.Provider
 }
 
 // Run registers the observer with containerd NRI and blocks until ctx ends.
@@ -42,7 +49,11 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	logger = logger.With("component", "nri")
 
-	observer := &Observer{logger: logger}
+	observer := &Observer{
+		logger:   logger,
+		agent:    &agentClient{socketPath: opts.AgentSocketPath},
+		provider: opts.Provider,
+	}
 	nriStub, err := stub.New(observer,
 		stub.WithSocketPath(opts.SocketPath),
 		stub.WithPluginName(pluginName),
@@ -54,6 +65,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	logger.InfoContext(ctx, "nri_observer_starting",
 		"nri_socket", opts.SocketPath,
+		"agent_socket", opts.AgentSocketPath,
+		"provider", opts.Provider,
 		"plugin_name", pluginName,
 		"plugin_index", pluginIndex,
 	)
@@ -68,19 +81,47 @@ func ValidateOptions(opts Options) error {
 	if opts.SocketPath == "" {
 		return errors.New("nri socket path is required")
 	}
+	if opts.AgentSocketPath == "" {
+		return errors.New("agent socket path is required")
+	}
+	if opts.Provider != jobcontext.ProviderGitHub && opts.Provider != jobcontext.ProviderGitLab {
+		return errors.New("nri provider must be github or gitlab")
+	}
 	return nil
 }
 
 // CreateContainer is invoked by the NRI stub when containerd sends a ttrpc
-// CreateContainer request. It never requests adjustments or updates because
-// this prototype is discovery-only.
+// CreateContainer request. It stages matching CI/CD containers through the
+// agent socket but never requests runtime adjustments or updates.
 func (o *Observer) CreateContainer(ctx context.Context, pod *nriapi.PodSandbox, container *nriapi.Container) (*nriapi.ContainerAdjustment, []*nriapi.ContainerUpdate, error) {
 	event := NormalizeCreateContainer(pod, container)
+	decision, shouldStage := stagingDecisionForCreateContainer(o.provider, event)
 	o.logger.InfoContext(ctx, "nri_create_container",
 		"pod", event.Pod,
 		"container", event.Container,
 		"cgroup_basename", event.CgroupBasename,
+		"provider", decision.Provider,
+		"identity_status", decision.Status,
+		"skip_reason", decision.SkipReason,
 	)
+	if shouldStage && o.agent != nil {
+		stageCtx, cancel := context.WithTimeout(ctx, agentPostTimeout)
+		defer cancel()
+		if err := o.agent.stage(stageCtx, decision); err != nil {
+			o.logger.WarnContext(ctx, "nri_staging_failed",
+				"provider", decision.Provider,
+				"job_identity", decision.Identity,
+				"basename", decision.Basename,
+				"error", err,
+			)
+		} else {
+			o.logger.InfoContext(ctx, "nri_staging_put",
+				"provider", decision.Provider,
+				"job_identity", decision.Identity,
+				"basename", decision.Basename,
+			)
+		}
+	}
 	return nil, nil, nil
 }
 
