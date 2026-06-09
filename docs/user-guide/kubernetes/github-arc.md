@@ -5,6 +5,7 @@ This page describes the planned deployment model for ARC runner scale sets.
 
 Use the official `gha-runner-scale-set` Helm chart.
 Install the shared [Kubernetes runner setup](index.md) first, then configure the ARC runner scale set for the mode you use.
+The node-level cicd-sensor DaemonSet runs privileged as root; do not mount host runtime or cicd-sensor staging sockets into workflow-created Pods.
 
 ## Mode summary
 

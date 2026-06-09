@@ -16,7 +16,8 @@ Runner workloads do not mount host container runtime sockets or cicd-sensor inte
 ## Basic architecture
 
 cicd-sensor uses a node-level DaemonSet for the shared Kubernetes setup.
-The agent and NRI observer run on each node, monitor Kubernetes runner workloads on that node, and send logs to cicd-sensor Manager.
+The agent runs on each node, monitors Kubernetes runner workloads on that node, and sends logs to cicd-sensor Manager.
+Modes that create Kubernetes job containers also run the NRI observer on each node.
 
 ```mermaid
 flowchart LR
@@ -49,6 +50,8 @@ Kubernetes nodes must provide:
 - Linux with cgroup v2.
 - containerd with NRI enabled.
 - runc systemd cgroups.
+- A privileged node-level cicd-sensor DaemonSet running as root (`runAsUser: 0`).
+- Host cgroup v2 mounted into the agent container.
 
 cicd-sensor does not patch or restart containerd.
 Before installing the DaemonSet, verify that the node already exposes the NRI socket:
@@ -57,6 +60,7 @@ Before installing the DaemonSet, verify that the node already exposes the NRI so
 test -S /var/run/nri/nri.sock
 ```
 
+GKE Standard with COS, containerd 2.x, and systemd cgroups has been verified.
 Managed Kubernetes environments that do not allow privileged node agents or required host mounts are not supported.
 This includes GKE Autopilot and managed container services outside Kubernetes, such as Amazon ECS.
 

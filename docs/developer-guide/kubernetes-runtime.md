@@ -17,6 +17,16 @@ References:
 - GitHub container customization hooks: `https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/customize-containers`
 - ARC runner scale set deployment and hook extensions: `https://docs.github.com/en/enterprise-cloud@latest/actions/tutorials/use-actions-runner-controller/deploy-runner-scale-sets`
 
+## Node runtime requirements
+
+Kubernetes support assumes a node-level privileged DaemonSet on Linux cgroup v2 with containerd, NRI, and runc systemd cgroups.
+The agent and NRI containers run as root (`runAsUser: 0`).
+
+The agent needs root/privileged access to load eBPF programs and create BPF maps.
+The NRI observer needs root access to connect to the host NRI socket mounted from `/var/run/nri/nri.sock`.
+GKE Standard with COS and containerd 2.x has been verified with this model.
+GKE Autopilot and other environments that block privileged hostPath node agents are unsupported.
+
 ## GitLab Runner Kubernetes executor
 
 GitLab Runner writes CI job information into Kubernetes Pod labels and annotations.
