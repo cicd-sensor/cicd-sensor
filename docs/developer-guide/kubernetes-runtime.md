@@ -101,6 +101,7 @@ Kubernetes job Pods must not receive host `containerd`, CRI, NRI, or cicd-sensor
 The NRI staging endpoint is used by the host-side NRI observer.
 The GitHub k8s start socket is mounted only into GitHub ARC runner containers and exposes only start behavior.
 The container customization hook wrapper does not need cicd-sensor socket access.
+For the exact Agent socket endpoints, see [Agent Architecture](agent.md#listener-endpoints).
 
 ## NRI availability
 

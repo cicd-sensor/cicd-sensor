@@ -119,10 +119,38 @@ For implementation ownership boundaries, see [Agent Ownership Boundaries](agent-
 | GitHub Actions | GitHub-hosted runner | `/v1/github/project/start` | cgroup of the project start peer PID |
 | GitHub Actions | Self-hosted runner on a machine | `/v1/github/host/start` | cgroup of the hook peer PID |
 | GitLab CI/CD | GitLab Runner Docker executor | `/v1/gitlab/staging/put` -> lazy `/v1/gitlab/host/start` | Docker label evidence and staging promote |
-| GitHub Actions / GitLab CI/CD | ARC runner scale set / GitLab Runner Kubernetes executor | Planned | NRI and hooks are under consideration |
+| GitHub Actions | ARC default / dind mode | `/v1/github/k8s/start` | cgroup of the job hook peer PID; dind also binds the Pod cgroup tree |
+| GitHub Actions | ARC Kubernetes mode | `/v1/github/k8s/start` + `/v1/github/k8s/staging/put` | job hook peer PID plus NRI-provided container cgroup basenames |
+| GitLab CI/CD | GitLab Runner Kubernetes executor | `/v1/gitlab/k8s/staging/put` -> lazy `/v1/gitlab/host/start` | GitLab Pod metadata and NRI-provided container cgroup basenames |
 
 The agent process selects one provider at startup.
 The Listener mounts either `/v1/github/*` or `/v1/gitlab/*`, not both.
+Kubernetes runtime details are covered in [Kubernetes Runtime](kubernetes-runtime.md).
+
+## Listener endpoints
+
+These endpoints are internal Agent APIs over Unix sockets. They are not a public network API.
+
+The normal agent control socket exposes the provider route family selected at agent startup:
+
+| Provider | Endpoint | Caller | Purpose |
+| --- | --- | --- | --- |
+| GitHub | `/v1/github/job/health` | GitHub job hook / action | Check whether the caller belongs to a tracked Job. |
+| GitHub | `/v1/github/host/start` | installed runner hook | Create or attach host scope for a machine runner Job. |
+| GitHub | `/v1/github/host/end` | installed runner hook | End host scope for a machine runner Job. |
+| GitHub | `/v1/github/project/start` | project action | Create or attach project scope for a Job. |
+| GitHub | `/v1/github/project/result` | project action | Read project result data for reports and attestations. |
+| GitHub | `/v1/github/staging/put` | Docker proxy | Stage Docker-created container cgroup basenames by peer PID. |
+| GitHub | `/v1/github/k8s/staging/put` | host-side NRI observer | Stage Kubernetes-created container cgroup basenames by injected GitHub identity. |
+| GitLab | `/v1/gitlab/host/start` | Docker proxy / NRI lazy start | Create GitLab host Job state from runner metadata. |
+| GitLab | `/v1/gitlab/staging/put` | Docker proxy | Stage Docker-created container cgroup basenames by peer PID. |
+| GitLab | `/v1/gitlab/k8s/staging/put` | host-side NRI observer | Stage Kubernetes-created container cgroup basenames by GitLab identity. |
+
+GitHub ARC also uses a separate start-only socket mounted into the runner container:
+
+| Endpoint | Caller | Purpose |
+| --- | --- | --- |
+| `/v1/github/k8s/start` | GitHub ARC job hook | Create the Job from GitHub identity and bind the runner or Pod cgroup before workflow steps run. |
 
 ## Listener trust model
 
@@ -134,11 +162,14 @@ The control socket is mode `0o777`; request identification uses `SO_PEERCRED`:
 
 | Check | Endpoints | What it confirms |
 | --- | --- | --- |
-| Agent-owner UID | GitLab `host/start`, GitHub / GitLab `staging/put` | peer UID matches the agent process owner |
+| Agent-owner UID | GitLab `host/start`, GitHub / GitLab staging endpoints | peer UID matches the agent process owner |
 | Peer in tracked Job | GitHub `host/end`, `project/result`, `job/health` | peer PID's cgroup is in an already-tracked Job |
-| Seed | GitHub `host/start` | peer's cgroup becomes the new Job's tracked root |
+| Seed | GitHub `host/start`, GitHub `k8s/start` | peer's cgroup becomes the new Job's tracked root |
 
 GitHub `project/start` is the mixed case: on a self-hosted runner the peer must already belong to the host Job (it attaches project scope); on a hosted runner no prior Job exists, so the peer's cgroup seeds a new project-only Job. Co-resident untrusted local users are out of scope.
+
+Kubernetes support keeps the GitHub k8s start endpoint on a separate start-only socket because the caller is inside the ARC runner container, while the normal control socket and NRI staging callers are host-side agent components.
+This keeps the container-visible surface to job start only and preserves the boundary between runner container code and host-side staging / runtime control.
 
 ## KernelTracker Primitives
 
