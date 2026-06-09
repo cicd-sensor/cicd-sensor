@@ -100,20 +100,27 @@ data:
       return JSON.stringify(String(value));
     }
 
-    function templateYaml(identity, metadata) {
-      return [
+    function templateYaml(identity, metadata, nodeName) {
+      const lines = [
         "metadata:",
         "  annotations:",
         `    ${IDENTITY_ANNOTATION}: ${yamlString(JSON.stringify(identity))}`,
         `    ${METADATA_ANNOTATION}: ${yamlString(JSON.stringify(metadata))}`,
-        "",
-      ].join("\n");
+      ];
+      if (nodeName) {
+        lines.push(
+          "spec:",
+          `  nodeName: ${yamlString(nodeName)}`,
+        );
+      }
+      lines.push("");
+      return lines.join("\n");
     }
 
-    function writeTemplate(identity, metadata) {
+    function writeTemplate(identity, metadata, nodeName) {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cicd-sensor-arc-hook-"));
       const file = path.join(dir, `hook-template-${process.pid}-${Date.now()}.yaml`);
-      fs.writeFileSync(file, templateYaml(identity, metadata), { mode: 0o600 });
+      fs.writeFileSync(file, templateYaml(identity, metadata, nodeName), { mode: 0o600 });
       return file;
     }
 
@@ -150,7 +157,7 @@ data:
       if (shouldInject(parsed.command)) {
         const identity = buildIdentity();
         if (hasRequiredIdentity(identity)) {
-          env.ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE = writeTemplate(identity, buildMetadata());
+          env.ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE = writeTemplate(identity, buildMetadata(), process.env.CICD_SENSOR_K8S_NODE_NAME || "");
         } else {
           console.error("cicd-sensor hook wrapper: GitHub identity is incomplete; delegating without annotations");
         }

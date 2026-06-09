@@ -77,7 +77,7 @@ cicd-sensor uses a small container customization hook wrapper:
 
 1. The runner calls the cicd-sensor wrapper through `ACTIONS_RUNNER_CONTAINER_HOOKS`.
 2. The wrapper reads GitHub identity from the hook process environment.
-3. The wrapper writes a temporary hook template with cicd-sensor annotations.
+3. The wrapper writes a temporary hook template with cicd-sensor annotations and the runner Pod's `nodeName`.
 4. The wrapper delegates to the official ARC Kubernetes hook at `/home/runner/k8s/index.js`.
 5. NRI reads the injected annotations during `CreateContainer` and stages the cgroup.
 
@@ -91,6 +91,9 @@ Injected annotations:
 The container customization hook wrapper does not replace NRI.
 It supplies identity before Pod creation; NRI still supplies the runtime cgroup path at container creation time.
 Using the hook alone would require post-create Kubernetes API lookup or exposing a staging socket to the runner, and would no longer match the existing cgroup-mkdir staging model.
+
+ARC Kubernetes mode keeps workflow-created Pods on the same node as the runner Pod.
+Agent state and cgroup tracking are node-local, so the agent that receives the GitHub job start must be the same node agent that receives the NRI `CreateContainer` events for the workflow job, service, and container-action Pods.
 
 ## Cgroup staging
 

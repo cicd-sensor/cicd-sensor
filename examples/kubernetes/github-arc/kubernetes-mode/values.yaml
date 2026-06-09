@@ -29,6 +29,10 @@ template:
             value: /run/cicd-sensor/github-k8s/runner.sock
           - name: ACTIONS_RUNNER_CONTAINER_HOOKS
             value: /opt/cicd-sensor/container-hooks/arc-hook-wrapper.js
+          - name: CICD_SENSOR_K8S_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
         volumeMounts:
           - name: cicd-sensor-github-arc-job-hook
             mountPath: /opt/cicd-sensor/job-hooks

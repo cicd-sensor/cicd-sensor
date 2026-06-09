@@ -76,6 +76,9 @@ In Kubernetes mode, ARC uses GitHub's container hooks to create workflow job con
 | NRI | Required. NRI reads injected Pod annotations and runtime cgroup paths for workflow job, service, and container-action Pods. |
 | ARC values | [`examples/kubernetes/github-arc/kubernetes-mode/values.yaml`](https://github.com/cicd-sensor/cicd-sensor/blob/main/examples/kubernetes/github-arc/kubernetes-mode/values.yaml) |
 
+The Kubernetes mode values pass the runner Pod's `spec.nodeName` to the container hook wrapper.
+The wrapper pins workflow-created Pods to the same node so the node-local agent that receives the job start also receives the NRI container events.
+
 Do not mount cicd-sensor sockets into workflow-created job, service, or step containers.
 
 ## Example files
