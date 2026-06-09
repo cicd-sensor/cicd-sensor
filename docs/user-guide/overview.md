@@ -11,8 +11,8 @@ The first decision is the runner environment you want to protect.
 | GitHub-hosted | GitHub Actions | GitHub-hosted runner | [GitHub-hosted runner](github-hosted.md) | Graphical report and runtime-trace attestation predicate. Log delivery is also available when using the manager. |
 | Machine runner | GitHub Actions | Self-hosted runner on a machine | [Machine runner install](self-hosted-install.md), then [GitHub Actions machine runner](github-self-hosted.md), plus [Manager](manager.md) | Summary Log, Detection Log, Runtime Event Log, and graphical report |
 | Machine runner | GitLab CI/CD | GitLab Runner Docker executor | [Machine runner install](self-hosted-install.md), then [GitLab Runner Docker executor](gitlab-ci.md), plus [Manager](manager.md) | Summary Log, Detection Log, and Runtime Event Log |
-| Kubernetes runner | GitHub Actions | ARC runner scale set on Kubernetes | [Kubernetes runner install](kubernetes/index.md), then [GitHub ARC runner scale sets](kubernetes/github-arc.md), plus [Manager](manager.md) | In development: Summary Log, Detection Log, Runtime Event Log, and Kubernetes container tracking |
-| Kubernetes runner | GitLab CI/CD | GitLab Runner Kubernetes executor | [Kubernetes runner install](kubernetes/index.md), then [GitLab Runner Kubernetes executor](kubernetes/gitlab-runner.md), plus [Manager](manager.md) | In development: Summary Log, Detection Log, Runtime Event Log, and Kubernetes container tracking |
+| Kubernetes runner | GitHub Actions | ARC runner scale set on Kubernetes | [Kubernetes runner install](kubernetes/index.md), then [GitHub ARC runner scale sets](kubernetes/github-arc.md), plus [Manager](manager.md) | Preview support. Summary Log, Detection Log, Runtime Event Log, and Kubernetes container tracking |
+| Kubernetes runner | GitLab CI/CD | GitLab Runner Kubernetes executor | [Kubernetes runner install](kubernetes/index.md), then [GitLab Runner Kubernetes executor](kubernetes/gitlab-runner.md), plus [Manager](manager.md) | Preview support. Summary Log, Detection Log, Runtime Event Log, and Kubernetes container tracking |
 | Rules | Rule author / SIRT | Rule authoring | [Rules](rules.md) | Detection, collection, and correlation rules for CI/CD runtime events |
 | Logs | Log consumer / SIEM integration | Log delivery | [Logging](logging.md) | Log format delivered by the manager |
 
@@ -90,9 +90,9 @@ See [Kubernetes runner install](kubernetes/index.md) for the shared node setup, 
 | --- | --- | --- |
 | GitHub Actions | GitHub-hosted runner | Supported target |
 | GitHub Actions | Self-hosted runner on a machine | Supported target |
-| GitHub Actions | [ARC runner scale set on Kubernetes](kubernetes/github-arc.md) | In development |
+| GitHub Actions | [ARC runner scale set on Kubernetes](kubernetes/github-arc.md) | Preview support |
 | GitLab CI/CD | GitLab Runner Docker executor | Supported target |
-| GitLab CI/CD | [GitLab Runner Kubernetes executor](kubernetes/gitlab-runner.md) | In development |
+| GitLab CI/CD | [GitLab Runner Kubernetes executor](kubernetes/gitlab-runner.md) | Preview support |
 | GitLab CI/CD | Self-hosted Shell executor | Not planned |
 | GitLab CI/CD | GitLab-hosted runner | Not supported due to technical constraints |
 

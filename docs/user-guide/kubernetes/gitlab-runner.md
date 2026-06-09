@@ -1,6 +1,6 @@
 # GitLab Runner Kubernetes executor
 
-GitLab Runner Kubernetes executor support is in development.
+GitLab Runner Kubernetes executor support is available as preview support.
 
 Install the shared [Kubernetes runner setup](index.md) first, then configure GitLab Runner with the Kubernetes executor.
 cicd-sensor does not require a GitLab-specific hook in this mode.

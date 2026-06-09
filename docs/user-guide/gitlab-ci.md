@@ -10,7 +10,7 @@ Unlike GitHub Actions, GitLab CI/CD does not require workflow steps or project-s
 | Environment | Status |
 | --- | --- |
 | GitLab Runner Docker executor | Supported target |
-| GitLab Runner Kubernetes executor | In development |
+| [GitLab Runner Kubernetes executor](kubernetes/gitlab-runner.md) | Preview support |
 | Self-hosted Shell executor | Not planned |
 | GitLab-hosted runner | Not supported due to technical constraints |
 

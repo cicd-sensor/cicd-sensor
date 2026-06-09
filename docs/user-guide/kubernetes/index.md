@@ -1,7 +1,7 @@
 # Kubernetes runner install
 
-Kubernetes support is in development.
-This page describes the planned install shape and operational cautions.
+Kubernetes support is available as preview support.
+This page describes the current install shape and operational cautions.
 
 For Kubernetes runners, cicd-sensor runs at the node level and uses cicd-sensor Manager for config, rules, and log delivery.
 Runner workloads do not mount host container runtime sockets or cicd-sensor internal sockets.
@@ -10,8 +10,8 @@ Runner workloads do not mount host container runtime sockets or cicd-sensor inte
 
 | CI/CD system | Runner environment | Setup page | Status |
 | --- | --- | --- | --- |
-| GitHub Actions | ARC runner scale set on Kubernetes | [GitHub ARC runner scale sets](github-arc.md) | In development |
-| GitLab CI/CD | GitLab Runner Kubernetes executor | [GitLab Runner Kubernetes executor](gitlab-runner.md) | In development |
+| GitHub Actions | ARC runner scale set on Kubernetes | [GitHub ARC runner scale sets](github-arc.md) | Preview support |
+| GitLab CI/CD | GitLab Runner Kubernetes executor | [GitLab Runner Kubernetes executor](gitlab-runner.md) | Preview support |
 
 ## Basic architecture
 

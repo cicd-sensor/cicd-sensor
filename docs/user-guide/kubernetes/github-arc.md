@@ -1,7 +1,7 @@
 # GitHub ARC runner scale sets
 
-GitHub Actions support for Actions Runner Controller is in development.
-This page describes the planned deployment model for ARC runner scale sets.
+GitHub Actions support for Actions Runner Controller is available as preview support.
+This page describes the deployment model for ARC runner scale sets.
 
 Use the official `gha-runner-scale-set` Helm chart.
 Install the shared [Kubernetes runner setup](index.md) first, then configure the ARC runner scale set for the mode you use.

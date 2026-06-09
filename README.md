@@ -83,10 +83,10 @@ Most other runtimes have their open-source defenders: Falco, Tetragon, Tracee, W
 | Platform | Environment | Status |
 | --- | --- | --- |
 | GitHub Actions | GitHub-hosted runner | ✅ Supported |
-| GitHub Actions | Self-hosted Machine Runner | ✅ Supported |
-| GitHub Actions | Actions Runner Controller on Kubernetes | 🚧 Planned |
-| GitLab CI/CD | Self-hosted Docker executor | ✅ Supported |
-| GitLab CI/CD | Self-hosted Kubernetes executor | 🚧 Planned |
+| GitHub Actions | Self-hosted runner on a machine | ✅ Supported |
+| GitHub Actions | Actions Runner Controller on Kubernetes | 🧪 Preview support |
+| GitLab CI/CD | GitLab Runner Docker executor | ✅ Supported |
+| GitLab CI/CD | GitLab Runner Kubernetes executor | 🧪 Preview support |
 | GitLab CI/CD | GitLab-hosted runner | ❌ Not supported (technical constraints) |
 
 Works on both public and private repositories, with no third-party SaaS dependency.
