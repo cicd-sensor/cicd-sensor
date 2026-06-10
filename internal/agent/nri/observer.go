@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	nriapi "github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
@@ -21,6 +22,16 @@ const (
 
 	pluginName  = "cicd-sensor"
 	pluginIndex = "90"
+
+	// Reconnect backoff bounds for lost NRI connections. containerd closes
+	// plugin connections on restart and NRI has no event replay, so exiting
+	// instead of reconnecting would widen the unobserved-container gap to the
+	// DaemonSet restart (plus crash-loop backoff).
+	reconnectInitialDelay = time.Second
+	reconnectMaxDelay     = 30 * time.Second
+	// reconnectResetAfter resets the backoff once a connection has stayed up
+	// long enough to count as healthy rather than flapping.
+	reconnectResetAfter = time.Minute
 )
 
 // Options configures the NRI observer process.
@@ -40,6 +51,10 @@ type Observer struct {
 }
 
 // Run registers the observer with containerd NRI and blocks until ctx ends.
+// A lost NRI connection (typically a containerd restart) is retried with
+// backoff instead of returned: NRI has no event replay and the staging model
+// cannot backfill, so containers created while disconnected are permanently
+// unobserved — every reconnect log line marks such a monitoring gap.
 func Run(ctx context.Context, opts Options) error {
 	if err := ValidateOptions(opts); err != nil {
 		return err
@@ -55,13 +70,49 @@ func Run(ctx context.Context, opts Options) error {
 		agent:    &agentClient{socketPath: opts.AgentSocketPath},
 		provider: opts.Provider,
 	}
+
+	delay := reconnectInitialDelay
+	for {
+		connectedAt := time.Now()
+		started, err := runStubOnce(ctx, opts, observer, logger)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if !started {
+			return err
+		}
+		if err == nil {
+			err = errors.New("nri connection closed")
+		}
+		if time.Since(connectedAt) >= reconnectResetAfter {
+			delay = reconnectInitialDelay
+		}
+		logger.WarnContext(ctx, "nri_connection_lost",
+			"error", err,
+			"retry_delay", delay.String(),
+			"note", "containers created while disconnected are not staged",
+		)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, reconnectMaxDelay)
+	}
+}
+
+// runStubOnce serves one NRI connection until it is closed or ctx ends.
+// Startup errors are returned with started=false so misconfiguration fails
+// loudly; only a connection that was successfully started is eligible for
+// reconnect.
+func runStubOnce(ctx context.Context, opts Options, observer *Observer, logger *slog.Logger) (started bool, err error) {
 	nriStub, err := stub.New(observer,
 		stub.WithSocketPath(opts.SocketPath),
 		stub.WithPluginName(pluginName),
 		stub.WithPluginIdx(pluginIndex),
 	)
 	if err != nil {
-		return fmt.Errorf("create nri stub: %w", err)
+		return false, fmt.Errorf("create nri stub: %w", err)
 	}
 
 	logger.InfoContext(ctx, "nri_observer_starting",
@@ -71,10 +122,24 @@ func Run(ctx context.Context, opts Options) error {
 		"plugin_name", pluginName,
 		"plugin_index", pluginIndex,
 	)
-	if err := nriStub.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return fmt.Errorf("run nri stub: %w", err)
+	if err := nriStub.Start(ctx); err != nil {
+		return false, fmt.Errorf("start nri stub: %w", err)
 	}
-	return nil
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		nriStub.Wait()
+	}()
+
+	select {
+	case <-done:
+		return true, nil
+	case <-ctx.Done():
+		nriStub.Stop()
+		<-done
+		return true, ctx.Err()
+	}
 }
 
 // ValidateOptions validates observer process options without starting NRI.

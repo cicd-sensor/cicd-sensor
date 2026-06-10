@@ -1,6 +1,10 @@
 package nri
 
 import (
+	"context"
+	"errors"
+	"io"
+	"log/slog"
 	"reflect"
 	"testing"
 
@@ -109,6 +113,21 @@ func TestSafeCreateContainerSnapshotsForLogOmitSensitiveValues(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotContainer.EnvKeys, []string{"CI", "TOKEN"}) {
 		t.Fatalf("container env keys: got %#v", gotContainer.EnvKeys)
+	}
+}
+
+func TestRunReturnsStartupErrorForMissingNRISocket(t *testing.T) {
+	err := Run(t.Context(), Options{
+		SocketPath:      t.TempDir() + "/missing-nri.sock",
+		AgentSocketPath: t.TempDir() + "/agent.sock",
+		Provider:        "gitlab",
+		Logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err == nil {
+		t.Fatal("Run error: got nil, want startup error")
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("Run error: got context cancellation, want startup error: %v", err)
 	}
 }
 

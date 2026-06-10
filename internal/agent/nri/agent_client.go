@@ -14,7 +14,12 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
-const agentPostTimeout = 5 * time.Second
+// agentPostTimeout must stay well below containerd's per-request NRI plugin
+// budget (api.DefaultPluginRequestTimeout, 2s). If the runtime-side timeout
+// fires first, containerd treats the plugin as failed and closes its
+// connection. The agent is node-local, so a short timeout degrades a slow
+// agent to a logged staging miss instead of a plugin disconnect.
+const agentPostTimeout = 1 * time.Second
 
 type agentClient struct {
 	socketPath string

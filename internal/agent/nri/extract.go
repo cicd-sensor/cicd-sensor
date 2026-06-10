@@ -3,6 +3,7 @@ package nri
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -18,6 +19,7 @@ const (
 	gitlabJobNameAnnotation     = "job.runner.gitlab.com/name"
 	gitlabJobRefAnnotation      = "job.runner.gitlab.com/ref"
 	gitlabJobSHAAnnotation      = "job.runner.gitlab.com/sha"
+	gitlabJobURLAnnotation      = "job.runner.gitlab.com/url"
 )
 
 type stagingDecision struct {
@@ -96,11 +98,21 @@ func gitlabStagingDecision(event CreateContainerEvent) (stagingDecision, bool) {
 	if jobID == "" {
 		return stagingDecision{}, false
 	}
-	projectPath := gitlabProjectPath(event.Pod.Labels, envMap(event.Container.Env))
+	urlHost, urlProjectPath, urlJobID := gitlabJobURLIdentity(event.Pod.Annotations[gitlabJobURLAnnotation])
+	if urlJobID != "" && urlJobID != jobID {
+		return stagingDecision{Provider: jobcontext.ProviderGitLab, Status: "skip", SkipReason: "gitlab_job_url_id_mismatch"}, false
+	}
+	projectPath := urlProjectPath
+	if projectPath == "" {
+		projectPath = gitlabProjectPath(event.Pod.Labels, envMap(event.Container.Env))
+	}
 	if projectPath == "" {
 		return stagingDecision{Provider: jobcontext.ProviderGitLab, Status: "skip", SkipReason: "gitlab_project_path_missing"}, false
 	}
-	providerHost := gitlabProviderHost(event.Container.Env)
+	providerHost := urlHost
+	if providerHost == "" {
+		providerHost = gitlabProviderHost(event.Container.Env)
+	}
 	if providerHost == "" {
 		return stagingDecision{Provider: jobcontext.ProviderGitLab, Status: "skip", SkipReason: "gitlab_provider_host_missing"}, false
 	}
@@ -127,6 +139,36 @@ func shouldSkipGitLabContainer(name string) bool {
 	}
 }
 
+// gitlabJobURLIdentity derives the provider host and project path from the
+// runner-set job URL annotation (https://<host>/<project_path>/-/jobs/<id>).
+// It is the preferred identity source: Pod label values cannot contain "/",
+// so labels cannot represent nested group paths, and container env can be
+// overridden by job configuration. A URL without the /-/jobs/ marker still
+// yields the host; the caller falls back for the project path.
+func gitlabJobURLIdentity(rawURL string) (host, projectPath, jobID string) {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return "", "", ""
+	}
+	host, err := jobcontext.DeriveProviderHost(rawURL)
+	if err != nil {
+		return "", "", ""
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", "", ""
+	}
+	path, rest, found := strings.Cut(parsed.Path, "/-/jobs/")
+	if !found {
+		return host, "", ""
+	}
+	jobID, _, _ = strings.Cut(strings.Trim(rest, "/"), "/")
+	return host, strings.Trim(path, "/"), strings.TrimSpace(jobID)
+}
+
+// gitlabProjectPath is the fallback when the job URL annotation is missing.
+// Label values cannot contain "/", so the label-derived path is wrong for
+// projects under nested groups; CI_PROJECT_PATH is job-author-influenced.
 func gitlabProjectPath(labels map[string]string, env map[string]string) string {
 	namespace := strings.Trim(strings.TrimSpace(labels[gitlabProjectNamespaceLabel]), "/")
 	name := strings.Trim(strings.TrimSpace(labels[gitlabProjectNameLabel]), "/")

@@ -4,7 +4,9 @@ Kubernetes support is available as preview support.
 This page describes the current install shape and operational cautions.
 
 For Kubernetes runners, cicd-sensor runs at the node level and uses cicd-sensor Manager for config, rules, and log delivery.
-Runner workloads do not mount host container runtime sockets or cicd-sensor internal sockets.
+Workflow- and job-created Pods do not mount host container runtime sockets or cicd-sensor internal sockets.
+GitHub ARC runner containers mount one exception: the dedicated GitHub Kubernetes runner socket, which exposes job start only.
+In ARC default and dind modes, workflow steps run inside the runner container and can therefore reach that socket; see the [listener trust model](../../developer-guide/agent.md#listener-trust-model) for what it does and does not guarantee.
 
 ## Supported setups
 

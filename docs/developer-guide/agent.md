@@ -176,6 +176,10 @@ Kubernetes support keeps the GitHub k8s start endpoint on a separate runner sock
 This keeps the container-visible surface to job start only and preserves the boundary between runner container code and host-side staging / runtime control.
 The same runner socket may later carry GitHub Kubernetes project start/result endpoints, but the normal agent control socket should not be mounted into workflow containers.
 
+In ARC default and dind modes, workflow code runs in the runner container and can reach the runner socket.
+The request identity is caller-asserted, but the peer cgroup is still the guard: if that cgroup is already tracked for another Job, start is rejected and the partial Job is unwound.
+An untracked peer cgroup can still assert a new identity, so Kubernetes runner job records are runner-asserted, not independently verified.
+
 ## KernelTracker Primitives
 
 Job tracking is expressed by JobRegistry composing KernelTracker primitives.

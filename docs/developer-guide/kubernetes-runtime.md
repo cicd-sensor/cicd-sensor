@@ -32,15 +32,16 @@ GKE Autopilot and other environments that block privileged hostPath node agents 
 GitLab Runner writes CI job information into Kubernetes Pod labels and annotations.
 The NRI handler reads those fields from `api.PodSandbox` during `CreateContainer`.
 
-Primary source:
+Consumed sources, in identity precedence order:
 
-| Source | Example keys | Use |
+| Source | Keys | Use |
 | --- | --- | --- |
-| Pod labels | `project.runner.gitlab.com/id`, `project.runner.gitlab.com/name`, `project.runner.gitlab.com/namespace` | Project identity and namespace metadata. |
-| Pod labels | `job.runner.gitlab.com/pod`, `manager.runner.gitlab.com/name` | Runner and Pod correlation. |
-| Pod annotations | `job.runner.gitlab.com/id`, `job.runner.gitlab.com/name`, `job.runner.gitlab.com/ref`, `job.runner.gitlab.com/sha`, `job.runner.gitlab.com/url` | Primary job identity and commit metadata. |
+| Pod annotation | `job.runner.gitlab.com/url` | Primary source for provider host and project path. Label values cannot contain `/`, so nested group paths are only available here. |
+| Pod annotations | `job.runner.gitlab.com/id`, `job.runner.gitlab.com/name`, `job.runner.gitlab.com/ref`, `job.runner.gitlab.com/sha` | Job ID and commit metadata. |
+| Pod labels | `project.runner.gitlab.com/name`, `project.runner.gitlab.com/namespace` | Project path fallback when the job URL annotation is missing; cannot represent nested group paths. |
 
-Container environment variables such as `CI_PROJECT_PATH`, `CI_PIPELINE_ID`, `CI_JOB_ID`, and `CI_COMMIT_SHA` are fallback metadata only because job configuration can override environment values.
+Container environment variables such as `CI_PROJECT_PATH` and `CI_SERVER_HOST` are last-resort identity fallbacks, and variables such as `CI_PIPELINE_SOURCE` and `CI_COMMIT_SHA` fill metadata.
+Job configuration can override environment values, so an identity built from env alone is job-author-influenced; runner-set annotations are preferred for identity fields.
 
 `build` and user-defined service containers are monitored.
 `helper` and `init-permissions` are GitLab Runner infrastructure containers and are skipped by default.
@@ -117,6 +118,7 @@ That basename is inserted into staging state using the same promotion model as t
 Kubernetes job Pods must not receive host `containerd`, CRI, NRI, or cicd-sensor staging sockets.
 The NRI staging endpoint is used by the host-side NRI observer.
 The GitHub Kubernetes runner socket is mounted only into GitHub ARC runner containers and currently exposes only start behavior.
+In ARC default and dind modes, workflow steps run inside the runner container and can reach that socket; the start identity is caller-asserted, see the [listener trust model](agent.md#listener-trust-model).
 The container customization hook wrapper does not need cicd-sensor socket access.
 Future GitHub Kubernetes project start/result endpoints may use the same runner socket; the normal agent control socket should remain host-side only.
 For the exact Agent socket endpoints, see [Agent Architecture](agent.md#listener-endpoints).
@@ -133,3 +135,6 @@ This keeps containerd NRI callbacks local and bounded; manager unavailability af
 cicd-sensor does not patch or restart containerd to enable NRI.
 The Kubernetes installer treats `/var/run/nri/nri.sock` as a preflight requirement.
 The install path should fail clearly if the NRI socket is missing instead of mutating node runtime configuration.
+
+containerd restarts close NRI plugin connections, and NRI has no event replay.
+The observer reconnects with backoff instead of exiting, but containers created while disconnected are never staged; each `nri_connection_lost` log line marks such a monitoring gap.
