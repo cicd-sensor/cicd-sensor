@@ -1,6 +1,7 @@
 package nri
 
 import (
+	"reflect"
 	"testing"
 
 	nriapi "github.com/containerd/nri/pkg/api"
@@ -56,6 +57,58 @@ func TestCgroupBasename(t *testing.T) {
 				t.Fatalf("basename: got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSafeCreateContainerSnapshotsForLogOmitSensitiveValues(t *testing.T) {
+	pod := PodSnapshot{
+		ID:        "pod-id",
+		Name:      "job-pod",
+		UID:       "pod-uid",
+		Namespace: "ci",
+		Labels: map[string]string{
+			"app": "secret-label-value",
+		},
+		Annotations: map[string]string{
+			"example.com/token": "secret-annotation-value",
+		},
+		CgroupsPath: "pod-cgroup",
+	}
+	container := ContainerSnapshot{
+		ID:   "container-id",
+		Name: "build",
+		Labels: map[string]string{
+			"container": "secret-container-label-value",
+		},
+		Annotations: map[string]string{
+			"example.com/container-token": "secret-container-annotation-value",
+		},
+		Env: []string{
+			"TOKEN=secret-env-value",
+			"CI=true",
+			"TOKEN=duplicate-secret-env-value",
+			"malformed",
+		},
+		CgroupsPath: "container-cgroup",
+	}
+
+	gotPod := safePodSnapshotForLog(pod)
+	if !reflect.DeepEqual(gotPod.LabelKeys, []string{"app"}) {
+		t.Fatalf("pod label keys: got %#v", gotPod.LabelKeys)
+	}
+	if !reflect.DeepEqual(gotPod.AnnotationKeys, []string{"example.com/token"}) {
+		t.Fatalf("pod annotation keys: got %#v", gotPod.AnnotationKeys)
+	}
+
+	gotContainer := safeContainerSnapshotForLog(container)
+	if !reflect.DeepEqual(gotContainer.LabelKeys, []string{"container"}) {
+		t.Fatalf("container label keys: got %#v", gotContainer.LabelKeys)
+	}
+	if !reflect.DeepEqual(gotContainer.AnnotationKeys, []string{"example.com/container-token"}) {
+		t.Fatalf("container annotation keys: got %#v", gotContainer.AnnotationKeys)
+	}
+	if !reflect.DeepEqual(gotContainer.EnvKeys, []string{"CI", "TOKEN"}) {
+		t.Fatalf("container env keys: got %#v", gotContainer.EnvKeys)
 	}
 }
 

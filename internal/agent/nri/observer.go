@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	nriapi "github.com/containerd/nri/pkg/api"
@@ -97,8 +98,8 @@ func (o *Observer) CreateContainer(ctx context.Context, pod *nriapi.PodSandbox, 
 	event := NormalizeCreateContainer(pod, container)
 	decision, shouldStage := stagingDecisionForCreateContainer(o.provider, event)
 	o.logger.InfoContext(ctx, "nri_create_container",
-		"pod", event.Pod,
-		"container", event.Container,
+		"pod", safePodSnapshotForLog(event.Pod),
+		"container", safeContainerSnapshotForLog(event.Container),
 		"cgroup_basename", event.CgroupBasename,
 		"provider", decision.Provider,
 		"identity_status", decision.Status,
@@ -151,6 +152,82 @@ type ContainerSnapshot struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Env         []string          `json:"env,omitempty"`
 	CgroupsPath string            `json:"cgroups_path,omitempty"`
+}
+
+type podLogSnapshot struct {
+	ID             string   `json:"id,omitempty"`
+	Name           string   `json:"name,omitempty"`
+	UID            string   `json:"uid,omitempty"`
+	Namespace      string   `json:"namespace,omitempty"`
+	LabelKeys      []string `json:"label_keys,omitempty"`
+	AnnotationKeys []string `json:"annotation_keys,omitempty"`
+	CgroupsPath    string   `json:"cgroups_path,omitempty"`
+}
+
+type containerLogSnapshot struct {
+	ID             string   `json:"id,omitempty"`
+	Name           string   `json:"name,omitempty"`
+	LabelKeys      []string `json:"label_keys,omitempty"`
+	AnnotationKeys []string `json:"annotation_keys,omitempty"`
+	EnvKeys        []string `json:"env_keys,omitempty"`
+	CgroupsPath    string   `json:"cgroups_path,omitempty"`
+}
+
+func safePodSnapshotForLog(pod PodSnapshot) podLogSnapshot {
+	return podLogSnapshot{
+		ID:             pod.ID,
+		Name:           pod.Name,
+		UID:            pod.UID,
+		Namespace:      pod.Namespace,
+		LabelKeys:      sortedMapKeys(pod.Labels),
+		AnnotationKeys: sortedMapKeys(pod.Annotations),
+		CgroupsPath:    pod.CgroupsPath,
+	}
+}
+
+func safeContainerSnapshotForLog(container ContainerSnapshot) containerLogSnapshot {
+	return containerLogSnapshot{
+		ID:             container.ID,
+		Name:           container.Name,
+		LabelKeys:      sortedMapKeys(container.Labels),
+		AnnotationKeys: sortedMapKeys(container.Annotations),
+		EnvKeys:        sortedEnvKeys(container.Env),
+		CgroupsPath:    container.CgroupsPath,
+	}
+}
+
+func sortedMapKeys(values map[string]string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func sortedEnvKeys(env []string) []string {
+	if len(env) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(env))
+	seen := make(map[string]struct{}, len(env))
+	for _, kv := range env {
+		key, _, ok := strings.Cut(kv, "=")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 // NormalizeCreateContainer converts NRI API objects into a stable log shape.
