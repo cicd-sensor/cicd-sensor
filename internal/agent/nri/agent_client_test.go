@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
@@ -37,9 +39,8 @@ func TestAgentClient_StageGitLabWithIdentityAndMetadata(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"staged"}`))
 	}))
-	client := &agentClient{socketPath: socket}
+	client := newAgentClient(socket, jobcontext.ProviderGitLab)
 	decision := stagingDecision{
-		Provider: jobcontext.ProviderGitLab,
 		Basename: "cri-containerd-build.scope",
 		Identity: jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
 		Metadata: jobcontext.JobMetadata{CommitSHA: "abc123"},
@@ -76,9 +77,8 @@ func TestAgentClient_StageGitLabDoesNotCallHostStartOnJobNotFound(t *testing.T) 
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 	}))
-	client := &agentClient{socketPath: socket}
+	client := newAgentClient(socket, jobcontext.ProviderGitLab)
 	decision := stagingDecision{
-		Provider: jobcontext.ProviderGitLab,
 		Basename: "cri-containerd-build.scope",
 		Identity: identity,
 		Metadata: jobcontext.JobMetadata{CommitSHA: "abc123"},
@@ -107,10 +107,9 @@ func TestAgentClient_StageGitLabDoesNotStartOnNonJobNotFoundError(t *testing.T) 
 		}
 		http.Error(w, "agent boom", http.StatusTeapot)
 	}))
-	client := &agentClient{socketPath: socket}
+	client := newAgentClient(socket, jobcontext.ProviderGitLab)
 
 	err := client.stage(context.Background(), stagingDecision{
-		Provider: jobcontext.ProviderGitLab,
 		Basename: "cri-containerd-build.scope",
 		Identity: jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
 	})
@@ -139,10 +138,9 @@ func TestAgentClient_StageGitHubWithIdentity(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"staged"}`))
 	}))
-	client := &agentClient{socketPath: socket}
+	client := newAgentClient(socket, jobcontext.ProviderGitHub)
 
 	err := client.stage(context.Background(), stagingDecision{
-		Provider: jobcontext.ProviderGitHub,
 		Basename: "cri-containerd-job.scope",
 		Identity: identity,
 	})
@@ -151,7 +149,51 @@ func TestAgentClient_StageGitHubWithIdentity(t *testing.T) {
 	}
 }
 
+func TestAgentClient_PostReusesUnixHTTPClient(t *testing.T) {
+	var newConnections int64
+	socket := startNRIUnixServerWithConfig(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}), func(server *http.Server) {
+		server.ConnState = func(_ net.Conn, state http.ConnState) {
+			if state == http.StateNew {
+				atomic.AddInt64(&newConnections, 1)
+			}
+		}
+	})
+	client := newAgentClient(socket, jobcontext.ProviderGitLab)
+
+	for range 2 {
+		status, _, err := client.post(context.Background(), "/v1/test", []byte(`{}`))
+		if err != nil {
+			t.Fatalf("post: %v", err)
+		}
+		if status != http.StatusOK {
+			t.Fatalf("status: got %d, want %d", status, http.StatusOK)
+		}
+	}
+	if got := atomic.LoadInt64(&newConnections); got != 1 {
+		t.Fatalf("new unix connections: got %d, want 1", got)
+	}
+}
+
+func TestNewAgentClient_ConfiguresIdleTimeoutBelowListener(t *testing.T) {
+	client := newAgentClient("/tmp/agent.sock", jobcontext.ProviderGitLab)
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport type: got %T, want *http.Transport", client.client.Transport)
+	}
+	if transport.IdleConnTimeout != 30*time.Second {
+		t.Fatalf("IdleConnTimeout: got %s, want 30s", transport.IdleConnTimeout)
+	}
+}
+
 func startNRIUnixServer(t *testing.T, handler http.Handler) string {
+	t.Helper()
+	return startNRIUnixServerWithConfig(t, handler, nil)
+}
+
+func startNRIUnixServerWithConfig(t *testing.T, handler http.Handler, configure func(*http.Server)) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "cicd-sensor-nri-")
 	if err != nil {
@@ -164,6 +206,9 @@ func startNRIUnixServer(t *testing.T, handler http.Handler) string {
 		t.Fatalf("listen unix: %v", err)
 	}
 	server := &http.Server{Handler: handler}
+	if configure != nil {
+		configure(server)
+	}
 	go func() {
 		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			t.Errorf("server: %v", err)

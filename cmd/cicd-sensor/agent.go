@@ -75,7 +75,7 @@ func runAgentStart(args []string) {
 		fmt.Fprintf(fs.Output(), "  --socket PATH\n        Agent control socket path. (default %q)\n", defaultSocketPath)
 		fmt.Fprintf(fs.Output(), "  --github-k8s-start-socket PATH\n        GitHub Kubernetes runner socket path. Defaults to %q for --provider github --runner kubernetes.\n", defaultGitHubK8sRunnerSocketPath)
 		fmt.Fprintln(fs.Output(), "  --manager-url URL")
-		fmt.Fprintln(fs.Output(), "        Host scope manager URL. Required for host/start.")
+		fmt.Fprintln(fs.Output(), "        Host scope manager URL. Required for --runner kubernetes and host-installed machine runners.")
 		fmt.Fprintln(fs.Output(), "  CICD_SENSOR_MANAGER_TOKEN or --manager-token-file PATH")
 		fmt.Fprintln(fs.Output(), "        Host scope manager bearer token. Required only when --manager-url is set.")
 		fmt.Fprintln(fs.Output(), "  --shutdown-grace DURATION")
@@ -115,6 +115,12 @@ func runAgentStart(args []string) {
 		os.Exit(1)
 	}
 	opts = resolveAgentStartOptions(opts)
+	if opts.ManagerURL == "" {
+		if err := validateAgentStartOptions(opts); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 
 	slog.InfoContext(ctx, "agent_started",
 		"version", version.Current,
@@ -167,6 +173,9 @@ func runAgentStart(args []string) {
 func validateAgentStartOptions(opts agentStartOptions) error {
 	if err := validateAgentStartRequiredOptions(opts); err != nil {
 		return err
+	}
+	if opts.Runner == "kubernetes" && opts.ManagerURL == "" {
+		return fmt.Errorf("manager-url is required for runner kubernetes")
 	}
 	if opts.ManagerURL == "" {
 		return nil

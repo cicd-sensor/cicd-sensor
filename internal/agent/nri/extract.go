@@ -23,7 +23,6 @@ const (
 )
 
 type stagingDecision struct {
-	Provider   jobcontext.Provider
 	Status     string
 	SkipReason string
 	Basename   string
@@ -65,25 +64,24 @@ func githubStagingDecision(event CreateContainerEvent) (stagingDecision, bool) {
 
 	var identity jobcontext.JobIdentity
 	if err := json.Unmarshal([]byte(rawIdentity), &identity); err != nil {
-		return stagingDecision{Provider: jobcontext.ProviderGitHub, Status: "skip", SkipReason: "github_identity_malformed"}, false
+		return stagingDecision{Status: "skip", SkipReason: "github_identity_malformed"}, false
 	}
 	if identity.Provider != jobcontext.ProviderGitHub {
-		return stagingDecision{Provider: jobcontext.ProviderGitHub, Status: "skip", SkipReason: "github_identity_provider_mismatch"}, false
+		return stagingDecision{Status: "skip", SkipReason: "github_identity_provider_mismatch"}, false
 	}
 	if err := identity.Validate(); err != nil {
-		return stagingDecision{Provider: jobcontext.ProviderGitHub, Status: "skip", SkipReason: "github_identity_invalid"}, false
+		return stagingDecision{Status: "skip", SkipReason: "github_identity_invalid"}, false
 	}
 
 	var metadata jobcontext.JobMetadata
 	rawMetadata := strings.TrimSpace(event.Pod.Annotations[githubMetadataAnnotation])
 	if rawMetadata != "" {
 		if err := json.Unmarshal([]byte(rawMetadata), &metadata); err != nil {
-			return stagingDecision{Provider: jobcontext.ProviderGitHub, Status: "skip", SkipReason: "github_metadata_malformed"}, false
+			return stagingDecision{Status: "skip", SkipReason: "github_metadata_malformed"}, false
 		}
 	}
 
 	return stagingDecision{
-		Provider: jobcontext.ProviderGitHub,
 		Status:   "stage",
 		Identity: identity,
 		Metadata: metadata,
@@ -92,7 +90,7 @@ func githubStagingDecision(event CreateContainerEvent) (stagingDecision, bool) {
 
 func gitlabStagingDecision(event CreateContainerEvent) (stagingDecision, bool) {
 	if shouldSkipGitLabContainer(event.Container.Name) {
-		return stagingDecision{Provider: jobcontext.ProviderGitLab, Status: "skip", SkipReason: "gitlab_runtime_container"}, false
+		return stagingDecision{Status: "skip", SkipReason: "gitlab_runtime_container"}, false
 	}
 	jobID := strings.TrimSpace(event.Pod.Annotations[gitlabJobIDAnnotation])
 	if jobID == "" {
@@ -100,30 +98,29 @@ func gitlabStagingDecision(event CreateContainerEvent) (stagingDecision, bool) {
 	}
 	urlHost, urlProjectPath, urlJobID := gitlabJobURLIdentity(event.Pod.Annotations[gitlabJobURLAnnotation])
 	if urlJobID != "" && urlJobID != jobID {
-		return stagingDecision{Provider: jobcontext.ProviderGitLab, Status: "skip", SkipReason: "gitlab_job_url_id_mismatch"}, false
+		return stagingDecision{Status: "skip", SkipReason: "gitlab_job_url_id_mismatch"}, false
 	}
 	projectPath := urlProjectPath
 	if projectPath == "" {
 		projectPath = gitlabProjectPath(event.Pod.Labels, envMap(event.Container.Env))
 	}
 	if projectPath == "" {
-		return stagingDecision{Provider: jobcontext.ProviderGitLab, Status: "skip", SkipReason: "gitlab_project_path_missing"}, false
+		return stagingDecision{Status: "skip", SkipReason: "gitlab_project_path_missing"}, false
 	}
 	providerHost := urlHost
 	if providerHost == "" {
 		providerHost = gitlabProviderHost(event.Container.Env)
 	}
 	if providerHost == "" {
-		return stagingDecision{Provider: jobcontext.ProviderGitLab, Status: "skip", SkipReason: "gitlab_provider_host_missing"}, false
+		return stagingDecision{Status: "skip", SkipReason: "gitlab_provider_host_missing"}, false
 	}
 
 	identity := jobcontext.GitLabJobIdentity(providerHost, projectPath, jobID)
 	if err := identity.Validate(); err != nil {
-		return stagingDecision{Provider: jobcontext.ProviderGitLab, Status: "skip", SkipReason: "gitlab_identity_invalid"}, false
+		return stagingDecision{Status: "skip", SkipReason: "gitlab_identity_invalid"}, false
 	}
 
 	return stagingDecision{
-		Provider: jobcontext.ProviderGitLab,
 		Status:   "stage",
 		Identity: identity,
 		Metadata: gitlabMetadata(event),

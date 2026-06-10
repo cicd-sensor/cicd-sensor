@@ -67,9 +67,10 @@ func Run(ctx context.Context, opts Options) error {
 
 	observer := &Observer{
 		logger:   logger,
-		agent:    &agentClient{socketPath: opts.AgentSocketPath},
+		agent:    newAgentClient(opts.AgentSocketPath, opts.Provider),
 		provider: opts.Provider,
 	}
+	defer observer.agent.closeIdleConnections()
 
 	delay := reconnectInitialDelay
 	everConnected := false
@@ -174,7 +175,7 @@ func (o *Observer) CreateContainer(ctx context.Context, pod *nriapi.PodSandbox, 
 		"pod", safePodSnapshotForLog(event.Pod),
 		"container", safeContainerSnapshotForLog(event.Container),
 		"cgroup_basename", event.CgroupBasename,
-		"provider", decision.Provider,
+		"provider", o.provider,
 		"identity_status", decision.Status,
 		"skip_reason", decision.SkipReason,
 	)
@@ -183,14 +184,14 @@ func (o *Observer) CreateContainer(ctx context.Context, pod *nriapi.PodSandbox, 
 		defer cancel()
 		if err := o.agent.stage(stageCtx, decision); err != nil {
 			o.logger.WarnContext(ctx, "nri_staging_failed",
-				"provider", decision.Provider,
+				"provider", o.provider,
 				"job_identity", decision.Identity,
 				"basename", decision.Basename,
 				"error", err,
 			)
 		} else {
 			o.logger.InfoContext(ctx, "nri_staging_put",
-				"provider", decision.Provider,
+				"provider", o.provider,
 				"job_identity", decision.Identity,
 				"basename", decision.Basename,
 			)

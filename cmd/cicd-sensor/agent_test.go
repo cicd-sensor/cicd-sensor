@@ -101,6 +101,28 @@ func TestValidateAgentStartOptionsRequiresManagerToken(t *testing.T) {
 	}
 }
 
+func TestValidateAgentStartOptionsRequiresManagerForKubernetes(t *testing.T) {
+	opts := agentStartOptions{
+		Provider:      "github",
+		Runner:        "kubernetes",
+		ShutdownGrace: time.Second,
+	}
+
+	err := validateAgentStartOptions(opts)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "manager-url is required for runner kubernetes") {
+		t.Fatalf("error: got %q", err.Error())
+	}
+
+	opts.ManagerURL = "https://manager.example.com"
+	opts.ManagerToken = managerauth.TokenPrefix + strings.Repeat("a", 64)
+	if err := validateAgentStartOptions(opts); err != nil {
+		t.Fatalf("validateAgentStartOptions: %v", err)
+	}
+}
+
 func TestResolveAgentStartOptions(t *testing.T) {
 	valid := agentStartOptions{
 		Provider:      "github",

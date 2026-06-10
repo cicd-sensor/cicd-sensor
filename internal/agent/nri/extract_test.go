@@ -201,8 +201,8 @@ func TestStagingDecisionForCreateContainer_GitHubInjectedIdentity(t *testing.T) 
 	if !ok {
 		t.Fatalf("stageable: got false (%s)", got.String())
 	}
-	if got.Provider != jobcontext.ProviderGitHub || got.Identity != identity {
-		t.Fatalf("identity: got provider=%q identity=%+v", got.Provider, got.Identity)
+	if got.Identity != identity {
+		t.Fatalf("identity: got %+v, want %+v", got.Identity, identity)
 	}
 	if got.Metadata.CommitSHA != "abc123" || got.Metadata.GitHubWorkflow != "ci" {
 		t.Fatalf("metadata: got %+v", got.Metadata)

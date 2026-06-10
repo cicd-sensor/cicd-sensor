@@ -228,6 +228,89 @@ func TestJobIdentity_Validate_RejectsMalformedGitLabID(t *testing.T) {
 	}
 }
 
+func TestJobIdentity_Validate_FieldLengthBounds(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   jobcontext.JobIdentity
+		wantErr string
+	}{
+		{
+			name: "project_path accepts 2048 bytes",
+			input: jobcontext.GitHubJobIdentity(
+				"github.com",
+				strings.Repeat("x", 2048),
+				"123",
+				"build",
+				"1",
+				"runner-1",
+			),
+		},
+		{
+			name: "project_path rejects 2049 bytes",
+			input: jobcontext.GitHubJobIdentity(
+				"github.com",
+				strings.Repeat("x", 2049),
+				"123",
+				"build",
+				"1",
+				"runner-1",
+			),
+			wantErr: "project_path exceeds 2048 bytes",
+		},
+		{
+			name: "github_job rejects 2049 bytes",
+			input: jobcontext.GitHubJobIdentity(
+				"github.com",
+				"acme/example",
+				"123",
+				strings.Repeat("x", 2049),
+				"1",
+				"runner-1",
+			),
+			wantErr: "github_job exceeds 2048 bytes",
+		},
+		{
+			name: "gitlab_job_id rejects 2049 bytes",
+			input: jobcontext.GitLabJobIdentity(
+				"gitlab.com",
+				"group/project",
+				strings.Repeat("1", 2049),
+			),
+			wantErr: "gitlab_job_id exceeds 2048 bytes",
+		},
+		{
+			name: "github_runner_tracking_id keeps shorter bound",
+			input: jobcontext.GitHubJobIdentity(
+				"github.com",
+				"acme/example",
+				"123",
+				"build",
+				"1",
+				strings.Repeat("x", 129),
+			),
+			wantErr: "github_runner_tracking_id exceeds 128 bytes",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.input.Validate()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Validate: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error: got %q, want substring %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestJobIdentity_FilenameKey(t *testing.T) {
 	cases := []struct {
 		name     string

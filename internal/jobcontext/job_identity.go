@@ -75,11 +75,26 @@ func (j JobIdentity) Validate() error {
 	if j.ProjectPath == "" {
 		return errors.New("project_path is required")
 	}
+	if err := validateIdentityFieldLen("provider_host", j.ProviderHost, maxIdentityFieldLen); err != nil {
+		return err
+	}
+	if err := validateIdentityFieldLen("project_path", j.ProjectPath, maxIdentityFieldLen); err != nil {
+		return err
+	}
 
 	switch j.Provider {
 	case ProviderGitHub:
 		if j.GitHubRunID == "" || j.GitHubJob == "" || j.GitHubRunAttempt == "" || j.GitHubRunnerTrackingID == "" {
 			return errors.New("github_run_id, github_job, github_run_attempt, and github_runner_tracking_id are required for github")
+		}
+		if err := validateIdentityFieldLen("github_run_id", j.GitHubRunID, maxIdentityFieldLen); err != nil {
+			return err
+		}
+		if err := validateIdentityFieldLen("github_job", j.GitHubJob, maxIdentityFieldLen); err != nil {
+			return err
+		}
+		if err := validateIdentityFieldLen("github_run_attempt", j.GitHubRunAttempt, maxIdentityFieldLen); err != nil {
+			return err
 		}
 		if j.GitLabJobID != "" {
 			return errors.New("gitlab_job_id must be empty for github")
@@ -97,6 +112,9 @@ func (j JobIdentity) Validate() error {
 		if j.GitLabJobID == "" {
 			return errors.New("gitlab_job_id is required for gitlab")
 		}
+		if err := validateIdentityFieldLen("gitlab_job_id", j.GitLabJobID, maxIdentityFieldLen); err != nil {
+			return err
+		}
 		if j.GitHubRunID != "" || j.GitHubJob != "" || j.GitHubRunAttempt != "" || j.GitHubRunnerTrackingID != "" {
 			return errors.New("github fields must be empty for gitlab")
 		}
@@ -110,8 +128,20 @@ func (j JobIdentity) Validate() error {
 	return nil
 }
 
-// maxTrackingIDLen bounds malformed runner tracking IDs.
-const maxTrackingIDLen = 128
+const (
+	// maxIdentityFieldLen bounds malformed caller-provided identity strings
+	// before they become log fields or Job map keys.
+	maxIdentityFieldLen = 2048
+	// maxTrackingIDLen bounds malformed runner tracking IDs.
+	maxTrackingIDLen = 128
+)
+
+func validateIdentityFieldLen(name, value string, maxLen int) error {
+	if len(value) > maxLen {
+		return fmt.Errorf("%s exceeds %d bytes", name, maxLen)
+	}
+	return nil
+}
 
 // isPositiveIntString reports whether s is a decimal positive integer.
 func isPositiveIntString(s string) bool {
