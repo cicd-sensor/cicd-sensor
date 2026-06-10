@@ -43,6 +43,9 @@ var ErrJobAlreadyRegistered = errors.New("job already registered")
 // Job's tracking set. The listener maps this to 403 Forbidden.
 var ErrPeerNotInJob = errors.New("peer pid not in job tracking set")
 
+// ManagerConfigFetcher fetches manager-owned config for a host or project scope.
+// Implementations must return caller-owned results; JobScopeState stores and
+// resolves the returned rule data without treating it as a shared snapshot.
 type ManagerConfigFetcher interface {
 	FetchConfig(ctx context.Context, req *managerv1beta1.FetchConfigRequest) (*managerclient.FetchResult, error)
 }

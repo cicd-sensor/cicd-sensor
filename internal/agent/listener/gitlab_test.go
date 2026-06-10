@@ -20,6 +20,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
+	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
 func gitlabRegisteredJob(registry *jobregistry.JobRegistry, identity jobcontext.JobIdentity) *jobpkg.Job {
@@ -33,6 +34,12 @@ func gitlabRegisteredJob(registry *jobregistry.JobRegistry, identity jobcontext.
 
 func jobIdentityPointer(identity jobcontext.JobIdentity) *jobcontext.JobIdentity {
 	return &identity
+}
+
+type cacheMissManagerFetcher struct{}
+
+func (cacheMissManagerFetcher) FetchConfig(context.Context, *managerv1beta1.FetchConfigRequest) (*managerclient.FetchResult, error) {
+	return nil, managerclient.ErrConfigCacheNotReady
 }
 
 func requireLinuxPeerPIDLookup(t *testing.T) {
@@ -570,6 +577,7 @@ func TestListener_GitLabProvider_RejectsGitHubRoutes(t *testing.T) {
 		"http://cicd-sensor/v1/github/project/start",
 		"http://cicd-sensor/v1/github/project/result",
 		"http://cicd-sensor/v1/github/staging/put",
+		"http://cicd-sensor/v1/github/k8s/staging/put",
 	}
 	for _, url := range cases {
 		t.Run(url, func(t *testing.T) {
@@ -613,6 +621,137 @@ func TestGitLabStagingPut_WrongUIDForbidden(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+func TestGitLabK8sStagingPut_StagesWhenJobExists(t *testing.T) {
+	requireLinuxPeerPIDLookup(t)
+	matchAgentOwnerUIDToPeerCred(t)
+
+	client, registry, cleanup := setupGitLabListener(t)
+	defer cleanup()
+
+	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	startBody := mustMarshal(t, jobcontext.GitLabHostStartRequest{
+		JobIdentity: identity,
+		Metadata:    jobcontext.JobMetadata{CommitSHA: "abc123"},
+	})
+	startResp, err := client.Post("http://cicd-sensor/v1/gitlab/host/start", "application/json", bytes.NewReader(startBody))
+	if err != nil {
+		t.Fatalf("host_start request: %v", err)
+	}
+	startResp.Body.Close()
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("host_start status: %d", startResp.StatusCode)
+	}
+
+	body := mustMarshal(t, jobcontext.GitLabK8sStagingPutRequest{
+		Basename:    "cri-containerd-build.scope",
+		JobIdentity: identity,
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/gitlab/k8s/staging/put", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, dump)
+	}
+	job := gitlabRegisteredJob(registry, identity)
+	if job == nil {
+		t.Fatal("expected job to be registered")
+	}
+	if job.HostScope() == nil {
+		t.Fatal("expected host scope to be set")
+	}
+	if job.Metadata().CommitSHA != "abc123" {
+		t.Fatalf("metadata commit_sha: got %q, want abc123", job.Metadata().CommitSHA)
+	}
+}
+
+func TestGitLabK8sStagingPut_CreatesMissingJobAndStages(t *testing.T) {
+	requireLinuxPeerPIDLookup(t)
+	matchAgentOwnerUIDToPeerCred(t)
+
+	client, registry, cleanup := setupGitLabListener(t)
+	defer cleanup()
+
+	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	body := mustMarshal(t, jobcontext.GitLabK8sStagingPutRequest{
+		Basename:    "cri-containerd-build.scope",
+		JobIdentity: identity,
+		Metadata:    jobcontext.JobMetadata{CommitSHA: "abc123"},
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/gitlab/k8s/staging/put", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, dump)
+	}
+	job := gitlabRegisteredJob(registry, identity)
+	if job == nil {
+		t.Fatal("expected job to be registered")
+	}
+	if job.HostScope() == nil {
+		t.Fatal("expected host scope to be set")
+	}
+	if job.Metadata().CommitSHA != "abc123" {
+		t.Fatalf("metadata commit_sha: got %q, want abc123", job.Metadata().CommitSHA)
+	}
+}
+
+func TestGitLabK8sStagingPut_ReturnsUnavailableWhenHostConfigCacheMissing(t *testing.T) {
+	requireLinuxPeerPIDLookup(t)
+	matchAgentOwnerUIDToPeerCred(t)
+
+	client, _, cleanup := setupGitLabListenerWithHostManager(t, cacheMissManagerFetcher{})
+	defer cleanup()
+
+	body := mustMarshal(t, jobcontext.GitLabK8sStagingPutRequest{
+		Basename:    "cri-containerd-build.scope",
+		JobIdentity: jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"),
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/gitlab/k8s/staging/put", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusServiceUnavailable, dump)
+	}
+	dump, _ := io.ReadAll(resp.Body)
+	if !bytes.Contains(dump, []byte(managerclient.ErrConfigCacheNotReady.Error())) {
+		t.Fatalf("body should contain cache error, got %s", dump)
+	}
+}
+
+func TestGitLabK8sStagingPut_RejectsNonGitLabIdentity(t *testing.T) {
+	requireLinuxPeerPIDLookup(t)
+	matchAgentOwnerUIDToPeerCred(t)
+
+	client, _, cleanup := setupGitLabListener(t)
+	defer cleanup()
+
+	body := mustMarshal(t, jobcontext.GitLabK8sStagingPutRequest{
+		Basename:    "cri-containerd-build.scope",
+		JobIdentity: jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/gitlab/k8s/staging/put", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusBadRequest, dump)
 	}
 }
 

@@ -1,0 +1,12 @@
+# Helm values snippet for the GitLab Runner chart.
+# Use this with GitLab Runner Kubernetes executor.
+#
+# cicd-sensor does not require a GitLab-specific hook. Job identity comes from
+# GitLab Runner Pod labels and annotations observed by host-side NRI.
+
+runners:
+  config: |
+    [[runners]]
+      [runners.kubernetes]
+        namespace = "{{.Release.Namespace}}"
+        image = "ubuntu:22.04"

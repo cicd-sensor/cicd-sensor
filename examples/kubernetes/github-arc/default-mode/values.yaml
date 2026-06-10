@@ -1,0 +1,34 @@
+# Helm values snippet for actions-runner-controller gha-runner-scale-set.
+# Use this with ARC default mode, where containerMode is not set.
+#
+# The runner container receives only the GitHub job hook and the
+# cicd-sensor GitHub Kubernetes runner socket. Workflow job/service/step
+# containers are not created in this mode.
+
+template:
+  spec:
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command:
+          - /home/runner/run.sh
+        env:
+          - name: ACTIONS_RUNNER_HOOK_JOB_STARTED
+            value: /opt/cicd-sensor/job-hooks/github-k8s-job-started.js
+          - name: CICD_SENSOR_GITHUB_K8S_RUNNER_SOCKET
+            value: /run/cicd-sensor/github-k8s/runner.sock
+        volumeMounts:
+          - name: cicd-sensor-github-arc-job-hook
+            mountPath: /opt/cicd-sensor/job-hooks
+            readOnly: true
+          - name: cicd-sensor-github-k8s-runner-socket
+            mountPath: /run/cicd-sensor/github-k8s
+    volumes:
+      - name: cicd-sensor-github-arc-job-hook
+        configMap:
+          name: cicd-sensor-github-arc-job-hook
+          defaultMode: 0555
+      - name: cicd-sensor-github-k8s-runner-socket
+        hostPath:
+          path: /run/cicd-sensor/github-k8s
+          type: DirectoryOrCreate

@@ -47,7 +47,10 @@ func (engine *KernelTracker) BindProcessCgroupToJob(ctx context.Context, jobID j
 	if cgroup == 0 {
 		return fmt.Errorf("invalid cgroup id 0")
 	}
+	return engine.bindCgroupIDToJob(ctx, jobID, cgroup)
+}
 
+func (engine *KernelTracker) bindCgroupIDToJob(ctx context.Context, jobID jobcontext.JobIdentity, cgroup uint64) error {
 	replyCh := make(chan error, 1)
 
 	select {

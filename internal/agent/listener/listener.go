@@ -62,19 +62,7 @@ type Config struct {
 
 // New creates a listener bound to cfg.SocketPath.
 func New(cfg Config) *Listener {
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-	l := &Listener{
-		logger:            logger.With("component", "listener"),
-		jobRegistry:       cfg.JobRegistry,
-		socketPath:        cfg.SocketPath,
-		hostManagerConn:   cfg.HostManagerConnection,
-		hostManagerClient: cfg.HostManagerClient,
-		runnerType:        cfg.RunnerType,
-		provider:          cfg.Provider,
-	}
+	l := newBase(cfg)
 	mux := http.NewServeMux()
 	switch cfg.Provider {
 	case jobcontext.ProviderGitHub:
@@ -84,10 +72,45 @@ func New(cfg Config) *Listener {
 		mux.HandleFunc("POST /v1/github/project/start", l.handleGitHubProjectStart)
 		mux.HandleFunc("POST /v1/github/project/result", l.handleGitHubProjectResult)
 		mux.HandleFunc("POST /v1/github/staging/put", l.handleGitHubStagingPut)
+		mux.HandleFunc("POST /v1/github/k8s/staging/put", l.handleGitHubK8sStagingPut)
 	case jobcontext.ProviderGitLab:
 		mux.HandleFunc("POST /v1/gitlab/host/start", l.handleGitLabHostStart)
 		mux.HandleFunc("POST /v1/gitlab/staging/put", l.handleGitLabStagingPut)
+		mux.HandleFunc("POST /v1/gitlab/k8s/staging/put", l.handleGitLabK8sStagingPut)
 	}
+	l.setMux(mux)
+	return l
+}
+
+// NewGitHubK8sStart creates the GitHub Kubernetes runner-socket listener. It
+// currently exposes only start and must not inherit the full control API.
+func NewGitHubK8sStart(cfg Config) *Listener {
+	cfg.Provider = jobcontext.ProviderGitHub
+	cfg.RunnerType = "kubernetes"
+	l := newBase(cfg)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/github/k8s/start", l.handleGitHubK8sStart)
+	l.setMux(mux)
+	return l
+}
+
+func newBase(cfg Config) *Listener {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Listener{
+		logger:            logger.With("component", "listener"),
+		jobRegistry:       cfg.JobRegistry,
+		socketPath:        cfg.SocketPath,
+		hostManagerConn:   cfg.HostManagerConnection,
+		hostManagerClient: cfg.HostManagerClient,
+		runnerType:        cfg.RunnerType,
+		provider:          cfg.Provider,
+	}
+}
+
+func (l *Listener) setMux(mux *http.ServeMux) {
 	l.server = &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: listenerReadHeaderTimeout,
@@ -98,7 +121,6 @@ func New(cfg Config) *Listener {
 			return context.WithValue(ctx, unixConnKey{}, connection)
 		},
 	}
-	return l
 }
 
 // Serve starts the Unix socket listener.

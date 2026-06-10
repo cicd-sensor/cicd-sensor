@@ -7,7 +7,10 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
 
-const defaultSocketPath = "/run/cicd-sensor/agent.sock"
+const (
+	defaultSocketPath                = "/run/cicd-sensor/agent.sock"
+	defaultGitHubK8sRunnerSocketPath = "/run/cicd-sensor/github-k8s/runner.sock"
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -28,6 +31,8 @@ func main() {
 		runProjectSubcommand(os.Args[2:])
 	case "proxy":
 		runProxySubcommand(os.Args[2:])
+	case "nri":
+		runNRISubcommand(os.Args[2:])
 	default:
 		printUsage()
 		os.Exit(2)
@@ -43,4 +48,5 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  cicd-sensor project start [flags]")
 	fmt.Fprintln(os.Stderr, "  cicd-sensor project result [flags]")
 	fmt.Fprintln(os.Stderr, "  cicd-sensor proxy dockerd [flags]")
+	fmt.Fprintln(os.Stderr, "  cicd-sensor nri [flags]")
 }

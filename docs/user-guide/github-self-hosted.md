@@ -1,8 +1,8 @@
-# GitHub Actions self-hosted
+# GitHub Actions machine runner
 
-For GitHub Actions Self-hosted Machine Runners, install the cicd-sensor Agent and Docker proxy on the runner host and operate them with cicd-sensor Manager.
+For GitHub Actions self-hosted runners on machines, install the cicd-sensor Agent and Docker proxy on the runner host and operate them with cicd-sensor Manager.
 
-Complete [Self-hosted Machine install](self-hosted-install.md) first.
+Complete [Machine runner install](self-hosted-install.md) first.
 This page only covers the GitHub Actions-specific job lifecycle hooks.
 
 ## Overview
@@ -25,15 +25,15 @@ flowchart LR
     class AGENT,MANAGER cicdSensor
 ```
 
-On Self-hosted Machine Runners, cicd-sensor creates one job record for each GitHub Actions job.
+On GitHub Actions self-hosted runners on machines, cicd-sensor creates one job record for each GitHub Actions job.
 Whether the runner is ephemeral or long-lived, the Agent monitors runtime behavior per job.
 
-Running only a long-lived Agent on a Self-hosted Machine Runner without a manager is not a supported target.
+Running only a long-lived Agent on a machine runner without a manager is not a supported target.
 Config, rules, and log delivery are handled through the manager.
 
 ## Hook placement
 
-GitHub Actions Self-hosted Machine Runners use GitHub job management hooks to start and end the cicd-sensor job lifecycle.
+GitHub Actions self-hosted runners on machines use GitHub job management hooks to start and end the cicd-sensor job lifecycle.
 See GitHub's [Running scripts before or after a job](https://docs.github.com/en/enterprise-cloud@latest/actions/how-tos/manage-runners/self-hosted-runners/run-scripts) documentation.
 
 The GitHub Actions runner executes scripts before and after each job when these environment variables point to absolute script paths.
@@ -49,7 +49,7 @@ If the start hook exits non-zero, the job is not executed and fails.
 ## Hook scripts
 
 Place the hook scripts under `/opt/cicd-sensor`.
-This path matches the [Self-hosted Machine install](self-hosted-install.md) assumptions.
+This path matches the [Machine runner install](self-hosted-install.md) assumptions.
 
 Start hook:
 
@@ -68,7 +68,7 @@ The hook scripts do not need to pass repository, run ID, job name, or similar id
 
 ## Configure the runner
 
-GitHub documents two ways to configure hooks: OS environment variables or the `.env` file in the Self-hosted Machine Runner application directory.
+GitHub documents two ways to configure hooks: OS environment variables or the `.env` file in the self-hosted runner application directory.
 This guide uses the runner directory `.env` so the setting is scoped per runner.
 
 For example, if the runner is installed under `/opt/actions-runner`:
@@ -107,4 +107,4 @@ The completed hook runs job health check and finalize inside `host end`.
 
 ## Action support
 
-Even when host-side setup is installed manually on a Self-hosted Machine Runner, projects can still start cicd-sensor from `cicd-sensor-action`.
+Even when host-side setup is installed manually on a machine runner, projects can still start cicd-sensor from `cicd-sensor-action`.

@@ -54,6 +54,11 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 			opts:        withAgentShutdownGrace(valid, 0),
 			wantErrText: "shutdown-grace must be positive",
 		},
+		{
+			name:        "github k8s runner socket outside github kubernetes",
+			opts:        withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"),
+			wantErrText: "github k8s runner socket is only valid with provider github and runner kubernetes",
+		},
 	}
 
 	for _, tc := range tests {
@@ -101,6 +106,84 @@ func TestValidateAgentStartOptionsRequiresManagerToken(t *testing.T) {
 	}
 }
 
+func TestValidateAgentStartOptionsRequiresManagerForKubernetes(t *testing.T) {
+	opts := agentStartOptions{
+		Provider:      "github",
+		Runner:        "kubernetes",
+		ShutdownGrace: time.Second,
+	}
+
+	err := validateAgentStartOptions(opts)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "manager-url is required for runner kubernetes") {
+		t.Fatalf("error: got %q", err.Error())
+	}
+
+	opts.ManagerURL = "https://manager.example.com"
+	opts.ManagerToken = managerauth.TokenPrefix + strings.Repeat("a", 64)
+	if err := validateAgentStartOptions(opts); err != nil {
+		t.Fatalf("validateAgentStartOptions: %v", err)
+	}
+}
+
+func TestResolveAgentStartOptions(t *testing.T) {
+	valid := agentStartOptions{
+		Provider:      "github",
+		Runner:        "kubernetes",
+		ShutdownGrace: time.Second,
+	}
+	tests := []struct {
+		name       string
+		opts       agentStartOptions
+		wantSocket string
+		wantErr    string
+	}{
+		{
+			name:       "github kubernetes uses default runner socket",
+			opts:       valid,
+			wantSocket: defaultGitHubK8sRunnerSocketPath,
+		},
+		{
+			name:       "github kubernetes keeps explicit runner socket",
+			opts:       withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"),
+			wantSocket: "/tmp/runner.sock",
+		},
+		{
+			name:    "github machine rejects runner socket",
+			opts:    withAgentRunner(withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"), "machine"),
+			wantErr: "github k8s runner socket is only valid with provider github and runner kubernetes",
+		},
+		{
+			name:    "gitlab kubernetes rejects runner socket",
+			opts:    withAgentProvider(withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"), "gitlab"),
+			wantErr: "github k8s runner socket is only valid with provider github and runner kubernetes",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := resolveAgentStartOptions(tc.opts)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error: got %q, want substring %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveAgentStartOptions: %v", err)
+			}
+			if got.GitHubK8sRunnerSocketPath != tc.wantSocket {
+				t.Fatalf("github k8s runner socket: got %q, want %q", got.GitHubK8sRunnerSocketPath, tc.wantSocket)
+			}
+		})
+	}
+}
+
 func withAgentProvider(opts agentStartOptions, provider string) agentStartOptions {
 	opts.Provider = provider
 	return opts
@@ -113,5 +196,10 @@ func withAgentRunner(opts agentStartOptions, runner string) agentStartOptions {
 
 func withAgentShutdownGrace(opts agentStartOptions, shutdownGrace time.Duration) agentStartOptions {
 	opts.ShutdownGrace = shutdownGrace
+	return opts
+}
+
+func withGitHubK8sRunnerSocket(opts agentStartOptions, socketPath string) agentStartOptions {
+	opts.GitHubK8sRunnerSocketPath = socketPath
 	return opts
 }

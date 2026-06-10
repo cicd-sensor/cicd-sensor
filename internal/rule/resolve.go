@@ -126,7 +126,7 @@ func applyModifiers(rules []ResolvedRule, mods []RuleModifier) []ResolvedRule {
 				})
 			}
 			if len(modifier.AddTargetExclude) > 0 {
-				resolvedRule.Rule.Target.Exclude = append(resolvedRule.Rule.Target.Exclude, modifier.AddTargetExclude...)
+				resolvedRule.Rule.Target.Exclude = slices.Concat(resolvedRule.Rule.Target.Exclude, modifier.AddTargetExclude)
 			}
 			resolvedRule.AppliedModifiers = append(resolvedRule.AppliedModifiers, modifier.ModifierID)
 		}

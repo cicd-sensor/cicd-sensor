@@ -153,7 +153,8 @@ func proxyHandlerGitLab(logger *slog.Logger, upstreamSocket, agentSocket string)
 	return rev
 }
 
-// stageGitLabWithLazyCreate retries staging once after host/start creates the Job.
+// stageGitLabWithLazyCreate keeps GitLab Job creation on host/start. Staging
+// first preserves the cheap existing-Job path; 404 is the lazy-start signal.
 func stageGitLabWithLazyCreate(ctx context.Context, agentSocket, basename string, peerPID int32, identity *jobcontext.JobIdentity, metadata jobcontext.JobMetadata) error {
 	err := postGitLabStaging(ctx, agentSocket, basename, peerPID, identity)
 	if err == nil {

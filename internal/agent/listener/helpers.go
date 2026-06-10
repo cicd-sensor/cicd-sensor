@@ -9,6 +9,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/job"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobregistry"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 )
 
 // decodeJSONBody accepts exactly one bounded JSON object.
@@ -34,6 +35,8 @@ func (l *Listener) writeStartError(w http.ResponseWriter, r *http.Request, logEv
 	switch {
 	case errors.Is(err, jobregistry.ErrHostManagerRequired):
 		l.writeError(w, r, http.StatusBadRequest, jobregistry.ErrHostManagerRequired.Error())
+	case errors.Is(err, managerclient.ErrConfigCacheNotReady):
+		l.writeError(w, r, http.StatusServiceUnavailable, managerclient.ErrConfigCacheNotReady.Error())
 	case errors.Is(err, jobregistry.ErrHostAfterProject):
 		l.writeError(w, r, http.StatusConflict, jobregistry.ErrHostAfterProject.Error())
 	case errors.Is(err, job.ErrProjectScopeAlreadySet):
