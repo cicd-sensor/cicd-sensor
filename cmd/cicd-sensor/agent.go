@@ -114,7 +114,11 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	opts = resolveAgentStartOptions(opts)
+	opts, err := resolveAgentStartOptions(opts)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if opts.ManagerURL == "" {
 		if err := validateAgentStartOptions(opts); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -203,21 +207,34 @@ func validateAgentStartRequiredOptions(opts agentStartOptions) error {
 	default:
 		return fmt.Errorf("runner must be machine or kubernetes")
 	}
+	if err := validateGitHubK8sRunnerSocketOption(opts); err != nil {
+		return err
+	}
 	if opts.ShutdownGrace <= 0 {
 		return fmt.Errorf("shutdown-grace must be positive")
 	}
 	return nil
 }
 
-func resolveAgentStartOptions(opts agentStartOptions) agentStartOptions {
+func resolveAgentStartOptions(opts agentStartOptions) (agentStartOptions, error) {
+	if err := validateGitHubK8sRunnerSocketOption(opts); err != nil {
+		return agentStartOptions{}, err
+	}
 	if opts.Provider == "github" && opts.Runner == "kubernetes" {
 		if opts.GitHubK8sRunnerSocketPath == "" {
 			opts.GitHubK8sRunnerSocketPath = defaultGitHubK8sRunnerSocketPath
 		}
-		return opts
+		return opts, nil
 	}
 	opts.GitHubK8sRunnerSocketPath = ""
-	return opts
+	return opts, nil
+}
+
+func validateGitHubK8sRunnerSocketOption(opts agentStartOptions) error {
+	if opts.GitHubK8sRunnerSocketPath != "" && !(opts.Provider == "github" && opts.Runner == "kubernetes") {
+		return fmt.Errorf("github k8s runner socket is only valid with provider github and runner kubernetes")
+	}
+	return nil
 }
 
 func newCLIJSONLogger() *slog.Logger {

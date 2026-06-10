@@ -86,6 +86,7 @@ func New(cfg Config) *Listener {
 // currently exposes only start and must not inherit the full control API.
 func NewGitHubK8sStart(cfg Config) *Listener {
 	cfg.Provider = jobcontext.ProviderGitHub
+	cfg.RunnerType = "kubernetes"
 	l := newBase(cfg)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/github/k8s/start", l.handleGitHubK8sStart)

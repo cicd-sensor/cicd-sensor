@@ -111,8 +111,6 @@ func (a *Agent) Run(ctx context.Context) error {
 			SocketPath:            a.githubK8sRunnerSocketPath,
 			HostManagerConnection: a.hostManagerConn,
 			HostManagerClient:     hostManagerClient,
-			RunnerType:            a.runnerType,
-			Provider:              a.provider,
 		}))
 	}
 

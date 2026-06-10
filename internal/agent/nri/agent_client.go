@@ -28,9 +28,8 @@ const (
 )
 
 type agentClient struct {
-	socketPath string
-	provider   jobcontext.Provider
-	client     *http.Client
+	provider jobcontext.Provider
+	client   *http.Client
 }
 
 func newAgentClient(socketPath string, provider jobcontext.Provider) *agentClient {
@@ -42,8 +41,7 @@ func newAgentClient(socketPath string, provider jobcontext.Provider) *agentClien
 		IdleConnTimeout: agentIdleConnTimeout,
 	}
 	return &agentClient{
-		socketPath: socketPath,
-		provider:   provider,
+		provider: provider,
 		client: &http.Client{
 			Transport: transport,
 		},

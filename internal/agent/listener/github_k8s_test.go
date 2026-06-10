@@ -107,7 +107,68 @@ func TestGitHubK8sStart_ExposesOnlyStartRoute(t *testing.T) {
 	}
 }
 
+func TestGitHubK8sStart_RejectsNonGitHubProviderInBody(t *testing.T) {
+	client, _, cleanup := setupGitHubK8sStartListener(t)
+	defer cleanup()
+
+	body := mustJSON(t, map[string]string{
+		"provider":      "gitlab",
+		"provider_host": "gitlab.com",
+		"project_path":  "acme/example",
+		"gitlab_job_id": "123",
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/github/k8s/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusBadRequest, dump)
+	}
+}
+
+func TestGitHubK8sStart_ConstructorFixesRunnerBoundary(t *testing.T) {
+	client, registry, cleanup := setupGitHubK8sStartListenerWithConfig(t, "machine", jobcontext.ProviderGitLab)
+	defer cleanup()
+
+	body := mustJSON(t, map[string]string{
+		"provider":                  "github",
+		"provider_host":             "github.com",
+		"project_path":              "acme/example",
+		"github_run_id":             "125",
+		"github_job":                "build",
+		"github_run_attempt":        "1",
+		"github_runner_tracking_id": "github_k8s_tracking_constructor_boundary",
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/github/k8s/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		dump, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, dump)
+	}
+
+	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "125", "build", "1", "github_k8s_tracking_constructor_boundary")
+	job := listenerRegisteredJob(registry, id)
+	if job == nil {
+		t.Fatal("expected job to be registered")
+	}
+	if job.RunnerType() != "kubernetes" {
+		t.Fatalf("job runner_type: got %q, want %q", job.RunnerType(), "kubernetes")
+	}
+}
+
 func setupGitHubK8sStartListener(t *testing.T) (*http.Client, *jobregistry.JobRegistry, func()) {
+	t.Helper()
+	return setupGitHubK8sStartListenerWithConfig(t, "kubernetes", jobcontext.ProviderGitHub)
+}
+
+func setupGitHubK8sStartListenerWithConfig(t *testing.T, runnerType string, provider jobcontext.Provider) (*http.Client, *jobregistry.JobRegistry, func()) {
 	t.Helper()
 
 	dir := newTestSocketDir(t, "cicd-sensor-github-k8s-start-test-")
@@ -121,8 +182,8 @@ func setupGitHubK8sStartListener(t *testing.T) (*http.Client, *jobregistry.JobRe
 		SocketPath:            sock,
 		HostManagerConnection: managerclient.Connection{},
 		HostManagerClient:     staticManagerFetcher{},
-		RunnerType:            "kubernetes",
-		Provider:              jobcontext.ProviderGitHub,
+		RunnerType:            runnerType,
+		Provider:              provider,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

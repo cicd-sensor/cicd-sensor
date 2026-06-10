@@ -54,6 +54,11 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 			opts:        withAgentShutdownGrace(valid, 0),
 			wantErrText: "shutdown-grace must be positive",
 		},
+		{
+			name:        "github k8s runner socket outside github kubernetes",
+			opts:        withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"),
+			wantErrText: "github k8s runner socket is only valid with provider github and runner kubernetes",
+		},
 	}
 
 	for _, tc := range tests {
@@ -133,6 +138,7 @@ func TestResolveAgentStartOptions(t *testing.T) {
 		name       string
 		opts       agentStartOptions
 		wantSocket string
+		wantErr    string
 	}{
 		{
 			name:       "github kubernetes uses default runner socket",
@@ -145,20 +151,32 @@ func TestResolveAgentStartOptions(t *testing.T) {
 			wantSocket: "/tmp/runner.sock",
 		},
 		{
-			name:       "github machine ignores runner socket",
-			opts:       withAgentRunner(withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"), "machine"),
-			wantSocket: "",
+			name:    "github machine rejects runner socket",
+			opts:    withAgentRunner(withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"), "machine"),
+			wantErr: "github k8s runner socket is only valid with provider github and runner kubernetes",
 		},
 		{
-			name:       "gitlab kubernetes ignores runner socket",
-			opts:       withAgentProvider(withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"), "gitlab"),
-			wantSocket: "",
+			name:    "gitlab kubernetes rejects runner socket",
+			opts:    withAgentProvider(withGitHubK8sRunnerSocket(valid, "/tmp/runner.sock"), "gitlab"),
+			wantErr: "github k8s runner socket is only valid with provider github and runner kubernetes",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := resolveAgentStartOptions(tc.opts)
+			got, err := resolveAgentStartOptions(tc.opts)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error: got %q, want substring %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveAgentStartOptions: %v", err)
+			}
 			if got.GitHubK8sRunnerSocketPath != tc.wantSocket {
 				t.Fatalf("github k8s runner socket: got %q, want %q", got.GitHubK8sRunnerSocketPath, tc.wantSocket)
 			}
