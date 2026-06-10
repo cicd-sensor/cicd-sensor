@@ -171,7 +171,7 @@ func setupGitHubK8sStartListener(t *testing.T) (*http.Client, *jobregistry.JobRe
 func setupGitHubK8sStartListenerWithConfig(t *testing.T, runnerType string, provider jobcontext.Provider) (*http.Client, *jobregistry.JobRegistry, func()) {
 	t.Helper()
 
-	dir := newTestSocketDir(t, "cicd-sensor-github-k8s-start-test-")
+	dir := newTestSocketDir(t, "cicd-sensor-github-k8s-runner-test-")
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	sock := filepath.Join(dir, "runner.sock")
 

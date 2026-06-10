@@ -59,9 +59,6 @@ func runAgentStart(args []string) {
 	var shutdownGrace time.Duration
 	socketPath = defaultSocketPath
 	githubK8sRunnerSocketPath = os.Getenv("CICD_SENSOR_GITHUB_K8S_RUNNER_SOCKET")
-	if githubK8sRunnerSocketPath == "" {
-		githubK8sRunnerSocketPath = os.Getenv("CICD_SENSOR_GITHUB_K8S_START_SOCKET")
-	}
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), agentStartUsage)
 		fmt.Fprintln(fs.Output())
@@ -73,7 +70,7 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintf(fs.Output(), "  --socket PATH\n        Agent control socket path. (default %q)\n", defaultSocketPath)
-		fmt.Fprintf(fs.Output(), "  --github-k8s-start-socket PATH\n        GitHub Kubernetes runner socket path. Defaults to %q for --provider github --runner kubernetes.\n", defaultGitHubK8sRunnerSocketPath)
+		fmt.Fprintf(fs.Output(), "  --github-k8s-runner-socket PATH\n        GitHub Kubernetes runner socket path. Defaults to %q for --provider github --runner kubernetes.\n", defaultGitHubK8sRunnerSocketPath)
 		fmt.Fprintln(fs.Output(), "  --manager-url URL")
 		fmt.Fprintln(fs.Output(), "        Host scope manager URL. Required for --runner kubernetes and host-installed machine runners.")
 		fmt.Fprintln(fs.Output(), "  CICD_SENSOR_MANAGER_TOKEN or --manager-token-file PATH")
@@ -82,7 +79,7 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output(), "        Best-effort drain window used after SIGTERM. (default 8s)")
 	}
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
-	fs.StringVar(&githubK8sRunnerSocketPath, "github-k8s-start-socket", githubK8sRunnerSocketPath, "GitHub Kubernetes runner socket path.")
+	fs.StringVar(&githubK8sRunnerSocketPath, "github-k8s-runner-socket", githubK8sRunnerSocketPath, "GitHub Kubernetes runner socket path.")
 	fs.StringVar(&provider, "provider", "", "CI provider this host runs (github or gitlab).")
 	fs.StringVar(&runner, "runner", "", "Runner type (machine or kubernetes).")
 	fs.StringVar(&managerURL, "manager-url", "", "Host scope manager URL.")
