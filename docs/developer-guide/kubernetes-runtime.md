@@ -11,11 +11,35 @@ Runner modes are install recipes; the runtime implementation uses NRI and hooks 
 | Job hook | GitHub ARC default, dind, Kubernetes mode | Runs after GitHub job assignment and calls the GitHub Kubernetes runner socket so cicd-sensor can bind the runner cgroup. |
 | Container customization hook wrapper | GitHub ARC Kubernetes mode | Wraps `ACTIONS_RUNNER_CONTAINER_HOOKS` and injects GitHub identity into workflow Pod annotations before ARC creates Kubernetes workflow containers. |
 
-References:
+GitHub and ARC references:
 
-- GitHub job hooks: `https://docs.github.com/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job`
-- GitHub container customization hooks: `https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/customize-containers`
-- ARC runner scale set deployment and hook extensions: `https://docs.github.com/en/enterprise-cloud@latest/actions/tutorials/use-actions-runner-controller/deploy-runner-scale-sets`
+| GitHub concept | GitHub docs | cicd-sensor integration point |
+| --- | --- | --- |
+| ARC runner scale sets | [Deploy runner scale sets](https://docs.github.com/en/actions/how-tos/manage-runners/use-actions-runner-controller/deploy-runner-scale-sets) | The user guide provides mode-specific DaemonSet and Helm values snippets for the official `gha-runner-scale-set` chart. |
+| ARC authentication | [Authenticate to the GitHub API](https://docs.github.com/en/actions/how-tos/manage-runners/use-actions-runner-controller/authenticate-to-the-api) | Required before installing the runner scale set; cicd-sensor does not replace ARC authentication. |
+| Workflow `runs-on` | [Use ARC runners in a workflow](https://docs.github.com/en/actions/how-tos/manage-runners/use-actions-runner-controller/use-arc-in-a-workflow) | The runner scale set name selected in GitHub is the workflow label users target. |
+| Job hooks | [Run scripts before or after a job](https://docs.github.com/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job) | `ACTIONS_RUNNER_HOOK_JOB_STARTED` calls the GitHub Kubernetes runner socket after assignment and before workflow steps. |
+| Container customization hooks | [Customize containers used by jobs](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/customize-containers) | `ACTIONS_RUNNER_CONTAINER_HOOKS` is wrapped only in ARC Kubernetes mode to inject identity before workflow Pods are created. |
+
+For install order and mode-specific example files, see the [GitHub ARC user guide](../user-guide/kubernetes/github-arc.md).
+This page explains why the GitHub hooks and node-level components are needed.
+
+GitLab references:
+
+| GitLab concept | GitLab docs | cicd-sensor integration point |
+| --- | --- | --- |
+| GitLab Runner Helm chart | [Install GitLab Runner on Kubernetes](https://docs.gitlab.com/runner/install/kubernetes/) | The user guide provides a node-level DaemonSet and a minimal values snippet for the official GitLab Runner chart. |
+| Kubernetes executor | [GitLab Runner Kubernetes executor](https://docs.gitlab.com/runner/executors/kubernetes/) | GitLab Runner creates job Pods; cicd-sensor reads their labels and annotations through NRI. |
+
+For install order and example files, see the [GitLab Runner Kubernetes executor user guide](../user-guide/kubernetes/gitlab-runner.md).
+
+## ARC values merging
+
+ARC Helm values need manual merging because runner containers, environment
+variables, volume mounts, and volumes are YAML lists. Helm replaces lists from
+later values files instead of merging list entries, so a separate cicd-sensor
+values file can silently remove either existing runner settings or the
+cicd-sensor hook settings.
 
 ## Node runtime requirements
 
@@ -43,8 +67,15 @@ Consumed sources, in identity precedence order:
 Container environment variables such as `CI_PROJECT_PATH` and `CI_SERVER_HOST` are last-resort identity fallbacks, and variables such as `CI_PIPELINE_SOURCE` and `CI_COMMIT_SHA` fill metadata.
 Job configuration can override environment values, so an identity built from env alone is job-author-influenced; runner-set annotations are preferred for identity fields.
 
-`build` and user-defined service containers are monitored.
-`helper` and `init-permissions` are GitLab Runner infrastructure containers and are skipped by default.
+Default container handling:
+
+| GitLab Runner container | Handling |
+| --- | --- |
+| `build` | Monitored. |
+| user-defined service containers | Monitored as part of the same CI job. |
+| `helper` | Skipped by default. |
+| `init-permissions` | Skipped by default. |
+
 Containers without enough trusted Pod metadata to build a job identity are skipped.
 
 GitLab Kubernetes staging is a single local agent call.
@@ -92,6 +123,12 @@ Injected annotations:
 The container customization hook wrapper does not replace NRI.
 It supplies identity before Pod creation; NRI still supplies the runtime cgroup path at container creation time.
 Using the hook alone would require post-create Kubernetes API lookup or exposing a staging socket to the runner, and would no longer match the existing cgroup-mkdir staging model.
+
+The wrapper currently generates its own temporary hook template and overwrites
+any existing `ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE` setting. Operators that
+use a custom ARC hook template for security context, labels, or other PodSpec
+overrides need to merge those settings into the cicd-sensor wrapper flow before
+enabling Kubernetes mode.
 
 ARC Kubernetes mode keeps workflow-created Pods on the same node as the runner Pod.
 Agent state and cgroup tracking are node-local, so the agent that receives the GitHub job start must be the same node agent that receives the NRI `CreateContainer` events for the workflow job, service, and container-action Pods.
