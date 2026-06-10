@@ -72,13 +72,21 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	delay := reconnectInitialDelay
+	everConnected := false
 	for {
 		connectedAt := time.Now()
 		started, err := runStubOnce(ctx, opts, observer, logger)
 		if ctx.Err() != nil {
 			return nil
 		}
-		if !started {
+		if started {
+			everConnected = true
+		}
+		// A first-connection failure is a missing NRI socket or
+		// misconfiguration: fail loudly per the install preflight contract.
+		// After containerd restarts, Start fails to dial for a few seconds
+		// while containerd comes back, so reconnects must retry Start too.
+		if !started && !everConnected {
 			return err
 		}
 		if err == nil {
