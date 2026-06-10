@@ -9,15 +9,6 @@ metadata:
   name: cicd-sensor
   namespace: cicd-sensor-system
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cicd-sensor-manager
-  namespace: cicd-sensor-system
-type: Opaque
-stringData:
-  token: sk_cs_replace_me
----
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
