@@ -6,7 +6,7 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1
 	buf.build/go/protovalidate v1.2.0
 	cloud.google.com/go/pubsub/v2 v2.6.0
-	cloud.google.com/go/storage v1.62.2
+	cloud.google.com/go/storage v1.62.3
 	connectrpc.com/authn v0.2.0
 	connectrpc.com/connect v1.20.0
 	github.com/aws/aws-sdk-go-v2 v1.41.11

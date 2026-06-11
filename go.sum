@@ -49,8 +49,8 @@ cloud.google.com/go/monitoring v1.29.0 h1:AHhDsFaSax1/4k+qlIDX/SDGe6hggnfXJ9dkgD
 cloud.google.com/go/monitoring v1.29.0/go.mod h1:72NOVjJXHY/HBfoLT0+qlCZBT059+9VXLeAnL2PeeVM=
 cloud.google.com/go/pubsub/v2 v2.6.0 h1:8pjR0id+GTB+krKx5G6AGJoYrHog58w2Q89PCOrfM64=
 cloud.google.com/go/pubsub/v2 v2.6.0/go.mod h1:4anqvV/w8Pcgu2tO0qr2XgsF3GXHowzryfQ5gOnVmWY=
-cloud.google.com/go/storage v1.62.2 h1:WgR4U9n7bIzXkkVnwPKKE8bkaKUNsHG+0MAAlh9DGU4=
-cloud.google.com/go/storage v1.62.2/go.mod h1:cpYz/kRVZ+UQAF1uHeea10/9ewcRbxGoGNKsS9daSXA=
+cloud.google.com/go/storage v1.62.3 h1:SZq1t23NCI+e96dH77Dg3PEfsNNEjqO8zE5AnD8gVD0=
+cloud.google.com/go/storage v1.62.3/go.mod h1:cpYz/kRVZ+UQAF1uHeea10/9ewcRbxGoGNKsS9daSXA=
 cloud.google.com/go/trace v1.16.0 h1:GmQovzFc5F0CNfl0VLgL64aoTtu7xsM0YajW2GlG9+E=
 cloud.google.com/go/trace v1.16.0/go.mod h1:r+bdAn16dKLSV1G2D5v3e58IlQlizfxWrUfjx7kM7X0=
 connectrpc.com/authn v0.2.0 h1:epZK23EG7GP062dNn34wnhZfREcCXDzIu2nlocva9r8=
