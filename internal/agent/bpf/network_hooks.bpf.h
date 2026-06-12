@@ -103,13 +103,16 @@ int handle_cgroup_connect6(struct bpf_sock_addr *ctx)
     return 1;
 }
 
-// Captures userspace AF_UNIX connect(). The sample keeps enough context for
-// userspace to render the three sun_path forms: absolute filesystem paths,
-// Linux abstract namespace names, and relative paths resolved from cwd.
-// kernel_connect() bypasses this hook, so in-kernel connects are invisible.
-SEC("fentry/security_socket_connect")
-int BPF_PROG(handle_security_socket_connect,
-             struct socket *sock, struct sockaddr *address, int addrlen)
+// Submits the AF_UNIX connect sample shared by the unix_{stream,dgram}_connect
+// fentry programs. The sample keeps enough context for userspace to render the
+// three sun_path forms: absolute filesystem paths, Linux abstract namespace
+// names, and relative paths resolved from cwd.
+//
+// The proto_ops entry points see every AF_UNIX connect, including in-kernel
+// kernel_connect() callers; connects denied earlier by an LSM never reach them.
+static __always_inline int submit_unix_socket_connect(struct socket *sock,
+                                                      struct sockaddr *address,
+                                                      int addrlen)
 {
     if (!address)
         return 0;
@@ -120,11 +123,13 @@ int BPF_PROG(handle_security_socket_connect,
     if (!cgroup_is_tracked(cgroup_id))
         return 0;
 
+    // AF_UNSPEC on a dgram socket is a disconnect request, not an outbound
+    // endpoint.
     sa_family_t family = BPF_CORE_READ(address, sa_family);
     if (family != AGENT_AF_UNIX)
         return 0;
 
-    // sockaddr is caller-provided; verify the actual socket family too.
+    // unix proto_ops already guarantee AF_UNIX; defense in depth.
     __u16 sk_family = BPF_CORE_READ(sock, sk, __sk_common.skc_family);
     if (sk_family != AGENT_AF_UNIX)
         return 0;
@@ -180,4 +185,21 @@ int BPF_PROG(handle_security_socket_connect,
 
     bpf_ringbuf_submit(sample, 0);
     return 0;
+}
+
+// SOCK_STREAM and SOCK_SEQPACKET share unix_stream_connect through their
+// proto_ops, so one program covers both; sock->type records which.
+SEC("fentry/unix_stream_connect")
+int BPF_PROG(handle_unix_stream_connect,
+             struct socket *sock, struct sockaddr *uaddr, int addr_len,
+             int flags)
+{
+    return submit_unix_socket_connect(sock, uaddr, addr_len);
+}
+
+SEC("fentry/unix_dgram_connect")
+int BPF_PROG(handle_unix_dgram_connect,
+             struct socket *sock, struct sockaddr *addr, int alen, int flags)
+{
+    return submit_unix_socket_connect(sock, addr, alen);
 }

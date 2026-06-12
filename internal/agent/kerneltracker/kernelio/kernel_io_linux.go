@@ -86,7 +86,8 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		{name: "udpv6_sendmsg", program: kernelIO.objs.HandleUdpv6Sendmsg},
 		{name: "tcp_sendmsg", program: kernelIO.objs.HandleTcpSendmsg},
 		{name: "unix_stream_sendmsg", program: kernelIO.objs.HandleUnixStreamSendmsg},
-		{name: "security_socket_connect", program: kernelIO.objs.HandleSecuritySocketConnect},
+		{name: "unix_stream_connect", program: kernelIO.objs.HandleUnixStreamConnect},
+		{name: "unix_dgram_connect", program: kernelIO.objs.HandleUnixDgramConnect},
 	} {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})
 		if err != nil {

@@ -114,6 +114,36 @@ func TestLinuxKernelSampleUnixSocketConnectProxyBypassEndToEnd(t *testing.T) {
 			})
 	})
 
+	t.Run("datagram_socket_covered_by_dgram_connect_program", func(t *testing.T) {
+		// SOCK_DGRAM connect(2) flows through fentry/unix_dgram_connect, a
+		// separate BPF program from the stream/seqpacket one, so it needs
+		// its own end-to-end case.
+		tempDir := t.TempDir()
+		sockPath := filepath.Join(tempDir, "docker-upstream.sock")
+		server, err := net.ListenPacket("unixgram", sockPath)
+		if err != nil {
+			t.Fatalf("ListenPacket unixgram %s: %v", sockPath, err)
+		}
+		defer server.Close()
+
+		conn, err := net.Dial("unixgram", sockPath)
+		if err != nil {
+			t.Fatalf("Dial unixgram %s: %v", sockPath, err)
+		}
+		defer conn.Close()
+
+		waitForEventRecord(t, eventCh, 5*time.Second, "unix_socket_connect dgram",
+			func(record jobevent.EventRecord) bool {
+				if record.EventType != jobevent.UnixSocketConnect {
+					return false
+				}
+				path, _ := record.Payload["path"].(string)
+				socketType, _ := record.Payload["socket_type"].(string)
+				isAbstract, _ := record.Payload["is_abstract"].(bool)
+				return path == sockPath && socketType == "dgram" && !isAbstract
+			})
+	})
+
 	t.Run("relative_path_resolved_by_cwd", func(t *testing.T) {
 		tempDir := t.TempDir()
 		sockPath := filepath.Join(tempDir, "docker-upstream.sock")

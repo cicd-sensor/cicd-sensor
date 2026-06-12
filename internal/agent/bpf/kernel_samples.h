@@ -204,8 +204,9 @@ struct net_v6_sample {
     __u16 _pad2;
 };
 
-// AF_UNIX connect sample. security_socket_connect is pre-namei, so userspace
-// combines relative sun_path with cwd[] when cwd is available.
+// AF_UNIX connect sample. The unix_{stream,dgram}_connect fentry programs
+// fire pre-namei, so userspace combines relative sun_path with cwd[] when
+// cwd is available.
 struct unix_socket_connect_sample {
     __u32 kind;
     __u32 sun_path_len;
