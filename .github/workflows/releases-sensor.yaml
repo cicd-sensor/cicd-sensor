@@ -78,9 +78,14 @@ jobs:
     needs: [validate]
     uses: ./.github/workflows/bpf-cross-kernel.yaml
 
+  blacksmith-bpf-smoke:
+    name: Blacksmith BPF smoke gate
+    needs: [validate]
+    uses: ./.github/workflows/blacksmith-bpf-smoke.yaml
+
   approval:
     name: Approve release
-    needs: [validate, ci, bpf-integration]
+    needs: [validate, ci, bpf-integration, blacksmith-bpf-smoke]
     runs-on: ubuntu-24.04
     environment: sensor-releases/approval
     permissions:
