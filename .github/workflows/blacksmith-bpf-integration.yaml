@@ -1,5 +1,5 @@
 ---
-name: Blacksmith BPF Smoke
+name: Blacksmith BPF Integration
 
 "on":
   workflow_dispatch:
@@ -10,12 +10,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: blacksmith-bpf-smoke-${{ github.ref }}
+  group: blacksmith-bpf-integration-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  smoke:
-    name: BPF smoke
+  bpf-integration:
+    name: BPF integration
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 20
     env:
