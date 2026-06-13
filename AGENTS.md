@@ -3,6 +3,14 @@
 cicd-sensor is an eBPF-powered CI/CD runtime security sensor.
 The source of truth for design is `docs/`.
 
+## AI agent workflow
+
+This repo is developed through collaborative engineering, not autonomous "vibe coding".
+
+AI agents should first investigate the code, docs, runtime behavior, and tradeoffs; then help write down the design or plan; then implement the agreed change. Do not skip directly from a rough idea to a finished PR.
+
+Before changing external state such as creating, closing, reopening, or merging GitHub Issues / PRs, pushing branches, or publishing releases, show the exact target and proposed content, then wait for explicit approval.
+
 ## What to read first
 
 - `docs/index.md` — project goal and supported platforms
