@@ -35,6 +35,29 @@ flowchart LR
     class KT cicdSensor
 ```
 
+## Event delivery pressure
+
+The runtime has two distinct drop points:
+
+| Signal | Where it happens | Meaning |
+| --- | --- | --- |
+| `bpf_ringbuf_drop` | Kernel ring buffer reservation | The kernel could not reserve space for a sample. |
+| `bpf_event_channel_drop` | KernelTracker's per-job userspace event channel | A decoded sample was already attributed to a Job, but that Job's event worker could not accept another `EventRecord` fast enough. |
+
+`bpf_event_channel_drop` is not a job attribution failure and does not mean events from different jobs were mixed.
+It means runtime events for that specific Job may be missing before rule evaluation and log delivery.
+
+The main known producer is bursty `file_open` volume.
+`file_open` is useful for credential-access and filesystem behavior rules, but it is also the easiest event type to generate at very high rates through package managers, installers, shell loops, and language runtimes.
+Kubernetes preview testing reproduced `bpf_event_channel_drop` in both GitLab Runner Kubernetes executor and GitHub ARC, so this is provider-independent.
+
+The preferred fixes are to reduce unnecessary event volume before it reaches per-job evaluation and to keep high-value `file_open` signals:
+
+- avoid emitting or retaining low-value file opens when no rule can use them,
+- add cheap path / access prefilters where the rule model allows it,
+- keep baseline rules conservative so normal package-manager activity does not force large runtime logs,
+- make buffer sizing or worker throughput tunable only after the event volume is understood.
+
 ## Tracking model
 
 | Pattern | Trigger | Role |

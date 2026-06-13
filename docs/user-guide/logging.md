@@ -93,4 +93,15 @@ This means a rule can match full argv content even when the corresponding log en
 
 When building a compatible log consumer, use the linked proto schema as the exact field reference.
 
+## Runtime event drops
+
+Agent logs may contain `bpf_event_channel_drop` during very high event volume.
+This means cicd-sensor attributed events to a Job, but the Job's userspace event worker could not process every `EventRecord` fast enough.
+
+The main known cause is bursty `file_open` activity, such as package installation or a tight loop that opens many files.
+When this happens, detection and runtime-event logs for that Job may be incomplete.
+It does not mean events were mixed between jobs.
+
+For the implementation model and mitigation direction, see [eBPF Runtime](../developer-guide/ebpf-runtime.md#event-delivery-pressure).
+
 For build verification rather than detailed log consumption, see [Attestation predicate](attestation-predicate.md).
