@@ -78,9 +78,14 @@ jobs:
     needs: [validate]
     uses: ./.github/workflows/bpf-cross-kernel.yaml
 
+  blacksmith-bpf-integration:
+    name: Blacksmith BPF integration gate
+    needs: [validate]
+    uses: ./.github/workflows/blacksmith-bpf-integration.yaml
+
   approval:
     name: Approve release
-    needs: [validate, ci, bpf-integration]
+    needs: [validate, ci, bpf-integration, blacksmith-bpf-integration]
     runs-on: ubuntu-24.04
     environment: sensor-releases/approval
     permissions:
