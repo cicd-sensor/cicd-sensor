@@ -43,17 +43,21 @@ rule_sets:
         rule_name: "Tracking escape: cgroup.procs write (manual migration)"
         description: |
           What:
-            Terminates on a write to a cgroup.procs file under /sys/fs/cgroup, which migrates a process between cgroups.
+            Detects writes to cgroup.procs files under /sys/fs/cgroup, which migrate processes between cgroups.
           Why:
             Writing into another cgroup's cgroup.procs is the direct way to move a process out of cicd-sensor's tracked set. With sufficient privilege the destination can be outside the Job's cgroup tree, and post-migration execution is invisible to the agent.
           Notes:
-            CI workloads do not normally touch cgroup.procs directly; containerised work goes through the runtime. Review the writing process and the target cgroup path before adding any exception.
+            CI workloads do not normally touch cgroup.procs directly. Docker-in-Docker runtimes may write to /sys/fs/cgroup/docker/<container-id>/cgroup.procs through runc as part of normal container startup.
         event_type: file_open
         condition: |
           is_write &&
           path.startsWith("/sys/fs/cgroup/") &&
           path.endsWith("/cgroup.procs")
-        action: terminate
+        exceptions: |
+          process.exec_path.endsWith("/bin/runc") &&
+          path.startsWith("/sys/fs/cgroup/docker/") &&
+          path.endsWith("/cgroup.procs")
+        action: detect
         tags:
           mitre_tactic: defense-evasion
 
@@ -74,4 +78,3 @@ rule_sets:
         action: detect
         tags:
           mitre_tactic: defense-evasion,privilege-escalation
-
