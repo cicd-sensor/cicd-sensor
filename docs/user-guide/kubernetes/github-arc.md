@@ -151,6 +151,8 @@ helm upgrade --install RUNNER_SCALE_SET_NAME \
 
 Use this when ARC should create workflow job containers, services, and container actions as Kubernetes Pods.
 This mode uses ARC `containerMode.type: kubernetes`.
+The workflow-created Pods are pinned to the runner's node so the same node-level agent can handle both job start and NRI staging.
+Size runner nodes for the combined runner, workflow, service, and container-action workload.
 
 Copy these files:
 
@@ -172,6 +174,7 @@ Merge these values into your existing runner scale set values:
 
 - `containerMode.type: kubernetes`
 - `kubernetesModeWorkVolumeClaim`
+- `template.spec.securityContext.fsGroup: 1001`
 - `ACTIONS_RUNNER_HOOK_JOB_STARTED`
 - `CICD_SENSOR_GITHUB_K8S_RUNNER_SOCKET`
 - `ACTIONS_RUNNER_CONTAINER_HOOKS`
@@ -179,6 +182,10 @@ Merge these values into your existing runner scale set values:
 - the job hook ConfigMap volume and mount
 - the GitHub Kubernetes runner socket hostPath volume and mount
 - the container hook wrapper ConfigMap volume and mount
+
+The Kubernetes mode example sets `fsGroup: 1001` because ARC shares the work volume between the runner and workflow Pods.
+This keeps `/home/runner/_work` and `_tool` writable by the official runner image's runner group.
+If your custom runner image uses a different runner GID, adjust `fsGroup` to match it.
 
 Apply and upgrade:
 
