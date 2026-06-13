@@ -17,6 +17,11 @@ containerMode:
 
 template:
   spec:
+    securityContext:
+      # The official runner image uses runner UID/GID 1001. ARC Kubernetes mode
+      # shares the work volume with workflow Pods, so keep the volume writable by
+      # the runner group. Adjust this if you use a custom runner image.
+      fsGroup: 1001
     containers:
       - name: runner
         image: ghcr.io/actions/actions-runner:latest

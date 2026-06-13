@@ -15,6 +15,9 @@ Review the shared [Kubernetes runner setup](index.md), then install cicd-sensor 
 4. Configure GitLab Runner with the [Kubernetes executor](https://docs.gitlab.com/runner/executors/kubernetes/).
 5. Decide the namespace for GitLab Runner. This guide uses `gitlab-runner`.
 
+Use the current GitLab Runner authentication token flow and store the runner token in a Kubernetes Secret.
+Do not commit runner tokens or manager tokens into values files.
+
 Use pinned cicd-sensor image tags and pinned GitLab Runner chart versions in production.
 The example files use `:latest` only as a placeholder.
 
@@ -59,6 +62,7 @@ Edit `cicd-sensor-daemonset.yaml`:
 Merge the GitLab Runner values into your existing Helm values.
 The example is only a minimal Kubernetes executor snippet.
 Keep your existing `gitlabUrl`, runner registration, tags, cache, and resource settings.
+If you expect concurrent jobs, review the GitLab Runner `request_concurrency` setting as well; a low value can make Kubernetes runner verification look serialized even when the cluster has capacity.
 
 Apply cicd-sensor:
 
