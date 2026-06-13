@@ -30,6 +30,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install BPF integration deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq dnsutils libnss-resolve
+
       - name: Environment info
         run: |
           {
