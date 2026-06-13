@@ -31,6 +31,26 @@ The supported kernel ranges differ by architecture: 5.15 or later on `amd64`, 6.
 `ubuntu-slim` is not supported.
 It runs as a container on a shared VM and does not provide the host eBPF environment that cicd-sensor needs.
 
+## Third-party hosted runners
+
+Third-party GitHub Actions hosts (for example, Blacksmith and BuildJet) often run their own kernel builds, so eBPF capabilities can differ from GitHub's runner images even when the OS and kernel version look similar.
+
+cicd-sensor attaches its programs with fentry, which requires the target kernel functions to be fentry-attachable (present in `/sys/kernel/tracing/available_filter_functions`). When a required function is not exposed, the agent fails to start at BPF load time.
+
+### Blacksmith
+
+Blacksmith Ubuntu 24.04 runners (kernel `6.5.13`, as of 2026-06) are supported from `v0.0.38` onward.
+
+Earlier versions failed to start on Blacksmith because they attached `fentry/security_socket_connect`, which is not fentry-attachable on Blacksmith's kernel. `v0.0.38` observes AF_UNIX connects through `fentry/unix_stream_connect` and `fentry/unix_dgram_connect` instead, both of which are available there.
+
+If you pin an action release whose default agent predates `v0.0.38`, set the agent version explicitly:
+
+```yaml
+- uses: cicd-sensor/cicd-sensor-action@10fa5e7d8bf293cb679c9859f67d745c17cfc70f # v0.0.32
+  with:
+    cicd-sensor-version: v0.0.38
+```
+
 ## Standalone mode
 
 When no manager is configured, the agent starts inside the GitHub Actions job and uploads the HTML report as a job artifact.
