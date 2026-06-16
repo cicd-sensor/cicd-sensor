@@ -11,6 +11,8 @@ AI agents should first investigate the code, docs, runtime behavior, and tradeof
 
 Before changing external state such as creating, closing, reopening, or merging GitHub Issues / PRs, pushing branches, or publishing releases, show the exact target and proposed content, then wait for explicit approval.
 
+Use ignored `work_docs/` for local temporary design drafts, progress notes, investigation logs, and result reports. Do not place local-only working notes at the repository root.
+
 ## What to read first
 
 - `docs/index.md` — project goal and supported platforms
@@ -32,6 +34,7 @@ The files below add detail that only applies when touching specific paths. **The
 | `.claude/rules/20-testing.md` | Writing or reviewing tests. Required test-case table and coverage-perspective table. |
 | `.claude/rules/30-cel-rules.md` | Touching `rules/**`, `internal/rule/**`. RuleSet / RuleModifier schema, CEL surface, event-type sources. |
 | `.claude/rules/40-supply-chain.md` | Touching `.github/**`, `.gitlab-ci.yml`, Dependabot, or Renovate config. SHA pinning and cooldown. |
+| `.claude/rules/50-design-docs.md` | Writing or updating local Design Docs for large feature additions or substantial behavior changes. |
 
 ## Build and test
 
@@ -64,9 +67,11 @@ The Agent is built from several components, each owning a different boundary. Be
 
 | Component | Owns |
 | --- | --- |
-| `Agent` | Top-level process-wide orchestrator. Owns the control socket, provider selection, runner type, host manager connection / client, and shutdown lifecycle. |
-| `Listener` | Unix-socket entrypoint for `host start`, `project start`, and dockerd proxy staging. Provider routes and peer credentials. |
-| `JobRegistry` | Active jobs catalog and KernelTracker binding. Host-start methods receive the host manager client as a parameter; it is not held here. |
+| `Agent` | Top-level process orchestrator. Owns provider/runner selection, socket lifecycles, manager clients, host config cache startup, and shutdown. |
+| `Listener` | Unix-socket HTTP entrypoint. Owns provider routes, peer credentials, request trust checks, and dispatch into JobRegistry. |
+| `NRI observer` | Separate `cicd-sensor nri` process. Observes containerd NRI events and sends Kubernetes staging requests to the Agent. |
+| `ManagerClient / host config cache` | Manager config fetch boundary and cached host config for Kubernetes host paths. Does not own Jobs or KernelTracker state. |
+| `JobRegistry` | Active jobs catalog and KernelTracker binding. Creates scope state, composes tracking primitives, and finalizes Jobs. |
 | `Job` | One CI/CD job's lifecycle, identity, and event worker. |
 | `JobScopeState` | Per-scope state for one Job — one host instance and / or one project instance per Job. Holds the Job's `RuleSets`, `RuleModifiers`, `OutputSettings`, and scope-local manager output config. |
 | `Host scope` | The configuration surface owned by the runner host operator (the platform team installing cicd-sensor on the runner). It arrives via `host start` from a runner hook, and is used when the host enforces a baseline across every job on the runner — typically on self-hosted runners. |
@@ -74,6 +79,7 @@ The Agent is built from several components, each owning a different boundary. Be
 | `KernelTracker` | Userspace cgroup / process tracking, decoded sample domain, and EventRecord attribution. |
 | `KernelIO` | BPF object load, attach, ringbuf read, and map operations. |
 | `Docker proxy` | Mediates dockerd API and stages container cgroup basenames so jobs can track containers created through the host Docker socket. |
+| `GitHub Kubernetes hooks` | Runner-side integration, not Agent-owned state. Supplies GitHub job identity to the Agent and, in ARC Kubernetes mode, to workflow Pods for NRI staging. |
 | `Outputs` | Per-scope runtime summaries used for job logs, project results, reports, and attestations. |
 
 A single Job may carry one scope or both. Each scope owns its own rules, evaluation state, and outputs, and the two are isolated: neither operator can read or override the other's rules, and their outputs are emitted separately. This is the security boundary of the agent — see `docs/developer-guide/agent.md` for the conceptual model and `docs/developer-guide/agent-ownership-boundaries.md` for the implementation ownership rules. For the kernel-side model, see `docs/developer-guide/ebpf-runtime.md`.
@@ -90,5 +96,6 @@ Host scope and project scope are internal Agent implementation boundaries. User-
 ## Large changes
 
 For large feature additions or substantial behavior changes, write a Markdown Design Doc before implementation.
+Use `.claude/rules/50-design-docs.md` for the recommended format.
 Use it mainly as a local working document to keep the direction stable and track progress.
 If communication needs it, copy or summarize the relevant parts into GitHub Issues.

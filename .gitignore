@@ -42,6 +42,9 @@ book/
 /feedback.md
 /prompt.md
 
+# Local working docs and investigation notes
+/work_docs/
+
 # Editor/IDE
 .idea/
 .vscode/
