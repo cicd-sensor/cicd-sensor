@@ -149,6 +149,15 @@ func TestStartJobLogsUsesOneWorkerPerType(t *testing.T) {
 	if conn.detection.requests == conn.summaryLog.requests {
 		t.Fatal("detection and summary must use separate workers")
 	}
+	if got := cap(conn.runtimeEvent.requests); got != runtimeEventManagerOutputChannelCap {
+		t.Fatalf("runtime event output channel cap: got %d, want %d", got, runtimeEventManagerOutputChannelCap)
+	}
+	if got := cap(conn.detection.requests); got != managerOutputChannelCap {
+		t.Fatalf("detection output channel cap: got %d, want %d", got, managerOutputChannelCap)
+	}
+	if got := cap(conn.summaryLog.requests); got != managerOutputChannelCap {
+		t.Fatalf("summary output channel cap: got %d, want %d", got, managerOutputChannelCap)
+	}
 }
 
 func TestManagerJobLogsEmitAndCloseSummaryLog(t *testing.T) {

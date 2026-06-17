@@ -28,5 +28,5 @@ func (o *ManagerJobLogs) AttachSummaryRecorderForTesting(identity jobcontext.Job
 }
 
 func (o *ManagerJobLogs) attachRecorderForTesting(identity jobcontext.JobIdentity, scope jobcontext.ScopeType, logType managerv1beta1.LogType, sendBatch func(context.Context, managerclient.LogBatch) error, assign func(*managerOutput)) {
-	assign(newManagerOutput(o.logger, sendBatch, identity, scope, logType, &managerv1beta1.OutputSetting{Enabled: true, FlushThresholdBytes: 1}))
+	assign(newManagerOutput(o.logger, sendBatch, identity, scope, logType, &managerv1beta1.OutputSetting{Enabled: true, FlushThresholdBytes: 1}, managerOutputChannelCap))
 }

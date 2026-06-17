@@ -267,6 +267,7 @@ func testManagerOutput(sendBatch func(context.Context, managerclient.LogBatch) e
 		jobcontext.ScopeTypeHost,
 		managerv1beta1.LogType_LOG_TYPE_DETECTION,
 		setting,
+		managerOutputChannelCap,
 	)
 }
 

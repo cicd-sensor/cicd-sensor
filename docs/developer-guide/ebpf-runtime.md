@@ -120,6 +120,7 @@ It keeps up to 4096 file-open keys per Job; this is separate from the 64k per-Jo
 It uses FIFO eviction rather than LRU so a hot repeated key does not refresh itself forever and evict newer unique keys.
 The FIFO order is stored as a fixed-size ring buffer, so inserts remain O(1) after the per-Job key limit is reached.
 KernelTracker records delivery diagnostics internally (`attempted`, `delivered`, `dropped`, `suppressed_duplicates`, and `max_queue_depth`) and logs a summary when a Job is removed if drops or suppression occurred.
+Manager `runtime_event` output uses the same 64k queue capacity so the post-evaluation log path does not immediately become the next bottleneck; detection and summary outputs keep the smaller manager-output queue because they are not raw event streams.
 
 ## Implementation layout
 

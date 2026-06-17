@@ -29,6 +29,7 @@ func newManagerOutput(
 	scope jobcontext.ScopeType,
 	logType managerv1beta1.LogType,
 	setting *managerv1beta1.OutputSetting,
+	channelCap int,
 ) *managerOutput {
 	if sendBatch == nil {
 		return nil
@@ -43,7 +44,7 @@ func newManagerOutput(
 		now:       time.Now,
 	})
 	out := &managerOutput{
-		requests: make(chan managerOutputRequest, managerOutputChannelCap),
+		requests: make(chan managerOutputRequest, channelCap),
 		done:     make(chan struct{}),
 	}
 	go worker.run(out.requests, out.done)

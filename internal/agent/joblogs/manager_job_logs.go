@@ -89,6 +89,7 @@ func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcon
 			scopeType,
 			managerv1beta1.LogType_LOG_TYPE_DETECTION,
 			detection,
+			managerOutputChannelCap,
 		)
 	}
 	if runtimeEvent.GetEnabled() {
@@ -99,6 +100,7 @@ func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcon
 			scopeType,
 			managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT,
 			runtimeEvent,
+			runtimeEventManagerOutputChannelCap,
 		)
 	}
 	if summary.GetEnabled() {
@@ -109,6 +111,7 @@ func (o *ManagerJobLogs) start(identity jobcontext.JobIdentity, scopeType jobcon
 			scopeType,
 			managerv1beta1.LogType_LOG_TYPE_SUMMARY,
 			summary,
+			managerOutputChannelCap,
 		)
 	}
 }

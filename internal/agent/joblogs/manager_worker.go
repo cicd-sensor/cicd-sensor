@@ -11,7 +11,10 @@ import (
 	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 )
 
-const managerOutputChannelCap = 10_000
+const (
+	managerOutputChannelCap             = 10_000
+	runtimeEventManagerOutputChannelCap = 65_536
+)
 
 type managerWorkerConfig struct {
 	logger    *slog.Logger
