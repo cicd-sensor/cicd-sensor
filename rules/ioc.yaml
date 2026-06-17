@@ -20,3 +20,23 @@ rule_sets:
           mitre_tactic: command-and-control
           ioc_date: "2026-05-19"
           source_url: https://www.chainguard.dev/unchained/mini-shai-hulud-npm-attack-antv-ecosystem-compromise-may-2026
+
+      - rule_id: mastra_npm_compromise_c2_ip
+        rule_name: "IOC: Mastra npm package compromise C2 IP"
+        description: |
+          What:
+            Outbound C2 connections from the @mastra/* npm package compromise.
+          Why:
+            Active-compromise IOC. Compromised @mastra packages beacon to these IPs.
+        event_type: network_connect
+        condition: |
+          family == "ipv4" &&
+          (
+            remote_ip == "23.254.164.92" ||
+            remote_ip == "23.254.164.123"
+          )
+        action: terminate
+        tags:
+          mitre_tactic: command-and-control
+          ioc_date: "2026-06-17"
+          source_url: https://x.com/lmt_swallow/status/2067082668458786967
