@@ -21,6 +21,51 @@ type fileOpenSample struct {
 func (fileOpenSample) sealedEngineInput()         {}
 func (fileOpenSample) sealedDecodedKernelSample() {}
 
+const (
+	fileOpenPayloadPath    = "path"
+	fileOpenPayloadIsRead  = "is_read"
+	fileOpenPayloadIsWrite = "is_write"
+	fileOpenPayloadFlags   = "flags"
+)
+
+// fileOpenRecordPayload is what file_open dedup reads from EventRecord.Payload.
+// fileOpenDedupKey embeds this type so rule-visible payload changes also change
+// duplicate-suppression identity.
+type fileOpenRecordPayload struct {
+	Path    string
+	IsRead  bool
+	IsWrite bool
+	Flags   int
+}
+
+func fileOpenPayloadFromRecord(record jobevent.EventRecord) (fileOpenRecordPayload, bool) {
+	if record.EventType != jobevent.FileOpen {
+		return fileOpenRecordPayload{}, false
+	}
+	pathValue, ok := record.Payload[fileOpenPayloadPath].(string)
+	if !ok || pathValue == "" {
+		return fileOpenRecordPayload{}, false
+	}
+	isRead, ok := record.Payload[fileOpenPayloadIsRead].(bool)
+	if !ok {
+		return fileOpenRecordPayload{}, false
+	}
+	isWrite, ok := record.Payload[fileOpenPayloadIsWrite].(bool)
+	if !ok {
+		return fileOpenRecordPayload{}, false
+	}
+	flags, ok := record.Payload[fileOpenPayloadFlags].(int)
+	if !ok {
+		return fileOpenRecordPayload{}, false
+	}
+	return fileOpenRecordPayload{
+		Path:    pathValue,
+		IsRead:  isRead,
+		IsWrite: isWrite,
+		Flags:   flags,
+	}, true
+}
+
 type fileRemoveSample struct {
 	Identity      processIdentity
 	CgroupID      uint64
@@ -72,10 +117,10 @@ func handleFileOpenSample(state *jobTrackingState, sample fileOpenSample) []engi
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{
-			"path":     sample.Path,
-			"is_write": sample.IsWrite,
-			"is_read":  sample.IsRead,
-			"flags":    int(sample.Flags),
+			fileOpenPayloadPath:    sample.Path,
+			fileOpenPayloadIsRead:  sample.IsRead,
+			fileOpenPayloadIsWrite: sample.IsWrite,
+			fileOpenPayloadFlags:   int(sample.Flags),
 		},
 		Tags: map[string]string{},
 	}

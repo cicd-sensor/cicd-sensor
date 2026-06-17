@@ -87,6 +87,40 @@ BPF map state is intentionally small. The kernel side only needs to answer two q
 | `stagingByJob` | Cleans up staging entries for a job when the job ends |
 | `processesByJob` / `processNode` | Holds process fat nodes and attaches `exec_path`, `argv`, and `ancestors` to EventRecord |
 
+### EventRecord delivery pressure
+
+KernelTracker owns the boundary between decoded kernel samples and each Job's event worker.
+Each Job has a bounded `EventRecord` channel; the default capacity is 64k records.
+The bound is intentional: a slow or blocked Job worker must not create unbounded memory growth in the agent.
+
+`file_open` can be much higher volume than process, network, or domain events.
+Repeated reads of the same file by the same process are common during package install, build, and runtime startup.
+If those repeated records fill the per-Job channel, later `process_exec` or unique credential-like file reads can be dropped before rule evaluation sees them.
+
+To protect the delivery path, KernelTracker suppresses repeated same-key `file_open` records before enqueueing them into the Job channel.
+This is a delivery-pressure optimization, not a rule semantic change:
+
+- the first successfully enqueued event for a key is preserved;
+- unique paths are not collapsed;
+- truncated, malformed, or incomplete `file_open` records are not suppressed;
+- non-`file_open` event types are never deduplicated by this path.
+
+The dedup key is explicit rather than a generic payload hash:
+
+| Key field | Reason |
+| --- | --- |
+| process PID + start boottime | Distinguishes process lifetimes even when PIDs are reused |
+| process executable path | Keeps same PID/start context readable when exec context changes |
+| file path | Keeps unique file enumeration visible |
+| read/write mode | Keeps read and write behavior separate |
+| open flags | Keeps rule-visible open-flag differences separate |
+
+The dedup state is per Job, loop-local to KernelTracker, and bounded.
+It keeps up to 4096 file-open keys per Job; this is separate from the 64k per-Job EventRecord channel capacity.
+It uses FIFO eviction rather than LRU so a hot repeated key does not refresh itself forever and evict newer unique keys.
+The FIFO order is stored as a fixed-size ring buffer, so inserts remain O(1) after the per-Job key limit is reached.
+KernelTracker records delivery diagnostics internally (`attempted`, `delivered`, `dropped`, `suppressed_duplicates`, and `max_queue_depth`) and logs a summary when a Job is removed if drops or suppression occurred.
+
 ## Implementation layout
 
 | Path | Content |

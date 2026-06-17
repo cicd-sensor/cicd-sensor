@@ -195,6 +195,8 @@ Job tracking is expressed by JobRegistry composing KernelTracker primitives.
 GitHub can resolve the cgroup from the peer PID at start time, so it uses `RegisterJob + BindProcessCgroupToJob`.
 GitLab Docker executor registers a job from label identity evidence and waits for a later staging promote.
 
+The per-job event channel is bounded. KernelTracker owns delivery-pressure handling before events reach Job rule evaluation, including repeated `file_open` suppression and delivery diagnostics. See [EventRecord delivery pressure](ebpf-runtime.md#eventrecord-delivery-pressure).
+
 ## Design Notes
 
 - Job membership is determined by cgroup tracking. Process context is a fat node snapshot with `exec_path` / `argv` / `ancestors`; it is not used as the job boundary.

@@ -102,18 +102,41 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 			if !ok {
 				continue
 			}
+
+			// Keep delivery pressure stats separately from suppression so job
+			// removal can report what reached, skipped, or overflowed the queue.
+			stats := engine.jobTracking.deliveryStatsFor(value.JobID, value.Record.EventType)
+			stats.Attempted++
+			stats.observeQueueDepth(len(channel))
+
+			var fileOpenDedup *fileOpenDedupState
+			var fileOpenKey fileOpenDedupKey
+			if value.Record.EventType == jobevent.FileOpen {
+				// Collapse repeated file_open records before they consume the
+				// per-Job EventRecord channel. Other event types are never
+				// deduplicated here.
+				dedupKey, canDedupFileOpen := fileOpenDedupKeyForRecord(value.Record)
+				if canDedupFileOpen {
+					dedupState := engine.jobTracking.fileOpenDedupByJob[value.JobID]
+					if dedupState.contains(dedupKey) {
+						stats.SuppressedDuplicates++
+						continue
+					}
+					fileOpenDedup = dedupState
+					fileOpenKey = dedupKey
+				}
+			}
+
 			select {
 			case channel <- value.Record:
-			default:
-				engine.jobTracking.jobEventDropCounts[value.JobID]++
-				dropped := engine.jobTracking.jobEventDropCounts[value.JobID]
-				if shouldLogEventDrop(dropped) {
-					engine.logger.WarnContext(ctx, "bpf_event_channel_drop",
-						"job_id", value.JobID,
-						"count", dropped,
-						"event_type", value.Record.EventType,
-					)
+				stats.Delivered++
+				// Remember only delivered records, so every suppressible key has
+				// one visible EventRecord for rule evaluation.
+				if fileOpenDedup != nil {
+					fileOpenDedup.remember(fileOpenKey)
 				}
+			default:
+				stats.Dropped++
 			}
 		case notifyJobEnded:
 			if engine.jobEndNotifier != nil {
@@ -134,6 +157,7 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 		case removeJobFromKernel:
 			err := engine.deleteJobKernelMapEntries(ctx, value.Cgroups, value.Staging)
 			if err == nil {
+				engine.logEventDeliverySummary(ctx, value.JobID)
 				channel := engine.jobTracking.removeJob(value.JobID)
 				if channel != nil {
 					close(channel)
@@ -159,6 +183,23 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 				close(value.Channel)
 			}
 		}
+	}
+}
+
+func (engine *KernelTracker) logEventDeliverySummary(ctx context.Context, jobID jobcontext.JobIdentity) {
+	for eventType, stats := range engine.jobTracking.jobEventDeliveryStats[jobID] {
+		if stats.Dropped == 0 && stats.SuppressedDuplicates == 0 {
+			continue
+		}
+		engine.logger.InfoContext(ctx, "kernel_event_delivery_summary",
+			"job_id", jobID,
+			"event_type", eventType,
+			"attempted", stats.Attempted,
+			"delivered", stats.Delivered,
+			"dropped", stats.Dropped,
+			"suppressed_duplicates", stats.SuppressedDuplicates,
+			"max_queue_depth", stats.MaxQueueDepth,
+		)
 	}
 }
 

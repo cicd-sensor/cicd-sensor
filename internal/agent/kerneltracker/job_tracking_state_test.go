@@ -1,8 +1,10 @@
 package kerneltracker
 
 import (
-	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"testing"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
+	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 )
 
 func TestJobTrackingState_RemoveJobClearsAllJobOwnedState(t *testing.T) {
@@ -15,15 +17,27 @@ func TestJobTrackingState_RemoveJobClearsAllJobOwnedState(t *testing.T) {
 	otherProcess := processIdentity{PID: 20, StartBoottime: 2000}
 
 	s.registerJob(target, 1)
+	if s.fileOpenDedupByJob[target] == nil {
+		t.Fatal("registerJob did not initialize target file open dedup state")
+	}
 	s.bind(target, 42)
 	s.putStaging("docker-target.scope", target)
-	s.jobEventDropCounts[target] = 3
+	s.jobEventDeliveryStats[target] = map[jobevent.Type]*eventDeliveryStats{
+		jobevent.FileOpen: &eventDeliveryStats{Attempted: 3, Delivered: 1, SuppressedDuplicates: 2},
+	}
+	s.fileOpenDedupByJob[target].remember(testFileOpenDedupKey(10, 1000, "/target"))
 	s.recordExec(target, targetProcess, "/bin/target", nil, 0)
 
 	s.registerJob(other, 1)
+	if s.fileOpenDedupByJob[other] == nil {
+		t.Fatal("registerJob did not initialize bystander file open dedup state")
+	}
 	s.bind(other, 84)
 	s.putStaging("docker-other.scope", other)
-	s.jobEventDropCounts[other] = 5
+	s.jobEventDeliveryStats[other] = map[jobevent.Type]*eventDeliveryStats{
+		jobevent.FileOpen: &eventDeliveryStats{Attempted: 5, Delivered: 4, SuppressedDuplicates: 1},
+	}
+	s.fileOpenDedupByJob[other].remember(testFileOpenDedupKey(20, 2000, "/other"))
 	s.recordExec(other, otherProcess, "/bin/other", nil, 0)
 
 	channel := s.removeJob(target)
@@ -37,8 +51,11 @@ func TestJobTrackingState_RemoveJobClearsAllJobOwnedState(t *testing.T) {
 	if _, ok := s.jobEventChannels[target]; ok {
 		t.Fatal("target event channel survived RemoveJob")
 	}
-	if _, ok := s.jobEventDropCounts[target]; ok {
-		t.Fatal("target event drop count survived RemoveJob")
+	if _, ok := s.jobEventDeliveryStats[target]; ok {
+		t.Fatal("target event delivery stats survived RemoveJob")
+	}
+	if _, ok := s.fileOpenDedupByJob[target]; ok {
+		t.Fatal("target file open dedup state survived RemoveJob")
 	}
 	if _, ok := s.jobForCgroup(42); ok {
 		t.Fatal("target cgroup forward index survived RemoveJob")
@@ -62,8 +79,11 @@ func TestJobTrackingState_RemoveJobClearsAllJobOwnedState(t *testing.T) {
 	if _, ok := s.jobEventChannels[other]; !ok {
 		t.Fatal("bystander event channel was removed")
 	}
-	if got := s.jobEventDropCounts[other]; got != 5 {
-		t.Fatalf("bystander event drop count = %d, want 5", got)
+	if got := s.jobEventDeliveryStats[other][jobevent.FileOpen].SuppressedDuplicates; got != 1 {
+		t.Fatalf("bystander suppressed duplicate count = %d, want 1", got)
+	}
+	if state := s.fileOpenDedupByJob[other]; state == nil || !state.contains(testFileOpenDedupKey(20, 2000, "/other")) {
+		t.Fatal("bystander file open dedup state was removed")
 	}
 	if owner, ok := s.jobForCgroup(84); !ok || owner != other {
 		t.Fatalf("bystander cgroup owner = %v ok=%v, want %v true", owner, ok, other)
@@ -145,5 +165,17 @@ func TestJobTrackingState_RemoveJob(t *testing.T) {
 				t.Errorf("bystander staging entry lost: got %v ok=%v", owner, ok)
 			}
 		})
+	}
+}
+
+func testFileOpenDedupKey(pid int32, startBoottime uint64, path string) fileOpenDedupKey {
+	return fileOpenDedupKey{
+		pid:           pid,
+		startBoottime: startBoottime,
+		payload: fileOpenRecordPayload{
+			Path:   path,
+			IsRead: true,
+			Flags:  0,
+		},
 	}
 }

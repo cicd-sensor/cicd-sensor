@@ -82,9 +82,13 @@ func TestLinuxKernelSampleFileOpenEndToEnd(t *testing.T) {
 		return true
 	})
 
-	appendReadFile, err := os.OpenFile(path, os.O_RDONLY|syscall.O_APPEND, 0)
+	appendReadPath := filepath.Join(tempDir, "append-read.txt")
+	if err := os.WriteFile(appendReadPath, []byte("test"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", appendReadPath, err)
+	}
+	appendReadFile, err := os.OpenFile(appendReadPath, os.O_RDONLY|syscall.O_APPEND, 0)
 	if err != nil {
-		t.Fatalf("OpenFile(%q, O_RDONLY|O_APPEND): %v", path, err)
+		t.Fatalf("OpenFile(%q, O_RDONLY|O_APPEND): %v", appendReadPath, err)
 	}
 	_ = appendReadFile.Close()
 
@@ -95,7 +99,52 @@ func TestLinuxKernelSampleFileOpenEndToEnd(t *testing.T) {
 		gotPath, _ := record.Payload["path"].(string)
 		isRead, _ := record.Payload["is_read"].(bool)
 		isWrite, _ := record.Payload["is_write"].(bool)
-		return gotPath == path && isRead && !isWrite
+		return gotPath == appendReadPath && isRead && !isWrite
+	})
+}
+
+func TestLinuxKernelSampleFileOpenRepeatedReadIsSuppressedEndToEnd(t *testing.T) {
+	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	defer kernelIO.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	engine := newTestKernelTracker(nil, nil, kernelIO, cgroupRoot)
+	done := make(chan error, 1)
+	go func() {
+		done <- engine.Run(ctx)
+	}()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatalf("Run error = %v, want nil", err)
+		}
+	}()
+
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "repeated.txt")
+	if err := os.WriteFile(path, []byte("test"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", path, err)
+	}
+
+	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "file-open-dedup")
+	eventCh, err := engine.RegisterJob(ctx, jobID)
+	if err != nil {
+		t.Fatalf("RegisterJob: %v", err)
+	}
+	if err := engine.BindProcessCgroupToJob(ctx, jobID, int32(os.Getpid())); err != nil {
+		t.Fatalf("BindProcessCgroupToJob: %v", err)
+	}
+
+	openReadOnlyFile(t, path)
+	waitForEventRecord(t, eventCh, 5*time.Second, "first repeated file_open read", func(record jobevent.EventRecord) bool {
+		return isReadFileOpenForPath(record, path)
+	})
+
+	openReadOnlyFile(t, path)
+	assertNoEventRecord(t, eventCh, 500*time.Millisecond, func(record jobevent.EventRecord) bool {
+		return isReadFileOpenForPath(record, path)
 	})
 }
 
@@ -159,6 +208,27 @@ func TestLinuxKernelSampleFileOpenLongPathIsTruncated(t *testing.T) {
 		t.Logf("file_open long path saw path=%q tags=%v", record.Payload["path"], record.Tags)
 		return record.Tags["truncated"] == "path"
 	})
+}
+
+func openReadOnlyFile(t *testing.T, path string) {
+	t.Helper()
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("Open(%q): %v", path, err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close(%q): %v", path, err)
+	}
+}
+
+func isReadFileOpenForPath(record jobevent.EventRecord, path string) bool {
+	if record.EventType != jobevent.FileOpen {
+		return false
+	}
+	gotPath, _ := record.Payload["path"].(string)
+	isRead, _ := record.Payload["is_read"].(bool)
+	isWrite, _ := record.Payload["is_write"].(bool)
+	return gotPath == path && isRead && !isWrite
 }
 
 // TestLinuxKernelSampleFileRemoveEndToEnd exercises the security_inode_unlink and

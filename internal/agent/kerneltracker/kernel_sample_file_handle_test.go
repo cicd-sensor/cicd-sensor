@@ -49,6 +49,54 @@ func TestHandleFileOpen_EmitsPayloadAndTruncatedTag(t *testing.T) {
 	if got := emit.Record.Tags["truncated"]; got != "path" {
 		t.Fatalf("truncated tag = %q, want path", got)
 	}
+
+	assertPayloadKeys(t, emit.Record.Payload, fileOpenPayloadPath, fileOpenPayloadFlags, fileOpenPayloadIsWrite, fileOpenPayloadIsRead)
+	payload, ok := fileOpenPayloadFromRecord(emit.Record)
+	if !ok {
+		t.Fatal("fileOpenPayloadFromRecord() ok = false, want true")
+	}
+	if payload != (fileOpenRecordPayload{Path: "/tmp/very-long-path", IsRead: true, IsWrite: true, Flags: 0x241}) {
+		t.Fatalf("fileOpenPayloadFromRecord() = %#v", payload)
+	}
+	if _, ok := fileOpenDedupKeyForRecord(emit.Record); ok {
+		t.Fatal("truncated file_open must not be eligible for dedup")
+	}
+}
+
+func TestHandleFileOpen_PayloadRoundTripsToDedupKey(t *testing.T) {
+	t.Parallel()
+
+	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	identity := processIdentity{PID: 101, StartBoottime: 2}
+
+	state := destinationTrackedState(jobID, 42)
+	state.recordExec(jobID, identity, "/bin/cat", nil, 0)
+
+	effects := handleEngineInput(state, fileOpenSample{
+		Identity: identity,
+		CgroupID: 42,
+		TsNs:     17,
+		Path:     "/tmp/visible-path",
+		Flags:    0x241,
+		IsWrite:  true,
+		IsRead:   true,
+	})
+
+	emit, ok := singleEmitEventRecordEffect(effects)
+	if !ok {
+		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
+	}
+	assertPayloadKeys(t, emit.Record.Payload, fileOpenPayloadPath, fileOpenPayloadFlags, fileOpenPayloadIsWrite, fileOpenPayloadIsRead)
+	payload, ok := fileOpenPayloadFromRecord(emit.Record)
+	if !ok {
+		t.Fatal("fileOpenPayloadFromRecord() ok = false, want true")
+	}
+	if payload != (fileOpenRecordPayload{Path: "/tmp/visible-path", IsRead: true, IsWrite: true, Flags: 0x241}) {
+		t.Fatalf("fileOpenPayloadFromRecord() = %#v", payload)
+	}
+	if _, ok := fileOpenDedupKeyForRecord(emit.Record); !ok {
+		t.Fatal("fileOpenDedupKeyForRecord() ok = false, want true")
+	}
 }
 
 func TestHandleFileRemove_EmitsPayload(t *testing.T) {
@@ -226,5 +274,18 @@ func TestHandleFileLink_SymlinkRelativeResolved(t *testing.T) {
 				t.Fatalf("payload[is_symlink] = false, want true")
 			}
 		})
+	}
+}
+
+func assertPayloadKeys(t *testing.T, payload map[string]any, keys ...string) {
+	t.Helper()
+
+	if len(payload) != len(keys) {
+		t.Fatalf("payload keys = %v, want exactly %v", payload, keys)
+	}
+	for _, key := range keys {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("payload missing key %q in %v", key, payload)
+		}
 	}
 }

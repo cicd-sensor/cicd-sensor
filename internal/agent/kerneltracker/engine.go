@@ -12,7 +12,7 @@ import (
 
 const (
 	defaultEngineInputBufferSize = 16384
-	defaultEventRecordBufferSize = 16384
+	defaultEventRecordBufferSize = 65536
 )
 
 type KernelTracker struct {

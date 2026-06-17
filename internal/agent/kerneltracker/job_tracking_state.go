@@ -2,7 +2,6 @@ package kerneltracker
 
 import (
 	"log/slog"
-	"math/bits"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
@@ -10,27 +9,29 @@ import (
 
 // jobTrackingState is the loop-local Job mirror owned by KernelTracker.Run.
 type jobTrackingState struct {
-	logger             *slog.Logger
-	jobs               map[jobcontext.JobIdentity]struct{}
-	jobEventChannels   map[jobcontext.JobIdentity]chan jobevent.EventRecord
-	jobEventDropCounts map[jobcontext.JobIdentity]uint64
-	jobByCgroup        map[uint64]jobcontext.JobIdentity
-	cgroupsByJob       map[jobcontext.JobIdentity]map[uint64]struct{}
-	stagingByBasename  map[string]jobcontext.JobIdentity
-	stagingByJob       map[jobcontext.JobIdentity]map[string]struct{}
-	processesByJob     map[jobcontext.JobIdentity]*jobProcessState
+	logger                *slog.Logger
+	jobs                  map[jobcontext.JobIdentity]struct{}
+	jobEventChannels      map[jobcontext.JobIdentity]chan jobevent.EventRecord
+	jobEventDeliveryStats map[jobcontext.JobIdentity]map[jobevent.Type]*eventDeliveryStats
+	fileOpenDedupByJob    map[jobcontext.JobIdentity]*fileOpenDedupState
+	jobByCgroup           map[uint64]jobcontext.JobIdentity
+	cgroupsByJob          map[jobcontext.JobIdentity]map[uint64]struct{}
+	stagingByBasename     map[string]jobcontext.JobIdentity
+	stagingByJob          map[jobcontext.JobIdentity]map[string]struct{}
+	processesByJob        map[jobcontext.JobIdentity]*jobProcessState
 }
 
 func newJobTrackingState() *jobTrackingState {
 	return &jobTrackingState{
-		jobs:               make(map[jobcontext.JobIdentity]struct{}),
-		jobEventChannels:   make(map[jobcontext.JobIdentity]chan jobevent.EventRecord),
-		jobEventDropCounts: make(map[jobcontext.JobIdentity]uint64),
-		jobByCgroup:        make(map[uint64]jobcontext.JobIdentity),
-		cgroupsByJob:       make(map[jobcontext.JobIdentity]map[uint64]struct{}),
-		stagingByBasename:  make(map[string]jobcontext.JobIdentity),
-		stagingByJob:       make(map[jobcontext.JobIdentity]map[string]struct{}),
-		processesByJob:     make(map[jobcontext.JobIdentity]*jobProcessState),
+		jobs:                  make(map[jobcontext.JobIdentity]struct{}),
+		jobEventChannels:      make(map[jobcontext.JobIdentity]chan jobevent.EventRecord),
+		jobEventDeliveryStats: make(map[jobcontext.JobIdentity]map[jobevent.Type]*eventDeliveryStats),
+		fileOpenDedupByJob:    make(map[jobcontext.JobIdentity]*fileOpenDedupState),
+		jobByCgroup:           make(map[uint64]jobcontext.JobIdentity),
+		cgroupsByJob:          make(map[jobcontext.JobIdentity]map[uint64]struct{}),
+		stagingByBasename:     make(map[string]jobcontext.JobIdentity),
+		stagingByJob:          make(map[jobcontext.JobIdentity]map[string]struct{}),
+		processesByJob:        make(map[jobcontext.JobIdentity]*jobProcessState),
 	}
 }
 
@@ -39,6 +40,9 @@ func (s *jobTrackingState) registerJob(jobID jobcontext.JobIdentity, eventRecord
 
 	if s.processesByJob[jobID] == nil {
 		s.processesByJob[jobID] = newJobProcessState()
+	}
+	if s.fileOpenDedupByJob[jobID] == nil {
+		s.fileOpenDedupByJob[jobID] = newFileOpenDedupState(defaultFileOpenDedupKeyLimit)
 	}
 
 	channel := s.jobEventChannels[jobID]
@@ -50,15 +54,39 @@ func (s *jobTrackingState) registerJob(jobID jobcontext.JobIdentity, eventRecord
 	return channel
 }
 
-// shouldLogEventDrop rate-limits event-drop logs at powers of two.
-func shouldLogEventDrop(dropped uint64) bool {
-	return dropped == 1 || bits.OnesCount64(dropped) == 1
+type eventDeliveryStats struct {
+	Attempted            uint64
+	Delivered            uint64
+	Dropped              uint64
+	SuppressedDuplicates uint64
+	MaxQueueDepth        int
+}
+
+func (s *eventDeliveryStats) observeQueueDepth(depth int) {
+	if depth > s.MaxQueueDepth {
+		s.MaxQueueDepth = depth
+	}
+}
+
+func (s *jobTrackingState) deliveryStatsFor(jobID jobcontext.JobIdentity, eventType jobevent.Type) *eventDeliveryStats {
+	byEventType := s.jobEventDeliveryStats[jobID]
+	if byEventType == nil {
+		byEventType = make(map[jobevent.Type]*eventDeliveryStats)
+		s.jobEventDeliveryStats[jobID] = byEventType
+	}
+	stats := byEventType[eventType]
+	if stats == nil {
+		stats = &eventDeliveryStats{}
+		byEventType[eventType] = stats
+	}
+	return stats
 }
 
 func (s *jobTrackingState) removeJob(jobID jobcontext.JobIdentity) chan jobevent.EventRecord {
 	channel := s.jobEventChannels[jobID]
 	delete(s.jobEventChannels, jobID)
-	delete(s.jobEventDropCounts, jobID)
+	delete(s.jobEventDeliveryStats, jobID)
+	delete(s.fileOpenDedupByJob, jobID)
 	s.removeCgroupAndStaging(jobID)
 	delete(s.jobs, jobID)
 	delete(s.processesByJob, jobID)
