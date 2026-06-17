@@ -11,6 +11,12 @@ For the GitLab Runner Docker executor model, see [GitLab Runner Docker executor]
 - Linux kernel:
   - `amd64`: 5.15 or later.
   - `arm64`: 6.1 or later. The arm64 lower bound is set by upstream Linux because BPF trampoline / fentry attach landed on arm64 only in 6.0+; on older arm64 kernels the agent fails to attach with `create raw tracepoint: not supported`.
+  - Kernel BTF: the running kernel must expose BTF at `/sys/kernel/btf/vmlinux`; the kernel version alone is not sufficient for cicd-sensor's eBPF CO-RE programs. The kernel should be built with `CONFIG_DEBUG_INFO_BTF=y`. Check with:
+
+    ```sh
+    ls /sys/kernel/btf/vmlinux
+    ```
+
 - cgroup v2.
 - systemd.
 - dockerd.

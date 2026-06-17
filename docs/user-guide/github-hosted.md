@@ -35,15 +35,26 @@ It runs as a container on a shared VM and does not provide the host eBPF environ
 
 Third-party GitHub Actions hosts (for example, Blacksmith and BuildJet) often run their own kernel builds, so eBPF capabilities can differ from GitHub's runner images even when the OS and kernel version look similar.
 
+cicd-sensor also requires kernel BTF to load its eBPF CO-RE programs. A supported Linux kernel version alone is not sufficient; the running kernel must expose BTF at `/sys/kernel/btf/vmlinux`.
+Check a runner with:
+
+```sh
+ls /sys/kernel/btf/vmlinux
+```
+
+If the file is missing, the kernel may not have been built with `CONFIG_DEBUG_INFO_BTF=y`, and cicd-sensor may fail to start with a "no BTF found" error.
+
 cicd-sensor attaches its programs with fentry, which requires the target kernel functions to be fentry-attachable (present in `/sys/kernel/tracing/available_filter_functions`). When a required function is not exposed, the agent fails to start at BPF load time.
 
 ### Blacksmith
 
-Blacksmith Ubuntu 24.04 runners (kernel `6.5.13`, as of 2026-06) are supported from `v0.0.38` onward.
+Blacksmith Ubuntu 24.04 x86_64 runners (kernel `6.5.13`, as of 2026-06) are supported from `v0.0.38` onward. These runners expose kernel BTF at `/sys/kernel/btf/vmlinux`, so cicd-sensor can load its eBPF CO-RE programs.
 
-Earlier versions failed to start on Blacksmith because they attached `fentry/security_socket_connect`, which is not fentry-attachable on Blacksmith's kernel. `v0.0.38` observes AF_UNIX connects through `fentry/unix_stream_connect` and `fentry/unix_dgram_connect` instead, both of which are available there.
+Blacksmith ARM64 runners are not currently supported because their runner kernel ships without kernel BTF, so `/sys/kernel/btf/vmlinux` is missing. Use a Blacksmith x86_64 runner for jobs that run cicd-sensor, or disable cicd-sensor on Blacksmith ARM64 jobs.
 
-Action `v0.0.33` and later default to a compatible agent, so no extra configuration is needed. On older action releases, set `cicd-sensor-version: v0.0.38` explicitly.
+Earlier versions failed to start on Blacksmith x86_64 because they attached `fentry/security_socket_connect`, which is not fentry-attachable on Blacksmith's kernel. `v0.0.38` observes AF_UNIX connects through `fentry/unix_stream_connect` and `fentry/unix_dgram_connect` instead, both of which are available there.
+
+For Blacksmith x86_64, action `v0.0.33` and later default to a compatible agent, so no extra configuration is needed. On older action releases, set `cicd-sensor-version: v0.0.38` explicitly.
 
 ## Standalone mode
 
