@@ -30,6 +30,7 @@ const volatile struct staging_value *unused_staging_value;
 struct {
     // Ringbuf requires 5.8+; our 5.15+ baseline guarantees it.
     __uint(type, BPF_MAP_TYPE_RINGBUF);
+    // Userspace sets the real cap from node CPU count before load.
     __uint(max_entries, 1 << 20);
 } events SEC(".maps");
 

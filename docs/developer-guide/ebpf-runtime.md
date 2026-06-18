@@ -122,6 +122,9 @@ The FIFO order is stored as a fixed-size ring buffer, so inserts remain O(1) aft
 KernelTracker records delivery diagnostics internally (`attempted`, `delivered`, `dropped`, `suppressed_duplicates`, and `max_queue_depth`) and logs a summary when a Job is removed if drops or suppression occurred.
 Manager `runtime_event` output uses the same 64k queue capacity so the post-evaluation log path does not immediately become the next bottleneck; detection and summary outputs keep the smaller manager-output queue because they are not raw event streams.
 
+The BPF `events` ring buffer is a node-level ingress buffer before KernelTracker can attribute samples to Jobs.
+KernelIO sizes it from node CPU count, so larger runner nodes get a larger kernel-to-userspace buffer before per-Job delivery begins.
+
 ## Implementation layout
 
 | Path | Content |
