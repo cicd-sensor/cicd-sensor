@@ -78,7 +78,7 @@ func (kernelIO *LinuxKernelIO) watchRingbufDrops(ctx context.Context) {
 
 	// Ringbuf drops happen before samples can be attributed to a Job. Keep
 	// them as agent-wide audit signals; do not fold them into Job events_dropped.
-	var lastTotal uint64
+	var dropWarnings ringbufDropWarnState
 	for {
 		select {
 		case <-ctx.Done():
@@ -91,16 +91,42 @@ func (kernelIO *LinuxKernelIO) watchRingbufDrops(ctx context.Context) {
 			kernelIO.logger.WarnContext(ctx, "bpf_ringbuf_drop_count_read_failed", "error", err)
 			continue
 		}
-		if total <= lastTotal {
+		dropped, ok := dropWarnings.shouldWarn(total)
+		if !ok {
 			continue
 		}
 
 		kernelIO.logger.WarnContext(ctx, "bpf_ringbuf_drop",
-			"dropped", total-lastTotal,
+			"dropped", dropped,
 			"total", total,
 		)
-		lastTotal = total
 	}
+}
+
+type ringbufDropWarnState struct {
+	lastWarnTotal uint64
+	nextWarnTotal uint64
+}
+
+func (state *ringbufDropWarnState) shouldWarn(total uint64) (uint64, bool) {
+	if total == 0 || total <= state.lastWarnTotal {
+		return 0, false
+	}
+	if state.nextWarnTotal != 0 && total < state.nextWarnTotal {
+		return 0, false
+	}
+
+	dropped := total - state.lastWarnTotal
+	state.lastWarnTotal = total
+	state.nextWarnTotal = nextRingbufDropWarnTotal(total)
+	return dropped, true
+}
+
+func nextRingbufDropWarnTotal(total uint64) uint64 {
+	if total == ^uint64(0) {
+		return total
+	}
+	return roundUpToPowerOfTwo(total + 1)
 }
 
 func (kernelIO *LinuxKernelIO) readRingbufDropCount() (uint64, error) {
