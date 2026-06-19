@@ -418,13 +418,11 @@ func TestGitLabStagingPut_IgnoresPeerMissWithoutIdentity(t *testing.T) {
 	}
 }
 
-// 404 is the discriminable signal the GitLab proxy uses to lazy-create
-// a Job (call /v1/gitlab/host/start) and retry the staging put.
-func TestGitLabStagingPut_ReturnsJobNotFoundWhenJobMissing(t *testing.T) {
+func TestGitLabStagingPut_CreatesMissingJobAndStages(t *testing.T) {
 	requireLinuxPeerPIDLookup(t)
 	matchAgentOwnerUIDToPeerCred(t)
 
-	client, _, cleanup := setupGitLabListener(t)
+	client, registry, cleanup := setupGitLabListener(t)
 	defer cleanup()
 
 	identity := jobcontext.JobIdentity{
@@ -436,6 +434,7 @@ func TestGitLabStagingPut_ReturnsJobNotFoundWhenJobMissing(t *testing.T) {
 	body := mustMarshal(t, jobcontext.GitLabStagingPutRequest{
 		Basename:    "docker-cafef00d.scope",
 		JobIdentity: &identity,
+		Metadata:    jobcontext.JobMetadata{CommitSHA: "abc123"},
 	})
 
 	resp, err := client.Post("http://cicd-sensor/v1/gitlab/staging/put", "application/json", bytes.NewReader(body))
@@ -444,13 +443,28 @@ func TestGitLabStagingPut_ReturnsJobNotFoundWhenJobMissing(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
+	if resp.StatusCode != http.StatusOK {
 		dump, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusNotFound, dump)
+		t.Fatalf("status: got %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, dump)
 	}
-	dump, _ := io.ReadAll(resp.Body)
-	if !bytes.Contains(dump, []byte("job_not_found")) {
-		t.Fatalf("body should contain job_not_found, got %s", dump)
+	var got struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status != "staged" {
+		t.Fatalf("status: got %q, want %q", got.Status, "staged")
+	}
+	job := gitlabRegisteredJob(registry, identity)
+	if job == nil {
+		t.Fatal("expected job to be registered")
+	}
+	if job.HostScope() == nil {
+		t.Fatal("expected host scope to be set")
+	}
+	if job.Metadata().CommitSHA != "abc123" {
+		t.Fatalf("metadata commit_sha: got %q, want abc123", job.Metadata().CommitSHA)
 	}
 }
 
@@ -506,12 +520,10 @@ func TestGitLabStagingPut_RejectsBadBody(t *testing.T) {
 	}
 }
 
-// Concurrent lazy-create: the GitLab proxy issues host_start
-// opportunistically per container after a 404 from staging/put;
-// multiple containers in one Job race the lookup. The handler must
-// serialize so no caller can observe a Job that has been published
-// to the registry but not yet had its host scope attached.
-func TestGitLabHostStart_ConcurrentLazyCreate(t *testing.T) {
+// Concurrent explicit host starts for one GitLab Job must serialize so no
+// caller can observe a Job that has been published to the registry but not yet
+// had its host scope attached.
+func TestGitLabHostStart_ConcurrentStarts(t *testing.T) {
 	matchAgentOwnerUIDToPeerCred(t)
 
 	client, registry, cleanup := setupGitLabListener(t)

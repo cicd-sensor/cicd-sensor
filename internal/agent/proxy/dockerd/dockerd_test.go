@@ -373,8 +373,7 @@ func TestProxy_AgentFailureFallsThrough(t *testing.T) {
 // On a successful container_create with non-spoofable gitlab-runner labels
 // the proxy must (1) pass the request and response through unchanged and
 // (2) POST a basename + identity pair derived from the labels to
-// /v1/gitlab/staging/put. host_start must NOT be invoked when staging
-// returns 200 directly.
+// /v1/gitlab/staging/put. host_start must NOT be invoked by the proxy.
 func TestProxy_GitLab_StagingHappyPath(t *testing.T) {
 	t.Parallel()
 
@@ -594,7 +593,7 @@ func TestProxy_GitLab_StagingServerErrorDoesNotHostStart(t *testing.T) {
 	assertAgentCalls(t, got, []string{"/v1/gitlab/staging/put"})
 }
 
-func TestProxy_GitLab_HostStartFailureFallsThrough(t *testing.T) {
+func TestProxy_GitLab_StagingNotFoundWithIdentityFallsThrough(t *testing.T) {
 	t.Parallel()
 
 	const containerID = "3333333333333333333333333333333333333333333333333333333333333333"
@@ -618,7 +617,8 @@ func TestProxy_GitLab_HostStartFailureFallsThrough(t *testing.T) {
 		case "/v1/gitlab/staging/put":
 			writeJSON(t, w, http.StatusNotFound, map[string]string{"error": "job_not_found"})
 		case "/v1/gitlab/host/start":
-			http.Error(w, "host start failed", http.StatusInternalServerError)
+			t.Errorf("host_start must not be called; GitLab staging endpoint owns lazy start")
+			writeJSON(t, w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
 			t.Errorf("unexpected agent path: %q", r.URL.Path)
 		}
@@ -634,7 +634,7 @@ func TestProxy_GitLab_HostStartFailureFallsThrough(t *testing.T) {
 		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 
-	assertAgentCalls(t, got, []string{"/v1/gitlab/staging/put", "/v1/gitlab/host/start"})
+	assertAgentCalls(t, got, []string{"/v1/gitlab/staging/put"})
 }
 
 func TestProxy_GitLab_InvalidCreateResponseFallsThroughWithoutStaging(t *testing.T) {
@@ -689,11 +689,10 @@ func TestProxy_GitLab_InvalidCreateResponseFallsThroughWithoutStaging(t *testing
 	}
 }
 
-// When the agent has no Job for the identity yet (staging returns 404), the
-// proxy must lazily POST host/start with the same identity and retry the
-// staging put. The 3-call sequence (staging, host_start, staging) must
-// occur in order on the same docker create.
-func TestProxy_GitLab_LazyCreate(t *testing.T) {
+// GitLab Job creation belongs to /v1/gitlab/staging/put. The proxy sends one
+// request carrying peer PID plus labels identity; the listener creates a
+// missing Job and stages the basename behind that route.
+func TestProxy_GitLab_StagingCarriesIdentityForListenerLazyStart(t *testing.T) {
 	t.Parallel()
 
 	const containerID = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
@@ -712,19 +711,14 @@ func TestProxy_GitLab_LazyCreate(t *testing.T) {
 		body []byte
 	}
 	calls := make(chan agentCall, 4)
-	stagingSeen := 0
 	agentSocket := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		calls <- agentCall{path: r.URL.Path, body: body}
 		switch r.URL.Path {
 		case "/v1/gitlab/staging/put":
-			stagingSeen++
-			if stagingSeen == 1 {
-				writeJSON(t, w, http.StatusNotFound, map[string]string{"error": "job_not_found"})
-				return
-			}
 			writeJSON(t, w, http.StatusOK, map[string]string{"status": "staged"})
 		case "/v1/gitlab/host/start":
+			t.Errorf("host_start must not be called; GitLab staging endpoint owns lazy start")
 			writeJSON(t, w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
 			t.Errorf("unexpected agent path: %q", r.URL.Path)
@@ -746,40 +740,34 @@ func TestProxy_GitLab_LazyCreate(t *testing.T) {
 		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 
-	wantOrder := []string{
-		"/v1/gitlab/staging/put",
-		"/v1/gitlab/host/start",
-		"/v1/gitlab/staging/put",
-	}
-	for i, want := range wantOrder {
-		select {
-		case call := <-calls:
-			if call.path != want {
-				t.Fatalf("call %d: got %q, want %q", i, call.path, want)
-			}
-			if call.path == "/v1/gitlab/host/start" {
-				var req jobcontext.GitLabHostStartRequest
-				if err := json.Unmarshal(call.body, &req); err != nil {
-					t.Fatalf("decode host_start body: %v", err)
-				}
-				if req.JobIdentity != jobcontext.GitLabJobIdentity("gitlab.com", "cicd-sensor/cicd-sensor-testing", "777") {
-					t.Fatalf("host_start identity: got %+v", req.JobIdentity)
-				}
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatalf("call %d (%s) not seen within 2s", i, want)
+	select {
+	case call := <-calls:
+		if call.path != "/v1/gitlab/staging/put" {
+			t.Fatalf("agent path: got %q, want /v1/gitlab/staging/put", call.path)
 		}
+		var req jobcontext.GitLabStagingPutRequest
+		if err := json.Unmarshal(call.body, &req); err != nil {
+			t.Fatalf("decode staging body: %v", err)
+		}
+		if req.JobIdentity == nil {
+			t.Fatal("staging request missing job_identity")
+		}
+		if *req.JobIdentity != jobcontext.GitLabJobIdentity("gitlab.com", "cicd-sensor/cicd-sensor-testing", "777") {
+			t.Fatalf("staging identity: got %+v", *req.JobIdentity)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("staging call not seen within 2s")
 	}
 	select {
 	case extra := <-calls:
-		t.Fatalf("unexpected fourth agent call: %s", extra.path)
+		t.Fatalf("unexpected extra agent call: %s", extra.path)
 	case <-time.After(150 * time.Millisecond):
 	}
 }
 
-// host_start receives metadata from labels (trusted) and env (best-effort),
-// with first-wins on env discarding `.gitlab-ci.yml variables:` spoof attempts.
-func TestProxy_GitLab_LazyCreate_PropagatesMetadata(t *testing.T) {
+// staging receives metadata from labels (trusted) and env (best-effort), with
+// first-wins on env discarding `.gitlab-ci.yml variables:` spoof attempts.
+func TestProxy_GitLab_StagingPropagatesMetadata(t *testing.T) {
 	t.Parallel()
 
 	const containerID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -796,7 +784,7 @@ func TestProxy_GitLab_LazyCreate_PropagatesMetadata(t *testing.T) {
 		"CI_JOB_NAME=jirojiro-smoke",
 		"GITLAB_USER_LOGIN=rung",
 		// User-spoofed .gitlab-ci.yml `variables:` overrides (come later).
-		// host_start metadata must NOT pick these up (first-wins).
+		// staging metadata must NOT pick these up (first-wins).
 		"CI_PIPELINE_SOURCE=web",
 		"GITLAB_USER_LOGIN=attacker",
 	}
@@ -805,24 +793,19 @@ func TestProxy_GitLab_LazyCreate_PropagatesMetadata(t *testing.T) {
 		writeJSON(t, w, http.StatusCreated, containerCreateResponse{ID: containerID})
 	}))
 
-	hostStartReq := make(chan jobcontext.GitLabHostStartRequest, 1)
-	stagingSeen := 0
+	stagingReq := make(chan jobcontext.GitLabStagingPutRequest, 1)
 	agentSocket := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/gitlab/staging/put":
-			stagingSeen++
-			if stagingSeen == 1 {
-				writeJSON(t, w, http.StatusNotFound, map[string]string{"error": "job_not_found"})
-				return
+			body, _ := io.ReadAll(r.Body)
+			var req jobcontext.GitLabStagingPutRequest
+			if err := json.Unmarshal(body, &req); err != nil {
+				t.Errorf("decode staging body: %v", err)
 			}
+			stagingReq <- req
 			writeJSON(t, w, http.StatusOK, map[string]string{"status": "staged"})
 		case "/v1/gitlab/host/start":
-			body, _ := io.ReadAll(r.Body)
-			var req jobcontext.GitLabHostStartRequest
-			if err := json.Unmarshal(body, &req); err != nil {
-				t.Errorf("decode host_start body: %v", err)
-			}
-			hostStartReq <- req
+			t.Errorf("host_start must not be called; GitLab staging endpoint owns lazy start")
 			writeJSON(t, w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
 			t.Errorf("unexpected agent path: %q", r.URL.Path)
@@ -841,10 +824,13 @@ func TestProxy_GitLab_LazyCreate_PropagatesMetadata(t *testing.T) {
 	resp.Body.Close()
 
 	select {
-	case got := <-hostStartReq:
+	case got := <-stagingReq:
 		wantIdentity := jobcontext.GitLabJobIdentity("gitlab.com", "rung/girogiro-testing", "14499483701")
-		if got.JobIdentity != wantIdentity {
-			t.Fatalf("identity: got %+v, want %+v", got.JobIdentity, wantIdentity)
+		if got.JobIdentity == nil {
+			t.Fatal("staging request missing job_identity")
+		}
+		if *got.JobIdentity != wantIdentity {
+			t.Fatalf("identity: got %+v, want %+v", *got.JobIdentity, wantIdentity)
 		}
 		wantMetadata := jobcontext.JobMetadata{
 			CommitSHA:     "c4c41b82483929ffab3abae20b60dd9f793400ba",
@@ -857,12 +843,12 @@ func TestProxy_GitLab_LazyCreate_PropagatesMetadata(t *testing.T) {
 			t.Fatalf("metadata: got %+v, want %+v", got.Metadata, wantMetadata)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatalf("host_start not seen within 2s")
+		t.Fatalf("staging request not seen within 2s")
 	}
 }
 
-// cache-init carries labels but no env; the proxy must defer Job creation
-// to predefined/build so env-sourced metadata makes it into host_start.
+// cache-init carries labels but no env; the proxy must defer Job creation to
+// predefined/build so env-sourced metadata makes it into the staging request.
 func TestProxy_GitLab_CacheInitSkipped(t *testing.T) {
 	t.Parallel()
 
@@ -915,17 +901,10 @@ func TestProxy_GitLab_CacheInitSkipped(t *testing.T) {
 	}
 }
 
-// Multiple concurrent containers/create for the same identity must each
-// complete the lazy-create flow successfully. The agent fake here simulates
-// the JobRegistry per-identity barrier: staging/put returns 404 until
-// host/start has been received, host/start can be invoked multiple times
-// (idempotent EnsureJob), and a tiny artificial delay on host/start widens
-// the race window so multiple goroutines hit the 404 → host/start path
-// concurrently. Without proxy-side de-dup or agent-side serialisation,
-// some staging retries would observe stale 404s; this test asserts that
-// at least one host/start completes and every concurrent docker create
-// receives a 201 with no errors propagated.
-func TestProxy_GitLab_ConcurrentLazyCreates(t *testing.T) {
+// Multiple concurrent containers/create for the same identity must still make
+// one staging request per container. The listener owns the per-identity lazy
+// start barrier; the proxy must not add its own host/start sequence.
+func TestProxy_GitLab_ConcurrentStagingRequests(t *testing.T) {
 	t.Parallel()
 
 	const N = 4
@@ -943,28 +922,14 @@ func TestProxy_GitLab_ConcurrentLazyCreates(t *testing.T) {
 		writeJSON(t, w, http.StatusCreated, containerCreateResponse{ID: cid})
 	}))
 
-	var (
-		jobRegistered  atomic.Bool
-		hostStartCalls atomic.Int32
-		stagingCalls   atomic.Int32
-		stagingSuccess atomic.Int32
-	)
+	var stagingCalls atomic.Int32
 	agentSocket := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/gitlab/staging/put":
 			stagingCalls.Add(1)
-			if !jobRegistered.Load() {
-				writeJSON(t, w, http.StatusNotFound, map[string]string{"error": "job_not_found"})
-				return
-			}
-			stagingSuccess.Add(1)
 			writeJSON(t, w, http.StatusOK, map[string]string{"status": "staged"})
 		case "/v1/gitlab/host/start":
-			hostStartCalls.Add(1)
-			// Hold the slot briefly so other goroutines stack up on the
-			// 404 → host/start transition.
-			time.Sleep(10 * time.Millisecond)
-			jobRegistered.Store(true)
+			t.Errorf("host_start must not be called; GitLab staging endpoint owns lazy start")
 			writeJSON(t, w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
 			t.Errorf("unexpected agent path: %q", r.URL.Path)
@@ -1003,12 +968,8 @@ func TestProxy_GitLab_ConcurrentLazyCreates(t *testing.T) {
 			t.Errorf("goroutine %d: %v", i, e)
 		}
 	}
-	if hostStartCalls.Load() == 0 {
-		t.Errorf("host_start never invoked")
-	}
-	if stagingSuccess.Load() != N {
-		t.Errorf("expected %d staging successes, got %d (total staging calls: %d)",
-			N, stagingSuccess.Load(), stagingCalls.Load())
+	if stagingCalls.Load() != N {
+		t.Errorf("expected %d staging calls, got %d", N, stagingCalls.Load())
 	}
 }
 
@@ -1033,7 +994,7 @@ func TestPostStagingErrorsIncludeResponseBody(t *testing.T) {
 	}
 
 	identity := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "42")
-	if err := postGitLabStaging(context.Background(), agentSocket, "docker-deadbeef.scope", int32(os.Getpid()), &identity); err == nil || !strings.Contains(err.Error(), "agent boom") {
+	if err := postGitLabStaging(context.Background(), agentSocket, "docker-deadbeef.scope", int32(os.Getpid()), &identity, jobcontext.JobMetadata{}); err == nil || !strings.Contains(err.Error(), "agent boom") {
 		t.Fatalf("postGitLabStaging error = %v, want body included", err)
 	}
 }

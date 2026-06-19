@@ -18,8 +18,8 @@ const (
 // runHostStart is the explicit host-side Job registration path for GitHub
 // self-hosted runners: the wrapper calls it at Job start so the agent can bind
 // the runner cgroup immediately. GitLab Container Executor does not use this
-// CLI path; its dockerd proxy creates Jobs through /v1/gitlab/host/start when
-// it first sees a container for an unregistered GitLab Job.
+// CLI path; its dockerd proxy creates missing Jobs through /v1/gitlab/staging/put
+// when it first sees a container for an unregistered GitLab Job.
 func runHostSubcommand(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, hostUsage)

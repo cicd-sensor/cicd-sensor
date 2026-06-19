@@ -46,8 +46,9 @@ func (l *Listener) handleGitLabHostStart(w http.ResponseWriter, r *http.Request)
 }
 
 // handleGitLabStagingPut stages Docker proxy-discovered containers. The proxy
-// can identify an existing Job by peer PID, or use the 404 response to
-// lazy-create the Job and retry when it has GitLab runner metadata.
+// can identify an existing Job by peer PID; if peer lookup misses but trusted
+// GitLab runner labels are present, this handler creates the host Job and
+// stages the cgroup basename in the same request.
 func (l *Listener) handleGitLabStagingPut(w http.ResponseWriter, r *http.Request) {
 	if !l.requireRequestPeerUIDMatchesAgentOwner(w, r) {
 		return
@@ -111,7 +112,7 @@ func (l *Listener) handleGitLabStagingPut(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	status, ok := l.stageGitLabBasename(w, r, req.Basename, labelsIdentity)
+	status, ok := l.stageGitLabBasename(w, r, req.Basename, labelsIdentity, req.Metadata)
 	if !ok {
 		return
 	}
@@ -126,10 +127,8 @@ func (l *Listener) handleGitLabStagingPut(w http.ResponseWriter, r *http.Request
 }
 
 // handleGitLabK8sStagingPut records NRI-discovered Kubernetes containers.
-// Unlike the Docker proxy socket flow, Kubernetes/NRI does not do
-// staging -> host/start -> staging across separate requests. NRI runs in
-// containerd's callback path, so this local handler owns lazy Job creation and
-// must not force NRI through an extra host/start round trip.
+// NRI runs in containerd's callback path, so this local handler owns lazy Job
+// creation and must not force NRI through an extra host/start round trip.
 func (l *Listener) handleGitLabK8sStagingPut(w http.ResponseWriter, r *http.Request) {
 	if !l.requireRequestPeerUIDMatchesAgentOwner(w, r) {
 		return
@@ -194,10 +193,24 @@ func (l *Listener) stageGitLabK8sBasename(w http.ResponseWriter, r *http.Request
 	return "staged", true
 }
 
-func (l *Listener) stageGitLabBasename(w http.ResponseWriter, r *http.Request, basename string, identity jobcontext.JobIdentity) (status string, ok bool) {
+func (l *Listener) stageGitLabBasename(w http.ResponseWriter, r *http.Request, basename string, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) (status string, ok bool) {
+	if err := l.jobRegistry.StageCgroupBasenameForJob(r.Context(), basename, identity); err == nil {
+		return "staged", true
+	} else if !errors.Is(err, jobregistry.ErrJobNotFound) {
+		l.logger.ErrorContext(r.Context(), "gitlab_staging_put_failed", "error", err)
+		l.writeError(w, r, http.StatusInternalServerError, "internal error")
+		return "", false
+	}
+
+	// GitLab Docker proxy sends labels identity and cgroup basename in one
+	// staging request. If the Job is not registered yet, create the host Job
+	// locally, then retry staging before returning to the proxy.
+	if _, err := l.jobRegistry.ApplyGitLabHostStart(r.Context(), identity, metadata, l.runnerType, l.hostManagerConn, l.hostManagerClient); err != nil {
+		l.writeStartError(w, r, "gitlab_staging_host_start_failed", err)
+		return "", false
+	}
 	if err := l.jobRegistry.StageCgroupBasenameForJob(r.Context(), basename, identity); err != nil {
 		if errors.Is(err, jobregistry.ErrJobNotFound) {
-			// The GitLab proxy uses 404 to lazy-create the Job and retry.
 			l.writeError(w, r, http.StatusNotFound, "job_not_found")
 			return "", false
 		}

@@ -40,9 +40,6 @@ type gitlabRequestState struct {
 	metadata jobcontext.JobMetadata
 }
 
-// errGitLabJobNotFound triggers host/start before one staging retry.
-var errGitLabJobNotFound = errors.New("gitlab job not found at agent")
-
 // proxyHandlerGitLab stages docker-<cid>.scope with peer PID and optional
 // GitLab runner label identity; the agent chooses which evidence to use.
 func proxyHandlerGitLab(logger *slog.Logger, upstreamSocket, agentSocket string) http.Handler {
@@ -129,9 +126,9 @@ func proxyHandlerGitLab(logger *slog.Logger, upstreamSocket, agentSocket string)
 			}
 
 			basename := fmt.Sprintf("docker-%s.scope", parsed.ID)
-			ctx, cancel := context.WithTimeout(resp.Request.Context(), agentLazyCreateTimeout)
+			ctx, cancel := context.WithTimeout(resp.Request.Context(), agentGitLabStagingTimeout)
 			defer cancel()
-			if err := stageGitLabWithLazyCreate(ctx, agentSocket, basename, peerPID, identityPtr, state.metadata); err != nil {
+			if err := postGitLabStaging(ctx, agentSocket, basename, peerPID, identityPtr, state.metadata); err != nil {
 				logger.WarnContext(resp.Request.Context(), "staging_put_failed",
 					"error", err,
 					"basename", basename,
@@ -153,32 +150,12 @@ func proxyHandlerGitLab(logger *slog.Logger, upstreamSocket, agentSocket string)
 	return rev
 }
 
-// stageGitLabWithLazyCreate keeps GitLab Job creation on host/start. Staging
-// first preserves the cheap existing-Job path; 404 is the lazy-start signal.
-func stageGitLabWithLazyCreate(ctx context.Context, agentSocket, basename string, peerPID int32, identity *jobcontext.JobIdentity, metadata jobcontext.JobMetadata) error {
-	err := postGitLabStaging(ctx, agentSocket, basename, peerPID, identity)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, errGitLabJobNotFound) {
-		return err
-	}
-	if identity == nil {
-		return err
-	}
-	// The agent deduplicates concurrent host/start calls for the same identity.
-	if err := postGitLabHostStart(ctx, agentSocket, *identity, metadata); err != nil {
-		return fmt.Errorf("host_start: %w", err)
-	}
-	return postGitLabStaging(ctx, agentSocket, basename, peerPID, identity)
-}
-
-// postGitLabStaging maps 404 to errGitLabJobNotFound for lazy create.
-func postGitLabStaging(ctx context.Context, agentSocket, basename string, peerPID int32, identity *jobcontext.JobIdentity) error {
+func postGitLabStaging(ctx context.Context, agentSocket, basename string, peerPID int32, identity *jobcontext.JobIdentity, metadata jobcontext.JobMetadata) error {
 	body, err := json.Marshal(jobcontext.GitLabStagingPutRequest{
 		Basename:    basename,
 		PeerPID:     peerPID,
 		JobIdentity: identity,
+		Metadata:    metadata,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal gitlab staging request: %w", err)
@@ -190,30 +167,9 @@ func postGitLabStaging(ctx context.Context, agentSocket, basename string, peerPI
 	switch status {
 	case http.StatusOK:
 		return nil
-	case http.StatusNotFound:
-		return errGitLabJobNotFound
 	default:
 		return fmt.Errorf("agent /v1/gitlab/staging/put returned %d: %s", status, respBody)
 	}
-}
-
-// postGitLabHostStart issues the agent's idempotent EnsureJob request.
-func postGitLabHostStart(ctx context.Context, agentSocket string, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) error {
-	body, err := json.Marshal(jobcontext.GitLabHostStartRequest{
-		JobIdentity: identity,
-		Metadata:    metadata,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal gitlab host_start request: %w", err)
-	}
-	status, respBody, err := postAgent(ctx, agentSocket, "/v1/gitlab/host/start", body)
-	if err != nil {
-		return err
-	}
-	if status != http.StatusOK {
-		return fmt.Errorf("agent /v1/gitlab/host/start returned %d: %s", status, respBody)
-	}
-	return nil
 }
 
 // jobMetadataFromGitLabContainer derives metadata from runner labels (trust

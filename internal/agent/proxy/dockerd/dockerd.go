@@ -25,9 +25,9 @@ const (
 	// GitHub staging is on the docker create response path, so keep the
 	// agent wait bounded and fail open if the agent is wedged.
 	agentPostTimeout = 1 * time.Second
-	// GitLab lazy create may fetch a project baseline image before the
-	// first staging retry, so it needs a larger bounded fail-open budget.
-	agentLazyCreateTimeout = 5 * time.Second
+	// GitLab staging may create a missing Job behind the listener route, so it
+	// needs a larger bounded fail-open budget than GitHub's staging-only path.
+	agentGitLabStagingTimeout = 5 * time.Second
 )
 
 // Options carries the proxy runtime configuration.

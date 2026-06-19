@@ -14,11 +14,13 @@ type GitHubK8sStagingPutRequest struct {
 }
 
 // GitLabStagingPutRequest lets the proxy send both evidence sources; the agent
-// chooses peer PID first, then labels identity when needed.
+// chooses peer PID first, then labels identity when it needs to create a
+// missing GitLab host Job.
 type GitLabStagingPutRequest struct {
 	Basename    string       `json:"basename"`
 	PeerPID     int32        `json:"peer_pid,omitempty"`
 	JobIdentity *JobIdentity `json:"job_identity,omitempty"`
+	Metadata    JobMetadata  `json:"metadata,omitempty"`
 }
 
 // GitLabK8sStagingPutRequest is sent by the host-side NRI observer. The
@@ -29,7 +31,7 @@ type GitLabK8sStagingPutRequest struct {
 	Metadata    JobMetadata `json:"metadata,omitempty"`
 }
 
-// GitLabHostStartRequest is the proxy lazy-create payload.
+// GitLabHostStartRequest is the explicit GitLab host-start payload.
 type GitLabHostStartRequest struct {
 	JobIdentity
 	Metadata JobMetadata `json:"metadata,omitempty"`
