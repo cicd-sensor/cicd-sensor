@@ -90,6 +90,53 @@ func (x OrganizationVerificationStatus) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
+// The visibility of an Organization, currently either public or private.
+type OrganizationVisibility int32
+
+const (
+	OrganizationVisibility_ORGANIZATION_VISIBILITY_UNSPECIFIED OrganizationVisibility = 0
+	// ORGANIZATION_VISIBILITY_PUBLIC says that the organization is publicly available.
+	OrganizationVisibility_ORGANIZATION_VISIBILITY_PUBLIC OrganizationVisibility = 1
+	// ORGANIZATION_VISIBILITY_PRIVATE says that the organization is private.
+	OrganizationVisibility_ORGANIZATION_VISIBILITY_PRIVATE OrganizationVisibility = 2
+)
+
+// Enum value maps for OrganizationVisibility.
+var (
+	OrganizationVisibility_name = map[int32]string{
+		0: "ORGANIZATION_VISIBILITY_UNSPECIFIED",
+		1: "ORGANIZATION_VISIBILITY_PUBLIC",
+		2: "ORGANIZATION_VISIBILITY_PRIVATE",
+	}
+	OrganizationVisibility_value = map[string]int32{
+		"ORGANIZATION_VISIBILITY_UNSPECIFIED": 0,
+		"ORGANIZATION_VISIBILITY_PUBLIC":      1,
+		"ORGANIZATION_VISIBILITY_PRIVATE":     2,
+	}
+)
+
+func (x OrganizationVisibility) Enum() *OrganizationVisibility {
+	p := new(OrganizationVisibility)
+	*p = x
+	return p
+}
+
+func (x OrganizationVisibility) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OrganizationVisibility) Descriptor() protoreflect.EnumDescriptor {
+	return file_buf_registry_owner_v1_organization_proto_enumTypes[1].Descriptor()
+}
+
+func (OrganizationVisibility) Type() protoreflect.EnumType {
+	return &file_buf_registry_owner_v1_organization_proto_enumTypes[1]
+}
+
+func (x OrganizationVisibility) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
 // Organization is an organization on the BSR.
 //
 // A name uniquely identifies an Organization, however name is mutable.
@@ -102,6 +149,7 @@ type Organization struct {
 	xxx_hidden_Description        string                         `protobuf:"bytes,5,opt,name=description,proto3"`
 	xxx_hidden_Url                string                         `protobuf:"bytes,6,opt,name=url,proto3"`
 	xxx_hidden_VerificationStatus OrganizationVerificationStatus `protobuf:"varint,7,opt,name=verification_status,json=verificationStatus,proto3,enum=buf.registry.owner.v1.OrganizationVerificationStatus"`
+	xxx_hidden_Visibility         OrganizationVisibility         `protobuf:"varint,8,opt,name=visibility,proto3,enum=buf.registry.owner.v1.OrganizationVisibility"`
 	unknownFields                 protoimpl.UnknownFields
 	sizeCache                     protoimpl.SizeCache
 }
@@ -180,6 +228,13 @@ func (x *Organization) GetVerificationStatus() OrganizationVerificationStatus {
 	return OrganizationVerificationStatus_ORGANIZATION_VERIFICATION_STATUS_UNSPECIFIED
 }
 
+func (x *Organization) GetVisibility() OrganizationVisibility {
+	if x != nil {
+		return x.xxx_hidden_Visibility
+	}
+	return OrganizationVisibility_ORGANIZATION_VISIBILITY_UNSPECIFIED
+}
+
 func (x *Organization) SetId(v string) {
 	x.xxx_hidden_Id = v
 }
@@ -206,6 +261,10 @@ func (x *Organization) SetUrl(v string) {
 
 func (x *Organization) SetVerificationStatus(v OrganizationVerificationStatus) {
 	x.xxx_hidden_VerificationStatus = v
+}
+
+func (x *Organization) SetVisibility(v OrganizationVisibility) {
+	x.xxx_hidden_Visibility = v
 }
 
 func (x *Organization) HasCreateTime() bool {
@@ -249,6 +308,7 @@ type Organization_builder struct {
 	Url string
 	// The verification status of the Organization.
 	VerificationStatus OrganizationVerificationStatus
+	Visibility         OrganizationVisibility
 }
 
 func (b0 Organization_builder) Build() *Organization {
@@ -262,6 +322,7 @@ func (b0 Organization_builder) Build() *Organization {
 	x.xxx_hidden_Description = b.Description
 	x.xxx_hidden_Url = b.Url
 	x.xxx_hidden_VerificationStatus = b.VerificationStatus
+	x.xxx_hidden_Visibility = b.Visibility
 	return m0
 }
 
@@ -439,7 +500,7 @@ var File_buf_registry_owner_v1_organization_proto protoreflect.FileDescriptor
 
 const file_buf_registry_owner_v1_organization_proto_rawDesc = "" +
 	"\n" +
-	"(buf/registry/owner/v1/organization.proto\x12\x15buf.registry.owner.v1\x1a3buf/registry/priv/extension/v1beta1/extension.proto\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc0\x03\n" +
+	"(buf/registry/owner/v1/organization.proto\x12\x15buf.registry.owner.v1\x1a3buf/registry/priv/extension/v1beta1/extension.proto\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x99\x04\n" +
 	"\fOrganization\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\x88\x02\x01R\x02id\x12C\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\n" +
@@ -449,7 +510,10 @@ const file_buf_registry_owner_v1_organization_proto_rawDesc = "" +
 	"\x04name\x18\x04 \x01(\tB*\xbaH'\xc8\x01\x01r\"\x10\x01\x18 2\x1c^[a-z]([a-z0-9-]*[a-z0-9])?$R\x04name\x12*\n" +
 	"\vdescription\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\xde\x02R\vdescription\x12 \n" +
 	"\x03url\x18\x06 \x01(\tB\x0e\xbaH\v\xd8\x01\x01r\x06\x18\xff\x01\x88\x01\x01R\x03url\x12s\n" +
-	"\x13verification_status\x18\a \x01(\x0e25.buf.registry.owner.v1.OrganizationVerificationStatusB\v\xbaH\b\xc8\x01\x01\x82\x01\x02\x10\x01R\x12verificationStatus:\x06\xea\xc5+\x02\x10\x01\"\x84\x01\n" +
+	"\x13verification_status\x18\a \x01(\x0e25.buf.registry.owner.v1.OrganizationVerificationStatusB\v\xbaH\b\xc8\x01\x01\x82\x01\x02\x10\x01R\x12verificationStatus\x12W\n" +
+	"\n" +
+	"visibility\x18\b \x01(\x0e2-.buf.registry.owner.v1.OrganizationVisibilityB\b\xbaH\x05\x82\x01\x02\x10\x01R\n" +
+	"visibility:\x06\xea\xc5+\x02\x10\x01\"\x84\x01\n" +
 	"\x0fOrganizationRef\x12\x1a\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x88\x02\x01H\x00R\x02id\x12=\n" +
 	"\x04name\x18\x02 \x01(\tB'\xbaH$r\"\x10\x01\x18 2\x1c^[a-z]([a-z0-9-]*[a-z0-9])?$H\x00R\x04name:\x06\xea\xc5+\x02\b\x01B\x0e\n" +
@@ -458,25 +522,31 @@ const file_buf_registry_owner_v1_organization_proto_rawDesc = "" +
 	",ORGANIZATION_VERIFICATION_STATUS_UNSPECIFIED\x10\x00\x12/\n" +
 	"+ORGANIZATION_VERIFICATION_STATUS_UNVERIFIED\x10\x01\x12-\n" +
 	")ORGANIZATION_VERIFICATION_STATUS_VERIFIED\x10\x02\x12-\n" +
-	")ORGANIZATION_VERIFICATION_STATUS_OFFICIAL\x10\x03BUZSbuf.build/gen/go/bufbuild/registry/protocolbuffers/go/buf/registry/owner/v1;ownerv1b\x06proto3"
+	")ORGANIZATION_VERIFICATION_STATUS_OFFICIAL\x10\x03*\x8a\x01\n" +
+	"\x16OrganizationVisibility\x12'\n" +
+	"#ORGANIZATION_VISIBILITY_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eORGANIZATION_VISIBILITY_PUBLIC\x10\x01\x12#\n" +
+	"\x1fORGANIZATION_VISIBILITY_PRIVATE\x10\x02BUZSbuf.build/gen/go/bufbuild/registry/protocolbuffers/go/buf/registry/owner/v1;ownerv1b\x06proto3"
 
-var file_buf_registry_owner_v1_organization_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_buf_registry_owner_v1_organization_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_buf_registry_owner_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_buf_registry_owner_v1_organization_proto_goTypes = []any{
 	(OrganizationVerificationStatus)(0), // 0: buf.registry.owner.v1.OrganizationVerificationStatus
-	(*Organization)(nil),                // 1: buf.registry.owner.v1.Organization
-	(*OrganizationRef)(nil),             // 2: buf.registry.owner.v1.OrganizationRef
-	(*timestamppb.Timestamp)(nil),       // 3: google.protobuf.Timestamp
+	(OrganizationVisibility)(0),         // 1: buf.registry.owner.v1.OrganizationVisibility
+	(*Organization)(nil),                // 2: buf.registry.owner.v1.Organization
+	(*OrganizationRef)(nil),             // 3: buf.registry.owner.v1.OrganizationRef
+	(*timestamppb.Timestamp)(nil),       // 4: google.protobuf.Timestamp
 }
 var file_buf_registry_owner_v1_organization_proto_depIdxs = []int32{
-	3, // 0: buf.registry.owner.v1.Organization.create_time:type_name -> google.protobuf.Timestamp
-	3, // 1: buf.registry.owner.v1.Organization.update_time:type_name -> google.protobuf.Timestamp
+	4, // 0: buf.registry.owner.v1.Organization.create_time:type_name -> google.protobuf.Timestamp
+	4, // 1: buf.registry.owner.v1.Organization.update_time:type_name -> google.protobuf.Timestamp
 	0, // 2: buf.registry.owner.v1.Organization.verification_status:type_name -> buf.registry.owner.v1.OrganizationVerificationStatus
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	1, // 3: buf.registry.owner.v1.Organization.visibility:type_name -> buf.registry.owner.v1.OrganizationVisibility
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_buf_registry_owner_v1_organization_proto_init() }
@@ -493,7 +563,7 @@ func file_buf_registry_owner_v1_organization_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_buf_registry_owner_v1_organization_proto_rawDesc), len(file_buf_registry_owner_v1_organization_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,

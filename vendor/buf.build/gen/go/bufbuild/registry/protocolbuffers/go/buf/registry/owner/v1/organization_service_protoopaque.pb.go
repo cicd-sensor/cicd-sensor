@@ -745,6 +745,9 @@ type CreateOrganizationsRequest_Value struct {
 	xxx_hidden_Description        string                         `protobuf:"bytes,2,opt,name=description,proto3"`
 	xxx_hidden_Url                string                         `protobuf:"bytes,3,opt,name=url,proto3"`
 	xxx_hidden_VerificationStatus OrganizationVerificationStatus `protobuf:"varint,4,opt,name=verification_status,json=verificationStatus,proto3,enum=buf.registry.owner.v1.OrganizationVerificationStatus"`
+	xxx_hidden_Visibility         OrganizationVisibility         `protobuf:"varint,5,opt,name=visibility,proto3,enum=buf.registry.owner.v1.OrganizationVisibility,oneof"`
+	XXX_raceDetectHookData        protoimpl.RaceDetectHookData
+	XXX_presence                  [1]uint32
 	unknownFields                 protoimpl.UnknownFields
 	sizeCache                     protoimpl.SizeCache
 }
@@ -802,6 +805,15 @@ func (x *CreateOrganizationsRequest_Value) GetVerificationStatus() OrganizationV
 	return OrganizationVerificationStatus_ORGANIZATION_VERIFICATION_STATUS_UNSPECIFIED
 }
 
+func (x *CreateOrganizationsRequest_Value) GetVisibility() OrganizationVisibility {
+	if x != nil {
+		if protoimpl.X.Present(&(x.XXX_presence[0]), 4) {
+			return x.xxx_hidden_Visibility
+		}
+	}
+	return OrganizationVisibility_ORGANIZATION_VISIBILITY_UNSPECIFIED
+}
+
 func (x *CreateOrganizationsRequest_Value) SetName(v string) {
 	x.xxx_hidden_Name = v
 }
@@ -818,6 +830,23 @@ func (x *CreateOrganizationsRequest_Value) SetVerificationStatus(v OrganizationV
 	x.xxx_hidden_VerificationStatus = v
 }
 
+func (x *CreateOrganizationsRequest_Value) SetVisibility(v OrganizationVisibility) {
+	x.xxx_hidden_Visibility = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 5)
+}
+
+func (x *CreateOrganizationsRequest_Value) HasVisibility() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *CreateOrganizationsRequest_Value) ClearVisibility() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_Visibility = OrganizationVisibility_ORGANIZATION_VISIBILITY_UNSPECIFIED
+}
+
 type CreateOrganizationsRequest_Value_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -831,6 +860,8 @@ type CreateOrganizationsRequest_Value_builder struct {
 	//
 	// If not set, the Organization will default to VERIFICATION_STATUS_UNVERIFIED.
 	VerificationStatus OrganizationVerificationStatus
+	// If not set, the Organization will default to ORGANIZATION_VISIBILITY_PUBLIC.
+	Visibility *OrganizationVisibility
 }
 
 func (b0 CreateOrganizationsRequest_Value_builder) Build() *CreateOrganizationsRequest_Value {
@@ -841,6 +872,10 @@ func (b0 CreateOrganizationsRequest_Value_builder) Build() *CreateOrganizationsR
 	x.xxx_hidden_Description = b.Description
 	x.xxx_hidden_Url = b.Url
 	x.xxx_hidden_VerificationStatus = b.VerificationStatus
+	if b.Visibility != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 5)
+		x.xxx_hidden_Visibility = *b.Visibility
+	}
 	return m0
 }
 
@@ -851,6 +886,7 @@ type UpdateOrganizationsRequest_Value struct {
 	xxx_hidden_Description        *string                        `protobuf:"bytes,2,opt,name=description,proto3,oneof"`
 	xxx_hidden_Url                *string                        `protobuf:"bytes,3,opt,name=url,proto3,oneof"`
 	xxx_hidden_VerificationStatus OrganizationVerificationStatus `protobuf:"varint,4,opt,name=verification_status,json=verificationStatus,proto3,enum=buf.registry.owner.v1.OrganizationVerificationStatus,oneof"`
+	xxx_hidden_Visibility         OrganizationVisibility         `protobuf:"varint,5,opt,name=visibility,proto3,enum=buf.registry.owner.v1.OrganizationVisibility,oneof"`
 	XXX_raceDetectHookData        protoimpl.RaceDetectHookData
 	XXX_presence                  [1]uint32
 	unknownFields                 protoimpl.UnknownFields
@@ -918,23 +954,37 @@ func (x *UpdateOrganizationsRequest_Value) GetVerificationStatus() OrganizationV
 	return OrganizationVerificationStatus_ORGANIZATION_VERIFICATION_STATUS_UNSPECIFIED
 }
 
+func (x *UpdateOrganizationsRequest_Value) GetVisibility() OrganizationVisibility {
+	if x != nil {
+		if protoimpl.X.Present(&(x.XXX_presence[0]), 4) {
+			return x.xxx_hidden_Visibility
+		}
+	}
+	return OrganizationVisibility_ORGANIZATION_VISIBILITY_UNSPECIFIED
+}
+
 func (x *UpdateOrganizationsRequest_Value) SetOrganizationRef(v *OrganizationRef) {
 	x.xxx_hidden_OrganizationRef = v
 }
 
 func (x *UpdateOrganizationsRequest_Value) SetDescription(v string) {
 	x.xxx_hidden_Description = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 4)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 5)
 }
 
 func (x *UpdateOrganizationsRequest_Value) SetUrl(v string) {
 	x.xxx_hidden_Url = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 4)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 5)
 }
 
 func (x *UpdateOrganizationsRequest_Value) SetVerificationStatus(v OrganizationVerificationStatus) {
 	x.xxx_hidden_VerificationStatus = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 4)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 5)
+}
+
+func (x *UpdateOrganizationsRequest_Value) SetVisibility(v OrganizationVisibility) {
+	x.xxx_hidden_Visibility = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 5)
 }
 
 func (x *UpdateOrganizationsRequest_Value) HasOrganizationRef() bool {
@@ -965,6 +1015,13 @@ func (x *UpdateOrganizationsRequest_Value) HasVerificationStatus() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
 }
 
+func (x *UpdateOrganizationsRequest_Value) HasVisibility() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
 func (x *UpdateOrganizationsRequest_Value) ClearOrganizationRef() {
 	x.xxx_hidden_OrganizationRef = nil
 }
@@ -984,6 +1041,11 @@ func (x *UpdateOrganizationsRequest_Value) ClearVerificationStatus() {
 	x.xxx_hidden_VerificationStatus = OrganizationVerificationStatus_ORGANIZATION_VERIFICATION_STATUS_UNSPECIFIED
 }
 
+func (x *UpdateOrganizationsRequest_Value) ClearVisibility() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_Visibility = OrganizationVisibility_ORGANIZATION_VISIBILITY_UNSPECIFIED
+}
+
 type UpdateOrganizationsRequest_Value_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -995,6 +1057,7 @@ type UpdateOrganizationsRequest_Value_builder struct {
 	Url *string
 	// The verification status of the Organization.
 	VerificationStatus *OrganizationVerificationStatus
+	Visibility         *OrganizationVisibility
 }
 
 func (b0 UpdateOrganizationsRequest_Value_builder) Build() *UpdateOrganizationsRequest_Value {
@@ -1003,16 +1066,20 @@ func (b0 UpdateOrganizationsRequest_Value_builder) Build() *UpdateOrganizationsR
 	_, _ = b, x
 	x.xxx_hidden_OrganizationRef = b.OrganizationRef
 	if b.Description != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 4)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 5)
 		x.xxx_hidden_Description = b.Description
 	}
 	if b.Url != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 4)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 5)
 		x.xxx_hidden_Url = b.Url
 	}
 	if b.VerificationStatus != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 4)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 5)
 		x.xxx_hidden_VerificationStatus = *b.VerificationStatus
+	}
+	if b.Visibility != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 5)
+		x.xxx_hidden_Visibility = *b.Visibility
 	}
 	return m0
 }
@@ -1038,28 +1105,38 @@ const file_buf_registry_owner_v1_organization_service_proto_rawDesc = "" +
 	"\x15ORDER_CREATE_TIME_ASC\x10\x02\"\x98\x01\n" +
 	"\x19ListOrganizationsResponse\x120\n" +
 	"\x0fnext_page_token\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\rnextPageToken\x12I\n" +
-	"\rorganizations\x18\x02 \x03(\v2#.buf.registry.owner.v1.OrganizationR\rorganizations\"\x84\x03\n" +
+	"\rorganizations\x18\x02 \x03(\v2#.buf.registry.owner.v1.OrganizationR\rorganizations\"\xf3\x03\n" +
 	"\x1aCreateOrganizationsRequest\x12\\\n" +
-	"\x06values\x18\x01 \x03(\v27.buf.registry.owner.v1.CreateOrganizationsRequest.ValueB\v\xbaH\b\x92\x01\x05\b\x01\x10\xfa\x01R\x06values\x1a\x87\x02\n" +
+	"\x06values\x18\x01 \x03(\v27.buf.registry.owner.v1.CreateOrganizationsRequest.ValueB\v\xbaH\b\x92\x01\x05\b\x01\x10\xfa\x01R\x06values\x1a\xf6\x02\n" +
 	"\x05Value\x12>\n" +
 	"\x04name\x18\x01 \x01(\tB*\xbaH'\xc8\x01\x01r\"\x10\x01\x18 2\x1c^[a-z]([a-z0-9-]*[a-z0-9])?$R\x04name\x12*\n" +
 	"\vdescription\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\xde\x02R\vdescription\x12 \n" +
 	"\x03url\x18\x03 \x01(\tB\x0e\xbaH\v\xd8\x01\x01r\x06\x18\xff\x01\x88\x01\x01R\x03url\x12p\n" +
-	"\x13verification_status\x18\x04 \x01(\x0e25.buf.registry.owner.v1.OrganizationVerificationStatusB\b\xbaH\x05\x82\x01\x02\x10\x01R\x12verificationStatus\"r\n" +
+	"\x13verification_status\x18\x04 \x01(\x0e25.buf.registry.owner.v1.OrganizationVerificationStatusB\b\xbaH\x05\x82\x01\x02\x10\x01R\x12verificationStatus\x12^\n" +
+	"\n" +
+	"visibility\x18\x05 \x01(\x0e2-.buf.registry.owner.v1.OrganizationVisibilityB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\n" +
+	"visibility\x88\x01\x01B\r\n" +
+	"\v_visibility\"r\n" +
 	"\x1bCreateOrganizationsResponse\x12S\n" +
-	"\rorganizations\x18\x01 \x03(\v2#.buf.registry.owner.v1.OrganizationB\b\xbaH\x05\x92\x01\x02\b\x01R\rorganizations\"\xa2\x04\n" +
+	"\rorganizations\x18\x01 \x03(\v2#.buf.registry.owner.v1.OrganizationB\b\xbaH\x05\x92\x01\x02\b\x01R\rorganizations\"\x91\x05\n" +
 	"\x1aUpdateOrganizationsRequest\x12\\\n" +
-	"\x06values\x18\x01 \x03(\v27.buf.registry.owner.v1.UpdateOrganizationsRequest.ValueB\v\xbaH\b\x92\x01\x05\b\x01\x10\xfa\x01R\x06values\x1a\xa5\x03\n" +
+	"\x06values\x18\x01 \x03(\v27.buf.registry.owner.v1.UpdateOrganizationsRequest.ValueB\v\xbaH\b\x92\x01\x05\b\x01\x10\xfa\x01R\x06values\x1a\x94\x04\n" +
 	"\x05Value\x12Y\n" +
 	"\x10organization_ref\x18\x01 \x01(\v2&.buf.registry.owner.v1.OrganizationRefB\x06\xbaH\x03\xc8\x01\x01R\x0forganizationRef\x12/\n" +
 	"\vdescription\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\xde\x02H\x00R\vdescription\x88\x01\x01\x12g\n" +
 	"\x03url\x18\x03 \x01(\tBP\xbaHM\xba\x01E\n" +
 	"\furi_or_empty\x12\x19value must be a valid URI\x1a\x1athis == '' || this.isUri()r\x03\x18\xff\x01H\x01R\x03url\x88\x01\x01\x12w\n" +
 	"\x13verification_status\x18\x04 \x01(\x0e25.buf.registry.owner.v1.OrganizationVerificationStatusB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x02R\x12verificationStatus\x88\x01\x01B\x0e\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x02R\x12verificationStatus\x88\x01\x01\x12^\n" +
+	"\n" +
+	"visibility\x18\x05 \x01(\x0e2-.buf.registry.owner.v1.OrganizationVisibilityB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x03R\n" +
+	"visibility\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x06\n" +
 	"\x04_urlB\x16\n" +
-	"\x14_verification_status\"r\n" +
+	"\x14_verification_statusB\r\n" +
+	"\v_visibility\"r\n" +
 	"\x1bUpdateOrganizationsResponse\x12S\n" +
 	"\rorganizations\x18\x01 \x03(\v2#.buf.registry.owner.v1.OrganizationB\b\xbaH\x05\x92\x01\x02\b\x01R\rorganizations\"~\n" +
 	"\x1aDeleteOrganizationsRequest\x12`\n" +
@@ -1092,6 +1169,7 @@ var file_buf_registry_owner_v1_organization_service_proto_goTypes = []any{
 	(*Organization)(nil),                     // 14: buf.registry.owner.v1.Organization
 	(*UserRef)(nil),                          // 15: buf.registry.owner.v1.UserRef
 	(OrganizationVerificationStatus)(0),      // 16: buf.registry.owner.v1.OrganizationVerificationStatus
+	(OrganizationVisibility)(0),              // 17: buf.registry.owner.v1.OrganizationVisibility
 }
 var file_buf_registry_owner_v1_organization_service_proto_depIdxs = []int32{
 	13, // 0: buf.registry.owner.v1.GetOrganizationsRequest.organization_refs:type_name -> buf.registry.owner.v1.OrganizationRef
@@ -1105,23 +1183,25 @@ var file_buf_registry_owner_v1_organization_service_proto_depIdxs = []int32{
 	14, // 8: buf.registry.owner.v1.UpdateOrganizationsResponse.organizations:type_name -> buf.registry.owner.v1.Organization
 	13, // 9: buf.registry.owner.v1.DeleteOrganizationsRequest.organization_refs:type_name -> buf.registry.owner.v1.OrganizationRef
 	16, // 10: buf.registry.owner.v1.CreateOrganizationsRequest.Value.verification_status:type_name -> buf.registry.owner.v1.OrganizationVerificationStatus
-	13, // 11: buf.registry.owner.v1.UpdateOrganizationsRequest.Value.organization_ref:type_name -> buf.registry.owner.v1.OrganizationRef
-	16, // 12: buf.registry.owner.v1.UpdateOrganizationsRequest.Value.verification_status:type_name -> buf.registry.owner.v1.OrganizationVerificationStatus
-	1,  // 13: buf.registry.owner.v1.OrganizationService.GetOrganizations:input_type -> buf.registry.owner.v1.GetOrganizationsRequest
-	3,  // 14: buf.registry.owner.v1.OrganizationService.ListOrganizations:input_type -> buf.registry.owner.v1.ListOrganizationsRequest
-	5,  // 15: buf.registry.owner.v1.OrganizationService.CreateOrganizations:input_type -> buf.registry.owner.v1.CreateOrganizationsRequest
-	7,  // 16: buf.registry.owner.v1.OrganizationService.UpdateOrganizations:input_type -> buf.registry.owner.v1.UpdateOrganizationsRequest
-	9,  // 17: buf.registry.owner.v1.OrganizationService.DeleteOrganizations:input_type -> buf.registry.owner.v1.DeleteOrganizationsRequest
-	2,  // 18: buf.registry.owner.v1.OrganizationService.GetOrganizations:output_type -> buf.registry.owner.v1.GetOrganizationsResponse
-	4,  // 19: buf.registry.owner.v1.OrganizationService.ListOrganizations:output_type -> buf.registry.owner.v1.ListOrganizationsResponse
-	6,  // 20: buf.registry.owner.v1.OrganizationService.CreateOrganizations:output_type -> buf.registry.owner.v1.CreateOrganizationsResponse
-	8,  // 21: buf.registry.owner.v1.OrganizationService.UpdateOrganizations:output_type -> buf.registry.owner.v1.UpdateOrganizationsResponse
-	10, // 22: buf.registry.owner.v1.OrganizationService.DeleteOrganizations:output_type -> buf.registry.owner.v1.DeleteOrganizationsResponse
-	18, // [18:23] is the sub-list for method output_type
-	13, // [13:18] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	17, // 11: buf.registry.owner.v1.CreateOrganizationsRequest.Value.visibility:type_name -> buf.registry.owner.v1.OrganizationVisibility
+	13, // 12: buf.registry.owner.v1.UpdateOrganizationsRequest.Value.organization_ref:type_name -> buf.registry.owner.v1.OrganizationRef
+	16, // 13: buf.registry.owner.v1.UpdateOrganizationsRequest.Value.verification_status:type_name -> buf.registry.owner.v1.OrganizationVerificationStatus
+	17, // 14: buf.registry.owner.v1.UpdateOrganizationsRequest.Value.visibility:type_name -> buf.registry.owner.v1.OrganizationVisibility
+	1,  // 15: buf.registry.owner.v1.OrganizationService.GetOrganizations:input_type -> buf.registry.owner.v1.GetOrganizationsRequest
+	3,  // 16: buf.registry.owner.v1.OrganizationService.ListOrganizations:input_type -> buf.registry.owner.v1.ListOrganizationsRequest
+	5,  // 17: buf.registry.owner.v1.OrganizationService.CreateOrganizations:input_type -> buf.registry.owner.v1.CreateOrganizationsRequest
+	7,  // 18: buf.registry.owner.v1.OrganizationService.UpdateOrganizations:input_type -> buf.registry.owner.v1.UpdateOrganizationsRequest
+	9,  // 19: buf.registry.owner.v1.OrganizationService.DeleteOrganizations:input_type -> buf.registry.owner.v1.DeleteOrganizationsRequest
+	2,  // 20: buf.registry.owner.v1.OrganizationService.GetOrganizations:output_type -> buf.registry.owner.v1.GetOrganizationsResponse
+	4,  // 21: buf.registry.owner.v1.OrganizationService.ListOrganizations:output_type -> buf.registry.owner.v1.ListOrganizationsResponse
+	6,  // 22: buf.registry.owner.v1.OrganizationService.CreateOrganizations:output_type -> buf.registry.owner.v1.CreateOrganizationsResponse
+	8,  // 23: buf.registry.owner.v1.OrganizationService.UpdateOrganizations:output_type -> buf.registry.owner.v1.UpdateOrganizationsResponse
+	10, // 24: buf.registry.owner.v1.OrganizationService.DeleteOrganizations:output_type -> buf.registry.owner.v1.DeleteOrganizationsResponse
+	20, // [20:25] is the sub-list for method output_type
+	15, // [15:20] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_buf_registry_owner_v1_organization_service_proto_init() }
@@ -1131,6 +1211,7 @@ func file_buf_registry_owner_v1_organization_service_proto_init() {
 	}
 	file_buf_registry_owner_v1_organization_proto_init()
 	file_buf_registry_owner_v1_user_proto_init()
+	file_buf_registry_owner_v1_organization_service_proto_msgTypes[10].OneofWrappers = []any{}
 	file_buf_registry_owner_v1_organization_service_proto_msgTypes[11].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
