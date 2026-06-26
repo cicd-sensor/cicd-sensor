@@ -16,12 +16,12 @@ require (
 	github.com/cilium/ebpf v0.21.0
 	github.com/containerd/nri v0.12.0
 	github.com/google/cel-go v0.28.1
-	github.com/google/go-containerregistry v0.21.6
+	github.com/google/go-containerregistry v0.21.7
 	github.com/google/uuid v1.6.0
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/sigstore/cosign/v3 v3.1.1
 	github.com/sigstore/sigstore-go v1.2.1
-	go.yaml.in/yaml/v4 v4.0.0-rc.5
+	go.yaml.in/yaml/v4 v4.0.0-rc.6
 	golang.org/x/net v0.56.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/text v0.38.0
