@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
@@ -443,6 +445,51 @@ func TestRunEngineEffects_NotifyJobEnded(t *testing.T) {
 	if got := notifier.ended[0]; got.JobID != jobID || got.Reason != EndCgroupRmdir {
 		t.Fatalf("notification = %#v, want job=%v reason=%v", got, jobID, EndCgroupRmdir)
 	}
+}
+
+func TestRunEngineEffects_PurgeRemovedCgroups(t *testing.T) {
+	t.Parallel()
+
+	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	t.Run("success deletes kernel entry then userspace mirror", func(t *testing.T) {
+		t.Parallel()
+
+		state := newTrackedState(jobID, 42)
+		state.markTrackedCgroupRemoved(42, time.Now().UTC())
+		kernelIO := &recordingKernelIO{}
+		engine := newTestKernelTracker(slog.New(slog.NewTextHandler(io.Discard, nil)), nil, kernelIO, "")
+		engine.jobTracking = state
+
+		engine.runEngineEffects(context.Background(), []engineEffect{
+			deleteExpiredCgroupsFromKernel{Cgroups: []cgroupPurgeCandidate{{JobID: jobID, CgroupID: 42}}},
+		})
+
+		if got := kernelIO.deleteTracked; !reflect.DeepEqual(got, []uint64{42}) {
+			t.Fatalf("deleted cgroups = %#v, want [42]", got)
+		}
+		if _, ok := state.jobForCgroup(42); ok {
+			t.Fatal("purged cgroup still has owner")
+		}
+	})
+
+	t.Run("kernel delete failure leaves userspace mirror for retry", func(t *testing.T) {
+		t.Parallel()
+
+		state := newTrackedState(jobID, 42)
+		state.markTrackedCgroupRemoved(42, time.Now().UTC())
+		wantErr := errors.New("delete failed")
+		kernelIO := &recordingKernelIO{deleteTrackedErr: wantErr}
+		engine := newTestKernelTracker(slog.New(slog.NewTextHandler(io.Discard, nil)), nil, kernelIO, "")
+		engine.jobTracking = state
+
+		engine.runEngineEffects(context.Background(), []engineEffect{
+			deleteExpiredCgroupsFromKernel{Cgroups: []cgroupPurgeCandidate{{JobID: jobID, CgroupID: 42}}},
+		})
+
+		if owner, ok := state.jobForCgroup(42); !ok || owner != jobID {
+			t.Fatalf("cgroup owner after failed purge = %v ok=%v, want %v true", owner, ok, jobID)
+		}
+	})
 }
 
 func TestDeleteJobKernelMapEntries_StagingDeleteFailure(t *testing.T) {

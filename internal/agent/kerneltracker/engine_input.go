@@ -58,6 +58,6 @@ type commandFindJobForCgroup struct {
 
 func (commandFindJobForCgroup) sealedEngineInput() {}
 
-type commandPurgeExitedProcesses struct{}
+type commandPurgeExpiredTrackingState struct{}
 
-func (commandPurgeExitedProcesses) sealedEngineInput() {}
+func (commandPurgeExpiredTrackingState) sealedEngineInput() {}

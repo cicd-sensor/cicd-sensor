@@ -1,6 +1,24 @@
 package kerneltracker
 
-import "github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
+import (
+	"time"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
+)
+
+type trackedCgroupState uint8
+
+const (
+	trackedCgroupActive trackedCgroupState = iota
+	trackedCgroupRemoved
+)
+
+const cgroupRemovalGracePeriod = processExitGracePeriod
+
+type trackedCgroup struct {
+	State     trackedCgroupState
+	RemovedAt time.Time
+}
 
 // cgroupAttachOwnership snapshots both sides of an attach before the handler
 // decides whether to emit a signal or extend the userspace mirror.
@@ -18,22 +36,35 @@ type cgroupDetachResult struct {
 	JobDrained bool
 }
 
+type cgroupPurgeCandidate struct {
+	JobID    jobcontext.JobIdentity
+	CgroupID uint64
+}
+
 // bind mirrors a cgroup -> Job attribution already accepted by KernelIO/eBPF.
 // It is non-overwriting so one cgroup cannot silently move between Jobs.
 func (s *jobTrackingState) bind(jobID jobcontext.JobIdentity, cgroupID uint64) bool {
-	if owner, ok := s.jobByCgroup[cgroupID]; ok && owner != jobID {
-		return false
+	if owner, ok := s.jobByCgroup[cgroupID]; ok {
+		// Removed cgroups stay attributable during their grace period, but
+		// rmdir is a one-way lifecycle signal. Do not reactivate them.
+		return owner == jobID
 	}
 	s.jobByCgroup[cgroupID] = jobID
 	if s.cgroupsByJob[jobID] == nil {
-		s.cgroupsByJob[jobID] = make(map[uint64]struct{})
+		s.cgroupsByJob[jobID] = make(map[uint64]*trackedCgroup)
 	}
-	s.cgroupsByJob[jobID][cgroupID] = struct{}{}
+	cgroup := s.cgroupsByJob[jobID][cgroupID]
+	if cgroup == nil {
+		cgroup = &trackedCgroup{}
+		s.cgroupsByJob[jobID][cgroupID] = cgroup
+	}
+	cgroup.State = trackedCgroupActive
+	cgroup.RemovedAt = time.Time{}
 	return true
 }
 
 // unbind removes one cgroup attribution but leaves the per-Job reverse entry
-// for RemoveJob cleanup; callers can use removeTrackedCgroup for drain checks.
+// for RemoveJob cleanup.
 func (s *jobTrackingState) unbind(jobID jobcontext.JobIdentity, cgroupID uint64) {
 	delete(s.jobByCgroup, cgroupID)
 	if cgroups := s.cgroupsByJob[jobID]; cgroups != nil {
@@ -60,19 +91,78 @@ func (s *jobTrackingState) lookupCgroupAttachOwnership(sourceID, destinationID u
 	}
 }
 
-// removeTrackedCgroup applies an rmdir mirror update and reports whether the
-// Job has no tracked cgroups left, without making the handler inspect indexes.
-func (s *jobTrackingState) removeTrackedCgroup(cgroupID uint64) cgroupDetachResult {
+func (s *jobTrackingState) markTrackedCgroupRemoved(cgroupID uint64, now time.Time) cgroupDetachResult {
 	jobID, ok := s.jobForCgroup(cgroupID)
 	if !ok {
 		return cgroupDetachResult{}
 	}
 
-	s.unbind(jobID, cgroupID)
+	cgroup := s.cgroupsByJob[jobID][cgroupID]
+	if cgroup == nil {
+		return cgroupDetachResult{}
+	}
+	if cgroup.State == trackedCgroupRemoved {
+		return cgroupDetachResult{JobID: jobID, Found: true}
+	}
+
+	cgroup.State = trackedCgroupRemoved
+	cgroup.RemovedAt = now
+	// Keep the forward cgroup -> Job mapping until purge so late samples from
+	// the removed cgroup still resolve to the Job.
+	s.removedCgroupQueue = append(s.removedCgroupQueue, cgroupPurgeCandidate{JobID: jobID, CgroupID: cgroupID})
 	return cgroupDetachResult{
 		JobID:      jobID,
 		Found:      true,
-		JobDrained: len(s.cgroupsByJob[jobID]) == 0,
+		JobDrained: s.activeCgroupCount(jobID) == 0,
+	}
+}
+
+func (s *jobTrackingState) activeCgroupCount(jobID jobcontext.JobIdentity) int {
+	count := 0
+	for _, cgroup := range s.cgroupsByJob[jobID] {
+		if cgroup != nil && cgroup.State == trackedCgroupActive {
+			count++
+		}
+	}
+	return count
+}
+
+func (s *jobTrackingState) expiredRemovedCgroups(now time.Time) []cgroupPurgeCandidate {
+	var out []cgroupPurgeCandidate
+	// Like exited processes, removed cgroups are queued in removal order.
+	// Stop at the first non-expired entry so later entries wait their turn.
+	for _, candidate := range s.removedCgroupQueue {
+		cgroup := s.cgroupsByJob[candidate.JobID][candidate.CgroupID]
+		if cgroup == nil || cgroup.State != trackedCgroupRemoved {
+			break
+		}
+		if cgroup.RemovedAt.Add(cgroupRemovalGracePeriod).After(now) {
+			break
+		}
+		out = append(out, candidate)
+	}
+	return out
+}
+
+func (s *jobTrackingState) purgeRemovedCgroups(candidates []cgroupPurgeCandidate) {
+	if len(candidates) == 0 {
+		return
+	}
+	for _, candidate := range candidates {
+		jobID, ok := s.jobForCgroup(candidate.CgroupID)
+		if !ok || jobID != candidate.JobID {
+			continue
+		}
+		cgroup := s.cgroupsByJob[jobID][candidate.CgroupID]
+		if cgroup == nil || cgroup.State != trackedCgroupRemoved {
+			continue
+		}
+		s.unbind(jobID, candidate.CgroupID)
+	}
+	if len(candidates) >= len(s.removedCgroupQueue) {
+		s.removedCgroupQueue = nil
+	} else {
+		s.removedCgroupQueue = s.removedCgroupQueue[len(candidates):]
 	}
 }
 
@@ -127,6 +217,16 @@ func (s *jobTrackingState) removeCgroupAndStaging(jobID jobcontext.JobIdentity) 
 		delete(s.stagingByBasename, basename)
 	}
 	delete(s.cgroupsByJob, jobID)
+	// RemoveJob cleans active and removed-pending cgroups together, so any
+	// queued lazy-deletion entries for this Job must be discarded here.
+	kept := s.removedCgroupQueue[:0]
+	for _, candidate := range s.removedCgroupQueue {
+		if candidate.JobID == jobID {
+			continue
+		}
+		kept = append(kept, candidate)
+	}
+	s.removedCgroupQueue = kept
 	delete(s.stagingByJob, jobID)
 }
 

@@ -47,6 +47,10 @@ When a CI/CD job starts a container through the host-side Docker socket, the act
 
 The Docker proxy checks the peer process of the Docker create request and determines whether that process belongs to a tracked job cgroup. If it does, the proxy stages the basename of the container cgroup that will be created and associates it with the job. Later, when the kernel-side `cgroup_mkdir` hook observes the actual container cgroup creation, that staging entry is promoted and the container cgroup is added to the job's tracked cgroups.
 
+`cgroup_rmdir` does not immediately delete non-final cgroups from `tracked_cgroups`.
+KernelTracker marks them removed and purges them after the 10-second grace period plus the next purge tick, so in-flight samples that arrive after rmdir can still be attributed to the Job.
+If the removed cgroup is the Job's last active cgroup, KernelTracker ends the Job immediately and lets normal Job finalization clean up kernel and userspace state.
+
 ## Event coverage
 
 The eBPF Runtime handles both rule-facing events and internal tracking samples.

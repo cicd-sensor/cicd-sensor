@@ -74,10 +74,10 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 		return fmt.Errorf("start kernel sample loop: %w", err)
 	}
 
-	// Start periodic maintenance such as process context GC.
-	stopProcessPurgeTicker := engine.startProcessPurgeTicker(ctx)
+	// Start periodic maintenance such as process context GC and lazy cgroup purge.
+	stopTrackingStatePurgeTicker := engine.startTrackingStatePurgeTicker(ctx)
 	defer engine.closeRemainingChannels()
-	defer stopProcessPurgeTicker()
+	defer stopTrackingStatePurgeTicker()
 
 	for {
 		select {

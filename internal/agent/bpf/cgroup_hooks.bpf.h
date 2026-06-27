@@ -129,10 +129,6 @@ int BPF_PROG(handle_cgroup_rmdir, struct cgroup *cgrp, const char *path)
     if (!cgroup_is_tracked(cgroup_id))
         return 0;
 
-    // Delete first so the kernel map remains the source of truth at event time.
-    if (bpf_map_delete_elem(&tracked_cgroups, &cgroup_id) != 0)
-        return 0;
-
     RESERVE_SAMPLE(sample, struct cgroup_rmdir_sample, return 0);
 
     sample->kind = SAMPLE_KIND_CGROUP_RMDIR;

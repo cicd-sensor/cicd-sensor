@@ -26,7 +26,7 @@ func handleEngineInput(state *jobTrackingState, input engineInput) []engineEffec
 		return handleExecSample(state, value)
 	case exitSample:
 		return handleExitSample(state, value)
-	case commandPurgeExitedProcesses:
+	case commandPurgeExpiredTrackingState:
 		return handlePurgeTick(state)
 	case cgroupMkdirSample:
 		return handleCgroupMkdirSample(state, value)
