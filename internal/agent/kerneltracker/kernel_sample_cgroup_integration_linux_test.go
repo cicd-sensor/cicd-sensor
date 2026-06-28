@@ -143,6 +143,160 @@ func TestLinuxKernelSampleCgroupLifecycle(t *testing.T) {
 	})
 }
 
+func TestLinuxKernelSampleCgroupRmdirLazyPurge(t *testing.T) {
+	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	defer kernelIO.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
+	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
+
+	parentPID := int32(os.Getpid())
+	parentCgroupID, err := lookupProcessCgroupID(parentPID, cgroupRoot)
+	if err != nil {
+		t.Fatalf("lookupProcessCgroupID: %v", err)
+	}
+	parentCgroupPath, err := currentCgroupPath(parentPID)
+	if err != nil {
+		t.Fatalf("currentCgroupPath: %v", err)
+	}
+
+	if err := kernelIO.PutCgroupIDInTrackedCgroupsMap(ctx, parentCgroupID); err != nil {
+		t.Fatalf("PutCgroupIDInTrackedCgroupsMap parent cgroup: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(context.Background(), []uint64{parentCgroupID})
+	})
+
+	childName := fmt.Sprintf("cicd-sensor-lazy-rmdir-%d", time.Now().UnixNano())
+	childPath := filepath.Join(parentCgroupPath, childName)
+	childFullPath := mustCgroupFSPath(t, cgroupRoot, childPath)
+	if err := os.Mkdir(childFullPath, 0o755); err != nil {
+		t.Fatalf("Mkdir(%q): %v", childFullPath, err)
+	}
+	childCgroupID, err := cgroupIDForPath(cgroupRoot, childPath)
+	if err != nil {
+		t.Fatalf("cgroupIDForPath(kernelIO, %q): %v", childPath, err)
+	}
+	cleanupChild := true
+	t.Cleanup(func() {
+		if cleanupChild {
+			_ = os.Remove(childFullPath)
+		}
+		_ = kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(context.Background(), []uint64{childCgroupID})
+	})
+
+	mkdirInput := waitForEngineInput(t, kernelTracker.inputCh, 5*time.Second, "mkdir", func(message engineInput) bool {
+		sample, ok := message.(cgroupMkdirSample)
+		return ok && sample.CgroupID == childCgroupID && sample.ParentCgroupID == parentCgroupID
+	})
+	requireTrackedCgroupEntry(t, ctx, kernelIO, childCgroupID, "mkdir child")
+
+	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	state := destinationTrackedState(jobID, parentCgroupID)
+	if effects := handleEngineInput(state, mkdirInput); len(effects) != 0 {
+		t.Fatalf("mkdir mirror emitted effects: %#v", effects)
+	}
+
+	if err := os.Remove(childFullPath); err != nil {
+		t.Fatalf("Remove(%q): %v", childFullPath, err)
+	}
+	cleanupChild = false
+
+	rmdirInput := waitForEngineInput(t, kernelTracker.inputCh, 5*time.Second, "rmdir", func(message engineInput) bool {
+		sample, ok := message.(cgroupRmdirSample)
+		return ok && sample.CgroupID == childCgroupID
+	})
+	requireTrackedCgroupEntry(t, ctx, kernelIO, childCgroupID, "removed pending child")
+
+	if effects := handleEngineInput(state, rmdirInput); len(effects) != 0 {
+		t.Fatalf("non-final rmdir emitted effects: %#v", effects)
+	}
+	if owner, ok := state.jobForCgroup(childCgroupID); !ok || owner != jobID {
+		t.Fatalf("removed pending child owner = %v ok=%v, want %v true", owner, ok, jobID)
+	}
+
+	state.cgroupsByJob[jobID][childCgroupID].RemovedAt = time.Now().UTC().Add(-cgroupRemovalGracePeriod - time.Second)
+	effects := handleEngineInput(state, commandPurgeExpiredTrackingState{})
+	engine := newTestKernelTracker(nil, nil, kernelIO, cgroupRoot)
+	engine.jobTracking = state
+	engine.runEngineEffects(ctx, effects)
+
+	if ok, err := kernelIO.TestOnlyLookupCgroupIDInTrackedCgroupsMap(ctx, childCgroupID); err != nil {
+		t.Fatalf("lookup purged child cgroup: %v", err)
+	} else if ok {
+		t.Fatal("child cgroup remained in tracked_cgroups after purge")
+	}
+}
+
+func TestLinuxKernelSampleCgroupFinalRmdirRemoveJobCleanup(t *testing.T) {
+	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	defer kernelIO.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
+	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
+
+	parentPID := int32(os.Getpid())
+	parentCgroupPath, err := currentCgroupPath(parentPID)
+	if err != nil {
+		t.Fatalf("currentCgroupPath: %v", err)
+	}
+
+	childName := fmt.Sprintf("cicd-sensor-final-rmdir-%d", time.Now().UnixNano())
+	childPath := filepath.Join(parentCgroupPath, childName)
+	childFullPath := mustCgroupFSPath(t, cgroupRoot, childPath)
+	if err := os.Mkdir(childFullPath, 0o755); err != nil {
+		t.Fatalf("Mkdir(%q): %v", childFullPath, err)
+	}
+	childCgroupID, err := cgroupIDForPath(cgroupRoot, childPath)
+	if err != nil {
+		t.Fatalf("cgroupIDForPath(kernelIO, %q): %v", childPath, err)
+	}
+	cleanupChild := true
+	t.Cleanup(func() {
+		if cleanupChild {
+			_ = os.Remove(childFullPath)
+		}
+		_ = kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(context.Background(), []uint64{childCgroupID})
+	})
+
+	if err := kernelIO.PutCgroupIDInTrackedCgroupsMap(ctx, childCgroupID); err != nil {
+		t.Fatalf("PutCgroupIDInTrackedCgroupsMap child cgroup: %v", err)
+	}
+	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	state := destinationTrackedState(jobID, childCgroupID)
+
+	if err := os.Remove(childFullPath); err != nil {
+		t.Fatalf("Remove(%q): %v", childFullPath, err)
+	}
+	cleanupChild = false
+
+	rmdirInput := waitForEngineInput(t, kernelTracker.inputCh, 5*time.Second, "final rmdir", func(message engineInput) bool {
+		sample, ok := message.(cgroupRmdirSample)
+		return ok && sample.CgroupID == childCgroupID
+	})
+	requireTrackedCgroupEntry(t, ctx, kernelIO, childCgroupID, "final removed child")
+
+	effects := handleEngineInput(state, rmdirInput)
+	assertEffectOrder(t, effects, notifyJobEnded{})
+
+	removeEffects := handleEngineInput(state, commandRemoveJob{JobID: jobID})
+	engine := newTestKernelTracker(nil, nil, kernelIO, cgroupRoot)
+	engine.jobTracking = state
+	engine.runEngineEffects(ctx, removeEffects)
+
+	if ok, err := kernelIO.TestOnlyLookupCgroupIDInTrackedCgroupsMap(ctx, childCgroupID); err != nil {
+		t.Fatalf("lookup final removed child cgroup: %v", err)
+	} else if ok {
+		t.Fatal("final removed child cgroup remained in tracked_cgroups after RemoveJob")
+	}
+}
+
 func TestLinuxKernelSampleCgroupAttachExternal(t *testing.T) {
 	kernelIO, cgroupRoot := newLinuxKernelIO(t)
 	defer kernelIO.Close()

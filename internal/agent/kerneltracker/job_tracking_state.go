@@ -15,7 +15,8 @@ type jobTrackingState struct {
 	jobEventDeliveryStats map[jobcontext.JobIdentity]map[jobevent.Type]*eventDeliveryStats
 	fileOpenDedupByJob    map[jobcontext.JobIdentity]*fileOpenDedupState
 	jobByCgroup           map[uint64]jobcontext.JobIdentity
-	cgroupsByJob          map[jobcontext.JobIdentity]map[uint64]struct{}
+	cgroupsByJob          map[jobcontext.JobIdentity]map[uint64]*trackedCgroup
+	removedCgroupQueue    []cgroupPurgeCandidate
 	stagingByBasename     map[string]jobcontext.JobIdentity
 	stagingByJob          map[jobcontext.JobIdentity]map[string]struct{}
 	processesByJob        map[jobcontext.JobIdentity]*jobProcessState
@@ -28,7 +29,7 @@ func newJobTrackingState() *jobTrackingState {
 		jobEventDeliveryStats: make(map[jobcontext.JobIdentity]map[jobevent.Type]*eventDeliveryStats),
 		fileOpenDedupByJob:    make(map[jobcontext.JobIdentity]*fileOpenDedupState),
 		jobByCgroup:           make(map[uint64]jobcontext.JobIdentity),
-		cgroupsByJob:          make(map[jobcontext.JobIdentity]map[uint64]struct{}),
+		cgroupsByJob:          make(map[jobcontext.JobIdentity]map[uint64]*trackedCgroup),
 		stagingByBasename:     make(map[string]jobcontext.JobIdentity),
 		stagingByJob:          make(map[jobcontext.JobIdentity]map[string]struct{}),
 		processesByJob:        make(map[jobcontext.JobIdentity]*jobProcessState),

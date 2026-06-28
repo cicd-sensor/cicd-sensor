@@ -96,6 +96,14 @@ func handleExitSample(state *jobTrackingState, sample exitSample) []engineEffect
 }
 
 func handlePurgeTick(state *jobTrackingState) []engineEffect {
-	state.purgeExitedProcesses(time.Now().UTC())
-	return nil
+	now := time.Now().UTC()
+	state.purgeExitedProcesses(now)
+
+	// Cgroup purge needs a KernelIO effect because the BPF tracked_cgroups map
+	// must be deleted before the userspace mirror is removed.
+	expired := state.expiredRemovedCgroups(now)
+	if len(expired) == 0 {
+		return nil
+	}
+	return []engineEffect{deleteExpiredCgroupsFromKernel{Cgroups: expired}}
 }

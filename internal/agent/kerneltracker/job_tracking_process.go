@@ -171,9 +171,9 @@ func (s *jobTrackingState) purgeExitedProcesses(now time.Time) {
 	}
 }
 
-// startProcessPurgeTicker queues purge as an job tracking input so process cleanup
-// stays serialized with kernel events and API commands.
-func (engine *KernelTracker) startProcessPurgeTicker(ctx context.Context) func() {
+// startTrackingStatePurgeTicker queues cleanup through the job tracking input
+// loop so process and cgroup purges stay serialized with kernel events.
+func (engine *KernelTracker) startTrackingStatePurgeTicker(ctx context.Context) func() {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -188,7 +188,7 @@ func (engine *KernelTracker) startProcessPurgeTicker(ctx context.Context) func()
 				return
 			case <-ticker.C:
 				select {
-				case engine.inputCh <- commandPurgeExitedProcesses{}:
+				case engine.inputCh <- commandPurgeExpiredTrackingState{}:
 				case <-ctx.Done():
 					return
 				}

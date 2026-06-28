@@ -1,8 +1,10 @@
 package kerneltracker
 
 import (
-	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"testing"
+	"time"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
 func TestJobTrackingState_BindAndJobForCgroup(t *testing.T) {
@@ -110,14 +112,14 @@ func TestJobTrackingState_UnbindLeavesEmptyReverseIndexForJobCleanup(t *testing.
 	}
 }
 
-func TestJobTrackingState_RemoveTrackedCgroup(t *testing.T) {
+func TestJobTrackingState_MarkTrackedCgroupRemoved(t *testing.T) {
 	t.Parallel()
 
 	t.Run("unknown", func(t *testing.T) {
 		t.Parallel()
 
 		s := newJobTrackingState()
-		got := s.removeTrackedCgroup(42)
+		got := s.markTrackedCgroupRemoved(42, time.Unix(100, 0))
 		if got.Found || got.JobDrained || got.JobID != (jobcontext.JobIdentity{}) {
 			t.Fatalf("unknown remove result = %+v, want zero value", got)
 		}
@@ -131,15 +133,18 @@ func TestJobTrackingState_RemoveTrackedCgroup(t *testing.T) {
 		s.bind(jobID, 42)
 		s.bind(jobID, 84)
 
-		got := s.removeTrackedCgroup(42)
+		got := s.markTrackedCgroupRemoved(42, time.Unix(100, 0))
 		if !got.Found || got.JobID != jobID || got.JobDrained {
 			t.Fatalf("partial remove result = %+v, want found/not drained for %v", got, jobID)
 		}
-		if _, ok := s.jobForCgroup(42); ok {
-			t.Fatal("removed cgroup still has owner")
+		if owner, ok := s.jobForCgroup(42); !ok || owner != jobID {
+			t.Fatalf("removed pending cgroup owner = %v ok=%v, want %v true", owner, ok, jobID)
 		}
 		if owner, ok := s.jobForCgroup(84); !ok || owner != jobID {
 			t.Fatalf("remaining cgroup owner = %v ok=%v, want %v true", owner, ok, jobID)
+		}
+		if state := s.cgroupsByJob[jobID][42].State; state != trackedCgroupRemoved {
+			t.Fatalf("removed cgroup state = %v, want removed", state)
 		}
 	})
 
@@ -150,17 +155,132 @@ func TestJobTrackingState_RemoveTrackedCgroup(t *testing.T) {
 		jobID := newJob("100")
 		s.bind(jobID, 42)
 
-		got := s.removeTrackedCgroup(42)
+		got := s.markTrackedCgroupRemoved(42, time.Unix(100, 0))
 		if !got.Found || got.JobID != jobID || !got.JobDrained {
 			t.Fatalf("last remove result = %+v, want found/drained for %v", got, jobID)
 		}
-		if _, ok := s.jobForCgroup(42); ok {
-			t.Fatal("removed cgroup still has owner")
+		if owner, ok := s.jobForCgroup(42); !ok || owner != jobID {
+			t.Fatalf("removed pending cgroup owner = %v ok=%v, want %v true", owner, ok, jobID)
 		}
 		if _, ok := s.cgroupsByJob[jobID]; !ok {
 			t.Fatal("empty reverse index should remain until RemoveJob cleanup")
 		}
 	})
+
+	t.Run("duplicate rmdir is idempotent", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bind(jobID, 42)
+
+		first := s.markTrackedCgroupRemoved(42, time.Unix(100, 0))
+		second := s.markTrackedCgroupRemoved(42, time.Unix(200, 0))
+		if !first.JobDrained {
+			t.Fatalf("first remove result = %+v, want drained", first)
+		}
+		if second.JobDrained {
+			t.Fatalf("duplicate remove result = %+v, want not drained", second)
+		}
+		if got := s.cgroupsByJob[jobID][42].RemovedAt; !got.Equal(time.Unix(100, 0)) {
+			t.Fatalf("duplicate rmdir changed removed timestamp: got %v", got)
+		}
+		if got := len(s.removedCgroupQueue); got != 1 {
+			t.Fatalf("removed cgroup queue length = %d, want 1", got)
+		}
+	})
+}
+
+func TestJobTrackingState_PurgeRemovedCgroups(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(200, 0)
+	t.Run("grace period retains removed cgroup", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bind(jobID, 42)
+		s.markTrackedCgroupRemoved(42, now.Add(-cgroupRemovalGracePeriod+time.Second))
+
+		if got := s.expiredRemovedCgroups(now); len(got) != 0 {
+			t.Fatalf("expired removed cgroups before grace = %#v, want none", got)
+		}
+	})
+
+	t.Run("expired cgroup is purge candidate", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bind(jobID, 42)
+		s.markTrackedCgroupRemoved(42, now.Add(-cgroupRemovalGracePeriod-time.Second))
+
+		got := s.expiredRemovedCgroups(now)
+		want := []cgroupPurgeCandidate{{JobID: jobID, CgroupID: 42}}
+		if len(got) != len(want) || got[0] != want[0] {
+			t.Fatalf("expired removed cgroups = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("purge removes only removed cgroups", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bind(jobID, 42)
+		s.bind(jobID, 84)
+		s.markTrackedCgroupRemoved(42, now)
+
+		s.purgeRemovedCgroups([]cgroupPurgeCandidate{{JobID: jobID, CgroupID: 42}})
+		if _, ok := s.jobForCgroup(42); ok {
+			t.Fatal("purged removed cgroup still has owner")
+		}
+		if owner, ok := s.jobForCgroup(84); !ok || owner != jobID {
+			t.Fatalf("active cgroup owner = %v ok=%v, want %v true", owner, ok, jobID)
+		}
+		if got := len(s.removedCgroupQueue); got != 0 {
+			t.Fatalf("removed cgroup queue length after purge = %d, want 0", got)
+		}
+	})
+
+	t.Run("queue stops at first non-expired removed cgroup", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bind(jobID, 42)
+		s.bind(jobID, 84)
+		s.markTrackedCgroupRemoved(42, now.Add(-cgroupRemovalGracePeriod+time.Second))
+		s.markTrackedCgroupRemoved(84, now.Add(-cgroupRemovalGracePeriod-time.Second))
+
+		if got := s.expiredRemovedCgroups(now); len(got) != 0 {
+			t.Fatalf("expired removed cgroups behind non-expired head = %#v, want none", got)
+		}
+	})
+}
+
+func TestJobTrackingState_BindDoesNotReactivateSameJobRemovedCgroup(t *testing.T) {
+	t.Parallel()
+
+	s := newJobTrackingState()
+	jobID := newJob("100")
+	s.bind(jobID, 42)
+	s.markTrackedCgroupRemoved(42, time.Unix(100, 0))
+
+	if !s.bind(jobID, 42) {
+		t.Fatal("same-job bind of removed cgroup must succeed")
+	}
+	cgroup := s.cgroupsByJob[jobID][42]
+	if cgroup.State != trackedCgroupRemoved {
+		t.Fatalf("same-job bind cgroup state = %v, want removed", cgroup.State)
+	}
+	if got := cgroup.RemovedAt; !got.Equal(time.Unix(100, 0)) {
+		t.Fatalf("same-job bind changed removed timestamp: got %v", got)
+	}
+	if got := len(s.removedCgroupQueue); got != 1 {
+		t.Fatalf("removed cgroup queue length = %d, want 1", got)
+	}
 }
 
 func TestJobTrackingState_StageCgroupBasename_RejectsCrossJobOwner(t *testing.T) {

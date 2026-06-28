@@ -2,6 +2,7 @@ package kerneltracker
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
@@ -15,12 +16,14 @@ func TestJobTrackingState_RemoveJobClearsAllJobOwnedState(t *testing.T) {
 	other := newJob("200")
 	targetProcess := processIdentity{PID: 10, StartBoottime: 1000}
 	otherProcess := processIdentity{PID: 20, StartBoottime: 2000}
+	now := time.Unix(100, 0)
 
 	s.registerJob(target, 1)
 	if s.fileOpenDedupByJob[target] == nil {
 		t.Fatal("registerJob did not initialize target file open dedup state")
 	}
 	s.bind(target, 42)
+	s.markTrackedCgroupRemoved(42, now)
 	s.putStaging("docker-target.scope", target)
 	s.jobEventDeliveryStats[target] = map[jobevent.Type]*eventDeliveryStats{
 		jobevent.FileOpen: &eventDeliveryStats{Attempted: 3, Delivered: 1, SuppressedDuplicates: 2},
@@ -33,6 +36,7 @@ func TestJobTrackingState_RemoveJobClearsAllJobOwnedState(t *testing.T) {
 		t.Fatal("registerJob did not initialize bystander file open dedup state")
 	}
 	s.bind(other, 84)
+	s.markTrackedCgroupRemoved(84, now)
 	s.putStaging("docker-other.scope", other)
 	s.jobEventDeliveryStats[other] = map[jobevent.Type]*eventDeliveryStats{
 		jobevent.FileOpen: &eventDeliveryStats{Attempted: 5, Delivered: 4, SuppressedDuplicates: 1},
@@ -63,6 +67,11 @@ func TestJobTrackingState_RemoveJobClearsAllJobOwnedState(t *testing.T) {
 	if _, ok := s.cgroupsByJob[target]; ok {
 		t.Fatal("target cgroup reverse index survived RemoveJob")
 	}
+	for _, candidate := range s.removedCgroupQueue {
+		if candidate.JobID == target {
+			t.Fatal("target removed cgroup queue entry survived RemoveJob")
+		}
+	}
 	if _, ok := s.stagingByBasename["docker-target.scope"]; ok {
 		t.Fatal("target staging forward index survived RemoveJob")
 	}
@@ -87,6 +96,9 @@ func TestJobTrackingState_RemoveJobClearsAllJobOwnedState(t *testing.T) {
 	}
 	if owner, ok := s.jobForCgroup(84); !ok || owner != other {
 		t.Fatalf("bystander cgroup owner = %v ok=%v, want %v true", owner, ok, other)
+	}
+	if len(s.removedCgroupQueue) != 1 || s.removedCgroupQueue[0].JobID != other || s.removedCgroupQueue[0].CgroupID != 84 {
+		t.Fatalf("bystander removed cgroup queue = %#v, want only bystander cgroup", s.removedCgroupQueue)
 	}
 	if owner, ok := s.stagingByBasename["docker-other.scope"]; !ok || owner != other {
 		t.Fatalf("bystander staging owner = %v ok=%v, want %v true", owner, ok, other)

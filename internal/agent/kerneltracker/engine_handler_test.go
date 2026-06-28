@@ -314,7 +314,7 @@ func TestTransitionInvariants(t *testing.T) {
 			},
 		},
 		{
-			name: "notify job ended only when last cgroup disappears",
+			name: "notify job ended only when last active cgroup is removed",
 			run: func(t *testing.T) {
 				state := destinationTrackedState(jobID, 42, 84)
 				partialEffects := handleEngineInput(state, cgroupRmdirSample{CgroupID: 42})
@@ -331,6 +331,36 @@ func TestTransitionInvariants(t *testing.T) {
 				}
 				assertEffectOrder(t, finalEffects,
 					notifyJobEnded{},
+				)
+			},
+		},
+		{
+			name: "duplicate final cgroup rmdir does not notify twice",
+			run: func(t *testing.T) {
+				state := destinationTrackedState(jobID, 42)
+				firstEffects := handleEngineInput(state, cgroupRmdirSample{CgroupID: 42})
+				if !hasNotifyJobEndedEffect(firstEffects) {
+					t.Fatalf("expected notifyJobEnded when last active cgroup was removed")
+				}
+
+				secondEffects := handleEngineInput(state, cgroupRmdirSample{CgroupID: 42})
+				if len(secondEffects) != 0 {
+					t.Fatalf("duplicate rmdir emitted effects: %#v", secondEffects)
+				}
+			},
+		},
+		{
+			name: "purge removed cgroups does not notify job ended",
+			run: func(t *testing.T) {
+				state := destinationTrackedState(jobID, 42, 84)
+				state.markTrackedCgroupRemoved(42, time.Now().UTC().Add(-cgroupRemovalGracePeriod-time.Second))
+
+				effects := handleEngineInput(state, commandPurgeExpiredTrackingState{})
+				if hasNotifyJobEndedEffect(effects) {
+					t.Fatalf("purge emitted notifyJobEnded: %#v", effects)
+				}
+				assertEffectOrder(t, effects,
+					deleteExpiredCgroupsFromKernel{},
 				)
 			},
 		},

@@ -28,7 +28,7 @@ func TestHandlePurgeTick(t *testing.T) {
 				handleEngineInput(state, exitSample{Identity: identity, CgroupID: 42})
 				time.Sleep(processExitGracePeriod + time.Second)
 
-				effects := handleEngineInput(state, commandPurgeExitedProcesses{})
+				effects := handleEngineInput(state, commandPurgeExpiredTrackingState{})
 				if len(effects) != 0 {
 					t.Fatalf("purge tick emitted effects: %#v", effects)
 				}
@@ -53,7 +53,7 @@ func TestHandlePurgeTick(t *testing.T) {
 				handleEngineInput(state, exitSample{Identity: identity, CgroupID: 42})
 				time.Sleep(processExitGracePeriod - time.Second)
 
-				handleEngineInput(state, commandPurgeExitedProcesses{})
+				handleEngineInput(state, commandPurgeExpiredTrackingState{})
 
 				if !testProcessExists(state, jobID, identity) {
 					t.Fatal("exited node removed before grace period elapsed")
@@ -96,7 +96,7 @@ func TestHandlePurgeTick(t *testing.T) {
 				handleEngineInput(state, exitSample{Identity: second, CgroupID: 42})
 				time.Sleep(processExitGracePeriod - time.Second)
 
-				handleEngineInput(state, commandPurgeExitedProcesses{})
+				handleEngineInput(state, commandPurgeExpiredTrackingState{})
 
 				if testProcessExists(state, jobID, first) {
 					t.Fatal("oldest exited node still present after purge")
@@ -128,7 +128,7 @@ func TestHandlePurgeTick(t *testing.T) {
 				})
 				time.Sleep(processExitGracePeriod + time.Second)
 
-				handleEngineInput(state, commandPurgeExitedProcesses{})
+				handleEngineInput(state, commandPurgeExpiredTrackingState{})
 
 				if !testProcessExists(state, jobID, identity) {
 					t.Fatal("live node was removed by purge tick")
@@ -157,7 +157,7 @@ func TestHandlePurgeTick(t *testing.T) {
 				handleEngineInput(state, exitSample{Identity: second, CgroupID: 84})
 				time.Sleep(processExitGracePeriod - time.Second)
 
-				handleEngineInput(state, commandPurgeExitedProcesses{})
+				handleEngineInput(state, commandPurgeExpiredTrackingState{})
 
 				if testProcessExists(state, jobOne, first) {
 					t.Fatal("expired node in first job context was not purged")
@@ -181,7 +181,7 @@ func TestHandlePurgeTick(t *testing.T) {
 				state := newTrackedState(jobID, 42)
 				beforeNodes := testProcessNodeCount(state, jobID)
 
-				effects := handleEngineInput(state, commandPurgeExitedProcesses{})
+				effects := handleEngineInput(state, commandPurgeExpiredTrackingState{})
 				if len(effects) != 0 {
 					t.Fatalf("purge tick emitted effects: %#v", effects)
 				}

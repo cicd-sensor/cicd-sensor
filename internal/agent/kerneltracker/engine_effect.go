@@ -94,6 +94,12 @@ type removeJobFromKernel struct {
 
 func (removeJobFromKernel) sealedEngineEffect() {}
 
+type deleteExpiredCgroupsFromKernel struct {
+	Cgroups []cgroupPurgeCandidate
+}
+
+func (deleteExpiredCgroupsFromKernel) sealedEngineEffect() {}
+
 func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []engineEffect) {
 	for _, effect := range effects {
 		switch value := effect.(type) {
@@ -166,6 +172,13 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 			if value.Reply != nil {
 				value.Reply <- err
 			}
+		case deleteExpiredCgroupsFromKernel:
+			err := engine.deleteCgroupKernelMapEntries(ctx, cgroupIDsForPurge(value.Cgroups))
+			if err == nil {
+				// Only drop userspace attribution after the kernel map delete
+				// succeeds; otherwise the next purge tick can retry.
+				engine.jobTracking.purgeRemovedCgroups(value.Cgroups)
+			}
 		case replyRegisterJob:
 			value.Reply <- registerJobReply{EventCh: value.EventCh, Err: value.Err}
 		case replyBindCgroup:
@@ -186,6 +199,17 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 	}
 }
 
+func cgroupIDsForPurge(cgroups []cgroupPurgeCandidate) []uint64 {
+	if len(cgroups) == 0 {
+		return nil
+	}
+	out := make([]uint64, 0, len(cgroups))
+	for _, cgroup := range cgroups {
+		out = append(out, cgroup.CgroupID)
+	}
+	return out
+}
+
 func (engine *KernelTracker) logEventDeliverySummary(ctx context.Context, jobID jobcontext.JobIdentity) {
 	for eventType, stats := range engine.jobTracking.jobEventDeliveryStats[jobID] {
 		if stats.Dropped == 0 && stats.SuppressedDuplicates == 0 {
@@ -204,17 +228,24 @@ func (engine *KernelTracker) logEventDeliverySummary(ctx context.Context, jobID 
 }
 
 func (engine *KernelTracker) deleteJobKernelMapEntries(ctx context.Context, cgroups []uint64, staging []string) error {
-	if err := engine.kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(ctx, cgroups); err != nil {
-		engine.logger.WarnContext(ctx, "bpf_tracked_cgroups_delete_failed",
-			"error", err,
-			"count", len(cgroups),
-		)
+	if err := engine.deleteCgroupKernelMapEntries(ctx, cgroups); err != nil {
 		return err
 	}
 	if err := engine.kernelIO.DeleteCgroupBasenamesFromStagingMap(ctx, staging); err != nil {
 		engine.logger.WarnContext(ctx, "bpf_staging_entries_delete_failed",
 			"error", err,
 			"count", len(staging),
+		)
+		return err
+	}
+	return nil
+}
+
+func (engine *KernelTracker) deleteCgroupKernelMapEntries(ctx context.Context, cgroups []uint64) error {
+	if err := engine.kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(ctx, cgroups); err != nil {
+		engine.logger.WarnContext(ctx, "bpf_tracked_cgroups_delete_failed",
+			"error", err,
+			"count", len(cgroups),
 		)
 		return err
 	}

@@ -2,6 +2,7 @@ package kerneltracker
 
 import (
 	"path/filepath"
+	"time"
 )
 
 type cgroupMkdirSample struct {
@@ -88,7 +89,7 @@ func handleCgroupAttachSample(state *jobTrackingState, sample cgroupAttachSample
 }
 
 func handleCgroupRmdirSample(state *jobTrackingState, sample cgroupRmdirSample) []engineEffect {
-	detached := state.removeTrackedCgroup(sample.CgroupID)
+	detached := state.markTrackedCgroupRemoved(sample.CgroupID, time.Now().UTC())
 	if !detached.Found {
 		return nil
 	}
