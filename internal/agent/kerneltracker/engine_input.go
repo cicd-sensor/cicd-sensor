@@ -1,6 +1,8 @@
 package kerneltracker
 
 import (
+	"time"
+
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 )
@@ -61,3 +63,12 @@ func (commandFindJobForCgroup) sealedEngineInput() {}
 type commandPurgeExpiredTrackingState struct{}
 
 func (commandPurgeExpiredTrackingState) sealedEngineInput() {}
+
+type commandReconcileCgroupLiveness struct {
+	ScanStartedAt  time.Time
+	CheckedAt      time.Time
+	LiveCgroupIDs  map[uint64]struct{}
+	StatErrorCount int
+}
+
+func (commandReconcileCgroupLiveness) sealedEngineInput() {}

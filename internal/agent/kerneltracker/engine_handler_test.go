@@ -365,6 +365,157 @@ func TestTransitionInvariants(t *testing.T) {
 			},
 		},
 		{
+			name: "cgroup liveness reconciliation notifies when final active cgroup is missing",
+			run: func(t *testing.T) {
+				state := destinationTrackedState(jobID, 42)
+				var logs bytes.Buffer
+				state.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+				effects := handleEngineInput(state, commandReconcileCgroupLiveness{
+					ScanStartedAt:  time.Now().UTC().Add(time.Second),
+					CheckedAt:      time.Now().UTC().Add(2 * time.Second),
+					LiveCgroupIDs:  map[uint64]struct{}{},
+					StatErrorCount: 1,
+				})
+				if !hasNotifyJobEndedEffect(effects) {
+					t.Fatalf("expected notifyJobEnded when final active cgroup is missing")
+				}
+				assertEffectOrder(t, effects,
+					notifyJobEnded{},
+				)
+				logOutput := logs.String()
+				for _, want := range []string{
+					"cgroup_liveness_reconciled",
+					`"removed_count":1`,
+					`"drained_job_count":1`,
+					`"live_cgroup_count":0`,
+					`"stat_error_count":1`,
+				} {
+					if !strings.Contains(logOutput, want) {
+						t.Fatalf("reconciliation log = %s, want to contain %s", logOutput, want)
+					}
+				}
+			},
+		},
+		{
+			name: "cgroup liveness reconciliation is silent when nothing changes",
+			run: func(t *testing.T) {
+				state := destinationTrackedState(jobID, 42)
+				var logs bytes.Buffer
+				state.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+				effects := handleEngineInput(state, commandReconcileCgroupLiveness{
+					ScanStartedAt: time.Now().UTC().Add(time.Second),
+					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
+					LiveCgroupIDs: map[uint64]struct{}{42: {}},
+				})
+				if len(effects) != 0 {
+					t.Fatalf("live cgroup reconciliation emitted effects: %#v", effects)
+				}
+				if got := logs.String(); got != "" {
+					t.Fatalf("live cgroup reconciliation log = %s, want empty", got)
+				}
+			},
+		},
+		{
+			name: "cgroup rmdir then liveness scan keeps non-final removed cgroup pending",
+			run: func(t *testing.T) {
+				state := destinationTrackedState(jobID, 42, 84)
+				rmdirEffects := handleEngineInput(state, cgroupRmdirSample{CgroupID: 42})
+				if len(rmdirEffects) != 0 {
+					t.Fatalf("non-final rmdir emitted effects: %#v", rmdirEffects)
+				}
+
+				scanEffects := handleEngineInput(state, commandReconcileCgroupLiveness{
+					ScanStartedAt: time.Now().UTC().Add(time.Second),
+					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
+					LiveCgroupIDs: map[uint64]struct{}{84: {}},
+				})
+				if len(scanEffects) != 0 {
+					t.Fatalf("scan after non-final rmdir emitted effects: %#v", scanEffects)
+				}
+				if got := len(state.removedCgroupQueue); got != 1 {
+					t.Fatalf("removed cgroup queue length = %d, want 1", got)
+				}
+				if state.cgroupsByJob[jobID][42].State != trackedCgroupRemoved {
+					t.Fatalf("rmdir cgroup state = %v, want removed", state.cgroupsByJob[jobID][42].State)
+				}
+				if state.cgroupsByJob[jobID][84].State != trackedCgroupActive {
+					t.Fatalf("live cgroup state = %v, want active", state.cgroupsByJob[jobID][84].State)
+				}
+			},
+		},
+		{
+			name: "cgroup rmdir then liveness scan can drain remaining active cgroup",
+			run: func(t *testing.T) {
+				state := destinationTrackedState(jobID, 42, 84)
+				rmdirEffects := handleEngineInput(state, cgroupRmdirSample{CgroupID: 42})
+				if len(rmdirEffects) != 0 {
+					t.Fatalf("non-final rmdir emitted effects: %#v", rmdirEffects)
+				}
+
+				scanEffects := handleEngineInput(state, commandReconcileCgroupLiveness{
+					ScanStartedAt: time.Now().UTC().Add(time.Second),
+					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
+					LiveCgroupIDs: map[uint64]struct{}{},
+				})
+				if !hasNotifyJobEndedEffect(scanEffects) {
+					t.Fatalf("expected scan to notify when remaining active cgroup is missing")
+				}
+				assertEffectOrder(t, scanEffects,
+					notifyJobEnded{},
+				)
+				if got := len(state.removedCgroupQueue); got != 2 {
+					t.Fatalf("removed cgroup queue length = %d, want 2", got)
+				}
+			},
+		},
+		{
+			name: "cgroup liveness scan then rmdir can drain remaining active cgroup",
+			run: func(t *testing.T) {
+				state := destinationTrackedState(jobID, 42, 84)
+				scanEffects := handleEngineInput(state, commandReconcileCgroupLiveness{
+					ScanStartedAt: time.Now().UTC().Add(time.Second),
+					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
+					LiveCgroupIDs: map[uint64]struct{}{84: {}},
+				})
+				if len(scanEffects) != 0 {
+					t.Fatalf("non-final scan emitted effects: %#v", scanEffects)
+				}
+
+				rmdirEffects := handleEngineInput(state, cgroupRmdirSample{CgroupID: 84})
+				if !hasNotifyJobEndedEffect(rmdirEffects) {
+					t.Fatalf("expected rmdir to notify when remaining active cgroup is removed")
+				}
+				assertEffectOrder(t, rmdirEffects,
+					notifyJobEnded{},
+				)
+				if got := len(state.removedCgroupQueue); got != 2 {
+					t.Fatalf("removed cgroup queue length = %d, want 2", got)
+				}
+			},
+		},
+		{
+			name: "cgroup liveness scan after final rmdir does not notify twice",
+			run: func(t *testing.T) {
+				state := destinationTrackedState(jobID, 42)
+				rmdirEffects := handleEngineInput(state, cgroupRmdirSample{CgroupID: 42})
+				if !hasNotifyJobEndedEffect(rmdirEffects) {
+					t.Fatalf("expected rmdir to notify when final active cgroup is removed")
+				}
+
+				scanEffects := handleEngineInput(state, commandReconcileCgroupLiveness{
+					ScanStartedAt: time.Now().UTC().Add(time.Second),
+					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
+					LiveCgroupIDs: map[uint64]struct{}{},
+				})
+				if len(scanEffects) != 0 {
+					t.Fatalf("scan after final rmdir emitted effects: %#v", scanEffects)
+				}
+				if got := len(state.removedCgroupQueue); got != 1 {
+					t.Fatalf("removed cgroup queue length = %d, want 1", got)
+				}
+			},
+		},
+		{
 			name: "exit marks process as logically deleted",
 			run: func(t *testing.T) {
 				state := destinationTrackedState(jobID, 42)

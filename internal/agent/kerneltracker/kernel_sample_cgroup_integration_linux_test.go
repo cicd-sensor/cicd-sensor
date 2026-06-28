@@ -297,6 +297,68 @@ func TestLinuxKernelSampleCgroupFinalRmdirRemoveJobCleanup(t *testing.T) {
 	}
 }
 
+func TestLinuxKernelSampleCgroupLivenessReconciliation(t *testing.T) {
+	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	defer kernelIO.Close()
+
+	parentPID := int32(os.Getpid())
+	parentCgroupPath, err := currentCgroupPath(parentPID)
+	if err != nil {
+		t.Fatalf("currentCgroupPath: %v", err)
+	}
+
+	childName := fmt.Sprintf("cicd-sensor-liveness-%d", time.Now().UnixNano())
+	childPath := filepath.Join(parentCgroupPath, childName)
+	childFullPath := mustCgroupFSPath(t, cgroupRoot, childPath)
+	if err := os.Mkdir(childFullPath, 0o755); err != nil {
+		t.Fatalf("Mkdir(%q): %v", childFullPath, err)
+	}
+	cleanupChild := true
+	t.Cleanup(func() {
+		if cleanupChild {
+			_ = os.Remove(childFullPath)
+		}
+	})
+
+	childCgroupID, err := cgroupIDForPath(cgroupRoot, childPath)
+	if err != nil {
+		t.Fatalf("cgroupIDForPath(%q): %v", childPath, err)
+	}
+	liveSnapshot, err := scanLiveCgroupIDs(cgroupRoot)
+	if err != nil {
+		t.Fatalf("scanLiveCgroupIDs live child: %v", err)
+	}
+	if _, ok := liveSnapshot.LiveCgroupIDs[childCgroupID]; !ok {
+		t.Fatalf("live child cgroup %d was not found by cgroup liveness scan", childCgroupID)
+	}
+
+	scanStartedAt := time.Now().UTC()
+	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	state := newJobTrackingState()
+	state.registerJob(jobID, defaultEventRecordBufferSize)
+	state.bindAt(jobID, childCgroupID, scanStartedAt.Add(-time.Second))
+
+	if err := os.Remove(childFullPath); err != nil {
+		t.Fatalf("Remove(%q): %v", childFullPath, err)
+	}
+	cleanupChild = false
+
+	missingSnapshot, err := scanLiveCgroupIDs(cgroupRoot)
+	if err != nil {
+		t.Fatalf("scanLiveCgroupIDs missing child: %v", err)
+	}
+	if _, ok := missingSnapshot.LiveCgroupIDs[childCgroupID]; ok {
+		t.Fatalf("removed child cgroup %d was still found by cgroup liveness scan", childCgroupID)
+	}
+
+	effects := handleEngineInput(state, commandReconcileCgroupLiveness{
+		ScanStartedAt: scanStartedAt,
+		CheckedAt:     time.Now().UTC(),
+		LiveCgroupIDs: missingSnapshot.LiveCgroupIDs,
+	})
+	assertEffectOrder(t, effects, notifyJobEnded{})
+}
+
 func TestLinuxKernelSampleCgroupAttachExternal(t *testing.T) {
 	kernelIO, cgroupRoot := newLinuxKernelIO(t)
 	defer kernelIO.Close()

@@ -100,3 +100,28 @@ func handleCgroupRmdirSample(state *jobTrackingState, sample cgroupRmdirSample) 
 
 	return nil
 }
+
+func handleCgroupLivenessReconciliation(state *jobTrackingState, command commandReconcileCgroupLiveness) []engineEffect {
+	removed := state.reconcileCgroupLiveness(command.LiveCgroupIDs, command.ScanStartedAt, command.CheckedAt)
+	if len(removed) == 0 {
+		return nil
+	}
+
+	var effects []engineEffect
+	drainedJobs := 0
+	for _, result := range removed {
+		if result.JobDrained {
+			drainedJobs++
+			effects = append(effects, notifyJobEnded{JobID: result.JobID, Reason: EndCgroupRmdir})
+		}
+	}
+	if state.logger != nil {
+		state.logger.Info("cgroup_liveness_reconciled",
+			"removed_count", len(removed),
+			"drained_job_count", drainedJobs,
+			"live_cgroup_count", len(command.LiveCgroupIDs),
+			"stat_error_count", command.StatErrorCount,
+		)
+	}
+	return effects
+}

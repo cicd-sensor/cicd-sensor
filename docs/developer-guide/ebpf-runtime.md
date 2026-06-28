@@ -50,6 +50,7 @@ The Docker proxy checks the peer process of the Docker create request and determ
 `cgroup_rmdir` does not immediately delete non-final cgroups from `tracked_cgroups`.
 KernelTracker marks them removed and purges them after the 10-second grace period plus the next purge tick, so in-flight samples that arrive after rmdir can still be attributed to the Job.
 If the removed cgroup is the Job's last active cgroup, KernelTracker ends the Job immediately and lets normal Job finalization clean up kernel and userspace state.
+KernelTracker also periodically scans the cgroup v2 root from userspace and reconciles active tracked cgroups, so a missed `cgroup_rmdir` sample does not leave stale cgroups or Jobs indefinitely.
 
 ## Event coverage
 

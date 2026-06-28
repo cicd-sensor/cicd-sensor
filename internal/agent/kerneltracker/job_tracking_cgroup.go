@@ -16,7 +16,11 @@ const (
 const cgroupRemovalGracePeriod = processExitGracePeriod
 
 type trackedCgroup struct {
-	State     trackedCgroupState
+	State trackedCgroupState
+	// TrackedAt is compared with async liveness scan start time. A cgroup
+	// first tracked after a scan started must not be removed by that scan's
+	// stale live-ID snapshot.
+	TrackedAt time.Time
 	RemovedAt time.Time
 }
 
@@ -44,6 +48,12 @@ type cgroupPurgeCandidate struct {
 // bind mirrors a cgroup -> Job attribution already accepted by KernelIO/eBPF.
 // It is non-overwriting so one cgroup cannot silently move between Jobs.
 func (s *jobTrackingState) bind(jobID jobcontext.JobIdentity, cgroupID uint64) bool {
+	return s.bindAt(jobID, cgroupID, time.Now().UTC())
+}
+
+// bindAt records when this userspace mirror first accepted the cgroup. Tests
+// and async reconciliation pass explicit times to make scan-race behavior clear.
+func (s *jobTrackingState) bindAt(jobID jobcontext.JobIdentity, cgroupID uint64, trackedAt time.Time) bool {
 	if owner, ok := s.jobByCgroup[cgroupID]; ok {
 		// Removed cgroups stay attributable during their grace period, but
 		// rmdir is a one-way lifecycle signal. Do not reactivate them.
@@ -59,6 +69,7 @@ func (s *jobTrackingState) bind(jobID jobcontext.JobIdentity, cgroupID uint64) b
 		s.cgroupsByJob[jobID][cgroupID] = cgroup
 	}
 	cgroup.State = trackedCgroupActive
+	cgroup.TrackedAt = trackedAt
 	cgroup.RemovedAt = time.Time{}
 	return true
 }
@@ -107,14 +118,45 @@ func (s *jobTrackingState) markTrackedCgroupRemoved(cgroupID uint64, now time.Ti
 
 	cgroup.State = trackedCgroupRemoved
 	cgroup.RemovedAt = now
-	// Keep the forward cgroup -> Job mapping until purge so late samples from
-	// the removed cgroup still resolve to the Job.
+	// cgroup_rmdir is the primary deletion signal. Periodic liveness
+	// reconciliation only uses this same path to compensate for a missed
+	// rmdir sample; it does not delete cgroups immediately. Keep the forward
+	// cgroup -> Job mapping until purge so late samples from the removed
+	// cgroup still resolve to the Job.
 	s.removedCgroupQueue = append(s.removedCgroupQueue, cgroupPurgeCandidate{JobID: jobID, CgroupID: cgroupID})
 	return cgroupDetachResult{
 		JobID:      jobID,
 		Found:      true,
 		JobDrained: s.activeCgroupCount(jobID) == 0,
 	}
+}
+
+// reconcileCgroupLiveness applies a filesystem scan result to loop-owned state.
+// The scan is a safety net for missed cgroup_rmdir samples: it detects active
+// tracked cgroups that no longer exist, then moves them into the same
+// removed-pending queue used by the rmdir handler. The scan itself runs outside
+// the engine loop; this method is the only place that interprets the live-ID
+// snapshot and mutates tracked cgroup ownership.
+func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroupIDs map[uint64]struct{}, scanStartedAt time.Time, checkedAt time.Time) []cgroupDetachResult {
+	var removed []cgroupDetachResult
+	for _, cgroups := range s.cgroupsByJob {
+		for cgroupID, cgroup := range cgroups {
+			if cgroup == nil || cgroup.State != trackedCgroupActive {
+				continue
+			}
+			if cgroup.TrackedAt.After(scanStartedAt) {
+				continue
+			}
+			if _, ok := liveCgroupIDs[cgroupID]; ok {
+				continue
+			}
+			result := s.markTrackedCgroupRemoved(cgroupID, checkedAt)
+			if result.Found {
+				removed = append(removed, result)
+			}
+		}
+	}
+	return removed
 }
 
 func (s *jobTrackingState) activeCgroupCount(jobID jobcontext.JobIdentity) int {

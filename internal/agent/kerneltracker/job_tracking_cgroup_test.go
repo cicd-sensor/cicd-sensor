@@ -12,8 +12,9 @@ func TestJobTrackingState_BindAndJobForCgroup(t *testing.T) {
 
 	s := newJobTrackingState()
 	jobID := newJob("100")
+	trackedAt := time.Unix(100, 0)
 
-	if !s.bind(jobID, 42) {
+	if !s.bindAt(jobID, 42, trackedAt) {
 		t.Fatalf("Bind on empty state must succeed")
 	}
 
@@ -23,6 +24,9 @@ func TestJobTrackingState_BindAndJobForCgroup(t *testing.T) {
 	}
 	if !testHasTrackedCgroups(s, jobID) {
 		t.Fatal("tracked cgroups must be present after Bind")
+	}
+	if got := s.cgroupsByJob[jobID][42].TrackedAt; !got.Equal(trackedAt) {
+		t.Fatalf("tracked at = %v, want %v", got, trackedAt)
 	}
 }
 
@@ -281,6 +285,138 @@ func TestJobTrackingState_BindDoesNotReactivateSameJobRemovedCgroup(t *testing.T
 	if got := len(s.removedCgroupQueue); got != 1 {
 		t.Fatalf("removed cgroup queue length = %d, want 1", got)
 	}
+}
+
+func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
+	t.Parallel()
+
+	scanStartedAt := time.Unix(200, 0)
+	checkedAt := time.Unix(210, 0)
+
+	t.Run("live active cgroup remains active", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
+
+		removed := s.reconcileCgroupLiveness(map[uint64]struct{}{42: {}}, scanStartedAt, checkedAt)
+		if len(removed) != 0 {
+			t.Fatalf("removed cgroups = %#v, want none", removed)
+		}
+		if state := s.cgroupsByJob[jobID][42].State; state != trackedCgroupActive {
+			t.Fatalf("cgroup state = %v, want active", state)
+		}
+	})
+
+	t.Run("missing non-final cgroup becomes removed pending", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
+		s.bindAt(jobID, 84, scanStartedAt.Add(-time.Second))
+
+		removed := s.reconcileCgroupLiveness(map[uint64]struct{}{84: {}}, scanStartedAt, checkedAt)
+		if len(removed) != 1 || removed[0].JobID != jobID || removed[0].JobDrained {
+			t.Fatalf("removed result = %#v, want one non-drained result for %v", removed, jobID)
+		}
+		if state := s.cgroupsByJob[jobID][42].State; state != trackedCgroupRemoved {
+			t.Fatalf("missing cgroup state = %v, want removed", state)
+		}
+		if got := s.cgroupsByJob[jobID][42].RemovedAt; !got.Equal(checkedAt) {
+			t.Fatalf("removed at = %v, want %v", got, checkedAt)
+		}
+		if owner, ok := s.jobForCgroup(42); !ok || owner != jobID {
+			t.Fatalf("removed pending owner = %v ok=%v, want %v true", owner, ok, jobID)
+		}
+	})
+
+	t.Run("missing final active cgroup drains job", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
+
+		removed := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
+		if len(removed) != 1 || removed[0].JobID != jobID || !removed[0].JobDrained {
+			t.Fatalf("removed result = %#v, want one drained result for %v", removed, jobID)
+		}
+	})
+
+	t.Run("all active cgroups missing drains once", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
+		s.bindAt(jobID, 84, scanStartedAt.Add(-time.Second))
+
+		removed := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
+		if len(removed) != 2 {
+			t.Fatalf("removed result count = %d, want 2: %#v", len(removed), removed)
+		}
+		drained := 0
+		for _, result := range removed {
+			if result.JobID != jobID {
+				t.Fatalf("removed result job = %v, want %v", result.JobID, jobID)
+			}
+			if result.JobDrained {
+				drained++
+			}
+		}
+		if drained != 1 {
+			t.Fatalf("drained result count = %d, want 1: %#v", drained, removed)
+		}
+	})
+
+	t.Run("removed pending cgroup is ignored", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
+		s.markTrackedCgroupRemoved(42, checkedAt.Add(-time.Second))
+
+		removed := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
+		if len(removed) != 0 {
+			t.Fatalf("removed result = %#v, want none", removed)
+		}
+		if got := len(s.removedCgroupQueue); got != 1 {
+			t.Fatalf("removed cgroup queue length = %d, want 1", got)
+		}
+	})
+
+	t.Run("cgroup tracked after scan start is skipped", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bindAt(jobID, 42, scanStartedAt.Add(time.Second))
+
+		removed := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
+		if len(removed) != 0 {
+			t.Fatalf("removed result = %#v, want none", removed)
+		}
+		if state := s.cgroupsByJob[jobID][42].State; state != trackedCgroupActive {
+			t.Fatalf("new cgroup state = %v, want active", state)
+		}
+	})
+
+	t.Run("stale scan after remove job is no-op", func(t *testing.T) {
+		t.Parallel()
+
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
+		s.removeJob(jobID)
+
+		removed := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
+		if len(removed) != 0 {
+			t.Fatalf("removed result = %#v, want none", removed)
+		}
+	})
 }
 
 func TestJobTrackingState_StageCgroupBasename_RejectsCrossJobOwner(t *testing.T) {
