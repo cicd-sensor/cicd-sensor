@@ -1,3 +1,8 @@
+---
+paths:
+  - "work_docs/**"
+---
+
 # Design Doc Rules
 
 Use a Design Doc for large feature additions or substantial behavior changes before implementation. Keep it useful as a local working document, not a ceremony.
