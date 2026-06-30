@@ -39,6 +39,15 @@ func TestCloseZeroValueKernelIO(t *testing.T) {
 	}
 }
 
+func TestCloseNilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var kernelIO *LinuxKernelIO
+	if err := kernelIO.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+}
+
 func TestReadRingbufDropCountRequiresMap(t *testing.T) {
 	t.Parallel()
 

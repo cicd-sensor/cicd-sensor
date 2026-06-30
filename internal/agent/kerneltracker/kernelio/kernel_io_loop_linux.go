@@ -148,6 +148,10 @@ func (kernelIO *LinuxKernelIO) readRingbufDropCount() (uint64, error) {
 
 // Close releases the ring buffer reader, tracing links, and loaded objects.
 func (kernelIO *LinuxKernelIO) Close() error {
+	if kernelIO == nil {
+		return nil
+	}
+
 	var firstErr error
 
 	if kernelIO.cancelLoop != nil {

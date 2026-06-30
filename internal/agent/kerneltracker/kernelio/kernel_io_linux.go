@@ -56,12 +56,15 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 
 	// NewLinux fails fast on any attach/open error, but earlier steps may
 	// already have loaded objects or attached links. Roll those back here
-	// because no caller-owned LinuxKernelIO exists on failure.
+	// because no caller-owned LinuxKernelIO exists on failure. The error
+	// paths `return nil, err`, which nils the named return value, so hold a
+	// stable handle rather than closing kernelIO directly.
+	rollback := kernelIO
 	defer func() {
 		if err == nil {
 			return
 		}
-		_ = kernelIO.Close()
+		_ = rollback.Close()
 	}()
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
