@@ -120,18 +120,22 @@ type BPFProgramFileMoveSample struct {
 }
 
 type BPFProgramFileOpenSample struct {
-	_             structs.HostLayout
-	Kind          uint32
-	IsWrite       uint8
-	IsRead        uint8
-	PathTruncated uint8
-	Pad0          uint8
-	TsNs          uint64
-	CgroupId      uint64
-	StartBoottime uint64
-	Tgid          int32
-	Flags         uint32
-	Path          [1024]int8
+	_                 structs.HostLayout
+	Kind              uint32
+	IsWrite           uint8
+	IsRead            uint8
+	PathTruncated     uint8
+	ResolvedTruncated uint8
+	TsNs              uint64
+	CgroupId          uint64
+	StartBoottime     uint64
+	Tgid              int32
+	Flags             uint32
+	ResolvedOffset    uint16
+	Pad1              uint16
+	Path              [1024]int8
+	ResolvedPath      [1024]int8
+	_                 [4]byte
 }
 
 type BPFProgramFileRemoveSample struct {

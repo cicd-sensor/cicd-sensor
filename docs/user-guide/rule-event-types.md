@@ -220,11 +220,20 @@ Evaluates file open events.
 
 | field | Type | Example value | Meaning |
 | --- | --- | --- | --- |
-| `path` | string | `/home/runner/.npmrc`, `/workspace/.env` | Opened file path |
+| `path` | string | `/home/runner/.npmrc`, `/workspace/.env` | Opened file path (mount-aware; reflects a bind-mount alias if one is used) |
+| `resolved_path` | string | `/etc/cron.d/job`, `""` | Filesystem-rooted path from a `d_parent` walk. Populated only for writes (empty string otherwise). Unlike `path` it is not affected by bind-mount aliasing, so use it to match a protected write target. |
 | `is_read` | bool | `true` / `false` | True when read access is included |
 | `is_write` | bool | `true` / `false` | True when write access is included |
 | `flags` | int | `0`, `66` | Open flags |
 | `process` | object | `process.exec_path == "/bin/cat"` | Process that opened the file |
+
+`resolved_path` closes a detection blind spot: `path` comes from `bpf_d_path`, which
+reports the path the caller used — including a bind-mount alias such as
+`/tmp/x/job` for a file that is really `/etc/cron.d/job`. A write rule that only
+checks `path` can be evaded by writing through such an alias. `resolved_path`
+reconstructs the location from the directory tree, so it always shows
+`/etc/cron.d/job`. It is only computed for writes to keep the read path cheap; it
+is the empty string for reads.
 
 Credential file read:
 
@@ -267,6 +276,7 @@ Example event value:
   },
   "payload": {
     "path": "/home/runner/.npmrc",
+    "resolved_path": "",
     "is_read": true,
     "is_write": false,
     "flags": 0

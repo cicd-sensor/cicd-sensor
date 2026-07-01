@@ -79,6 +79,8 @@ message FileOpenPayload {
   bool is_write = 2 [json_name = "is_write"];
   bool is_read = 3 [json_name = "is_read"];
   uint64 flags = 4 [json_name = "flags"];
+  // Filesystem-rooted (bind-mount-alias-resistant) path, set only for writes.
+  string resolved_path = 5 [json_name = "resolved_path"];
 }
 
 message FileRemovePayload {

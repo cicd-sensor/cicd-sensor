@@ -63,6 +63,9 @@ type CELInputEvent struct {
 	IsWrite bool
 	IsRead  bool
 	Flags   int64
+	// ResolvedPath is the filesystem-rooted d_parent-walk path for writes;
+	// empty for reads. Bind-mount-alias-resistant counterpart of Path.
+	ResolvedPath string
 	// file_remove / file_move / file_link.
 	IsFolder     bool
 	FromPath     string

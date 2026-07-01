@@ -637,11 +637,13 @@ func (x *UnixSocketConnectPayload) GetIsAbstract() bool {
 }
 
 type FileOpenPayload struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	IsWrite       bool                   `protobuf:"varint,2,opt,name=is_write,proto3" json:"is_write,omitempty"`
-	IsRead        bool                   `protobuf:"varint,3,opt,name=is_read,proto3" json:"is_read,omitempty"`
-	Flags         uint64                 `protobuf:"varint,4,opt,name=flags,proto3" json:"flags,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Path    string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	IsWrite bool                   `protobuf:"varint,2,opt,name=is_write,proto3" json:"is_write,omitempty"`
+	IsRead  bool                   `protobuf:"varint,3,opt,name=is_read,proto3" json:"is_read,omitempty"`
+	Flags   uint64                 `protobuf:"varint,4,opt,name=flags,proto3" json:"flags,omitempty"`
+	// Filesystem-rooted (bind-mount-alias-resistant) path, set only for writes.
+	ResolvedPath  string `protobuf:"bytes,5,opt,name=resolved_path,proto3" json:"resolved_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -702,6 +704,13 @@ func (x *FileOpenPayload) GetFlags() uint64 {
 		return x.Flags
 	}
 	return 0
+}
+
+func (x *FileOpenPayload) GetResolvedPath() string {
+	if x != nil {
+		return x.ResolvedPath
+	}
+	return ""
 }
 
 type FileRemovePayload struct {
@@ -993,12 +1002,13 @@ const file_cicd_sensor_log_v1beta1_common_proto_rawDesc = "" +
 	"\x18UnixSocketConnectPayload\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12 \n" +
 	"\vsocket_type\x18\x02 \x01(\tR\vsocket_type\x12 \n" +
-	"\vis_abstract\x18\x03 \x01(\bR\vis_abstract\"q\n" +
+	"\vis_abstract\x18\x03 \x01(\bR\vis_abstract\"\x97\x01\n" +
 	"\x0fFileOpenPayload\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1a\n" +
 	"\bis_write\x18\x02 \x01(\bR\bis_write\x12\x18\n" +
 	"\ais_read\x18\x03 \x01(\bR\ais_read\x12\x14\n" +
-	"\x05flags\x18\x04 \x01(\x04R\x05flags\"E\n" +
+	"\x05flags\x18\x04 \x01(\x04R\x05flags\x12$\n" +
+	"\rresolved_path\x18\x05 \x01(\tR\rresolved_path\"E\n" +
 	"\x11FileRemovePayload\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1c\n" +
 	"\tis_folder\x18\x02 \x01(\bR\tis_folder\"I\n" +

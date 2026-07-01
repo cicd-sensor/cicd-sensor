@@ -279,8 +279,14 @@ func (e *Env) EnvForType(eventType jobevent.Type) (*cel.Env, error) {
 			cel.Variable("is_abstract", cel.BoolType),
 		)
 	case jobevent.FileOpen:
+		// path: mount-aware path from bpf_d_path (what the caller opened,
+		// including any bind-mount alias).
+		// resolved_path: filesystem-rooted d_parent walk, populated only for
+		// writes. Empty string for reads. Use it to match a protected
+		// location regardless of a bind-mount alias (issue #48 "Bypass B").
 		opts = append(opts,
 			cel.Variable("path", cel.StringType),
+			cel.Variable("resolved_path", cel.StringType),
 			cel.Variable("is_write", cel.BoolType),
 			cel.Variable("is_read", cel.BoolType),
 			cel.Variable("flags", cel.IntType),
