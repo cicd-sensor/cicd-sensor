@@ -18,6 +18,53 @@ rule_sets:
         - "restart"
         - "start"
 
+      # Cron persistence locations. Matched with contains() so that any file
+      # created, renamed, or linked inside these directories is covered.
+      cron_persistence_dirs:
+        - "/etc/cron.d/"
+        - "/etc/cron.hourly/"
+        - "/etc/cron.daily/"
+        - "/etc/cron.weekly/"
+        - "/etc/cron.monthly/"
+        - "/var/spool/cron/"
+
+      cron_persistence_files:
+        - "/etc/crontab"
+
+      # Shell startup files (system-wide and per-user). System directories use
+      # contains(); per-user dotfiles use endsWith() against the home path.
+      shell_rc_dirs:
+        - "/etc/profile.d/"
+
+      shell_rc_files:
+        - "/etc/profile"
+        - "/etc/bashrc"
+        - "/etc/bash.bashrc"
+        - "/etc/zshrc"
+        - "/etc/zshenv"
+        - "/etc/zsh/zshrc"
+        - "/etc/zsh/zshenv"
+        - "/etc/zsh/zprofile"
+
+      shell_rc_suffixes:
+        - "/.bashrc"
+        - "/.bash_profile"
+        - "/.bash_login"
+        - "/.bash_logout"
+        - "/.profile"
+        - "/.zshrc"
+        - "/.zshenv"
+        - "/.zprofile"
+        - "/.zlogin"
+
+      # Dynamic-linker preload / config locations.
+      ld_preload_dirs:
+        - "/etc/ld.so.conf.d/"
+
+      ld_preload_files:
+        - "/etc/ld.so.preload"
+        - "/etc/ld.so.conf"
+
     rules:
       - rule_id: systemctl_user_persistence_operation
         rule_name: "Supply-chain: user systemd persistence operation"
@@ -98,6 +145,216 @@ rule_sets:
           process.ancestors.exists(a,
             list.python_suffixes.exists(p, a.exec_path.endsWith(p))
           )
+        action: detect
+        tags:
+          mitre_tactic: persistence
+
+      # --- Cron persistence -------------------------------------------------
+      # cron_write/_move/_link cover the three ways a payload reaches a
+      # protected cron location: writing it open(O_WRONLY), renaming a file
+      # already staged elsewhere (mv), or linking it in (ln). A rule bound to
+      # file_open alone is bypassed by the move/link primitives, so each
+      # protected location is monitored across all three event types.
+      - rule_id: cron_write
+        rule_name: "Supply-chain: cron persistence file write"
+        description: |
+          What:
+            Detects writes to system cron locations (/etc/cron.*, /etc/crontab, /var/spool/cron).
+          Why:
+            Dropping a job into a cron directory persists payload execution outside the CI job lineage.
+          Notes:
+            Package installs (dpkg/rpm) can legitimately write /etc/cron.d entries; correlate with payload download or unexpected ancestry.
+        event_type: file_open
+        condition: |
+          is_write &&
+          (
+            list.cron_persistence_dirs.exists(d, path.contains(d)) ||
+            list.cron_persistence_files.exists(f, path == f)
+          )
+        action: detect
+        tags:
+          mitre_tactic: persistence
+
+      - rule_id: cron_move
+        rule_name: "Supply-chain: cron persistence file move (rename bypass)"
+        description: |
+          What:
+            Detects a rename whose destination is a system cron location.
+          Why:
+            Renaming a staged file into /etc/cron.d (mv) reaches the same persistence as a direct write but emits file_move instead of file_open, evading write-only rules.
+          Notes:
+            Inspect the source path and the moved content; package tooling rarely renames into cron directories.
+        event_type: file_move
+        condition: |
+          list.cron_persistence_dirs.exists(d, to_path.contains(d)) ||
+          list.cron_persistence_files.exists(f, to_path == f)
+        action: detect
+        tags:
+          mitre_tactic: persistence
+
+      - rule_id: cron_link
+        rule_name: "Supply-chain: cron persistence file link (link bypass)"
+        description: |
+          What:
+            Detects a hardlink or symlink created inside a system cron location.
+          Why:
+            Linking a file into /etc/cron.d (ln) installs cron persistence without a write to the protected path, evading write-only rules.
+          Notes:
+            Review the link target; legitimate workflows seldom link into cron directories.
+        event_type: file_link
+        condition: |
+          list.cron_persistence_dirs.exists(d, created_path.contains(d)) ||
+          list.cron_persistence_files.exists(f, created_path == f)
+        action: detect
+        tags:
+          mitre_tactic: persistence
+
+      # --- Shell startup persistence ---------------------------------------
+      - rule_id: shell_rc_write
+        rule_name: "Supply-chain: shell startup file write"
+        description: |
+          What:
+            Detects writes to shell startup files (/etc/profile, /etc/profile.d, *.bashrc, *.zshrc, *.profile, ...).
+          Why:
+            Shell rc files execute on every interactive/login shell, persisting a payload across sessions and jobs.
+          Notes:
+            Toolchain installers (nvm, rustup, conda, pyenv) commonly append to ~/.bashrc or ~/.profile; tune with an exception for the specific installer if needed.
+        event_type: file_open
+        condition: |
+          is_write &&
+          (
+            list.shell_rc_dirs.exists(d, path.contains(d)) ||
+            list.shell_rc_files.exists(f, path == f) ||
+            list.shell_rc_suffixes.exists(s, path.endsWith(s))
+          )
+        action: detect
+        tags:
+          mitre_tactic: persistence
+
+      - rule_id: shell_rc_move
+        rule_name: "Supply-chain: shell startup file move (rename bypass)"
+        description: |
+          What:
+            Detects a rename whose destination is a shell startup file.
+          Why:
+            Renaming a staged file over ~/.bashrc or into /etc/profile.d reaches shell-rc persistence while emitting file_move instead of file_open.
+          Notes:
+            Inspect the source path and content; correlate with unexpected ancestry.
+        event_type: file_move
+        condition: |
+          list.shell_rc_dirs.exists(d, to_path.contains(d)) ||
+          list.shell_rc_files.exists(f, to_path == f) ||
+          list.shell_rc_suffixes.exists(s, to_path.endsWith(s))
+        action: detect
+        tags:
+          mitre_tactic: persistence
+
+      - rule_id: shell_rc_link
+        rule_name: "Supply-chain: shell startup file link (link bypass)"
+        description: |
+          What:
+            Detects a hardlink or symlink created at a shell startup file path.
+          Why:
+            Linking a payload into a shell rc path installs persistence without writing the protected path, evading write-only rules.
+          Notes:
+            Review the link target before treating it as benign.
+        event_type: file_link
+        condition: |
+          list.shell_rc_dirs.exists(d, created_path.contains(d)) ||
+          list.shell_rc_files.exists(f, created_path == f) ||
+          list.shell_rc_suffixes.exists(s, created_path.endsWith(s))
+        action: detect
+        tags:
+          mitre_tactic: persistence
+
+      # --- Dynamic linker preload (defense evasion) ------------------------
+      - rule_id: ld_so_preload_write
+        rule_name: "Supply-chain: dynamic linker preload write"
+        description: |
+          What:
+            Detects writes to /etc/ld.so.preload, /etc/ld.so.conf, or /etc/ld.so.conf.d.
+          Why:
+            ld.so.preload forces a shared object into every dynamically linked process — a classic library-injection persistence and defense-evasion primitive.
+          Notes:
+            These files are almost never written during normal CI; investigate any match.
+        event_type: file_open
+        condition: |
+          is_write &&
+          (
+            list.ld_preload_files.exists(f, path == f) ||
+            list.ld_preload_dirs.exists(d, path.contains(d))
+          )
+        action: detect
+        tags:
+          mitre_tactic: defense-evasion,persistence
+
+      - rule_id: ld_so_preload_move
+        rule_name: "Supply-chain: dynamic linker preload move (rename bypass)"
+        description: |
+          What:
+            Detects a rename whose destination is an ld.so preload/config path.
+          Why:
+            Renaming a staged file over /etc/ld.so.preload reaches the same injection primitive while emitting file_move instead of file_open.
+          Notes:
+            Investigate any match; legitimate tooling does not rename into these paths.
+        event_type: file_move
+        condition: |
+          list.ld_preload_files.exists(f, to_path == f) ||
+          list.ld_preload_dirs.exists(d, to_path.contains(d))
+        action: detect
+        tags:
+          mitre_tactic: defense-evasion,persistence
+
+      - rule_id: ld_so_preload_link
+        rule_name: "Supply-chain: dynamic linker preload link (link bypass)"
+        description: |
+          What:
+            Detects a hardlink or symlink created at an ld.so preload/config path.
+          Why:
+            Linking a controlled file into /etc/ld.so.preload installs library injection without writing the protected path, evading write-only rules.
+          Notes:
+            Investigate any match.
+        event_type: file_link
+        condition: |
+          list.ld_preload_files.exists(f, created_path == f) ||
+          list.ld_preload_dirs.exists(d, created_path.contains(d))
+        action: detect
+        tags:
+          mitre_tactic: defense-evasion,persistence
+
+      # --- User systemd service (close the same move/link gap) -------------
+      # user_systemd_service_write (above) is file_open-only and is bypassed
+      # by the same rename/link primitives; these cover the gap.
+      - rule_id: user_systemd_service_move
+        rule_name: "Supply-chain: user systemd service move (rename bypass)"
+        description: |
+          What:
+            Detects a rename whose destination is a user systemd service unit.
+          Why:
+            Renaming a staged .service into ~/.config/systemd/user persists payload execution while emitting file_move instead of file_open.
+          Notes:
+            Inspect the unit content and the writing process ancestry.
+        event_type: file_move
+        condition: |
+          to_path.endsWith(".service") &&
+          list.user_systemd_fragments.exists(p, to_path.contains(p))
+        action: detect
+        tags:
+          mitre_tactic: persistence
+
+      - rule_id: user_systemd_service_link
+        rule_name: "Supply-chain: user systemd service link (link bypass)"
+        description: |
+          What:
+            Detects a hardlink or symlink created at a user systemd service unit path.
+          Why:
+            Linking a .service into ~/.config/systemd/user installs persistence without writing the protected path, evading write-only rules.
+          Notes:
+            Inspect the link target and unit content.
+        event_type: file_link
+        condition: |
+          created_path.endsWith(".service") &&
+          list.user_systemd_fragments.exists(p, created_path.contains(p))
         action: detect
         tags:
           mitre_tactic: persistence
