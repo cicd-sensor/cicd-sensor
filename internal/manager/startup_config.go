@@ -40,11 +40,12 @@ type SinksConfig map[string]SinkConfig
 
 // SinkConfig describes one physical manager output destination.
 type SinkConfig struct {
-	Type      string `yaml:"type"`
-	URI       string `yaml:"uri,omitempty"`
-	Region    string `yaml:"region,omitempty"`
-	ProjectID string `yaml:"project_id,omitempty"`
-	Topic     string `yaml:"topic,omitempty"`
+	Type         string `yaml:"type"`
+	URI          string `yaml:"uri,omitempty"`
+	Region       string `yaml:"region,omitempty"`
+	UsePathStyle bool   `yaml:"use_path_style,omitempty"`
+	ProjectID    string `yaml:"project_id,omitempty"`
+	Topic        string `yaml:"topic,omitempty"`
 }
 
 // LogsConfig maps a log type to one sink name.
@@ -149,6 +150,9 @@ func validateGCSSink(name string, sc SinkConfig) error {
 	if sc.Region != "" || sc.ProjectID != "" || sc.Topic != "" {
 		return fmt.Errorf("sinks.%s: region, project_id, and topic are not valid for google_storage", name)
 	}
+	if sc.UsePathStyle {
+		return fmt.Errorf("sinks.%s: use_path_style is only valid for aws_s3", name)
+	}
 	return nil
 }
 
@@ -161,6 +165,9 @@ func validatePubSubSink(name string, sc SinkConfig) error {
 	}
 	if sc.Region != "" || sc.URI != "" {
 		return fmt.Errorf("sinks.%s: region and uri are not valid for google_pubsub", name)
+	}
+	if sc.UsePathStyle {
+		return fmt.Errorf("sinks.%s: use_path_style is only valid for aws_s3", name)
 	}
 	return nil
 }
