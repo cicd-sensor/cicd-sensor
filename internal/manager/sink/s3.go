@@ -36,7 +36,9 @@ const (
 
 // NewS3 creates an S3-backed Sink using the AWS default credential chain.
 // uri must be an s3:// URI; any path component becomes the object key prefix.
-func NewS3(ctx context.Context, uri, region string) (Sink, error) {
+// When usePathStyle is true the client uses path-style addressing
+// (e.g. endpoint/bucket) instead of virtual-hosted-style (bucket.endpoint).
+func NewS3(ctx context.Context, uri, region string, usePathStyle bool) (Sink, error) {
 	bucket, prefix, err := parseObjectURI("s3", uri)
 	if err != nil {
 		return nil, fmt.Errorf("invalid s3 uri: %w", err)
@@ -49,8 +51,14 @@ func NewS3(ctx context.Context, uri, region string) (Sink, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
 	}
+	var s3Opts []func(*s3.Options)
+	if usePathStyle {
+		s3Opts = append(s3Opts, func(o *s3.Options) {
+			o.UsePathStyle = true
+		})
+	}
 	return &s3Sink{
-		client: s3.NewFromConfig(cfg),
+		client: s3.NewFromConfig(cfg, s3Opts...),
 		bucket: bucket,
 		prefix: prefix,
 	}, nil

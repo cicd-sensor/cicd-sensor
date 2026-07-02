@@ -91,7 +91,7 @@ func BuildOutputs(ctx context.Context, logger *slog.Logger, sinks SinksConfig, l
 func buildNamedSink(ctx context.Context, logger *slog.Logger, sc SinkConfig) (sink.Sink, error) {
 	switch sc.Type {
 	case "aws_s3":
-		return sink.NewS3(ctx, sc.URI, sc.Region)
+		return sink.NewS3(ctx, sc.URI, sc.Region, sc.UsePathStyle)
 	case "google_storage":
 		return sink.NewGCS(ctx, sc.URI)
 	case "google_pubsub":

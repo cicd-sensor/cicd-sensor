@@ -216,11 +216,11 @@ Use this mapping to choose patterns such as storing all logs in one GCS destinat
 
 ### Sink settings
 
-| Sink type | Required settings | Notes |
-| --- | --- | --- |
-| `aws_s3` | `uri`, `region` | `uri` is an `s3://...` object-storage URI. Include any desired object key path in the URI. |
-| `google_storage` | `uri` | `uri` is a `gs://...` object-storage URI. Include any desired object key path in the URI. |
-| `google_pubsub` | `project_id`, `topic` | Publishes one plain JSON record per message. |
+| Sink type | Required settings | Optional settings | Notes |
+| --- | --- | --- | --- |
+| `aws_s3` | `uri`, `region` | `use_path_style` | `uri` is an `s3://...` object-storage URI. Include any desired object key path in the URI. Set `use_path_style: true` to use path-style addressing (`endpoint/bucket`) instead of virtual-hosted-style (`bucket.endpoint`). |
+| `google_storage` | `uri` | | `uri` is a `gs://...` object-storage URI. Include any desired object key path in the URI. |
+| `google_pubsub` | `project_id`, `topic` | | Publishes one plain JSON record per message. |
 
 Store logs in GCS:
 

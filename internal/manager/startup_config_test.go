@@ -247,6 +247,45 @@ sinks:
 			wantErr: "sinks.s3-prod.region is required for aws_s3",
 		},
 		{
+			name: "s3_sink_use_path_style",
+			body: `
+sinks:
+  s3-compat:
+    type: aws_s3
+    uri: s3://my-bucket/logs/
+    region: us-east-1
+    use_path_style: true
+logs:
+  detection:
+    sink: s3-compat
+`,
+			assertCfg: func(t *testing.T, cfg StartupConfig) {
+				t.Helper()
+				if !cfg.Sinks["s3-compat"].UsePathStyle {
+					t.Fatal("use_path_style: got false, want true")
+				}
+			},
+		},
+		{
+			name: "s3_sink_use_path_style_default_false",
+			body: `
+sinks:
+  s3-prod:
+    type: aws_s3
+    uri: s3://my-bucket/logs/
+    region: us-east-1
+logs:
+  detection:
+    sink: s3-prod
+`,
+			assertCfg: func(t *testing.T, cfg StartupConfig) {
+				t.Helper()
+				if cfg.Sinks["s3-prod"].UsePathStyle {
+					t.Fatal("use_path_style: got true, want false")
+				}
+			},
+		},
+		{
 			name: "s3_sink_with_pubsub_fields",
 			body: `
 sinks:
@@ -278,6 +317,17 @@ sinks:
 			wantErr: "sinks.gcs-prod.uri must start with gs://",
 		},
 		{
+			name: "gcs_sink_with_path_style",
+			body: `
+sinks:
+  gcs-prod:
+    type: google_storage
+    uri: gs://bucket/logs
+    use_path_style: true
+`,
+			wantErr: "sinks.gcs-prod: use_path_style is only valid for aws_s3",
+		},
+		{
 			name: "gcs_sink_with_pubsub_fields",
 			body: `
 sinks:
@@ -307,6 +357,18 @@ sinks:
     project_id: project
 `,
 			wantErr: "sinks.pubsub-detect.topic is required for google_pubsub",
+		},
+		{
+			name: "pubsub_sink_with_path_style",
+			body: `
+sinks:
+  pubsub-detect:
+    type: google_pubsub
+    project_id: project
+    topic: detections
+    use_path_style: true
+`,
+			wantErr: "sinks.pubsub-detect: use_path_style is only valid for aws_s3",
 		},
 		{
 			name: "pubsub_sink_with_object_storage_fields",
