@@ -8,24 +8,27 @@ import (
 )
 
 type fileOpenSample struct {
-	Identity      processIdentity
-	CgroupID      uint64
-	TsNs          uint64
-	Path          string
-	Flags         uint32
-	IsWrite       bool
-	IsRead        bool
-	PathTruncated bool
+	Identity          processIdentity
+	CgroupID          uint64
+	TsNs              uint64
+	Path              string
+	ResolvedPath      string
+	Flags             uint32
+	IsWrite           bool
+	IsRead            bool
+	PathTruncated     bool
+	ResolvedTruncated bool
 }
 
 func (fileOpenSample) sealedEngineInput()         {}
 func (fileOpenSample) sealedDecodedKernelSample() {}
 
 const (
-	fileOpenPayloadPath    = "path"
-	fileOpenPayloadIsRead  = "is_read"
-	fileOpenPayloadIsWrite = "is_write"
-	fileOpenPayloadFlags   = "flags"
+	fileOpenPayloadPath         = "path"
+	fileOpenPayloadResolvedPath = "resolved_path"
+	fileOpenPayloadIsRead       = "is_read"
+	fileOpenPayloadIsWrite      = "is_write"
+	fileOpenPayloadFlags        = "flags"
 )
 
 // fileOpenRecordPayload is what file_open dedup reads from EventRecord.Payload.
@@ -123,6 +126,12 @@ func handleFileOpenSample(state *jobTrackingState, sample fileOpenSample) []engi
 			fileOpenPayloadFlags:   int(sample.Flags),
 		},
 		Tags: map[string]string{},
+	}
+	// resolved_path is the bind-mount-alias-resistant path, emitted only for
+	// writes (issue #48 "Bypass B"). Omit it entirely for reads and when the
+	// walk produced nothing, so read events stay unchanged.
+	if sample.ResolvedPath != "" {
+		record.Payload[fileOpenPayloadResolvedPath] = sample.ResolvedPath
 	}
 	if sample.PathTruncated {
 		record.Tags["truncated"] = "path"

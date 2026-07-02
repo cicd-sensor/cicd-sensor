@@ -39,24 +39,31 @@ SEC("fentry/security_file_open")
 int BPF_PROG(handle_security_file_open, struct file *file)
 {
     struct path_scratch *scratch;
+    struct path_scratch *walk_scratch;
+    struct dentry *file_dentry;
     __u64 cgroup_id = current_cgroup_id();
     __u32 flags;
+    __u8 is_write;
 
     if (!file || !cgroup_is_tracked(cgroup_id))
         return 0;
 
     scratch = copy_bpf_d_path_to_scratch(&file->f_path);
     flags = BPF_CORE_READ(file, f_flags);
+    is_write = file_is_write(flags);
     RESERVE_SAMPLE(sample, struct file_open_sample, return 0);
 
     sample->kind = SAMPLE_KIND_FILE_OPEN;
     sample->is_write = 0;
     sample->is_read = 0;
     sample->path_truncated = 0;
-    sample->_pad0 = 0;
+    sample->resolved_truncated = 0;
+    // Default to the "empty path" sentinel; only writes fill resolved_path.
+    sample->resolved_offset = FILE_PATH_LEN - 1;
+    sample->_pad1 = 0;
     SET_TASK_HEADER(sample, cgroup_id);
     sample->flags = flags;
-    sample->is_write = file_is_write(flags);
+    sample->is_write = is_write;
     sample->is_read = file_is_read(flags);
 
     if (scratch) {
@@ -65,6 +72,28 @@ int BPF_PROG(handle_security_file_open, struct file *file)
         // Treat unavailable or overlong paths as incomplete, never as exact.
         zero_path_bytes(sample->path);
         sample->path_truncated = 1;
+    }
+
+    // Canonical, mount-independent path for writes only (issue #48 "Bypass B"):
+    // bpf_d_path above is mount-aware and reports a bind-mount alias, so a write
+    // reaching a protected location through an alias would evade path rules. A
+    // pure d_parent walk yields the filesystem-rooted path. Gated on is_write to
+    // keep the read-heavy hot path cheap. Reuse the per-CPU scratch now that its
+    // d_path contents have been copied into sample->path.
+    if (is_write) {
+        __u32 scratch_key = 0;
+        walk_scratch = bpf_map_lookup_elem(&path_scratch, &scratch_key);
+        file_dentry = BPF_CORE_READ(file, f_path.dentry);
+        if (walk_scratch && file_dentry) {
+            copy_dentry_fallback_path_to_sample(walk_scratch, sample->resolved_path,
+                                                &sample->resolved_offset,
+                                                &sample->resolved_truncated, file_dentry);
+        } else {
+            zero_path_bytes(sample->resolved_path);
+            sample->resolved_truncated = 1;
+        }
+    } else {
+        zero_path_bytes(sample->resolved_path);
     }
 
     bpf_ringbuf_submit(sample, 0);

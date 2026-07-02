@@ -113,13 +113,25 @@ struct file_open_sample {
     __u8 is_write;
     __u8 is_read;
     __u8 path_truncated;
-    __u8 _pad0;
+    // 1 = the dentry-walk resolved_path is incomplete. Only meaningful when
+    // is_write; reads leave resolved_path empty and this 0.
+    __u8 resolved_truncated;
     __u64 ts_ns;
     __u64 cgroup_id;
     __u64 start_boottime;
     __s32 tgid;
     __u32 flags;
+    // Start byte of the right-aligned resolved_path (dentry-walk paths grow
+    // from the buffer's end, like file_move/file_link).
+    __u16 resolved_offset;
+    __u16 _pad1;
     char path[FILE_PATH_LEN];
+    // Mount-independent path from a pure d_parent walk, so a write reaching a
+    // protected location through a bind-mount alias is still observed at its
+    // canonical path (issue #48 "Bypass B"). bpf_d_path(path[]) is mount-aware
+    // and reports the alias. Populated only for writes to keep the read-heavy
+    // hot path cheap; reads leave it empty (resolved_offset == FILE_PATH_LEN-1).
+    char resolved_path[FILE_PATH_LEN];
 };
 
 // file_remove_sample / file_move_sample / file_link_sample use dentry fallback

@@ -42,11 +42,13 @@ func logEventRecord(event jobevent.EventRecord) *logv1beta1.EventRecord {
 		}
 	case jobevent.FileOpen:
 		path, _ := event.Payload["path"].(string)
+		resolvedPath, _ := event.Payload["resolved_path"].(string)
 		out.FileOpen = &logv1beta1.FileOpenPayload{
-			Path:    path,
-			IsWrite: payloadBool(event.Payload, "is_write"),
-			IsRead:  payloadBool(event.Payload, "is_read"),
-			Flags:   uint64(payloadInt64(event.Payload, "flags")),
+			Path:         path,
+			ResolvedPath: resolvedPath,
+			IsWrite:      payloadBool(event.Payload, "is_write"),
+			IsRead:       payloadBool(event.Payload, "is_read"),
+			Flags:        uint64(payloadInt64(event.Payload, "flags")),
 		}
 	case jobevent.FileRemove:
 		path, _ := event.Payload["path"].(string)

@@ -21,6 +21,7 @@ func celInputEventFromRecord(event jobevent.EventRecord) celengine.CELInputEvent
 		input.Family = normalizedPayloadString(event.Payload, "family")
 	case jobevent.FileOpen:
 		input.Path = normalizedPayloadString(event.Payload, "path")
+		input.ResolvedPath = normalizedPayloadString(event.Payload, "resolved_path")
 		input.IsWrite = payloadBool(event.Payload, "is_write")
 		input.IsRead = payloadBool(event.Payload, "is_read")
 		input.Flags = payloadInt(event.Payload, "flags")

@@ -152,6 +152,20 @@ func TestEnvCompileAndEval(t *testing.T) {
 			wantMatch: true,
 		},
 		{
+			name:      "file_open_resolved_path_matches_when_path_is_alias",
+			eventType: jobevent.FileOpen,
+			source:    `is_write && resolved_path.contains("/etc/cron.d/")`,
+			input:     CELInputEvent{Path: "/tmp/x/job", ResolvedPath: "/etc/cron.d/job", IsWrite: true},
+			wantMatch: true,
+		},
+		{
+			name:      "file_open_resolved_path_empty_for_read",
+			eventType: jobevent.FileOpen,
+			source:    `resolved_path == ""`,
+			input:     CELInputEvent{Path: "/etc/cron.d/job", IsRead: true},
+			wantMatch: true,
+		},
+		{
 			name:      "file_open_can_reference_process",
 			eventType: jobevent.FileOpen,
 			source:    `process.exec_path.endsWith("/cat") && path.endsWith(".env")`,

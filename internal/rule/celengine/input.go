@@ -114,6 +114,8 @@ func (a *EventActivation) resolveLocal(name string) (any, bool) {
 	case "path":
 		return types.String(a.input.Path), true
 	// file_open.
+	case "resolved_path":
+		return types.String(a.input.ResolvedPath), true
 	case "is_write":
 		return types.Bool(a.input.IsWrite), true
 	case "is_read":
