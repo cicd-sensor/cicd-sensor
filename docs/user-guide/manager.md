@@ -218,7 +218,7 @@ Use this mapping to choose patterns such as storing all logs in one GCS destinat
 
 | Sink type | Required settings | Optional settings | Notes |
 | --- | --- | --- | --- |
-| `aws_s3` | `uri`, `region` | `use_path_style` | `uri` is an `s3://...` object-storage URI. Include any desired object key path in the URI. Set `use_path_style: true` to use path-style addressing (`endpoint/bucket`) instead of virtual-hosted-style (`bucket.endpoint`). |
+| `aws_s3` | `uri`, `region` | `use_path_style` | `uri` is an `s3://...` object-storage URI. Include any desired object key path in the URI. Set `use_path_style: true` to use path-style addressing (`endpoint/bucket`) instead of virtual-hosted-style (`bucket.endpoint`); see [AWS (S3)](#aws-s3) for targeting S3-compatible stores. |
 | `google_storage` | `uri` | | `uri` is a `gs://...` object-storage URI. Include any desired object key path in the URI. |
 | `google_pubsub` | `project_id`, `topic` | | Publishes one plain JSON record per message. |
 
@@ -273,3 +273,5 @@ On GKE / GCE, grant access with Workload Identity or an attached service account
 
 The manager uses the [AWS default credentials provider chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html).
 On EKS / ECS / EC2, grant access with an IAM role attached to the workload (EKS Pod Identity / IRSA, ECS task role, or EC2 instance profile). In other environments, use the standard runtime mechanism such as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` environment variables or the shared credentials file (`~/.aws/credentials`).
+
+To send logs to an S3-compatible object store instead of AWS S3, set the standard `AWS_ENDPOINT_URL_S3` environment variable to the store's endpoint. Stores that require path-style requests (for example a self-hosted MinIO) also need `use_path_style: true` on the sink.
