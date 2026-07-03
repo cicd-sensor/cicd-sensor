@@ -237,18 +237,18 @@ jobs:
           ls -la
 
       - name: Attest SBOM (CycloneDX)
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
           subject-checksums: dist/checksums.txt
           sbom-path: dist/cicd-sensor_${{ needs.validate.outputs.version }}_sbom.cdx.json
 
       - name: Attest SLSA build provenance
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
           subject-checksums: dist/checksums.txt
 
       - name: Attest runtime-trace (cicd-sensor)
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
           subject-checksums: dist/checksums.txt
           predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
@@ -352,7 +352,7 @@ jobs:
             "ghcr.io/cicd-sensor/${{ matrix.image }}@${{ steps.build_and_push.outputs.digest }}"
 
       - name: Attest SBOM (image)
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
           subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
           subject-digest: ${{ steps.build_and_push.outputs.digest }}
@@ -361,7 +361,7 @@ jobs:
           create-storage-record: false
 
       - name: Attest SLSA build provenance (image)
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
           subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
           subject-digest: ${{ steps.build_and_push.outputs.digest }}
@@ -369,7 +369,7 @@ jobs:
           create-storage-record: true
 
       - name: Attest runtime-trace (image)
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
           subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
           subject-digest: ${{ steps.build_and_push.outputs.digest }}
