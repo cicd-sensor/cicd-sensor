@@ -223,6 +223,50 @@ type BPFProgramUnixSocketConnectSample struct {
 	Cwd              [1024]int8
 }
 
+// Names of all BPF objects in the ELF.
+//
+// Used for safe lookups in a Collection or CollectionSpec.
+const (
+	BPFProgramMapEvents                        = "events"
+	BPFProgramMapPathScratch                   = "path_scratch"
+	BPFProgramMapRingbufDropCount              = "ringbuf_drop_count"
+	BPFProgramMapStagingMap                    = "staging_map"
+	BPFProgramMapTrackedCgroups                = "tracked_cgroups"
+	BPFProgramProgHandleCgroupAttachTask       = "handle_cgroup_attach_task"
+	BPFProgramProgHandleCgroupConnect4         = "handle_cgroup_connect4"
+	BPFProgramProgHandleCgroupConnect6         = "handle_cgroup_connect6"
+	BPFProgramProgHandleCgroupMkdir            = "handle_cgroup_mkdir"
+	BPFProgramProgHandleCgroupRmdir            = "handle_cgroup_rmdir"
+	BPFProgramProgHandleSchedProcessExec       = "handle_sched_process_exec"
+	BPFProgramProgHandleSchedProcessFork       = "handle_sched_process_fork"
+	BPFProgramProgHandleSecurityFileOpen       = "handle_security_file_open"
+	BPFProgramProgHandleSecurityInodeLink      = "handle_security_inode_link"
+	BPFProgramProgHandleSecurityInodeRename    = "handle_security_inode_rename"
+	BPFProgramProgHandleSecurityInodeRmdir     = "handle_security_inode_rmdir"
+	BPFProgramProgHandleSecurityInodeSymlink   = "handle_security_inode_symlink"
+	BPFProgramProgHandleSecurityInodeUnlink    = "handle_security_inode_unlink"
+	BPFProgramProgHandleTcpSendmsg             = "handle_tcp_sendmsg"
+	BPFProgramProgHandleUdpSendmsg             = "handle_udp_sendmsg"
+	BPFProgramProgHandleUdpv6Sendmsg           = "handle_udpv6_sendmsg"
+	BPFProgramProgHandleUnixDgramConnect       = "handle_unix_dgram_connect"
+	BPFProgramProgHandleUnixStreamConnect      = "handle_unix_stream_connect"
+	BPFProgramProgHandleUnixStreamSendmsg      = "handle_unix_stream_sendmsg"
+	BPFProgramVarUnusedCgroupAttachSample      = "unused_cgroup_attach_sample"
+	BPFProgramVarUnusedCgroupMkdirSample       = "unused_cgroup_mkdir_sample"
+	BPFProgramVarUnusedCgroupRmdirSample       = "unused_cgroup_rmdir_sample"
+	BPFProgramVarUnusedDnsSample               = "unused_dns_sample"
+	BPFProgramVarUnusedExecSample              = "unused_exec_sample"
+	BPFProgramVarUnusedFileLinkSample          = "unused_file_link_sample"
+	BPFProgramVarUnusedFileMoveSample          = "unused_file_move_sample"
+	BPFProgramVarUnusedFileOpenSample          = "unused_file_open_sample"
+	BPFProgramVarUnusedFileRemoveSample        = "unused_file_remove_sample"
+	BPFProgramVarUnusedForkSample              = "unused_fork_sample"
+	BPFProgramVarUnusedNetV4Sample             = "unused_net_v4_sample"
+	BPFProgramVarUnusedNetV6Sample             = "unused_net_v6_sample"
+	BPFProgramVarUnusedStagingValue            = "unused_staging_value"
+	BPFProgramVarUnusedUnixSocketConnectSample = "unused_unix_socket_connect_sample"
+)
+
 // LoadBPFProgram returns the embedded CollectionSpec for BPFProgram.
 func LoadBPFProgram() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_BPFProgramBytes)
@@ -243,7 +287,7 @@ func LoadBPFProgram() (*ebpf.CollectionSpec, error) {
 //	*BPFProgramMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
-func LoadBPFProgramObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
+func LoadBPFProgramObjects(obj any, opts *ebpf.CollectionOptions) error {
 	spec, err := LoadBPFProgram()
 	if err != nil {
 		return err
