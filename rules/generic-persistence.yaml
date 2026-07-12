@@ -18,7 +18,7 @@ rule_sets:
         - "restart"
         - "start"
 
-      # Cron persistence locations. Matched with contains() so that any file
+      # Cron persistence locations. Matched with startsWith() so that any file
       # created, renamed, or linked inside these directories is covered.
       cron_persistence_dirs:
         - "/etc/cron.d/"
@@ -32,7 +32,7 @@ rule_sets:
         - "/etc/crontab"
 
       # Shell startup files (system-wide and per-user). System directories use
-      # contains(); per-user dotfiles use endsWith() against the home path.
+      # startsWith(); per-user dotfiles use endsWith() against the home path.
       shell_rc_dirs:
         - "/etc/profile.d/"
 
@@ -159,7 +159,7 @@ rule_sets:
         rule_name: "Supply-chain: cron persistence file write"
         description: |
           What:
-            Detects writes to system cron locations (/etc/cron.*, /etc/crontab, /var/spool/cron).
+            Collects writes to system cron locations (/etc/cron.*, /etc/crontab, /var/spool/cron).
           Why:
             Dropping a job into a cron directory persists payload execution outside the CI job lineage.
           Notes:
@@ -168,10 +168,10 @@ rule_sets:
         condition: |
           is_write &&
           (
-            list.cron_persistence_dirs.exists(d, path.contains(d)) ||
+            list.cron_persistence_dirs.exists(d, path.startsWith(d)) ||
             list.cron_persistence_files.exists(f, path == f)
           )
-        action: detect
+        action: collect
         tags:
           mitre_tactic: persistence
 
@@ -179,16 +179,16 @@ rule_sets:
         rule_name: "Supply-chain: cron persistence file move (rename bypass)"
         description: |
           What:
-            Detects a rename whose destination is a system cron location.
+            Collects a rename whose destination is a system cron location.
           Why:
             Renaming a staged file into /etc/cron.d (mv) reaches the same persistence as a direct write but emits file_move instead of file_open, evading write-only rules.
           Notes:
-            Inspect the source path and the moved content; package tooling rarely renames into cron directories.
+            Package tooling can atomically rename files into cron directories; correlate the source path and process ancestry before treating the event as suspicious.
         event_type: file_move
         condition: |
-          list.cron_persistence_dirs.exists(d, to_path.contains(d)) ||
+          list.cron_persistence_dirs.exists(d, to_path.startsWith(d)) ||
           list.cron_persistence_files.exists(f, to_path == f)
-        action: detect
+        action: collect
         tags:
           mitre_tactic: persistence
 
@@ -203,7 +203,7 @@ rule_sets:
             Review the link target; legitimate workflows seldom link into cron directories.
         event_type: file_link
         condition: |
-          list.cron_persistence_dirs.exists(d, created_path.contains(d)) ||
+          list.cron_persistence_dirs.exists(d, created_path.startsWith(d)) ||
           list.cron_persistence_files.exists(f, created_path == f)
         action: detect
         tags:
@@ -214,7 +214,7 @@ rule_sets:
         rule_name: "Supply-chain: shell startup file write"
         description: |
           What:
-            Detects writes to shell startup files (/etc/profile, /etc/profile.d, *.bashrc, *.zshrc, *.profile, ...).
+            Collects writes to shell startup files (/etc/profile, /etc/profile.d, *.bashrc, *.zshrc, *.profile, ...).
           Why:
             Shell rc files execute on every interactive/login shell, persisting a payload across sessions and jobs.
           Notes:
@@ -223,11 +223,11 @@ rule_sets:
         condition: |
           is_write &&
           (
-            list.shell_rc_dirs.exists(d, path.contains(d)) ||
+            list.shell_rc_dirs.exists(d, path.startsWith(d)) ||
             list.shell_rc_files.exists(f, path == f) ||
             list.shell_rc_suffixes.exists(s, path.endsWith(s))
           )
-        action: detect
+        action: collect
         tags:
           mitre_tactic: persistence
 
@@ -235,17 +235,17 @@ rule_sets:
         rule_name: "Supply-chain: shell startup file move (rename bypass)"
         description: |
           What:
-            Detects a rename whose destination is a shell startup file.
+            Collects a rename whose destination is a shell startup file.
           Why:
             Renaming a staged file over ~/.bashrc or into /etc/profile.d reaches shell-rc persistence while emitting file_move instead of file_open.
           Notes:
             Inspect the source path and content; correlate with unexpected ancestry.
         event_type: file_move
         condition: |
-          list.shell_rc_dirs.exists(d, to_path.contains(d)) ||
+          list.shell_rc_dirs.exists(d, to_path.startsWith(d)) ||
           list.shell_rc_files.exists(f, to_path == f) ||
           list.shell_rc_suffixes.exists(s, to_path.endsWith(s))
-        action: detect
+        action: collect
         tags:
           mitre_tactic: persistence
 
@@ -253,17 +253,17 @@ rule_sets:
         rule_name: "Supply-chain: shell startup file link (link bypass)"
         description: |
           What:
-            Detects a hardlink or symlink created at a shell startup file path.
+            Collects a hardlink or symlink created at a shell startup file path.
           Why:
             Linking a payload into a shell rc path installs persistence without writing the protected path, evading write-only rules.
           Notes:
             Review the link target before treating it as benign.
         event_type: file_link
         condition: |
-          list.shell_rc_dirs.exists(d, created_path.contains(d)) ||
+          list.shell_rc_dirs.exists(d, created_path.startsWith(d)) ||
           list.shell_rc_files.exists(f, created_path == f) ||
           list.shell_rc_suffixes.exists(s, created_path.endsWith(s))
-        action: detect
+        action: collect
         tags:
           mitre_tactic: persistence
 
@@ -282,7 +282,7 @@ rule_sets:
           is_write &&
           (
             list.ld_preload_files.exists(f, path == f) ||
-            list.ld_preload_dirs.exists(d, path.contains(d))
+            list.ld_preload_dirs.exists(d, path.startsWith(d))
           )
         action: detect
         tags:
@@ -300,7 +300,7 @@ rule_sets:
         event_type: file_move
         condition: |
           list.ld_preload_files.exists(f, to_path == f) ||
-          list.ld_preload_dirs.exists(d, to_path.contains(d))
+          list.ld_preload_dirs.exists(d, to_path.startsWith(d))
         action: detect
         tags:
           mitre_tactic: defense-evasion,persistence
@@ -317,7 +317,7 @@ rule_sets:
         event_type: file_link
         condition: |
           list.ld_preload_files.exists(f, created_path == f) ||
-          list.ld_preload_dirs.exists(d, created_path.contains(d))
+          list.ld_preload_dirs.exists(d, created_path.startsWith(d))
         action: detect
         tags:
           mitre_tactic: defense-evasion,persistence

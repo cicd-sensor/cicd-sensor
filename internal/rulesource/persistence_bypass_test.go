@@ -42,24 +42,36 @@ func TestPersistenceRulesCoverMoveAndLinkBypass(t *testing.T) {
 		input     celengine.CELInputEvent
 		wantMatch bool
 	}{
-		// Cron: write, rename, and link into /etc/cron.d all detect.
+		// Cron: write, rename, and link into /etc/cron.d all match.
 		{"cron_write", celengine.CELInputEvent{Path: "/etc/cron.d/evil", IsWrite: true}, true},
 		{"cron_write", celengine.CELInputEvent{Path: "/etc/crontab", IsWrite: true}, true},
 		{"cron_write", celengine.CELInputEvent{Path: "/etc/cron.d/evil", IsWrite: false}, false},
+		{"cron_write", celengine.CELInputEvent{Path: "/workspace/rootfs/etc/cron.d/fixture", IsWrite: true}, false},
 		{"cron_move", celengine.CELInputEvent{FromPath: "/tmp/job", ToPath: "/etc/cron.d/evil"}, true},
 		{"cron_move", celengine.CELInputEvent{FromPath: "/tmp/a", ToPath: "/tmp/b"}, false},
+		{"cron_move", celengine.CELInputEvent{FromPath: "/tmp/job", ToPath: "/workspace/rootfs/etc/cron.d/fixture"}, false},
 		{"cron_link", celengine.CELInputEvent{CreatedPath: "/etc/cron.d/evil", ExistingPath: "/tmp/job", IsSymlink: true}, true},
+		{"cron_link", celengine.CELInputEvent{CreatedPath: "/workspace/rootfs/etc/cron.d/fixture", ExistingPath: "/tmp/job", IsSymlink: true}, false},
 
 		// Shell startup files.
 		{"shell_rc_write", celengine.CELInputEvent{Path: "/home/runner/.bashrc", IsWrite: true}, true},
+		{"shell_rc_write", celengine.CELInputEvent{Path: "/workspace/dotfiles/.bashrc", IsWrite: true}, true},
 		{"shell_rc_write", celengine.CELInputEvent{Path: "/etc/profile.d/evil.sh", IsWrite: true}, true},
+		{"shell_rc_write", celengine.CELInputEvent{Path: "/workspace/rootfs/etc/profile.d/fixture.sh", IsWrite: true}, false},
 		{"shell_rc_move", celengine.CELInputEvent{FromPath: "/tmp/rc", ToPath: "/home/runner/.bashrc"}, true},
+		{"shell_rc_move", celengine.CELInputEvent{FromPath: "/tmp/rc", ToPath: "/workspace/dotfiles/.bashrc"}, true},
+		{"shell_rc_move", celengine.CELInputEvent{FromPath: "/tmp/rc", ToPath: "/workspace/rootfs/etc/profile.d/fixture.sh"}, false},
 		{"shell_rc_link", celengine.CELInputEvent{CreatedPath: "/home/runner/.zshrc", ExistingPath: "/tmp/rc", IsSymlink: true}, true},
+		{"shell_rc_link", celengine.CELInputEvent{CreatedPath: "/workspace/dotfiles/.zshrc", ExistingPath: "/tmp/rc", IsSymlink: true}, true},
+		{"shell_rc_link", celengine.CELInputEvent{CreatedPath: "/workspace/rootfs/etc/profile.d/fixture.sh", ExistingPath: "/tmp/rc", IsSymlink: true}, false},
 
 		// Dynamic linker preload.
 		{"ld_so_preload_write", celengine.CELInputEvent{Path: "/etc/ld.so.preload", IsWrite: true}, true},
+		{"ld_so_preload_write", celengine.CELInputEvent{Path: "/workspace/rootfs/etc/ld.so.conf.d/fixture.conf", IsWrite: true}, false},
 		{"ld_so_preload_move", celengine.CELInputEvent{FromPath: "/tmp/p", ToPath: "/etc/ld.so.preload"}, true},
+		{"ld_so_preload_move", celengine.CELInputEvent{FromPath: "/tmp/p", ToPath: "/workspace/rootfs/etc/ld.so.conf.d/fixture.conf"}, false},
 		{"ld_so_preload_link", celengine.CELInputEvent{CreatedPath: "/etc/ld.so.conf.d/evil.conf", ExistingPath: "/tmp/p", IsHardlink: true}, true},
+		{"ld_so_preload_link", celengine.CELInputEvent{CreatedPath: "/workspace/rootfs/etc/ld.so.conf.d/fixture.conf", ExistingPath: "/tmp/p", IsHardlink: true}, false},
 
 		// User systemd service unit (same move/link gap closed).
 		{"user_systemd_service_move", celengine.CELInputEvent{FromPath: "/tmp/x.service", ToPath: "/home/runner/.config/systemd/user/x.service"}, true},
@@ -91,6 +103,29 @@ func TestPersistenceRulesCoverMoveAndLinkBypass(t *testing.T) {
 				t.Fatalf("rule %s matched=%v, want %v", r.RuleID, matched, tc.wantMatch)
 			}
 		})
+	}
+
+	wantActions := map[string]rule.RuleAction{
+		"cron_write":                rule.RuleActionCollect,
+		"cron_move":                 rule.RuleActionCollect,
+		"cron_link":                 rule.RuleActionDetect,
+		"shell_rc_write":            rule.RuleActionCollect,
+		"shell_rc_move":             rule.RuleActionCollect,
+		"shell_rc_link":             rule.RuleActionCollect,
+		"ld_so_preload_write":       rule.RuleActionDetect,
+		"ld_so_preload_move":        rule.RuleActionDetect,
+		"ld_so_preload_link":        rule.RuleActionDetect,
+		"user_systemd_service_move": rule.RuleActionDetect,
+		"user_systemd_service_link": rule.RuleActionDetect,
+	}
+	for id, want := range wantActions {
+		r, ok := byID[id]
+		if !ok {
+			t.Fatalf("expected rule %q to be shipped", id)
+		}
+		if r.Action != want {
+			t.Fatalf("rule %q action=%q, want %q", id, r.Action, want)
+		}
 	}
 
 	// Guard the event-type coverage explicitly: each persistence category
