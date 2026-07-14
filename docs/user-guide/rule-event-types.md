@@ -395,6 +395,54 @@ Example event value:
 }
 ```
 
+## `mount`
+
+Evaluates mount attempts that may expose or relocate a mount tree through
+another path. The event records classic bind and move requests and new-API
+`move_mount` requests from tracked jobs. It does not represent every
+filesystem mount, and the recorded attempt is not guaranteed to have
+succeeded.
+
+| field | Type | Example value | Meaning |
+| --- | --- | --- | --- |
+| `source_path` | string | `/tmp/source` | Mount source. For classic `mount(2)`, this is the raw source string |
+| `target_path` | string | `/mnt/target` | Mount target path |
+| `process` | object | `process.exec_path == "/bin/mount"` | Process that attempted the mount |
+
+Because a classic `source_path` may be relative, symlinked, or otherwise
+non-canonical, source matching is a best-effort signal rather than a strict
+security boundary.
+
+Protected path exposed through another location:
+
+```yaml
+condition: source_path.startsWith("/protected/") && !target_path.startsWith("/protected/")
+```
+
+Example event value:
+
+```json
+{
+  "event_type": "mount",
+  "process": {
+    "exec_path": "/bin/mount",
+    "argv": ["mount", "--bind", "/tmp/source", "/mnt/target"]
+  },
+  "payload": {
+    "source_path": "/tmp/source",
+    "target_path": "/mnt/target"
+  }
+}
+```
+
+The paths describe the mount operation, not a canonical identity for later file
+writes. The classic mount source is the raw source string supplied to the mount
+operation. Target paths and new-API move paths use a filesystem-rooted dentry
+walk and can expose node-side backing paths for Kubernetes volumes. A
+`move_mount` event can represent a detached mount attachment, a mount tree
+relocation, or another operation routed through the same kernel hook; rules
+should rely on path and process context rather than infer that distinction.
+
 ## `domain`
 
 Evaluates domain access.

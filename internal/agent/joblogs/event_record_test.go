@@ -37,6 +37,17 @@ func TestLogEventRecord_PayloadsAndTags(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "mount",
+			event: jobevent.EventRecord{
+				ID:        "event-3",
+				EventType: jobevent.Mount,
+				Payload: map[string]any{
+					"source_path": "/real/source",
+					"target_path": "/mnt/target",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -60,6 +71,12 @@ func TestLogEventRecord_PayloadsAndTags(t *testing.T) {
 			case jobevent.Domain:
 				if got.Domain == nil || got.Domain.Name != "example.com" || got.Domain.Source != "dns" {
 					t.Fatalf("domain payload mismatch: %+v", got.Domain)
+				}
+			case jobevent.Mount:
+				if got.Mount == nil ||
+					got.Mount.SourcePath != "/real/source" ||
+					got.Mount.TargetPath != "/mnt/target" {
+					t.Fatalf("mount payload mismatch: %+v", got.Mount)
 				}
 			}
 		})

@@ -17,6 +17,7 @@
 #include "process_hooks.bpf.h"
 #include "cgroup_hooks.bpf.h"
 #include "file_hooks.bpf.h"
+#include "mount_hooks.bpf.h"
 #include "network_hooks.bpf.h"
 #include "dns_hooks.bpf.h"
 

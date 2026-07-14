@@ -14,6 +14,7 @@ const (
 	FileRemove        Type = "file_remove"
 	FileMove          Type = "file_move"
 	FileLink          Type = "file_link"
+	Mount             Type = "mount"
 	Domain            Type = "domain"
 )
 

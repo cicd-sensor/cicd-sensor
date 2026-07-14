@@ -19,4 +19,5 @@ const (
 	SampleKindFileLink          uint32 = 11
 	SampleKindDNS               uint32 = 12
 	SampleKindUnixSocketConnect uint32 = 13
+	SampleKindMount             uint32 = 14
 )

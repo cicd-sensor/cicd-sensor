@@ -105,6 +105,11 @@ func TestDecodeKernelSampleDispatchesSampleKinds(t *testing.T) {
 			sample: encodeDispatchSample(t, bpfprog.BPFProgramUnixSocketConnectSample{Kind: kernelio.SampleKindUnixSocketConnect}),
 			want:   unixSocketConnectSample{},
 		},
+		{
+			name:   "mount",
+			sample: encodeDispatchSample(t, bpfprog.BPFProgramMountSample{Kind: kernelio.SampleKindMount}),
+			want:   mountSample{},
+		},
 	}
 
 	for _, test := range tests {

@@ -25,6 +25,7 @@ enum agent_sample_kind {
     SAMPLE_KIND_FILE_LINK = 11,
     SAMPLE_KIND_DNS = 12,
     SAMPLE_KIND_UNIX_SOCKET_CONNECT = 13,
+    SAMPLE_KIND_MOUNT = 14,
 };
 
 // Field-size constants below define generated Go struct layout.
@@ -174,6 +175,23 @@ struct file_link_sample {
     char existing_path[FILE_PATH_LEN];
 };
 
+struct mount_sample {
+    __u32 kind;
+    __u8 source_truncated;
+    __u8 target_truncated;
+    __u16 source_offset;
+    __u16 target_offset;
+    __u16 _pad_offsets;
+    __u32 _pad0;
+    __u64 ts_ns;
+    __u64 cgroup_id;
+    __u64 start_boottime;
+    __s32 tgid;
+    __u32 _pad1;
+    char source_path[FILE_PATH_LEN];
+    char target_path[FILE_PATH_LEN];
+};
+
 struct net_v4_sample {
     __u32 kind;
     __u8 protocol;
@@ -255,6 +273,7 @@ const volatile struct file_open_sample *unused_file_open_sample;
 const volatile struct file_remove_sample *unused_file_remove_sample;
 const volatile struct file_move_sample *unused_file_move_sample;
 const volatile struct file_link_sample *unused_file_link_sample;
+const volatile struct mount_sample *unused_mount_sample;
 const volatile struct net_v4_sample *unused_net_v4_sample;
 const volatile struct net_v6_sample *unused_net_v6_sample;
 const volatile struct dns_sample *unused_dns_sample;

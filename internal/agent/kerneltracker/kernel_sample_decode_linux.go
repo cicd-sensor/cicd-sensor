@@ -44,6 +44,8 @@ func decodeKernelSample(sample kernelio.KernelSample) (decodedKernelSample, erro
 		return decodeDNSSample(raw)
 	case kernelio.SampleKindUnixSocketConnect:
 		return decodeUnixSocketConnectSample(raw)
+	case kernelio.SampleKindMount:
+		return decodeMountSample(raw)
 	default:
 		return nil, fmt.Errorf("unknown sample kind %d", kind)
 	}

@@ -43,6 +43,7 @@ message EventRecord {
   FileMovePayload file_move = 15 [json_name = "file_move"];
   FileLinkPayload file_link = 16 [json_name = "file_link"];
   DomainPayload domain = 18 [json_name = "domain"];
+  MountPayload mount = 19 [json_name = "mount"];
 }
 
 message ProcessSummary {
@@ -96,6 +97,11 @@ message FileLinkPayload {
   string existing_path = 2 [json_name = "existing_path"];
   bool is_hardlink = 3 [json_name = "is_hardlink"];
   bool is_symlink = 4 [json_name = "is_symlink"];
+}
+
+message MountPayload {
+  string source_path = 1 [json_name = "source_path"];
+  string target_path = 2 [json_name = "target_path"];
 }
 
 message DomainPayload {

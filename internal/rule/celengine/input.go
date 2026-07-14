@@ -147,6 +147,11 @@ func (a *EventActivation) resolveLocal(name string) (any, bool) {
 		return types.String(a.input.SocketType), true
 	case "is_abstract":
 		return types.Bool(a.input.IsAbstract), true
+	// mount.
+	case "source_path":
+		return types.String(a.input.SourcePath), true
+	case "target_path":
+		return types.String(a.input.TargetPath), true
 	}
 	return nil, false
 }

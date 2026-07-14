@@ -62,12 +62,24 @@ The eBPF Runtime handles both rule-facing events and internal tracking samples.
 | cgroup tracking | `cgroup_mkdir`, `cgroup_attach_task`, `cgroup_rmdir` | internal tracking sample |
 | network | `cgroup/connect4`, `cgroup/connect6` | `network_connect` |
 | file | `security_file_open`, `security_inode_unlink`, `security_inode_rename`, `security_inode_link` | `file_open`, `file_remove`, `file_move`, `file_link` |
+| mount | `security_sb_mount`, `security_move_mount` | `mount` for path exposure attempts |
 | domain | `udp_sendmsg`, `udpv6_sendmsg`, `tcp_sendmsg` | `domain` |
 | unix socket | `unix_stream_connect`, `unix_dgram_connect` | `unix_socket_connect` |
 
 `cgroup/connect4/6` is not attached per tracked cgroup. The agent attaches once to the cgroup v2 root detected at startup, and the program uses `tracked_cgroups` lookup to handle only target jobs.
 
 `unix_stream_connect` / `unix_dgram_connect` observe AF_UNIX connects at the proto_ops entry points, so connects denied earlier by an LSM (AppArmor, SELinux, BPF LSM) are not observable.
+
+The `mount` event records classic bind/move and new-API `move_mount` attempts;
+ordinary classic filesystem mounts are filtered before ring-buffer
+reservation. The event intentionally does not classify bind, attach, and move:
+`security_move_mount` does not expose enough context to distinguish them.
+Classic mount source paths are raw operation strings, while mount targets and
+new-API move paths use the bounded dentry fallback because
+`bpf_d_path` is not available from these hooks on the Linux 5.15 baseline.
+These fields describe the operation rather than a canonical identity for later
+file writes. Observing a mount therefore does not detect writes through aliases
+that existed before the Job started.
 
 ## Kernel / userspace boundary
 

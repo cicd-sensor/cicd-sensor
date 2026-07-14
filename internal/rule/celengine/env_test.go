@@ -239,6 +239,26 @@ func TestEnvCompileAndEval(t *testing.T) {
 			wantMatch: true,
 		},
 		{
+			name:      "mount_source_path",
+			eventType: jobevent.Mount,
+			source:    `source_path.startsWith("/tmp/")`,
+			input: CELInputEvent{
+				SourcePath: "/tmp/source",
+				TargetPath: "/mnt/target",
+			},
+			wantMatch: true,
+		},
+		{
+			name:      "mount_protected_target",
+			eventType: jobevent.Mount,
+			source:    `target_path.startsWith("/var/lib/kubelet")`,
+			input: CELInputEvent{
+				SourcePath: "/tmp/source",
+				TargetPath: "/var/lib/kubelet/pods/pod-id/volumes",
+			},
+			wantMatch: true,
+		},
+		{
 			name:      "domain_endswith_match",
 			eventType: jobevent.Domain,
 			source:    `domain.endsWith(".evil.example.com")`,
