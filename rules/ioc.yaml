@@ -63,3 +63,29 @@ rule_sets:
           mitre_tactic: command-and-control
           ioc_date: "2026-07-14"
           source_url: https://x.com/lmt_swallow/status/2076943312909672912
+
+      - rule_id: asyncapi_miasma_dht_bootstrap_domain
+        rule_name: "IOC: Miasma BitTorrent DHT bootstrap resolution"
+        description: |
+          What:
+            DNS resolution of public BitTorrent DHT bootstrap nodes, used by
+            the @asyncapi npm compromise stage 2 (Miasma variant) as a C2
+            rendezvous channel.
+          Why:
+            Active-compromise IOC in the current campaign. The domains are
+            legitimate DHT bootstrap infrastructure, but a CI job has no
+            ordinary reason to join the BitTorrent DHT, so resolution from a
+            tracked job is treated as compromise.
+          Notes:
+            Projects that legitimately exercise BitTorrent clients in CI
+            should exclude this rule with a rule modifier. Preserve job logs
+            and artifacts, then rotate credentials reachable from the job.
+        event_type: domain
+        condition: |
+          domain == "router.bittorrent.com" ||
+          domain == "dht.transmissionbt.com"
+        action: terminate
+        tags:
+          mitre_tactic: command-and-control
+          ioc_date: "2026-07-14"
+          source_url: https://x.com/lmt_swallow/status/2076945835313840559
