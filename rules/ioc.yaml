@@ -89,3 +89,30 @@ rule_sets:
           mitre_tactic: command-and-control
           ioc_date: "2026-07-14"
           source_url: https://x.com/lmt_swallow/status/2076945835313840559
+
+      - rule_id: miasma_systemd_unit_write
+        rule_name: "IOC: Miasma systemd persistence write"
+        description: |
+          What:
+            Write below a systemd directory whose path contains "miasma",
+            covering the @asyncapi npm compromise stage 2 persistence unit
+            (~/.config/systemd/user/miasma-monitor.service) and renamed
+            variants of the same worm family.
+          Why:
+            Active-compromise IOC. The Miasma lineage persists through a
+            systemd unit carrying its family name; no legitimate CI write
+            matches both fragments.
+          Notes:
+            Generic user-systemd persistence rules still cover arbitrary unit
+            names and renamed or linked landings at detect level. Preserve job
+            logs and artifacts, then rotate credentials reachable from the job.
+        event_type: file_open
+        condition: |
+          is_write &&
+          path.contains("/systemd/") &&
+          path.contains("miasma")
+        action: terminate
+        tags:
+          mitre_tactic: persistence
+          ioc_date: "2026-07-14"
+          source_url: https://x.com/lmt_swallow/status/2076945835313840559
