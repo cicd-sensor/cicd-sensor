@@ -160,6 +160,24 @@ type BPFProgramForkSample struct {
 	ParentTgid          int32
 }
 
+type BPFProgramMountSample struct {
+	_               structs.HostLayout
+	Kind            uint32
+	SourceTruncated uint8
+	TargetTruncated uint8
+	SourceOffset    uint16
+	TargetOffset    uint16
+	PadOffsets      uint16
+	Pad0            uint32
+	TsNs            uint64
+	CgroupId        uint64
+	StartBoottime   uint64
+	Tgid            int32
+	Pad1            uint32
+	SourcePath      [1024]int8
+	TargetPath      [1024]int8
+}
+
 type BPFProgramNetV4Sample struct {
 	_             structs.HostLayout
 	Kind          uint32
@@ -245,6 +263,8 @@ const (
 	BPFProgramProgHandleSecurityInodeRmdir     = "handle_security_inode_rmdir"
 	BPFProgramProgHandleSecurityInodeSymlink   = "handle_security_inode_symlink"
 	BPFProgramProgHandleSecurityInodeUnlink    = "handle_security_inode_unlink"
+	BPFProgramProgHandleSecurityMoveMount      = "handle_security_move_mount"
+	BPFProgramProgHandleSecuritySbMount        = "handle_security_sb_mount"
 	BPFProgramProgHandleTcpSendmsg             = "handle_tcp_sendmsg"
 	BPFProgramProgHandleUdpSendmsg             = "handle_udp_sendmsg"
 	BPFProgramProgHandleUdpv6Sendmsg           = "handle_udpv6_sendmsg"
@@ -261,6 +281,7 @@ const (
 	BPFProgramVarUnusedFileOpenSample          = "unused_file_open_sample"
 	BPFProgramVarUnusedFileRemoveSample        = "unused_file_remove_sample"
 	BPFProgramVarUnusedForkSample              = "unused_fork_sample"
+	BPFProgramVarUnusedMountSample             = "unused_mount_sample"
 	BPFProgramVarUnusedNetV4Sample             = "unused_net_v4_sample"
 	BPFProgramVarUnusedNetV6Sample             = "unused_net_v6_sample"
 	BPFProgramVarUnusedStagingValue            = "unused_staging_value"
@@ -322,6 +343,8 @@ type BPFProgramProgramSpecs struct {
 	HandleSecurityInodeRmdir   *ebpf.ProgramSpec `ebpf:"handle_security_inode_rmdir"`
 	HandleSecurityInodeSymlink *ebpf.ProgramSpec `ebpf:"handle_security_inode_symlink"`
 	HandleSecurityInodeUnlink  *ebpf.ProgramSpec `ebpf:"handle_security_inode_unlink"`
+	HandleSecurityMoveMount    *ebpf.ProgramSpec `ebpf:"handle_security_move_mount"`
+	HandleSecuritySbMount      *ebpf.ProgramSpec `ebpf:"handle_security_sb_mount"`
 	HandleTcpSendmsg           *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg"`
 	HandleUdpSendmsg           *ebpf.ProgramSpec `ebpf:"handle_udp_sendmsg"`
 	HandleUdpv6Sendmsg         *ebpf.ProgramSpec `ebpf:"handle_udpv6_sendmsg"`
@@ -355,6 +378,7 @@ type BPFProgramVariableSpecs struct {
 	UnusedFileOpenSample          *ebpf.VariableSpec `ebpf:"unused_file_open_sample"`
 	UnusedFileRemoveSample        *ebpf.VariableSpec `ebpf:"unused_file_remove_sample"`
 	UnusedForkSample              *ebpf.VariableSpec `ebpf:"unused_fork_sample"`
+	UnusedMountSample             *ebpf.VariableSpec `ebpf:"unused_mount_sample"`
 	UnusedNetV4Sample             *ebpf.VariableSpec `ebpf:"unused_net_v4_sample"`
 	UnusedNetV6Sample             *ebpf.VariableSpec `ebpf:"unused_net_v6_sample"`
 	UnusedStagingValue            *ebpf.VariableSpec `ebpf:"unused_staging_value"`
@@ -412,6 +436,7 @@ type BPFProgramVariables struct {
 	UnusedFileOpenSample          *ebpf.Variable `ebpf:"unused_file_open_sample"`
 	UnusedFileRemoveSample        *ebpf.Variable `ebpf:"unused_file_remove_sample"`
 	UnusedForkSample              *ebpf.Variable `ebpf:"unused_fork_sample"`
+	UnusedMountSample             *ebpf.Variable `ebpf:"unused_mount_sample"`
 	UnusedNetV4Sample             *ebpf.Variable `ebpf:"unused_net_v4_sample"`
 	UnusedNetV6Sample             *ebpf.Variable `ebpf:"unused_net_v6_sample"`
 	UnusedStagingValue            *ebpf.Variable `ebpf:"unused_staging_value"`
@@ -435,6 +460,8 @@ type BPFProgramPrograms struct {
 	HandleSecurityInodeRmdir   *ebpf.Program `ebpf:"handle_security_inode_rmdir"`
 	HandleSecurityInodeSymlink *ebpf.Program `ebpf:"handle_security_inode_symlink"`
 	HandleSecurityInodeUnlink  *ebpf.Program `ebpf:"handle_security_inode_unlink"`
+	HandleSecurityMoveMount    *ebpf.Program `ebpf:"handle_security_move_mount"`
+	HandleSecuritySbMount      *ebpf.Program `ebpf:"handle_security_sb_mount"`
 	HandleTcpSendmsg           *ebpf.Program `ebpf:"handle_tcp_sendmsg"`
 	HandleUdpSendmsg           *ebpf.Program `ebpf:"handle_udp_sendmsg"`
 	HandleUdpv6Sendmsg         *ebpf.Program `ebpf:"handle_udpv6_sendmsg"`
@@ -458,6 +485,8 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleSecurityInodeRmdir,
 		p.HandleSecurityInodeSymlink,
 		p.HandleSecurityInodeUnlink,
+		p.HandleSecurityMoveMount,
+		p.HandleSecuritySbMount,
 		p.HandleTcpSendmsg,
 		p.HandleUdpSendmsg,
 		p.HandleUdpv6Sendmsg,

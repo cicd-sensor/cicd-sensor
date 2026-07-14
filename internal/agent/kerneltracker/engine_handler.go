@@ -48,6 +48,8 @@ func handleEngineInput(state *jobTrackingState, input engineInput) []engineEffec
 		return handleFileMoveSample(state, value)
 	case fileLinkSample:
 		return handleFileLinkSample(state, value)
+	case mountSample:
+		return handleMountSample(state, value)
 	case dnsSample:
 		return handleDNSSample(state, value)
 	case unixSocketConnectSample:

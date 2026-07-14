@@ -70,6 +70,13 @@ func logEventRecord(event jobevent.EventRecord) *logv1beta1.EventRecord {
 			IsHardlink:   payloadBool(event.Payload, "is_hardlink"),
 			IsSymlink:    payloadBool(event.Payload, "is_symlink"),
 		}
+	case jobevent.Mount:
+		sourcePath, _ := event.Payload["source_path"].(string)
+		targetPath, _ := event.Payload["target_path"].(string)
+		out.Mount = &logv1beta1.MountPayload{
+			SourcePath: sourcePath,
+			TargetPath: targetPath,
+		}
 	case jobevent.Domain:
 		name, _ := event.Payload["domain"].(string)
 		source, _ := event.Payload["source"].(string)

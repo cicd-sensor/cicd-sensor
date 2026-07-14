@@ -299,6 +299,24 @@ func TestCELInputEventFromRecordEventTypePayloads(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "mount_paths",
+			event: jobevent.EventRecord{
+				EventType: jobevent.Mount,
+				Payload: map[string]any{
+					"source_path": "/TMP/SOURCE",
+					"target_path": "/MNT/TARGET",
+				},
+			},
+			assertion: func(t *testing.T, input celengine.CELInputEvent) {
+				if input.SourcePath != "/tmp/source" {
+					t.Fatalf("source_path: got %q, want /tmp/source", input.SourcePath)
+				}
+				if input.TargetPath != "/mnt/target" {
+					t.Fatalf("target_path: got %q, want /mnt/target", input.TargetPath)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

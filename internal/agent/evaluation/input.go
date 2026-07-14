@@ -42,6 +42,9 @@ func celInputEventFromRecord(event jobevent.EventRecord) celengine.CELInputEvent
 		input.Path = normalizedPayloadString(event.Payload, "path")
 		input.SocketType = normalizedPayloadString(event.Payload, "socket_type")
 		input.IsAbstract = payloadBool(event.Payload, "is_abstract")
+	case jobevent.Mount:
+		input.SourcePath = normalizedPayloadString(event.Payload, "source_path")
+		input.TargetPath = normalizedPayloadString(event.Payload, "target_path")
 	}
 
 	return input

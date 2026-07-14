@@ -16,6 +16,7 @@ binary.
 - `process_hooks.bpf.h` — process fork / exec hooks.
 - `cgroup_hooks.bpf.h` — cgroup lifecycle hooks.
 - `file_hooks.bpf.h` — file open and filesystem mutation hooks.
+- `mount_hooks.bpf.h` — mount path exposure attempt hooks.
 - `network_hooks.bpf.h` — network connect and AF_UNIX connect hooks.
 - `dns_hooks.bpf.h` — DNS sendmsg hooks.
 - `generate.go` — `go generate` entrypoint invoking bpf2go.

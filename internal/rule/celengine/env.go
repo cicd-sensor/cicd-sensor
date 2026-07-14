@@ -311,6 +311,14 @@ func (e *Env) EnvForType(eventType jobevent.Type) (*cel.Env, error) {
 			cel.Variable("is_hardlink", cel.BoolType),
 			cel.Variable("is_symlink", cel.BoolType),
 		)
+	case jobevent.Mount:
+		// source_path and target_path describe a mount path exposure attempt,
+		// not a later file write. security_sb_mount source_path is the raw
+		// source string; target_path and move_mount paths are dentry walks.
+		opts = append(opts,
+			cel.Variable("source_path", cel.StringType),
+			cel.Variable("target_path", cel.StringType),
+		)
 	case jobevent.Domain:
 		// domain: lowercased query name with any trailing dot removed,
 		// e.g. "example.com". source: observation channel — "dns" for

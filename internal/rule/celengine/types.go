@@ -77,6 +77,9 @@ type CELInputEvent struct {
 	// unix_socket_connect.
 	SocketType string
 	IsAbstract bool
+	// mount.
+	SourcePath string
+	TargetPath string
 }
 
 // CELRuleHit is exposed through correlation's `rule` map.

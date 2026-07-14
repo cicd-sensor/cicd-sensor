@@ -85,6 +85,8 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		{name: "security_inode_rename", program: kernelIO.objs.HandleSecurityInodeRename},
 		{name: "security_inode_link", program: kernelIO.objs.HandleSecurityInodeLink},
 		{name: "security_inode_symlink", program: kernelIO.objs.HandleSecurityInodeSymlink},
+		{name: "security_sb_mount", program: kernelIO.objs.HandleSecuritySbMount},
+		{name: "security_move_mount", program: kernelIO.objs.HandleSecurityMoveMount},
 		{name: "udp_sendmsg", program: kernelIO.objs.HandleUdpSendmsg},
 		{name: "udpv6_sendmsg", program: kernelIO.objs.HandleUdpv6Sendmsg},
 		{name: "tcp_sendmsg", program: kernelIO.objs.HandleTcpSendmsg},
