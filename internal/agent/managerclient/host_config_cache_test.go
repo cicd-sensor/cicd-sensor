@@ -65,11 +65,13 @@ func TestHostConfigCache_FetchConfig(t *testing.T) {
 
 func TestHostConfigCache_FetchConfigClonesCachedResult(t *testing.T) {
 	req := testFetchConfigRequest()
+	redactProcessArgs := false
 	cache, err := NewHostConfigCache(slog.Default(), &sequenceFetcher{
 		results: []*FetchResult{{
 			ConfigRevision: "rev-1",
 			OutputSettings: &managerv1beta1.OutputSettings{
-				Summary: &managerv1beta1.OutputSetting{Enabled: true},
+				Summary:           &managerv1beta1.OutputSetting{Enabled: true},
+				RedactProcessArgs: &redactProcessArgs,
 			},
 		}},
 	}, req, time.Hour)
@@ -85,6 +87,7 @@ func TestHostConfigCache_FetchConfigClonesCachedResult(t *testing.T) {
 		t.Fatalf("FetchConfig first: %v", err)
 	}
 	first.OutputSettings.Summary.Enabled = false
+	*first.OutputSettings.RedactProcessArgs = true
 
 	second, err := cache.FetchConfig(t.Context(), req)
 	if err != nil {
@@ -92,6 +95,9 @@ func TestHostConfigCache_FetchConfigClonesCachedResult(t *testing.T) {
 	}
 	if !second.OutputSettings.GetSummary().GetEnabled() {
 		t.Fatal("cached output settings were mutated by caller")
+	}
+	if second.OutputSettings.RedactProcessArgs == nil || second.OutputSettings.GetRedactProcessArgs() {
+		t.Fatal("cached process args redaction policy was mutated by caller")
 	}
 }
 

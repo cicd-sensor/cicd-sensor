@@ -78,6 +78,7 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 		return
 	}
 
+	redactProcessArgs := s.processArgsRedactionEnabled()
 	ruleName, ruleDescription, rulesetRevision, ruleTags := s.resolvedRuleInfo(hit.Identity)
 	payload, err := joblogs.MarshalDetectionLogEntry(joblogs.DetectionLogInput{
 		ScopeLogContext: joblogs.ScopeLogContext{
@@ -88,6 +89,7 @@ func (s *JobScopeState) writeDetectionLog(ctx context.Context, identity jobconte
 		},
 		Hit:                 hit,
 		Event:               event,
+		RedactProcessArgs:   &redactProcessArgs,
 		RuleName:            ruleName,
 		RuleDescription:     ruleDescription,
 		RulesetRevision:     rulesetRevision,
@@ -119,6 +121,7 @@ func (s *JobScopeState) WriteRuntimeEventLog(ctx context.Context, identity jobco
 		return
 	}
 
+	redactProcessArgs := s.processArgsRedactionEnabled()
 	payload, err := joblogs.MarshalRuntimeEventLogEntry(joblogs.RuntimeEventLogInput{
 		ScopeLogContext: joblogs.ScopeLogContext{
 			Identity:   identity,
@@ -126,7 +129,8 @@ func (s *JobScopeState) WriteRuntimeEventLog(ctx context.Context, identity jobco
 			RunnerType: runnerType,
 			Scope:      s.Type,
 		},
-		Event: event,
+		Event:             event,
+		RedactProcessArgs: &redactProcessArgs,
 	})
 	if err != nil {
 		if logger != nil {
@@ -145,8 +149,36 @@ func (s *JobScopeState) WriteRuntimeEventLog(ctx context.Context, identity jobco
 		)
 	}
 	if s.debugOutput != nil {
-		_ = s.debugOutput.WriteRuntimeEventPayload(ctx, payload)
+		// Debug artifacts are Agent-owned and explicitly request sanitization
+		// instead of reusing a potentially unredacted Manager payload.
+		redactDebugProcessArgs := true
+		debugPayload, err := joblogs.MarshalRuntimeEventLogEntry(joblogs.RuntimeEventLogInput{
+			ScopeLogContext: joblogs.ScopeLogContext{
+				Identity:   identity,
+				Metadata:   metadata,
+				RunnerType: runnerType,
+				Scope:      s.Type,
+			},
+			Event:             event,
+			RedactProcessArgs: &redactDebugProcessArgs,
+		})
+		if err != nil {
+			if logger != nil {
+				logger.WarnContext(ctx, "debug_runtime_event_marshal_failed",
+					"scope", string(s.Type),
+					"error", err,
+				)
+			}
+			return
+		}
+		_ = s.debugOutput.WriteRuntimeEventPayload(ctx, debugPayload)
 	}
+}
+
+func (s *JobScopeState) processArgsRedactionEnabled() bool {
+	return s.OutputSettings == nil ||
+		s.OutputSettings.RedactProcessArgs == nil ||
+		s.OutputSettings.GetRedactProcessArgs()
 }
 
 func (s *JobScopeState) FinalizeStreamingLogs(ctx context.Context) error {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/cicd-sensor/cicd-sensor/internal/manager"
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
@@ -277,6 +279,7 @@ func TestBuildServedConfig(t *testing.T) {
 		DefaultMaxAlertsPerRule: 7,
 		DisableBaselineRules:    true,
 		MonitorMode:             true,
+		RedactProcessArgs:       proto.Bool(false),
 	}
 	settings := &managerv1beta1.OutputSettings{
 		Detection: &managerv1beta1.OutputSetting{
@@ -305,6 +308,9 @@ func TestBuildServedConfig(t *testing.T) {
 	if !served.MonitorMode {
 		t.Fatalf("MonitorMode: got false, want true")
 	}
+	if served.OutputSettings.RedactProcessArgs == nil || served.OutputSettings.GetRedactProcessArgs() {
+		t.Fatalf("RedactProcessArgs: got %v, want explicit false", served.OutputSettings.RedactProcessArgs)
+	}
 	if !served.OutputSettings.GetDetection().GetEnabled() {
 		t.Fatalf("detection settings: got false, want true")
 	}
@@ -313,6 +319,16 @@ func TestBuildServedConfig(t *testing.T) {
 	}
 	if !served.OutputSettings.GetSummary().GetEnabled() {
 		t.Fatalf("summary settings: got false, want true")
+	}
+}
+
+func TestBuildServedConfig_DefaultsProcessArgsRedaction(t *testing.T) {
+	settings := &managerv1beta1.OutputSettings{}
+
+	served := buildServedConfig(manager.StartupConfig{}, settings)
+
+	if served.OutputSettings.RedactProcessArgs == nil || !served.OutputSettings.GetRedactProcessArgs() {
+		t.Fatalf("RedactProcessArgs: got %v, want explicit true", served.OutputSettings.RedactProcessArgs)
 	}
 }
 

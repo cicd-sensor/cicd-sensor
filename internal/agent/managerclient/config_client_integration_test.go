@@ -26,6 +26,7 @@ import (
 // ApplyManagerConfig → ResolveRules step.
 func TestManagerIntegration_FetchConfig_EndToEnd(t *testing.T) {
 	managerToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
+	redactProcessArgs := false
 
 	configDir := t.TempDir()
 	rulesPath := filepath.Join(configDir, "rules.yaml")
@@ -59,9 +60,10 @@ rule_modifiers:
 		DefaultMaxAlertsPerRule: 23,
 		MonitorMode:             true,
 		OutputSettings: &managerv1beta1.OutputSettings{
-			Summary:      &managerv1beta1.OutputSetting{Enabled: true},
-			Detection:    &managerv1beta1.OutputSetting{Enabled: true},
-			RuntimeEvent: &managerv1beta1.OutputSetting{Enabled: true},
+			Summary:           &managerv1beta1.OutputSetting{Enabled: true},
+			Detection:         &managerv1beta1.OutputSetting{Enabled: true},
+			RuntimeEvent:      &managerv1beta1.OutputSetting{Enabled: true},
+			RedactProcessArgs: &redactProcessArgs,
 		},
 	}
 
@@ -100,6 +102,9 @@ rule_modifiers:
 	}
 	if !result.MonitorMode {
 		t.Fatalf("monitor_mode: got false, want true")
+	}
+	if result.OutputSettings.RedactProcessArgs == nil || result.OutputSettings.GetRedactProcessArgs() {
+		t.Fatalf("redact_process_args: got %v, want explicit false", result.OutputSettings.RedactProcessArgs)
 	}
 	if len(result.RuleSources) != 2 {
 		t.Fatalf("rule_sources: got %d, want 2", len(result.RuleSources))
@@ -142,6 +147,9 @@ rule_modifiers:
 	}
 	if !scope.OutputSettings.GetSummary().GetEnabled() {
 		t.Fatal("expected scope to store output settings from manager response")
+	}
+	if scope.OutputSettings.RedactProcessArgs == nil || scope.OutputSettings.GetRedactProcessArgs() {
+		t.Fatal("expected scope to store disabled process args redaction from manager response")
 	}
 }
 

@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/cicd-sensor/cicd-sensor/internal/manager"
 	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
@@ -225,6 +227,9 @@ func readManagerTokenFile(path string) (string, error) {
 }
 
 func buildServedConfig(startup manager.StartupConfig, outputSettings *managerv1beta1.OutputSettings) *manager.ServedConfig {
+	if outputSettings != nil {
+		outputSettings.RedactProcessArgs = proto.Bool(startup.ProcessArgsRedactionEnabled())
+	}
 	return &manager.ServedConfig{
 		ConfigRevision:          startup.Revision,
 		DefaultMaxAlertsPerRule: startup.DefaultMaxAlertsPerRule,

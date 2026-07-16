@@ -104,15 +104,24 @@ func TestManagerClient_FetchConfig_Success(t *testing.T) {
 
 func TestManagerClient_FetchConfig_PreservesOutputSettingPolicy(t *testing.T) {
 	tests := []struct {
-		name string
-		in   *managerv1beta1.OutputSetting
+		name                  string
+		in                    *managerv1beta1.OutputSetting
+		redactProcessArgs     *bool
+		wantRedactProcessArgs *bool
 	}{
 		{
 			name: "nil remains nil",
 		},
 		{
-			name: "explicit zero policy remains explicit",
-			in:   &managerv1beta1.OutputSetting{Enabled: true},
+			name:                  "explicit output and redaction policy remain explicit",
+			in:                    &managerv1beta1.OutputSetting{Enabled: true},
+			redactProcessArgs:     boolPointer(false),
+			wantRedactProcessArgs: boolPointer(false),
+		},
+		{
+			name:                  "explicit enabled redaction remains enabled",
+			redactProcessArgs:     boolPointer(true),
+			wantRedactProcessArgs: boolPointer(true),
 		},
 	}
 
@@ -123,7 +132,8 @@ func TestManagerClient_FetchConfig_PreservesOutputSettingPolicy(t *testing.T) {
 					return connect.NewResponse(&managerv1beta1.FetchConfigResponse{
 						Config: &managerv1beta1.ServedConfig{
 							OutputSettings: &managerv1beta1.OutputSettings{
-								Detection: tt.in,
+								Detection:         tt.in,
+								RedactProcessArgs: tt.redactProcessArgs,
 							},
 						},
 					}), nil
@@ -151,6 +161,13 @@ func TestManagerClient_FetchConfig_PreservesOutputSettingPolicy(t *testing.T) {
 			if settings == nil {
 				t.Fatal("output_settings: got nil")
 			}
+			if tt.wantRedactProcessArgs == nil {
+				if settings.RedactProcessArgs != nil {
+					t.Fatalf("redact_process_args: got %v, want nil", settings.RedactProcessArgs)
+				}
+			} else if settings.RedactProcessArgs == nil || settings.GetRedactProcessArgs() != *tt.wantRedactProcessArgs {
+				t.Fatalf("redact_process_args: got %v, want %v", settings.RedactProcessArgs, *tt.wantRedactProcessArgs)
+			}
 			if tt.in == nil {
 				if settings.GetDetection() != nil {
 					t.Fatalf("detection: got %+v, want nil", settings.GetDetection())
@@ -166,6 +183,10 @@ func TestManagerClient_FetchConfig_PreservesOutputSettingPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func TestManagerClient_FetchConfig_ServerError(t *testing.T) {

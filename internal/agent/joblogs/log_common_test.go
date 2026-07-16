@@ -29,6 +29,23 @@ func assertProtoEventProcessSanitized(t *testing.T, event *logv1beta1.EventRecor
 	}
 }
 
+func assertProtoEventProcessUnredacted(t *testing.T, event *logv1beta1.EventRecord) {
+	t.Helper()
+	if event == nil || event.GetProcess() == nil {
+		t.Fatalf("event process missing: %#v", event)
+	}
+	if got, want := event.GetProcess().GetArgv()[1], "--token=supersecret"; got != want {
+		t.Fatalf("event argv: got %q, want %q", got, want)
+	}
+	if got, want := event.GetProcess().GetAncestors()[0].GetArgv()[2], "Bearer abc123"; got != want {
+		t.Fatalf("event ancestor argv: got %q, want %q", got, want)
+	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
+}
+
 func eventWithSecretArgv() jobevent.EventRecord {
 	return jobevent.EventRecord{
 		ID:        "event-1",

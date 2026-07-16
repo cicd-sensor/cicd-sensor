@@ -11,23 +11,40 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
 
-func TestMarshalDetectionLogEntrySanitizesEventProcess(t *testing.T) {
-	t.Parallel()
-
-	payload, err := MarshalDetectionLogEntry(DetectionLogInput{
-		ScopeLogContext: testScopeLogContext(),
-		Hit:             testHitEntry(),
-		Event:           eventWithSecretArgv(),
-	})
-	if err != nil {
-		t.Fatalf("marshal detection log: %v", err)
+func TestMarshalDetectionLogEntryAppliesProcessArgsRedactionPolicy(t *testing.T) {
+	tests := []struct {
+		name   string
+		redact *bool
+		assert func(*testing.T, *logv1beta1.EventRecord)
+	}{
+		{name: "nil policy defaults to sanitized output", assert: assertProtoEventProcessSanitized},
+		{name: "explicit true sanitizes output", redact: boolPointer(true), assert: assertProtoEventProcessSanitized},
+		{name: "explicit false preserves captured args", redact: boolPointer(false), assert: assertProtoEventProcessUnredacted},
 	}
 
-	var got logv1beta1.DetectionLogEntry
-	if err := protojson.Unmarshal(payload, &got); err != nil {
-		t.Fatalf("unmarshal detection log: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := eventWithSecretArgv()
+			payload, err := MarshalDetectionLogEntry(DetectionLogInput{
+				ScopeLogContext:   testScopeLogContext(),
+				Hit:               testHitEntry(),
+				Event:             event,
+				RedactProcessArgs: tt.redact,
+			})
+			if err != nil {
+				t.Fatalf("marshal detection log: %v", err)
+			}
+
+			var got logv1beta1.DetectionLogEntry
+			if err := protojson.Unmarshal(payload, &got); err != nil {
+				t.Fatalf("unmarshal detection log: %v", err)
+			}
+			tt.assert(t, got.GetEvent())
+			if got, want := event.Process.Argv[1], "--token=supersecret"; got != want {
+				t.Fatalf("input event argv mutated: got %q, want %q", got, want)
+			}
+		})
 	}
-	assertProtoEventProcessSanitized(t, got.GetEvent())
 }
 
 func TestMarshalDetectionLogEntryNilHitReturnsNilPayload(t *testing.T) {
