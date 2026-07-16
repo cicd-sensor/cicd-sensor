@@ -401,7 +401,7 @@ func defaultSubscriptionAdminRESTCallOptions() *SubscriptionAdminCallOptions {
 			}),
 		},
 		StreamingPull: []gax.CallOption{
-			gax.WithTimeout(900000 * time.Millisecond),
+			gax.WithTimeout(1800000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -546,7 +546,7 @@ type SubscriptionAdminClient struct {
 
 // Wrapper methods routed to the internal client.
 
-// Close closes the connection to the API service. The user should invoke this when
+// Close closes the connection to the API service. **Always** call Close() when
 // the client is no longer required.
 func (c *SubscriptionAdminClient) Close() error {
 	return c.internalClient.Close()
@@ -557,6 +557,16 @@ func (c *SubscriptionAdminClient) Close() error {
 // use by Google-written clients.
 func (c *SubscriptionAdminClient) setGoogleClientInfo(keyval ...string) {
 	c.internalClient.setGoogleClientInfo(keyval...)
+}
+
+// SetGoogleClientInfo sets the name and version of the application in
+// the `x-goog-api-client` header passed on each request. Intended for
+// use by Google-written clients.
+//
+// SetGoogleClientInfo is not concurrency-safe and should only be invoked
+// sequentially before concurrent operations begin.
+func (c *SubscriptionAdminClient) SetGoogleClientInfo(keyval ...string) {
+	c.setGoogleClientInfo(keyval...)
 }
 
 // Connection returns a connection to the API service.
@@ -871,7 +881,7 @@ func (c *subscriptionAdminGRPCClient) setGoogleClientInfo(keyval ...string) {
 	}
 }
 
-// Close closes the connection to the API service. The user should invoke this when
+// Close closes the connection to the API service. **Always** call Close() when
 // the client is no longer required.
 func (c *subscriptionAdminGRPCClient) Close() error {
 	return c.connPool.Close()
@@ -984,7 +994,7 @@ func (c *subscriptionAdminRESTClient) setGoogleClientInfo(keyval ...string) {
 	}
 }
 
-// Close closes the connection to the API service. The user should invoke this when
+// Close closes the connection to the API service. **Always** call Close() when
 // the client is no longer required.
 func (c *subscriptionAdminRESTClient) Close() error {
 	// Replace httpClient with nil to force cleanup.
@@ -1080,7 +1090,7 @@ func (c *subscriptionAdminGRPCClient) ListSubscriptions(ctx context.Context, req
 	}
 	opts = append((*c.CallOptions).ListSubscriptions[0:len((*c.CallOptions).ListSubscriptions):len((*c.CallOptions).ListSubscriptions)], opts...)
 	it := &SubscriptionIterator{}
-	req = proto.Clone(req).(*pubsubpb.ListSubscriptionsRequest)
+	req = proto.CloneOf(req)
 	it.InternalFetch = func(pageSize int, pageToken string) ([]*pubsubpb.Subscription, string, error) {
 		resp := &pubsubpb.ListSubscriptionsResponse{}
 		if pageToken != "" {
@@ -1280,7 +1290,7 @@ func (c *subscriptionAdminGRPCClient) ListSnapshots(ctx context.Context, req *pu
 	}
 	opts = append((*c.CallOptions).ListSnapshots[0:len((*c.CallOptions).ListSnapshots):len((*c.CallOptions).ListSnapshots)], opts...)
 	it := &SnapshotIterator{}
-	req = proto.Clone(req).(*pubsubpb.ListSnapshotsRequest)
+	req = proto.CloneOf(req)
 	it.InternalFetch = func(pageSize int, pageToken string) ([]*pubsubpb.Snapshot, string, error) {
 		resp := &pubsubpb.ListSnapshotsResponse{}
 		if pageToken != "" {
@@ -1675,7 +1685,7 @@ func (c *subscriptionAdminRESTClient) UpdateSubscription(ctx context.Context, re
 // ListSubscriptions lists matching subscriptions.
 func (c *subscriptionAdminRESTClient) ListSubscriptions(ctx context.Context, req *pubsubpb.ListSubscriptionsRequest, opts ...gax.CallOption) *SubscriptionIterator {
 	it := &SubscriptionIterator{}
-	req = proto.Clone(req).(*pubsubpb.ListSubscriptionsRequest)
+	req = proto.CloneOf(req)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	it.InternalFetch = func(pageSize int, pageToken string) ([]*pubsubpb.Subscription, string, error) {
 		resp := &pubsubpb.ListSubscriptionsResponse{}
@@ -2098,7 +2108,7 @@ func (c *subscriptionAdminRESTClient) GetSnapshot(ctx context.Context, req *pubs
 // state captured by a snapshot.
 func (c *subscriptionAdminRESTClient) ListSnapshots(ctx context.Context, req *pubsubpb.ListSnapshotsRequest, opts ...gax.CallOption) *SnapshotIterator {
 	it := &SnapshotIterator{}
-	req = proto.Clone(req).(*pubsubpb.ListSnapshotsRequest)
+	req = proto.CloneOf(req)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	it.InternalFetch = func(pageSize int, pageToken string) ([]*pubsubpb.Snapshot, string, error) {
 		resp := &pubsubpb.ListSnapshotsResponse{}
