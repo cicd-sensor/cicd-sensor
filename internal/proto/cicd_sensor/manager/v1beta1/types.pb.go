@@ -747,14 +747,18 @@ func (x *OutputSetting) GetFlushIntervalSeconds() uint32 {
 	return 0
 }
 
-// OutputSettings tells the agent which logs should be sent to manager.
+// OutputSettings tells the agent which logs to send to manager and how to
+// prepare them.
 type OutputSettings struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Detection     *OutputSetting         `protobuf:"bytes,1,opt,name=detection,proto3" json:"detection,omitempty"`
-	RuntimeEvent  *OutputSetting         `protobuf:"bytes,2,opt,name=runtime_event,json=runtimeEvent,proto3" json:"runtime_event,omitempty"`
-	Summary       *OutputSetting         `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Detection    *OutputSetting         `protobuf:"bytes,1,opt,name=detection,proto3" json:"detection,omitempty"`
+	RuntimeEvent *OutputSetting         `protobuf:"bytes,2,opt,name=runtime_event,json=runtimeEvent,proto3" json:"runtime_event,omitempty"`
+	Summary      *OutputSetting         `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`
+	// Agents treat absence as true so older managers never opt them into
+	// sending unredacted process arguments.
+	RedactProcessArgs *bool `protobuf:"varint,4,opt,name=redact_process_args,json=redactProcessArgs,proto3,oneof" json:"redact_process_args,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *OutputSettings) Reset() {
@@ -806,6 +810,13 @@ func (x *OutputSettings) GetSummary() *OutputSetting {
 		return x.Summary
 	}
 	return nil
+}
+
+func (x *OutputSettings) GetRedactProcessArgs() bool {
+	if x != nil && x.RedactProcessArgs != nil {
+		return *x.RedactProcessArgs
+	}
+	return false
 }
 
 var File_cicd_sensor_manager_v1beta1_types_proto protoreflect.FileDescriptor
@@ -890,11 +901,13 @@ const file_cicd_sensor_manager_v1beta1_types_proto_rawDesc = "" +
 	"\rOutputSetting\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x122\n" +
 	"\x15flush_threshold_bytes\x18\x02 \x01(\rR\x13flushThresholdBytes\x124\n" +
-	"\x16flush_interval_seconds\x18\x03 \x01(\rR\x14flushIntervalSeconds\"\xf1\x01\n" +
+	"\x16flush_interval_seconds\x18\x03 \x01(\rR\x14flushIntervalSeconds\"\xbe\x02\n" +
 	"\x0eOutputSettings\x12H\n" +
 	"\tdetection\x18\x01 \x01(\v2*.cicd_sensor.manager.v1beta1.OutputSettingR\tdetection\x12O\n" +
 	"\rruntime_event\x18\x02 \x01(\v2*.cicd_sensor.manager.v1beta1.OutputSettingR\fruntimeEvent\x12D\n" +
-	"\asummary\x18\x03 \x01(\v2*.cicd_sensor.manager.v1beta1.OutputSettingR\asummaryB\x95\x02\n" +
+	"\asummary\x18\x03 \x01(\v2*.cicd_sensor.manager.v1beta1.OutputSettingR\asummary\x123\n" +
+	"\x13redact_process_args\x18\x04 \x01(\bH\x00R\x11redactProcessArgs\x88\x01\x01B\x16\n" +
+	"\x14_redact_process_argsB\x95\x02\n" +
 	"\x1fcom.cicd_sensor.manager.v1beta1B\n" +
 	"TypesProtoP\x01Z\\github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1;managerv1beta1\xa2\x02\x03CMX\xaa\x02\x1aCicdSensor.Manager.V1beta1\xca\x02\x1aCicdSensor\\Manager\\V1beta1\xe2\x02&CicdSensor\\Manager\\V1beta1\\GPBMetadata\xea\x02\x1cCicdSensor::Manager::V1beta1b\x06proto3"
 
@@ -954,6 +967,7 @@ func file_cicd_sensor_manager_v1beta1_types_proto_init() {
 		return
 	}
 	file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[7].OneofWrappers = []any{}
+	file_cicd_sensor_manager_v1beta1_types_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

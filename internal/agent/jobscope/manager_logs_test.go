@@ -22,6 +22,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -132,8 +133,43 @@ func TestJobScopeStateWriteDetectionLogForHit_CollectEmitsDetectionLog(t *testin
 	if got, want := entries[0].GetAction(), string(rule.RuleActionCollect); got != want {
 		t.Fatalf("action: got %q, want %q", got, want)
 	}
+	if got, want := entries[0].GetEvent().GetProcess().GetArgv()[1], "<redacted>"; got != want {
+		t.Fatalf("event argv: got %q, want %q", got, want)
+	}
 	if got := scope.CorrelationHitCountFor(hit.Identity); got != 1 {
 		t.Fatalf("recorded hit count: got %d, want 1", got)
+	}
+}
+
+func TestJobScopeStateWriteDetectionLogForHit_AppliesOutputSettingsProcessArgsPolicy(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingJobScopeBatches{}
+	scope := jobscope.NewHost()
+	scope.OutputSettings = &managerv1beta1.OutputSettings{RedactProcessArgs: proto.Bool(false)}
+	scope.ManagerJobLogsForTesting().AttachDetectionRecorderForTesting(testJobIdentity, scope.Type, recorder.sendBatch)
+	hit := observations.HitEntry{
+		Identity:  rule.RuleIdentity{RulesetID: "set", RuleID: "collect_token"},
+		Action:    string(rule.RuleActionCollect),
+		MaxAlerts: 1,
+	}
+	event := testJobScopeProcessEvent("event-unredacted-detection")
+
+	scope.RecordHit(hit, event)
+	scope.WriteDetectionLogForHit(t.Context(), testJobIdentity, testJobMetadata, "machine", hit, event, testJobScopeLogger)
+	if err := scope.FinalizeStreamingLogs(t.Context()); err != nil {
+		t.Fatalf("finalize logs: %v", err)
+	}
+
+	entries := recorder.detectionEntries(t)
+	if len(entries) != 1 {
+		t.Fatalf("detection entries: got %d, want 1", len(entries))
+	}
+	if got, want := entries[0].GetEvent().GetProcess().GetArgv()[1], "--token=secret"; got != want {
+		t.Fatalf("event argv: got %q, want %q", got, want)
+	}
+	if got, want := event.Process.Argv[1], "--token=secret"; got != want {
+		t.Fatalf("input event argv mutated: got %q, want %q", got, want)
 	}
 }
 
@@ -299,6 +335,58 @@ func TestJobScopeStateWriteRuntimeEventLog_EmitsEvent(t *testing.T) {
 	}
 }
 
+func TestJobScopeStateWriteRuntimeEventLog_IsolatesProcessArgsPolicyByScope(t *testing.T) {
+	t.Parallel()
+
+	event := testJobScopeProcessEvent("event-scope-policy")
+	hostRecorder := &recordingJobScopeBatches{}
+	host := jobscope.NewHost()
+	host.OutputSettings = &managerv1beta1.OutputSettings{RedactProcessArgs: proto.Bool(false)}
+	host.ManagerJobLogsForTesting().AttachRuntimeEventRecorderForTesting(testJobIdentity, host.Type, hostRecorder.sendBatch)
+
+	projectRecorder := &recordingJobScopeBatches{}
+	project := jobscope.NewProject()
+	// An older Manager can provide OutputSettings without the new optional
+	// field. The absent value must keep the secure redaction default.
+	project.OutputSettings = &managerv1beta1.OutputSettings{}
+	project.ManagerJobLogsForTesting().AttachRuntimeEventRecorderForTesting(testJobIdentity, project.Type, projectRecorder.sendBatch)
+
+	// Both scopes receive the same EventRecord. Each output must apply only its
+	// own manager policy without mutating data observed by the other scope.
+	host.WriteRuntimeEventLog(t.Context(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	project.WriteRuntimeEventLog(t.Context(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	if err := host.FinalizeStreamingLogs(t.Context()); err != nil {
+		t.Fatalf("finalize host logs: %v", err)
+	}
+	if err := project.FinalizeStreamingLogs(t.Context()); err != nil {
+		t.Fatalf("finalize project logs: %v", err)
+	}
+
+	hostEntries := hostRecorder.runtimeEventEntries(t)
+	projectEntries := projectRecorder.runtimeEventEntries(t)
+	if len(hostEntries) != 1 || len(projectEntries) != 1 {
+		t.Fatalf("runtime entries: host=%d project=%d, want 1 each", len(hostEntries), len(projectEntries))
+	}
+	if got, want := hostEntries[0].GetEvent().GetProcess().GetArgv()[1], "--token=secret"; got != want {
+		t.Fatalf("host argv: got %q, want %q", got, want)
+	}
+	if got, want := hostEntries[0].GetEvent().GetProcess().GetAncestors()[0].GetArgv()[2], "Bearer ancestor-secret"; got != want {
+		t.Fatalf("host ancestor argv: got %q, want %q", got, want)
+	}
+	if got, want := projectEntries[0].GetEvent().GetProcess().GetArgv()[1], "<redacted>"; got != want {
+		t.Fatalf("project argv: got %q, want %q", got, want)
+	}
+	if got, want := projectEntries[0].GetEvent().GetProcess().GetAncestors()[0].GetArgv()[2], "<redacted>"; got != want {
+		t.Fatalf("project ancestor argv: got %q, want %q", got, want)
+	}
+	if got, want := event.Process.Argv[1], "--token=secret"; got != want {
+		t.Fatalf("shared event argv mutated: got %q, want %q", got, want)
+	}
+	if got, want := event.Process.Ancestors[0].Argv[2], "Bearer ancestor-secret"; got != want {
+		t.Fatalf("shared event ancestor argv mutated: got %q, want %q", got, want)
+	}
+}
+
 func TestJobScopeStateWriteRuntimeEventLog_WritesDebugOutput(t *testing.T) {
 	t.Parallel()
 
@@ -322,6 +410,39 @@ func TestJobScopeStateWriteRuntimeEventLog_WritesDebugOutput(t *testing.T) {
 	}
 	if got, want := entry.GetEvent().GetNetworkConnect().GetRemoteIp(), "203.0.113.30"; got != want {
 		t.Fatalf("remote ip: got %q, want %q", got, want)
+	}
+}
+
+func TestJobScopeStateWriteRuntimeEventLog_AlwaysSanitizesDebugOutput(t *testing.T) {
+	t.Parallel()
+
+	debugDir := t.TempDir()
+	scope := jobscope.NewProject()
+	scope.OutputSettings = &managerv1beta1.OutputSettings{RedactProcessArgs: proto.Bool(false)}
+	debugOutput, err := joblogs.NewDebugOutputForTesting(testJobScopeLogger, debugDir)
+	if err != nil {
+		t.Fatalf("NewDebugOutput: %v", err)
+	}
+	scope.SetDebugOutput(debugOutput)
+
+	event := testJobScopeProcessEvent("event-debug-redaction")
+	scope.WriteRuntimeEventLog(t.Context(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	if err := scope.CloseDebugOutput(t.Context()); err != nil {
+		t.Fatalf("close debug output: %v", err)
+	}
+
+	entry := readDebugRuntimeEventEntry(t, debugDir)
+	if got, want := entry.GetEvent().GetProcess().GetArgv()[1], "<redacted>"; got != want {
+		t.Fatalf("debug argv: got %q, want %q", got, want)
+	}
+	if got, want := entry.GetEvent().GetProcess().GetAncestors()[0].GetArgv()[2], "<redacted>"; got != want {
+		t.Fatalf("debug ancestor argv: got %q, want %q", got, want)
+	}
+	if got, want := event.Process.Argv[1], "--token=secret"; got != want {
+		t.Fatalf("input event argv mutated: got %q, want %q", got, want)
+	}
+	if got, want := event.Process.Ancestors[0].Argv[2], "Bearer ancestor-secret"; got != want {
+		t.Fatalf("input event ancestor argv mutated: got %q, want %q", got, want)
 	}
 }
 
@@ -477,6 +598,9 @@ func testJobScopeProcessEvent(id string) jobevent.EventRecord {
 			PID:      100,
 			ExecPath: "/usr/bin/curl",
 			Argv:     []string{"curl", "--token=secret"},
+			Ancestors: []jobevent.AncestorProcess{
+				{ExecPath: "/bin/bash", Argv: []string{"bash", "-c", "Bearer ancestor-secret"}},
+			},
 		},
 	}
 }

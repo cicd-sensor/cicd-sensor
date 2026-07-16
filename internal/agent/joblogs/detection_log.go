@@ -18,6 +18,7 @@ type DetectionLogInput struct {
 	ScopeLogContext
 	Hit                 *observations.HitEntry
 	Event               jobevent.EventRecord
+	RedactProcessArgs   *bool
 	RuleName            string
 	RuleDescription     string
 	RulesetRevision     string
@@ -54,7 +55,7 @@ func MarshalDetectionLogEntry(in DetectionLogInput) ([]byte, error) {
 		RuleDescription:     proto.String(in.RuleDescription),
 		Action:              proto.String(in.Hit.Action),
 		RuleAlertTruncation: proto.String(in.RuleAlertTruncation),
-		Event:               sanitizedLogEventRecord(in.Event),
+		Event:               logEventRecordForOutput(in.Event, in.RedactProcessArgs),
 		RuleTags:            logEventTags(in.RuleTags),
 	}
 	return logJSONMarshal.Marshal(message)

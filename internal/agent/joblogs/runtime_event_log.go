@@ -13,7 +13,8 @@ import (
 
 type RuntimeEventLogInput struct {
 	ScopeLogContext
-	Event jobevent.EventRecord
+	Event             jobevent.EventRecord
+	RedactProcessArgs *bool
 }
 
 func MarshalRuntimeEventLogEntry(in RuntimeEventLogInput) ([]byte, error) {
@@ -27,7 +28,7 @@ func MarshalRuntimeEventLogEntry(in RuntimeEventLogInput) ([]byte, error) {
 		Job:            protoconv.ToLogContext(in.Identity, in.Metadata),
 		Scope:          proto.String(string(in.Scope)),
 		RunnerType:     proto.String(in.RunnerType),
-		Event:          sanitizedLogEventRecord(in.Event),
+		Event:          logEventRecordForOutput(in.Event, in.RedactProcessArgs),
 	}
 	return logJSONMarshal.Marshal(message)
 }

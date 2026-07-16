@@ -31,6 +31,7 @@ type StartupConfig struct {
 	DefaultMaxAlertsPerRule int               `yaml:"default_max_alerts_per_rule,omitempty"`
 	DisableBaselineRules    bool              `yaml:"disable_baseline_rules,omitempty"`
 	MonitorMode             bool              `yaml:"monitor_mode,omitempty"`
+	RedactProcessArgs       *bool             `yaml:"redact_process_args,omitempty"`
 	Sinks                   SinksConfig       `yaml:"sinks,omitempty"`
 	Logs                    LogsConfig        `yaml:"logs,omitempty"`
 }
@@ -97,6 +98,12 @@ func LoadStartupConfig(path string) (StartupConfig, error) {
 // BindAddress returns the net/http listen address represented by bind config.
 func (cfg StartupConfig) BindAddress() string {
 	return net.JoinHostPort(cfg.Bind.Address, strconv.Itoa(*cfg.Bind.Port))
+}
+
+// ProcessArgsRedactionEnabled keeps redaction enabled when the setting is
+// absent, including configs written before the setting existed.
+func (cfg StartupConfig) ProcessArgsRedactionEnabled() bool {
+	return cfg.RedactProcessArgs == nil || *cfg.RedactProcessArgs
 }
 
 func validateSinks(sinks SinksConfig) error {

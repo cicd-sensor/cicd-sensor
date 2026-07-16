@@ -80,6 +80,8 @@ Rules are evaluated against the captured process context, but logs and reports u
 In output, argv values that look like tokens, passwords, secrets, credential material, or auth headers are replaced with `<redacted>`.
 Long argv values are shortened and marked with `<truncated, N bytes>`.
 
+Manager operators can set `redact_process_args: false` to preserve captured argv in manager-bound Detection and Runtime Event Logs. This is an explicit opt-in for sinks approved to handle potentially sensitive command lines. Agent-direct outputs, including project results and debug output, remain sanitized.
+
 This means a rule can match full argv content even when the corresponding log entry shows only a redacted or shortened value.
 
 ## How to use the logs

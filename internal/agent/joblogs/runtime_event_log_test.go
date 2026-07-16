@@ -10,22 +10,42 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/version"
 )
 
-func TestMarshalRuntimeEventLogEntrySanitizesEventProcess(t *testing.T) {
-	t.Parallel()
-
-	payload, err := MarshalRuntimeEventLogEntry(RuntimeEventLogInput{
-		ScopeLogContext: testScopeLogContext(),
-		Event:           eventWithSecretArgv(),
-	})
-	if err != nil {
-		t.Fatalf("marshal runtime event log: %v", err)
+func TestMarshalRuntimeEventLogEntryAppliesProcessArgsRedactionPolicy(t *testing.T) {
+	tests := []struct {
+		name   string
+		redact *bool
+		assert func(*testing.T, *logv1beta1.EventRecord)
+	}{
+		{name: "nil policy defaults to sanitized output", assert: assertProtoEventProcessSanitized},
+		{name: "explicit true sanitizes output", redact: boolPointer(true), assert: assertProtoEventProcessSanitized},
+		{name: "explicit false preserves captured args", redact: boolPointer(false), assert: assertProtoEventProcessUnredacted},
 	}
 
-	var got logv1beta1.RuntimeEventLogEntry
-	if err := protojson.Unmarshal(payload, &got); err != nil {
-		t.Fatalf("unmarshal runtime event log: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := eventWithSecretArgv()
+			payload, err := MarshalRuntimeEventLogEntry(RuntimeEventLogInput{
+				ScopeLogContext:   testScopeLogContext(),
+				Event:             event,
+				RedactProcessArgs: tt.redact,
+			})
+			if err != nil {
+				t.Fatalf("marshal runtime event log: %v", err)
+			}
+
+			var got logv1beta1.RuntimeEventLogEntry
+			if err := protojson.Unmarshal(payload, &got); err != nil {
+				t.Fatalf("unmarshal runtime event log: %v", err)
+			}
+			tt.assert(t, got.GetEvent())
+			if got, want := event.Process.Argv[1], "--token=supersecret"; got != want {
+				t.Fatalf("input event argv mutated: got %q, want %q", got, want)
+			}
+			if got, want := event.Process.Ancestors[0].Argv[2], "Bearer abc123"; got != want {
+				t.Fatalf("input ancestor argv mutated: got %q, want %q", got, want)
+			}
+		})
 	}
-	assertProtoEventProcessSanitized(t, got.GetEvent())
 }
 
 func TestMarshalRuntimeEventLogEntryStampsLogTypeAndVersions(t *testing.T) {

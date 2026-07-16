@@ -12,6 +12,15 @@ func sanitizedLogEventRecord(event jobevent.EventRecord) *logv1beta1.EventRecord
 	return logEventRecord(event)
 }
 
+func logEventRecordForOutput(event jobevent.EventRecord, redactProcessArgs *bool) *logv1beta1.EventRecord {
+	// Nil is the safe default for callers and for config received from managers
+	// that predate the redaction setting.
+	if redactProcessArgs == nil || *redactProcessArgs {
+		return sanitizedLogEventRecord(event)
+	}
+	return logEventRecord(event)
+}
+
 func logEventRecord(event jobevent.EventRecord) *logv1beta1.EventRecord {
 	out := &logv1beta1.EventRecord{
 		Id:      event.ID,

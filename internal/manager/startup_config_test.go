@@ -170,6 +170,34 @@ unexpected_field: true
 	}
 }
 
+func TestStartupConfig_ProcessArgsRedactionEnabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{name: "omitted policy defaults to redaction", content: "monitor_mode: false\n", want: true},
+		{name: "explicit true enables redaction", content: "redact_process_args: true\n", want: true},
+		{name: "explicit false disables redaction", content: "redact_process_args: false\n", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "manager.yaml")
+			if err := os.WriteFile(path, []byte(tt.content), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			got, err := LoadStartupConfig(path)
+			if err != nil {
+				t.Fatalf("LoadStartupConfig: %v", err)
+			}
+			if got.ProcessArgsRedactionEnabled() != tt.want {
+				t.Fatalf("ProcessArgsRedactionEnabled: got %v, want %v", got.ProcessArgsRedactionEnabled(), tt.want)
+			}
+		})
+	}
+}
+
 func TestLoadStartupConfig_SinksAndLogs(t *testing.T) {
 	tests := []struct {
 		name      string
