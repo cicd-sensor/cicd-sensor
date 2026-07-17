@@ -34,6 +34,7 @@ help:
 	@printf '  %-29s %s\n' 'make build-ctl-cross' 'build cicd-sensorctl for macOS/Windows into ./dist'
 	@printf '  %-29s %s\n' 'make build-local-ctl' 'build cicd-sensorctl for the local host into ./bin'
 	@printf '  %-29s %s\n' 'make bench-cel' 'run CEL evaluation benchmark once'
+	@printf '  %-29s %s\n' 'make rules-test' 'run shipped rule behavior tests'
 	@printf '  %-29s %s\n' 'make rules-bundle' 'bundle rules/ into $(RULE_BUNDLE)'
 	@printf '  %-29s %s\n' 'make rules-artifact-validate' 'pull and validate an OCI rules artifact'
 	@printf '  %-29s %s\n' 'make integration' 'run integration tests'
@@ -131,6 +132,10 @@ bpf-integration:
 .PHONY: rules-validate
 rules-validate:
 	$(GO) run $(GO_MOD_FLAG) ./cmd/cicd-sensorctl rule validate rules/
+
+.PHONY: rules-test
+rules-test:
+	$(GO) test $(GO_MOD_FLAG) -tags rules_validation -count=1 ./rules
 
 .PHONY: rules-bundle
 rules-bundle:

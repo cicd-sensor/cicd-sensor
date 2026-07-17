@@ -1,6 +1,10 @@
-package rulesource_test
+//go:build rules_validation
+
+package rules_test
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
@@ -9,16 +13,14 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
-// TestPersistenceRulesCoverMoveAndLinkBypass is the regression guard for
-// issue #107: protected-path persistence rules must match across file_open,
-// file_move (mv / rename), and file_link (ln) so that staging a payload and
-// then renaming or linking it into a protected location is not a detection
-// blind spot. It loads the actually shipped baseline ruleset and evaluates
-// the real rule conditions, so it fails if a rule is removed or narrowed.
-func TestPersistenceRulesCoverMoveAndLinkBypass(t *testing.T) {
+// TestPersistenceRulesCoverLandingBypasses is the regression guard for issues
+// #107 and #108. Protected persistence locations must remain covered when a
+// payload is written, moved, linked, or exposed through a mount alias. It loads
+// the shipped baseline ruleset and evaluates the real rule conditions.
+func TestPersistenceRulesCoverLandingBypasses(t *testing.T) {
 	t.Parallel()
 
-	loaded, err := rulesource.LoadRulesFile("../../rules/generic-persistence.yaml")
+	loaded, err := rulesource.LoadRulesFile("generic-persistence.yaml")
 	if err != nil {
 		t.Fatalf("load persistence rules: %v", err)
 	}
@@ -52,6 +54,18 @@ func TestPersistenceRulesCoverMoveAndLinkBypass(t *testing.T) {
 		{"cron_move", celengine.CELInputEvent{FromPath: "/tmp/job", ToPath: "/workspace/rootfs/etc/cron.d/fixture"}, false},
 		{"cron_link", celengine.CELInputEvent{CreatedPath: "/etc/cron.d/evil", ExistingPath: "/tmp/job", IsSymlink: true}, true},
 		{"cron_link", celengine.CELInputEvent{CreatedPath: "/workspace/rootfs/etc/cron.d/fixture", ExistingPath: "/tmp/job", IsSymlink: true}, false},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/cron.d", TargetPath: "/tmp/cron"}, true},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/cron.d/", TargetPath: "/tmp/cron"}, true},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/cron.d/evil", TargetPath: "/tmp/cron"}, true},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/var/spool/cron", TargetPath: "/tmp/cron"}, true},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/crontab", TargetPath: "/tmp/crontab"}, true},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/workspace/rootfs/etc/cron.d", TargetPath: "/tmp/cron"}, false},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/tmp/source", TargetPath: "/etc/cron.d"}, false},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc", TargetPath: "/tmp/etc"}, false},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "etc/cron.d", TargetPath: "/tmp/cron"}, false},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/cron.daily-backup", TargetPath: "/tmp/cron"}, false},
+		{"cron_mount_exposure", celengine.CELInputEvent{SourcePath: "/var/lib/docker/overlay2/rootfs", TargetPath: "/tmp/rootfs"}, false},
+		{"cron_mount_exposure", celengine.CELInputEvent{TargetPath: "/tmp/cron"}, false},
 
 		// Shell startup files.
 		{"shell_rc_write", celengine.CELInputEvent{Path: "/home/runner/.bashrc", IsWrite: true}, true},
@@ -64,6 +78,13 @@ func TestPersistenceRulesCoverMoveAndLinkBypass(t *testing.T) {
 		{"shell_rc_link", celengine.CELInputEvent{CreatedPath: "/home/runner/.zshrc", ExistingPath: "/tmp/rc", IsSymlink: true}, true},
 		{"shell_rc_link", celengine.CELInputEvent{CreatedPath: "/workspace/dotfiles/.zshrc", ExistingPath: "/tmp/rc", IsSymlink: true}, true},
 		{"shell_rc_link", celengine.CELInputEvent{CreatedPath: "/workspace/rootfs/etc/profile.d/fixture.sh", ExistingPath: "/tmp/rc", IsSymlink: true}, false},
+		{"shell_rc_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/profile.d", TargetPath: "/tmp/profile.d"}, true},
+		{"shell_rc_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/profile.d/evil.sh", TargetPath: "/tmp/profile"}, true},
+		{"shell_rc_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/profile", TargetPath: "/tmp/profile"}, true},
+		{"shell_rc_mount_exposure", celengine.CELInputEvent{SourcePath: "/home/runner/.bashrc", TargetPath: "/tmp/bashrc"}, true},
+		{"shell_rc_mount_exposure", celengine.CELInputEvent{SourcePath: "/workspace/rootfs/etc/profile", TargetPath: "/tmp/profile"}, false},
+		{"shell_rc_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/profile.d-backup", TargetPath: "/tmp/profile"}, false},
+		{"shell_rc_mount_exposure", celengine.CELInputEvent{SourcePath: "/proc/thread-self/fd/10", TargetPath: "/tmp/fd"}, false},
 
 		// Dynamic linker preload.
 		{"ld_so_preload_write", celengine.CELInputEvent{Path: "/etc/ld.so.preload", IsWrite: true}, true},
@@ -72,10 +93,20 @@ func TestPersistenceRulesCoverMoveAndLinkBypass(t *testing.T) {
 		{"ld_so_preload_move", celengine.CELInputEvent{FromPath: "/tmp/p", ToPath: "/workspace/rootfs/etc/ld.so.conf.d/fixture.conf"}, false},
 		{"ld_so_preload_link", celengine.CELInputEvent{CreatedPath: "/etc/ld.so.conf.d/evil.conf", ExistingPath: "/tmp/p", IsHardlink: true}, true},
 		{"ld_so_preload_link", celengine.CELInputEvent{CreatedPath: "/workspace/rootfs/etc/ld.so.conf.d/fixture.conf", ExistingPath: "/tmp/p", IsHardlink: true}, false},
+		{"ld_so_preload_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/ld.so.conf.d", TargetPath: "/tmp/ld"}, true},
+		{"ld_so_preload_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/ld.so.preload", TargetPath: "/tmp/preload"}, true},
+		{"ld_so_preload_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/ld.so.conf", TargetPath: "/tmp/ld"}, true},
+		{"ld_so_preload_mount_exposure", celengine.CELInputEvent{SourcePath: "/workspace/rootfs/etc/ld.so.preload", TargetPath: "/tmp/preload"}, false},
+		{"ld_so_preload_mount_exposure", celengine.CELInputEvent{SourcePath: "/etc/ld.so.conf.d-backup", TargetPath: "/tmp/ld"}, false},
+		{"ld_so_preload_mount_exposure", celengine.CELInputEvent{SourcePath: "/var/lib/docker/overlay2/rootfs", TargetPath: "/tmp/rootfs"}, false},
 
 		// User systemd service unit (same move/link gap closed).
 		{"user_systemd_service_move", celengine.CELInputEvent{FromPath: "/tmp/x.service", ToPath: "/home/runner/.config/systemd/user/x.service"}, true},
 		{"user_systemd_service_link", celengine.CELInputEvent{CreatedPath: "/home/runner/.config/systemd/user/x.service", ExistingPath: "/tmp/x.service", IsSymlink: true}, true},
+		{"user_systemd_service_mount_exposure", celengine.CELInputEvent{SourcePath: "/home/runner/.config/systemd/user", TargetPath: "/tmp/user-systemd"}, true},
+		{"user_systemd_service_mount_exposure", celengine.CELInputEvent{SourcePath: "/home/runner/.config/systemd/user/evil.service", TargetPath: "/tmp/evil.service"}, true},
+		{"user_systemd_service_mount_exposure", celengine.CELInputEvent{SourcePath: "/workspace/systemd/evil.service", TargetPath: "/tmp/evil.service"}, false},
+		{"user_systemd_service_mount_exposure", celengine.CELInputEvent{SourcePath: "/var/lib/docker/overlay2/rootfs", TargetPath: "/tmp/rootfs"}, false},
 	}
 
 	for _, tc := range cases {
@@ -106,17 +137,21 @@ func TestPersistenceRulesCoverMoveAndLinkBypass(t *testing.T) {
 	}
 
 	wantActions := map[string]rule.RuleAction{
-		"cron_write":                rule.RuleActionCollect,
-		"cron_move":                 rule.RuleActionCollect,
-		"cron_link":                 rule.RuleActionDetect,
-		"shell_rc_write":            rule.RuleActionCollect,
-		"shell_rc_move":             rule.RuleActionCollect,
-		"shell_rc_link":             rule.RuleActionCollect,
-		"ld_so_preload_write":       rule.RuleActionDetect,
-		"ld_so_preload_move":        rule.RuleActionDetect,
-		"ld_so_preload_link":        rule.RuleActionDetect,
-		"user_systemd_service_move": rule.RuleActionDetect,
-		"user_systemd_service_link": rule.RuleActionDetect,
+		"cron_write":                          rule.RuleActionCollect,
+		"cron_move":                           rule.RuleActionCollect,
+		"cron_link":                           rule.RuleActionDetect,
+		"cron_mount_exposure":                 rule.RuleActionDetect,
+		"shell_rc_write":                      rule.RuleActionCollect,
+		"shell_rc_move":                       rule.RuleActionCollect,
+		"shell_rc_link":                       rule.RuleActionCollect,
+		"shell_rc_mount_exposure":             rule.RuleActionCollect,
+		"ld_so_preload_write":                 rule.RuleActionDetect,
+		"ld_so_preload_move":                  rule.RuleActionDetect,
+		"ld_so_preload_link":                  rule.RuleActionDetect,
+		"ld_so_preload_mount_exposure":        rule.RuleActionDetect,
+		"user_systemd_service_move":           rule.RuleActionDetect,
+		"user_systemd_service_link":           rule.RuleActionDetect,
+		"user_systemd_service_mount_exposure": rule.RuleActionDetect,
 	}
 	for id, want := range wantActions {
 		r, ok := byID[id]
@@ -150,10 +185,45 @@ func TestPersistenceRulesCoverMoveAndLinkBypass(t *testing.T) {
 			}
 		}
 	}
+
+	for _, id := range []string{
+		"cron_mount_exposure",
+		"shell_rc_mount_exposure",
+		"ld_so_preload_mount_exposure",
+		"user_systemd_service_mount_exposure",
+	} {
+		r, ok := byID[id]
+		if !ok {
+			t.Fatalf("expected rule %q to be shipped", id)
+		}
+		if r.EventType != jobevent.Mount {
+			t.Fatalf("rule %q event_type=%q, want %q", id, r.EventType, jobevent.Mount)
+		}
+	}
+
+	for _, pair := range []struct {
+		dirs  string
+		roots string
+	}{
+		{dirs: "cron_persistence_dirs", roots: "cron_persistence_dir_roots"},
+		{dirs: "shell_rc_dirs", roots: "shell_rc_dir_roots"},
+		{dirs: "ld_preload_dirs", roots: "ld_preload_dir_roots"},
+	} {
+		dirs := slices.Clone(set.Lists[pair.dirs])
+		for i := range dirs {
+			dirs[i] = strings.TrimSuffix(dirs[i], "/")
+		}
+		if !slices.Equal(dirs, set.Lists[pair.roots]) {
+			t.Fatalf("list %q must equal %q with trailing slashes removed: got %v, want %v",
+				pair.roots, pair.dirs, set.Lists[pair.roots], dirs)
+		}
+	}
 }
 
 func caseLabel(in celengine.CELInputEvent) string {
 	switch {
+	case in.SourcePath != "":
+		return "source=" + in.SourcePath
 	case in.ToPath != "":
 		return "to=" + in.ToPath
 	case in.CreatedPath != "":

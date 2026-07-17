@@ -11,6 +11,9 @@ rule_sets:
       user_systemd_fragments:
         - "/.config/systemd/user/"
 
+      user_systemd_dir_fragments:
+        - "/.config/systemd/user"
+
       systemctl_user_persistence_verbs:
         - "daemon-reload"
         - "enable"
@@ -31,10 +34,23 @@ rule_sets:
       cron_persistence_files:
         - "/etc/crontab"
 
+      # Mount events can name a protected directory itself, while the lists
+      # above use trailing slashes to match files placed below the directory.
+      cron_persistence_dir_roots:
+        - "/etc/cron.d"
+        - "/etc/cron.hourly"
+        - "/etc/cron.daily"
+        - "/etc/cron.weekly"
+        - "/etc/cron.monthly"
+        - "/var/spool/cron"
+
       # Shell startup files (system-wide and per-user). System directories use
       # startsWith(); per-user dotfiles use endsWith() against the home path.
       shell_rc_dirs:
         - "/etc/profile.d/"
+
+      shell_rc_dir_roots:
+        - "/etc/profile.d"
 
       shell_rc_files:
         - "/etc/profile"
@@ -60,6 +76,9 @@ rule_sets:
       # Dynamic-linker preload / config locations.
       ld_preload_dirs:
         - "/etc/ld.so.conf.d/"
+
+      ld_preload_dir_roots:
+        - "/etc/ld.so.conf.d"
 
       ld_preload_files:
         - "/etc/ld.so.preload"
@@ -149,12 +168,91 @@ rule_sets:
         tags:
           mitre_tactic: persistence
 
+      # --- Protected path mount exposure -----------------------------------
+      # file_open.path remains process-visible, so a mount can expose the same
+      # persistence location through an alias. These rules detect the mount
+      # attempt that created the alias. source_path is best-effort: classic
+      # mount(2) supplies the raw caller string, which may be relative or
+      # symlinked.
+      - rule_id: cron_mount_exposure
+        rule_name: "Supply-chain: cron persistence path exposed by mount"
+        description: |
+          What:
+            Detects a mount attempt that exposes a system cron file or directory through another path.
+          Why:
+            A later write through the alias can install cron persistence while file_open reports only the alias path.
+          Notes:
+            The event records an attempt, not confirmed success. Classic mount sources are raw, non-canonical strings; review the target path and process context.
+        event_type: mount
+        condition: |
+          list.cron_persistence_dir_roots.exists(d, source_path == d) ||
+          list.cron_persistence_dirs.exists(d, source_path.startsWith(d)) ||
+          list.cron_persistence_files.exists(f, source_path == f)
+        action: detect
+        tags:
+          mitre_tactic: defense-evasion,persistence
+
+      - rule_id: shell_rc_mount_exposure
+        rule_name: "Supply-chain: shell startup path exposed by mount"
+        description: |
+          What:
+            Collects a mount attempt that exposes a shell startup file or directory through another path.
+          Why:
+            A later write through the alias can modify shell startup behavior while file_open reports only the alias path.
+          Notes:
+            Dotfile and container workflows can intentionally mount shell startup files. Classic mount sources are raw, non-canonical strings; review the target path and process context before treating the event as suspicious.
+        event_type: mount
+        condition: |
+          list.shell_rc_dir_roots.exists(d, source_path == d) ||
+          list.shell_rc_dirs.exists(d, source_path.startsWith(d)) ||
+          list.shell_rc_files.exists(f, source_path == f) ||
+          list.shell_rc_suffixes.exists(s, source_path.endsWith(s))
+        action: collect
+        tags:
+          mitre_tactic: defense-evasion,persistence
+
+      - rule_id: ld_so_preload_mount_exposure
+        rule_name: "Supply-chain: dynamic linker path exposed by mount"
+        description: |
+          What:
+            Detects a mount attempt that exposes an ld.so preload or configuration path through another path.
+          Why:
+            A later write through the alias can configure process-wide library injection while file_open reports only the alias path.
+          Notes:
+            The event records an attempt, not confirmed success. Classic mount sources are raw, non-canonical strings; investigate the source, target, and process context.
+        event_type: mount
+        condition: |
+          list.ld_preload_dir_roots.exists(d, source_path == d) ||
+          list.ld_preload_dirs.exists(d, source_path.startsWith(d)) ||
+          list.ld_preload_files.exists(f, source_path == f)
+        action: detect
+        tags:
+          mitre_tactic: defense-evasion,persistence
+
+      - rule_id: user_systemd_service_mount_exposure
+        rule_name: "Supply-chain: user systemd path exposed by mount"
+        description: |
+          What:
+            Detects a mount attempt that exposes a user systemd configuration path through another path.
+          Why:
+            A later write through the alias can install a user service while file_open reports only the alias path.
+          Notes:
+            The event records an attempt, not confirmed success. Classic mount sources are raw, non-canonical strings; review the target path and process context.
+        event_type: mount
+        condition: |
+          list.user_systemd_dir_fragments.exists(p, source_path.endsWith(p)) ||
+          list.user_systemd_fragments.exists(p, source_path.contains(p))
+        action: detect
+        tags:
+          mitre_tactic: defense-evasion,persistence
+
       # --- Cron persistence -------------------------------------------------
       # cron_write/_move/_link cover the three ways a payload reaches a
       # protected cron location: writing it open(O_WRONLY), renaming a file
       # already staged elsewhere (mv), or linking it in (ln). A rule bound to
       # file_open alone is bypassed by the move/link primitives, so each
-      # protected location is monitored across all three event types.
+      # protected location is monitored across all three event types. Mount
+      # aliases are covered separately by cron_mount_exposure above.
       - rule_id: cron_write
         rule_name: "Supply-chain: cron persistence file write"
         description: |
