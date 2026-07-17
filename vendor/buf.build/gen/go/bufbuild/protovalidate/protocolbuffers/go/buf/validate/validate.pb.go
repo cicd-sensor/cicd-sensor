@@ -5427,7 +5427,7 @@ type UInt64Rules struct {
 	//	message MyUInt64 {
 	//	  uint64 value = 1 [
 	//	    (buf.validate.field).uint64.example = 1,
-	//	    (buf.validate.field).uint64.example = -10
+	//	    (buf.validate.field).uint64.example = 10
 	//	  ];
 	//	}
 	//
@@ -5820,7 +5820,7 @@ type UInt64Rules_builder struct {
 	//	message MyUInt64 {
 	//	  uint64 value = 1 [
 	//	    (buf.validate.field).uint64.example = 1,
-	//	    (buf.validate.field).uint64.example = -10
+	//	    (buf.validate.field).uint64.example = 10
 	//	  ];
 	//	}
 	//
@@ -9591,8 +9591,8 @@ type BoolRules struct {
 	//
 	//	message MyBool {
 	//	  bool value = 1 [
-	//	    (buf.validate.field).bool.example = 1,
-	//	    (buf.validate.field).bool.example = 2
+	//	    (buf.validate.field).bool.example = true,
+	//	    (buf.validate.field).bool.example = false
 	//	  ];
 	//	}
 	//
@@ -9684,8 +9684,8 @@ type BoolRules_builder struct {
 	//
 	//	message MyBool {
 	//	  bool value = 1 [
-	//	    (buf.validate.field).bool.example = 1,
-	//	    (buf.validate.field).bool.example = 2
+	//	    (buf.validate.field).bool.example = true,
+	//	    (buf.validate.field).bool.example = false
 	//	  ];
 	//	}
 	//
@@ -9874,7 +9874,7 @@ type StringRules struct {
 	//
 	//	message MyString {
 	//	  // must be in list ["apple", "banana"]
-	//	  string value = 1 [(buf.validate.field).string.in = "apple", (buf.validate.field).string.in = "banana"];
+	//	  string value = 1 [(buf.validate.field).string = { in: ["apple", "banana"] }];
 	//	}
 	//
 	// ```
@@ -9886,7 +9886,7 @@ type StringRules struct {
 	//
 	//	message MyString {
 	//	  // value must not be in list ["orange", "grape"]
-	//	  string value = 1 [(buf.validate.field).string.not_in = "orange", (buf.validate.field).string.not_in = "grape"];
+	//	  string value = 1 [(buf.validate.field).string = { not_in: ["orange", "grape"] }];
 	//	}
 	//
 	// ```
@@ -11128,7 +11128,7 @@ type StringRules_builder struct {
 	//
 	//	message MyString {
 	//	  // must be in list ["apple", "banana"]
-	//	  string value = 1 [(buf.validate.field).string.in = "apple", (buf.validate.field).string.in = "banana"];
+	//	  string value = 1 [(buf.validate.field).string = { in: ["apple", "banana"] }];
 	//	}
 	//
 	// ```
@@ -11140,7 +11140,7 @@ type StringRules_builder struct {
 	//
 	//	message MyString {
 	//	  // value must not be in list ["orange", "grape"]
-	//	  string value = 1 [(buf.validate.field).string.not_in = "orange", (buf.validate.field).string.not_in = "grape"];
+	//	  string value = 1 [(buf.validate.field).string = { not_in: ["orange", "grape"] }];
 	//	}
 	//
 	// ```
@@ -12235,7 +12235,7 @@ type BytesRules struct {
 	//
 	//	message MyBytes {
 	//	  // value must in ["\x01\x02", "\x02\x03", "\x03\x04"]
-	//	  optional bytes value = 1 [(buf.validate.field).bytes.in = {"\x01\x02", "\x02\x03", "\x03\x04"}];
+	//	  optional bytes value = 1 [(buf.validate.field).bytes = { in: ["\x01\x02", "\x02\x03", "\x03\x04"] }];
 	//	}
 	//
 	// ```
@@ -12249,7 +12249,7 @@ type BytesRules struct {
 	//
 	//	message MyBytes {
 	//	  // value must not in ["\x01\x02", "\x02\x03", "\x03\x04"]
-	//	  optional bytes value = 1 [(buf.validate.field).bytes.not_in = {"\x01\x02", "\x02\x03", "\x03\x04"}];
+	//	  optional bytes value = 1 [(buf.validate.field).bytes = { not_in: ["\x01\x02", "\x02\x03", "\x03\x04"] }];
 	//	}
 	//
 	// ```
@@ -12795,7 +12795,7 @@ type BytesRules_builder struct {
 	//
 	//	message MyBytes {
 	//	  // value must in ["\x01\x02", "\x02\x03", "\x03\x04"]
-	//	  optional bytes value = 1 [(buf.validate.field).bytes.in = {"\x01\x02", "\x02\x03", "\x03\x04"}];
+	//	  optional bytes value = 1 [(buf.validate.field).bytes = { in: ["\x01\x02", "\x02\x03", "\x03\x04"] }];
 	//	}
 	//
 	// ```
@@ -12809,7 +12809,7 @@ type BytesRules_builder struct {
 	//
 	//	message MyBytes {
 	//	  // value must not in ["\x01\x02", "\x02\x03", "\x03\x04"]
-	//	  optional bytes value = 1 [(buf.validate.field).bytes.not_in = {"\x01\x02", "\x02\x03", "\x03\x04"}];
+	//	  optional bytes value = 1 [(buf.validate.field).bytes = { not_in: ["\x01\x02", "\x02\x03", "\x03\x04"] }];
 	//	}
 	//
 	// ```
@@ -13088,8 +13088,10 @@ type EnumRules struct {
 	//	}
 	//
 	//	message MyMessage {
+	//	  MyEnum value = 1 [
 	//	    (buf.validate.field).enum.example = 1,
 	//	    (buf.validate.field).enum.example = 2
+	//	  ];
 	//	}
 	//
 	// ```
@@ -13291,8 +13293,10 @@ type EnumRules_builder struct {
 	//	}
 	//
 	//	message MyMessage {
+	//	  MyEnum value = 1 [
 	//	    (buf.validate.field).enum.example = 1,
 	//	    (buf.validate.field).enum.example = 2
+	//	  ];
 	//	}
 	//
 	// ```
@@ -13966,7 +13970,7 @@ type DurationRules struct {
 	//
 	//	message MyDuration {
 	//	  // value must equal 5s
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.const = "5s"];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.const = { seconds: 5 }];
 	//	}
 	//
 	// ```
@@ -13989,7 +13993,9 @@ type DurationRules struct {
 	//
 	//	message MyDuration {
 	//	  // must be in list [1s, 2s, 3s]
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.in = ["1s", "2s", "3s"]];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration = {
+	//	    in: [{ seconds: 1 }, { seconds: 2 }, { seconds: 3 }]
+	//	  }];
 	//	}
 	//
 	// ```
@@ -14003,7 +14009,9 @@ type DurationRules struct {
 	//
 	//	message MyDuration {
 	//	  // value must not be in list [1s, 2s, 3s]
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.not_in = ["1s", "2s", "3s"]];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration = {
+	//	    not_in: [{ seconds: 1 }, { seconds: 2 }, { seconds: 3 }]
+	//	  }];
 	//	}
 	//
 	// ```
@@ -14017,7 +14025,7 @@ type DurationRules struct {
 	//	message MyDuration {
 	//	  google.protobuf.Duration value = 1 [
 	//	    (buf.validate.field).duration.example = { seconds: 1 },
-	//	    (buf.validate.field).duration.example = { seconds: 2 },
+	//	    (buf.validate.field).duration.example = { seconds: 2 }
 	//	  ];
 	//	}
 	//
@@ -14315,7 +14323,7 @@ type DurationRules_builder struct {
 	//
 	//	message MyDuration {
 	//	  // value must equal 5s
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.const = "5s"];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.const = { seconds: 5 }];
 	//	}
 	//
 	// ```
@@ -14329,7 +14337,7 @@ type DurationRules_builder struct {
 	//
 	//	message MyDuration {
 	//	  // must be less than 5s
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.lt = "5s"];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.lt = { seconds: 5 }];
 	//	}
 	//
 	// ```
@@ -14342,7 +14350,7 @@ type DurationRules_builder struct {
 	//
 	//	message MyDuration {
 	//	  // must be less than or equal to 10s
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.lte = "10s"];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.lte = { seconds: 10 }];
 	//	}
 	//
 	// ```
@@ -14400,7 +14408,9 @@ type DurationRules_builder struct {
 	//
 	//	message MyDuration {
 	//	  // must be in list [1s, 2s, 3s]
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.in = ["1s", "2s", "3s"]];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration = {
+	//	    in: [{ seconds: 1 }, { seconds: 2 }, { seconds: 3 }]
+	//	  }];
 	//	}
 	//
 	// ```
@@ -14414,7 +14424,9 @@ type DurationRules_builder struct {
 	//
 	//	message MyDuration {
 	//	  // value must not be in list [1s, 2s, 3s]
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.not_in = ["1s", "2s", "3s"]];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration = {
+	//	    not_in: [{ seconds: 1 }, { seconds: 2 }, { seconds: 3 }]
+	//	  }];
 	//	}
 	//
 	// ```
@@ -14428,7 +14440,7 @@ type DurationRules_builder struct {
 	//	message MyDuration {
 	//	  google.protobuf.Duration value = 1 [
 	//	    (buf.validate.field).duration.example = { seconds: 1 },
-	//	    (buf.validate.field).duration.example = { seconds: 2 },
+	//	    (buf.validate.field).duration.example = { seconds: 2 }
 	//	  ];
 	//	}
 	//
@@ -14492,7 +14504,7 @@ type DurationRules_Lt struct {
 	//
 	//	message MyDuration {
 	//	  // must be less than 5s
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.lt = "5s"];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.lt = { seconds: 5 }];
 	//	}
 	//
 	// ```
@@ -14508,7 +14520,7 @@ type DurationRules_Lte struct {
 	//
 	//	message MyDuration {
 	//	  // must be less than or equal to 10s
-	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.lte = "10s"];
+	//	  google.protobuf.Duration value = 1 [(buf.validate.field).duration.lte = { seconds: 10 }];
 	//	}
 	//
 	// ```
@@ -14636,7 +14648,7 @@ type FieldMaskRules struct {
 	//	message MyFieldMask {
 	//	  google.protobuf.FieldMask value = 1 [
 	//	    (buf.validate.field).field_mask.example = { paths: ["a", "b"] },
-	//	    (buf.validate.field).field_mask.example = { paths: ["c.a", "d"] },
+	//	    (buf.validate.field).field_mask.example = { paths: ["c.a", "d"] }
 	//	  ];
 	//	}
 	//
@@ -14788,7 +14800,7 @@ type FieldMaskRules_builder struct {
 	//	message MyFieldMask {
 	//	  google.protobuf.FieldMask value = 1 [
 	//	    (buf.validate.field).field_mask.example = { paths: ["a", "b"] },
-	//	    (buf.validate.field).field_mask.example = { paths: ["c.a", "d"] },
+	//	    (buf.validate.field).field_mask.example = { paths: ["c.a", "d"] }
 	//	  ];
 	//	}
 	//
@@ -14853,7 +14865,7 @@ type TimestampRules struct {
 	//	message MyTimestamp {
 	//	  google.protobuf.Timestamp value = 1 [
 	//	    (buf.validate.field).timestamp.example = { seconds: 1672444800 },
-	//	    (buf.validate.field).timestamp.example = { seconds: 1672531200 },
+	//	    (buf.validate.field).timestamp.example = { seconds: 1672531200 }
 	//	  ];
 	//	}
 	//
@@ -15324,7 +15336,7 @@ type TimestampRules_builder struct {
 	//	message MyTimestamp {
 	//	  google.protobuf.Timestamp value = 1 [
 	//	    (buf.validate.field).timestamp.example = { seconds: 1672444800 },
-	//	    (buf.validate.field).timestamp.example = { seconds: 1672531200 },
+	//	    (buf.validate.field).timestamp.example = { seconds: 1672531200 }
 	//	  ];
 	//	}
 	//
@@ -15652,7 +15664,7 @@ type Violation struct {
 	//	  bool b = 2 [(buf.validate.field).cel = {
 	//	    id: "custom_rule",
 	//	    expression: "!this ? 'b must be true': ''"
-	//	  }]
+	//	  }];
 	//	}
 	//
 	// ```
@@ -15860,7 +15872,7 @@ type Violation_builder struct {
 	//	  bool b = 2 [(buf.validate.field).cel = {
 	//	    id: "custom_rule",
 	//	    expression: "!this ? 'b must be true': ''"
-	//	  }]
+	//	  }];
 	//	}
 	//
 	// ```
@@ -16509,7 +16521,7 @@ var (
 	// ```proto
 	//
 	//	extend buf.validate.Int32Rules {
-	//	  bool is_zero [(buf.validate.predefined).cel = {
+	//	  bool is_zero = 1001 [(buf.validate.predefined).cel = {
 	//	    id: "int32.is_zero",
 	//	    message: "must be zero",
 	//	    expression: "!rule || this == 0",
