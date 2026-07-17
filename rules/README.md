@@ -24,6 +24,7 @@ source-backed indicators that are too specific for the generic baseline rules.
 Validate locally:
 
 ```sh
+make rules-test              # evaluate shipped rules against behavior cases
 make rules-validate          # parse + CEL compile + schema
 make rules-bundle-validate   # also bundle and re-validate the bundle
 ```
