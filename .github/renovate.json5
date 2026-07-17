@@ -7,6 +7,13 @@
   "dependencyDashboard": true,
   "internalChecksFilter": "strict",
   "rebaseWhen": "behind-base-branch",
+  // Routine dependency branches are created and updated Tuesday morning JST.
+  // Renovate vulnerability alert PRs bypass this schedule.
+  "timezone": "Asia/Tokyo",
+  "schedule": [
+    "* 9-12 * * 2"
+  ],
+  "updateNotScheduled": false,
   "labels": [
     "dependencies"
   ],
@@ -38,15 +45,12 @@
       "groupName": "github actions"
     },
     {
-      "description": "Group Dockerfile base image updates weekly before 1am UTC Tuesday / 10am JST Tuesday",
+      "description": "Group Dockerfile base image updates",
       "matchManagers": [
         "dockerfile"
       ],
       "groupName": "dockerfile base images",
-      "minimumReleaseAgeBehaviour": "timestamp-optional",
-      "schedule": [
-        "before 1am on tuesday"
-      ]
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
       "description": "Update SHA-pinned GitHub Actions examples in README and docs",
