@@ -354,11 +354,11 @@ func waitForJob(t *testing.T, reason string, condition func() bool) {
 
 func newTestJob(identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, eventChannelSize int) (*Job, chan jobevent.EventRecord) {
 	eventCh := make(chan jobevent.EventRecord, eventChannelSize)
-	return NewJob(testLogger, identity, metadata, "machine", eventCh), eventCh
+	return NewJob(testLogger, identity, metadata, "machine", eventCh, 0), eventCh
 }
 
 func newTestJobWithoutWorker(identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata) *Job {
-	return NewJob(testLogger, identity, metadata, "machine", nil)
+	return NewJob(testLogger, identity, metadata, "machine", nil, 0)
 }
 
 func sendTestEvent(t *testing.T, eventCh chan<- jobevent.EventRecord, event jobevent.EventRecord) {

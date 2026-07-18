@@ -71,7 +71,7 @@ func hitsWithAction(snapshot observations.StateSnapshot, action rule.RuleAction)
 
 func newTestJob(identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, eventChannelSize int) (*job.Job, chan jobevent.EventRecord) {
 	eventCh := make(chan jobevent.EventRecord, eventChannelSize)
-	return job.NewJob(testLogger, identity, metadata, "machine", eventCh), eventCh
+	return job.NewJob(testLogger, identity, metadata, "machine", eventCh, 0), eventCh
 }
 
 func sendTestEvent(t *testing.T, eventCh chan<- jobevent.EventRecord, event jobevent.EventRecord) {

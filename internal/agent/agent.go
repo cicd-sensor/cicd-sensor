@@ -27,6 +27,7 @@ type Agent struct {
 	socketPath                string
 	githubK8sRunnerSocketPath string
 	shutdownGrace             time.Duration
+	jobTTL                    time.Duration
 	reaperCancel              context.CancelFunc
 	cancelEngine              context.CancelFunc
 	engineDone                <-chan error
@@ -55,6 +56,14 @@ func NewAgent(logger *slog.Logger, socketPath string, provider jobcontext.Provid
 func (a *Agent) SetShutdownGrace(grace time.Duration) {
 	if grace > 0 {
 		a.shutdownGrace = grace
+	}
+}
+
+// SetJobTTL overrides the default maximum job lifetime before forced
+// finalization. Non-positive values are ignored.
+func (a *Agent) SetJobTTL(ttl time.Duration) {
+	if ttl > 0 {
+		a.jobTTL = ttl
 	}
 }
 
@@ -87,6 +96,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 	}
 	jobRegistry := jobregistry.New(a.logger)
+	jobRegistry.SetJobTTL(a.jobTTL)
 
 	kernelTracker, err := kerneltracker.New(a.logger, jobRegistry)
 	if err != nil {

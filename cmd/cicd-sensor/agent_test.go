@@ -13,6 +13,7 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 		Provider:      "github",
 		Runner:        "machine",
 		ShutdownGrace: time.Second,
+		JobTTL:        time.Hour,
 	}
 
 	tests := []struct {
@@ -27,6 +28,7 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 				Provider:      "gitlab",
 				Runner:        "kubernetes",
 				ShutdownGrace: time.Second,
+				JobTTL:        time.Hour,
 			},
 		},
 		{
@@ -53,6 +55,11 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 			name:        "non-positive shutdown grace",
 			opts:        withAgentShutdownGrace(valid, 0),
 			wantErrText: "shutdown-grace must be positive",
+		},
+		{
+			name:        "non-positive job ttl",
+			opts:        withAgentJobTTL(valid, 0),
+			wantErrText: "job-ttl must be positive",
 		},
 		{
 			name:        "github k8s runner socket outside github kubernetes",
@@ -85,6 +92,7 @@ func TestValidateAgentStartOptionsRequiresManagerToken(t *testing.T) {
 		Provider:      "github",
 		Runner:        "machine",
 		ShutdownGrace: time.Second,
+		JobTTL:        time.Hour,
 	}
 
 	if err := validateAgentStartOptions(opts); err != nil {
@@ -111,6 +119,7 @@ func TestValidateAgentStartOptionsRequiresManagerForKubernetes(t *testing.T) {
 		Provider:      "github",
 		Runner:        "kubernetes",
 		ShutdownGrace: time.Second,
+		JobTTL:        time.Hour,
 	}
 
 	err := validateAgentStartOptions(opts)
@@ -196,6 +205,11 @@ func withAgentRunner(opts agentStartOptions, runner string) agentStartOptions {
 
 func withAgentShutdownGrace(opts agentStartOptions, shutdownGrace time.Duration) agentStartOptions {
 	opts.ShutdownGrace = shutdownGrace
+	return opts
+}
+
+func withAgentJobTTL(opts agentStartOptions, jobTTL time.Duration) agentStartOptions {
+	opts.JobTTL = jobTTL
 	return opts
 }
 

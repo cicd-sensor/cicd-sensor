@@ -32,6 +32,7 @@ type agentStartOptions struct {
 	SocketPath                string
 	GitHubK8sRunnerSocketPath string
 	ShutdownGrace             time.Duration
+	JobTTL                    time.Duration
 }
 
 func runAgentSubcommand(args []string) {
@@ -57,6 +58,7 @@ func runAgentStart(args []string) {
 	var managerTokenFilePath string
 	var githubK8sRunnerSocketPath string
 	var shutdownGrace time.Duration
+	var jobTTL time.Duration
 	socketPath = defaultSocketPath
 	githubK8sRunnerSocketPath = os.Getenv("CICD_SENSOR_GITHUB_K8S_RUNNER_SOCKET")
 	fs.Usage = func() {
@@ -77,6 +79,8 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output(), "        Host scope manager bearer token. Required only when --manager-url is set.")
 		fmt.Fprintln(fs.Output(), "  --shutdown-grace DURATION")
 		fmt.Fprintln(fs.Output(), "        Best-effort drain window used after SIGTERM. (default 8s)")
+		fmt.Fprintln(fs.Output(), "  --job-ttl DURATION")
+		fmt.Fprintln(fs.Output(), "        Maximum lifetime of a job before forced finalization. (default 24h)")
 	}
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
 	fs.StringVar(&githubK8sRunnerSocketPath, "github-k8s-runner-socket", githubK8sRunnerSocketPath, "GitHub Kubernetes runner socket path.")
@@ -85,6 +89,7 @@ func runAgentStart(args []string) {
 	fs.StringVar(&managerURL, "manager-url", "", "Host scope manager URL.")
 	fs.StringVar(&managerTokenFilePath, "manager-token-file", "", "Path to a file containing the host scope manager bearer token. Overrides CICD_SENSOR_MANAGER_TOKEN.")
 	fs.DurationVar(&shutdownGrace, "shutdown-grace", 8*time.Second, "Best-effort drain window used after SIGTERM.")
+	fs.DurationVar(&jobTTL, "job-ttl", 24*time.Hour, "Maximum lifetime of a job before forced finalization.")
 	if err := fs.Parse(args[1:]); err != nil {
 		os.Exit(2)
 	}
@@ -106,6 +111,7 @@ func runAgentStart(args []string) {
 		SocketPath:                socketPath,
 		GitHubK8sRunnerSocketPath: githubK8sRunnerSocketPath,
 		ShutdownGrace:             shutdownGrace,
+		JobTTL:                    jobTTL,
 	}
 	if err := validateAgentStartRequiredOptions(opts); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -158,6 +164,7 @@ func runAgentStart(args []string) {
 
 	a := agent.NewAgent(logger, opts.SocketPath, jobcontext.Provider(opts.Provider), opts.Runner, hostManager, hostManagerClient)
 	a.SetShutdownGrace(opts.ShutdownGrace)
+	a.SetJobTTL(opts.JobTTL)
 	a.SetGitHubK8sRunnerSocketPath(opts.GitHubK8sRunnerSocketPath)
 	if err := a.Run(ctx); err != nil {
 		if errors.Is(err, listener.ErrAlreadyRunning) {
@@ -209,6 +216,9 @@ func validateAgentStartRequiredOptions(opts agentStartOptions) error {
 	}
 	if opts.ShutdownGrace <= 0 {
 		return fmt.Errorf("shutdown-grace must be positive")
+	}
+	if opts.JobTTL <= 0 {
+		return fmt.Errorf("job-ttl must be positive")
 	}
 	return nil
 }

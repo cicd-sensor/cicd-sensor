@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/job"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/joblogs"
@@ -61,6 +62,9 @@ type JobRegistry struct {
 	kernelTracker *kerneltracker.KernelTracker
 	jobs          map[jobcontext.JobIdentity]*job.Job
 	baselineLoad  BaselineLoader
+	// jobTTL is the maximum job lifetime stamped onto every new Job.
+	// Zero means job.DefaultTTL.
+	jobTTL time.Duration
 	// starting hides half-created jobs and serializes duplicate start requests.
 	starting map[jobcontext.JobIdentity]chan struct{}
 }
@@ -82,6 +86,17 @@ func New(logger *slog.Logger) *JobRegistry {
 
 func (jr *JobRegistry) SetBaselineLoadForTesting(load BaselineLoader) {
 	jr.baselineLoad = load
+}
+
+// SetJobTTL overrides the default maximum job lifetime applied to jobs
+// created after the call. Non-positive values are ignored.
+func (jr *JobRegistry) SetJobTTL(ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	jr.mu.Lock()
+	defer jr.mu.Unlock()
+	jr.jobTTL = ttl
 }
 
 // BindKernelTracker completes startup wiring after the KernelTracker is built.
@@ -163,6 +178,7 @@ func (jr *JobRegistry) registerJobRuntime(ctx context.Context, identity jobconte
 	if jobLogger == nil {
 		jobLogger = jr.logger
 	}
+	jobTTL := jr.jobTTL
 	jr.mu.Unlock()
 
 	var eventCh <-chan jobevent.EventRecord
@@ -176,7 +192,7 @@ func (jr *JobRegistry) registerJobRuntime(ctx context.Context, identity jobconte
 		engineRegistered = true
 	}
 
-	j := job.NewJob(jobLogger, identity, metadata, runnerType, eventCh)
+	j := job.NewJob(jobLogger, identity, metadata, runnerType, eventCh, jobTTL)
 	jr.mu.Lock()
 	if _, ok := jr.jobs[identity]; ok {
 		jr.mu.Unlock()

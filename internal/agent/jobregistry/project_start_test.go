@@ -160,6 +160,36 @@ func TestJobRegistry_ApplyGitHubProjectStart_ManagerConfigIgnoresLocalProjectInp
 	}
 }
 
+func TestJobRegistry_SetJobTTL_StampsNewJobs(t *testing.T) {
+	tests := []struct {
+		name    string
+		ttl     time.Duration
+		wantTTL time.Duration
+	}{
+		{name: "configured ttl stamps new jobs", ttl: 2 * time.Hour, wantTTL: 2 * time.Hour},
+		{name: "unset ttl keeps DefaultTTL", ttl: 0, wantTTL: jobpkg.DefaultTTL},
+		{name: "non-positive ttl is ignored", ttl: -time.Hour, wantTTL: jobpkg.DefaultTTL},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			jr := newJobRegistry(t)
+			jr.SetJobTTL(tc.ttl)
+
+			job, err := jr.ApplyGitHubProjectStart(testCtx, jobregistry.GitHubProjectStartConfig{
+				Identity:   jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
+				RunnerType: "machine",
+			})
+			if err != nil {
+				t.Fatalf("project start: %v", err)
+			}
+			if got := job.DeadlineAt().Sub(job.StartedAt()); got != tc.wantTTL {
+				t.Fatalf("job ttl: got %s, want %s", got, tc.wantTTL)
+			}
+		})
+	}
+}
+
 func TestJobRegistry_ApplyGitHubProjectStart_SetsProjectScopeOnNewJob(t *testing.T) {
 	jr := newJobRegistry(t)
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")

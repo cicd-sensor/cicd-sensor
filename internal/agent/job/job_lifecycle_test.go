@@ -15,7 +15,7 @@ func TestJob_Lifecycle(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
 	eventCh := make(chan jobevent.EventRecord, externalTestEventChannelSize)
-	j := job.NewJob(externalTestLogger, id, meta, "machine", eventCh)
+	j := job.NewJob(externalTestLogger, id, meta, "machine", eventCh, 0)
 
 	if j.State() != job.JobStateRunning {
 		t.Fatalf("initial state: got %q", j.State())
@@ -43,7 +43,7 @@ func TestJob_Lifecycle(t *testing.T) {
 
 func TestJob_FinalizeIdempotent(t *testing.T) {
 	eventCh := make(chan jobevent.EventRecord, externalTestEventChannelSize)
-	j := job.NewJob(externalTestLogger, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", eventCh)
+	j := job.NewJob(externalTestLogger, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", eventCh, 0)
 
 	j.MarkClosing()
 	close(eventCh)
@@ -60,7 +60,7 @@ func TestJob_FinalizeIdempotent(t *testing.T) {
 }
 
 func TestJob_NilEventChannelIsImmediatelyDone(t *testing.T) {
-	j := job.NewJob(externalTestLogger, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil)
+	j := job.NewJob(externalTestLogger, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil, 0)
 
 	select {
 	case <-j.Done():
@@ -73,7 +73,7 @@ func TestJob_NilEventChannelIsImmediatelyDone(t *testing.T) {
 }
 
 func TestJob_NilLoggerUsesDefaultLogger(t *testing.T) {
-	j := job.NewJob(nil, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil)
+	j := job.NewJob(nil, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil, 0)
 
 	select {
 	case <-j.Done():
@@ -85,8 +85,29 @@ func TestJob_NilLoggerUsesDefaultLogger(t *testing.T) {
 	}
 }
 
+func TestJob_NewJobTTLDeadline(t *testing.T) {
+	tests := []struct {
+		name    string
+		ttl     time.Duration
+		wantTTL time.Duration
+	}{
+		{name: "explicit ttl sets the deadline window", ttl: 2 * time.Hour, wantTTL: 2 * time.Hour},
+		{name: "zero ttl falls back to DefaultTTL", ttl: 0, wantTTL: job.DefaultTTL},
+		{name: "negative ttl falls back to DefaultTTL", ttl: -time.Hour, wantTTL: job.DefaultTTL},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			j := job.NewJob(externalTestLogger, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil, tc.ttl)
+			if got := j.DeadlineAt().Sub(j.StartedAt()); got != tc.wantTTL {
+				t.Fatalf("deadline window: got %s, want %s", got, tc.wantTTL)
+			}
+		})
+	}
+}
+
 func TestJob_IsExpired(t *testing.T) {
-	j := job.NewJob(externalTestLogger, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil)
+	j := job.NewJob(externalTestLogger, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil, 0)
 	if j.IsExpired() {
 		t.Fatal("new job should not be expired")
 	}
@@ -100,7 +121,7 @@ func TestJob_IsExpired(t *testing.T) {
 func TestJob_SetProjectScope_ResolvesScopeRules(t *testing.T) {
 	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
 	meta := jobcontext.JobMetadata{}
-	j := job.NewJob(externalTestLogger, id, meta, "machine", make(chan jobevent.EventRecord, externalTestEventChannelSize))
+	j := job.NewJob(externalTestLogger, id, meta, "machine", make(chan jobevent.EventRecord, externalTestEventChannelSize), 0)
 
 	scope := &jobscope.JobScopeState{
 		Type: jobcontext.ScopeTypeProject,
