@@ -55,6 +55,8 @@ See [cicd-sensor GitHub Packages](https://github.com/orgs/cicd-sensor/packages?r
 
 The manager does not terminate TLS directly.
 Design HTTPS / TLS, authentication boundaries, and private network exposure with cloud-side components such as a load balancer, ingress, API Gateway, service mesh, or private network.
+Use HTTPS for production deployments.
+Plain HTTP is supported for trusted private networks where the network boundary is the accepted protection, and the Agent logs `manager_url_insecure_scheme` when configured with an HTTP Manager URL.
 
 ## Network requirements
 
