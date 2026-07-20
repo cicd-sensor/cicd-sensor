@@ -1,7 +1,11 @@
 package evaluation
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"math"
+	"strings"
 	"sync"
 	"testing"
 
@@ -180,4 +184,55 @@ func TestEvaluateEvent_NilInputsAreNoOp(t *testing.T) {
 
 	eval := &EvaluationState{}
 	EvaluateEvent(testCtx, eval, testDispatchEvent("/usr/bin/curl", "example.com", 443), testEvalIdentity, jobcontext.JobMetadata{}, "machine", nil, nil, testLogger, testActivation())
+}
+
+func TestTerminateProcess_SkipsUnsafeTargets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		pid        int32
+		wantLog    string
+		forbidLogs []string
+	}{
+		{
+			name:    "missing zero pid",
+			pid:     0,
+			wantLog: "reason=missing_pid",
+		},
+		{
+			name:    "missing negative pid",
+			pid:     -1,
+			wantLog: "reason=missing_pid",
+		},
+		{
+			name:       "nonexistent pid",
+			pid:        math.MaxInt32,
+			wantLog:    "reason=getpgid_failed",
+			forbidLogs: []string{"terminate_process_sent", "terminate_process_group_sigint"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&logs, nil))
+			event := testDispatchEvent("/usr/bin/test", "example.com", 443)
+			event.Process.PID = tt.pid
+
+			terminateProcess(t.Context(), event, logger)
+
+			got := logs.String()
+			if !strings.Contains(got, tt.wantLog) {
+				t.Fatalf("terminate log: got %q, want substring %q", got, tt.wantLog)
+			}
+			for _, forbidden := range tt.forbidLogs {
+				if strings.Contains(got, forbidden) {
+					t.Fatalf("terminate log: got unexpected substring %q in %q", forbidden, got)
+				}
+			}
+		})
+	}
 }

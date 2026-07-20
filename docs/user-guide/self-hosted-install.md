@@ -140,6 +140,9 @@ Remove it if your maintenance workflow normally uses stop / restart.
 Machine runner deployments assume dockerd.
 Place `cicd-sensor proxy dockerd` in front of the Docker socket so cicd-sensor can observe container creation.
 
+Important: the proxy observes container creation for attribution; it is not an authorization boundary.
+Keep the proxy socket's owner, group, and mode equivalent to the original Docker socket, because access to either socket grants Docker daemon privileges.
+
 After installation, workflows and runner-side Docker clients still connect to `/run/docker.sock`.
 `/run/docker.sock` is served by the cicd-sensor Docker proxy, and the real dockerd socket moves to `/run/docker-upstream.sock`.
 

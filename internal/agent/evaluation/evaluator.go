@@ -221,7 +221,15 @@ func terminateProcess(ctx context.Context, event jobevent.EventRecord, logger *s
 		return
 	}
 
-	pgid, _ := syscall.Getpgid(int(pid))
+	pgid, err := syscall.Getpgid(int(pid))
+	if err != nil {
+		logger.WarnContext(ctx, "terminate_process_skipped", "reason", "getpgid_failed", "pid", pid, "error", err)
+		return
+	}
+	if pgid <= 0 {
+		logger.WarnContext(ctx, "terminate_process_skipped", "reason", "invalid_pgid", "pid", pid, "pgid", pgid)
+		return
+	}
 
 	if err := syscall.Kill(int(pid), syscall.SIGKILL); err != nil {
 		logger.WarnContext(ctx, "terminate_process_failed", "pid", pid, "error", err)
@@ -229,6 +237,10 @@ func terminateProcess(ctx context.Context, event jobevent.EventRecord, logger *s
 	}
 	logger.WarnContext(ctx, "terminate_process_sent", "pid", pid)
 
+	if pgid == syscall.Getpgrp() {
+		logger.WarnContext(ctx, "terminate_process_group_sigint_skipped", "reason", "agent_process_group", "pid", pid, "pgid", pgid)
+		return
+	}
 	if err := syscall.Kill(-pgid, syscall.SIGINT); err != nil {
 		logger.WarnContext(ctx, "terminate_process_group_sigint_failed", "pid", pid, "pgid", pgid, "error", err)
 	} else {
