@@ -1,10 +1,10 @@
-# syntax=docker/dockerfile:1.24
+# syntax=docker/dockerfile:1.25
 #
 # cicd-sensor CI agent image (BPF-based observation agent).
 #
 # Runtime requires CAP_BPF + CAP_PERFMON + cgroup v2 access.
 
-FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:3cea88773e65f24c4db570d96b97a65fb8f3c145f656a4396e23d9be6f34cddd AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:fd4cfadccffc600948b4d9b3dedb2f447748c5743b58aa66701076a47892c289 AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
         -o /out/cicd-sensorctl \
         ./cmd/cicd-sensorctl
 
-FROM cgr.dev/chainguard/static:latest@sha256:77d8b8925dc27970ec2f48243f44c7a260d52c49cd778288e4ee97566e0cb75b
+FROM cgr.dev/chainguard/static:latest@sha256:60582b2ae6074f641094af0f370d4ab241aab271858a66223dcde7eee9f51638
 COPY --from=builder /out/cicd-sensor /usr/local/bin/cicd-sensor
 COPY --from=builder /out/cicd-sensorctl /usr/local/bin/cicd-sensorctl
 

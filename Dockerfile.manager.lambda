@@ -1,11 +1,11 @@
-# syntax=docker/dockerfile:1.24
+# syntax=docker/dockerfile:1.25
 #
 # cicd-sensor-manager container image (Lambda adapter).
 #
 
-FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1@sha256:1e5ab4d9242167500ed8a7bed8a79b448228aaa51cf382fb51fe4bf8a5f9a811 AS lambda-adapter
+FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0@sha256:3a108c4ceee9e0346a61fc0fc7085017945c664be4eaa2925855b8dd2467227b AS lambda-adapter
 
-FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:3cea88773e65f24c4db570d96b97a65fb8f3c145f656a4396e23d9be6f34cddd AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:fd4cfadccffc600948b4d9b3dedb2f447748c5743b58aa66701076a47892c289 AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
         -o /out/cicd-sensor-manager \
         ./cmd/cicd-sensor-manager
 
-FROM cgr.dev/chainguard/static:latest@sha256:77d8b8925dc27970ec2f48243f44c7a260d52c49cd778288e4ee97566e0cb75b
+FROM cgr.dev/chainguard/static:latest@sha256:60582b2ae6074f641094af0f370d4ab241aab271858a66223dcde7eee9f51638
 
 # Lambda adapter
 COPY --from=lambda-adapter /lambda-adapter /opt/extensions/lambda-adapter
