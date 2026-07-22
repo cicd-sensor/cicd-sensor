@@ -1,5 +1,11 @@
 rule_sets:
   - ruleset_id: cicd_sensor_baseline/generic_execution
+    lists:
+      node_user_script_dirs:
+        - "/.local/share/"
+
+      node_package_manager_data_dirs:
+        - "/.local/share/pnpm/"
 
     rules:
       - rule_id: python_tmp_pyz_exec
@@ -18,6 +24,40 @@ rule_sets:
             process.exec_path.endsWith("/python3")
           ) &&
           process.argv.exists(arg, arg.contains("/tmp/") && arg.endsWith(".pyz"))
+        action: detect
+        tags:
+          mitre_tactic: execution
+
+      - rule_id: node_inline_eval_descendant_user_data_script_exec
+        rule_name: "Supply-chain: user-data Node.js below inline evaluation"
+        description: |
+          What:
+            Detects Node.js executing JavaScript from a user's local data directory when its process ancestry contains Node.js inline evaluation.
+          Why:
+            A malicious dependency can use an inline downloader to stage and launch a longer-lived second process outside node_modules.
+          Notes:
+            This proves process lineage, not that the ancestor downloaded or wrote the script or is its direct parent. Direct inline evaluation, project-local .config scripts, scripts below node_modules, and pnpm's own installation do not match.
+        event_type: process_exec
+        condition: |
+          process.exec_path.endsWith("/node") &&
+          process.argv.exists(arg,
+            list.node_user_script_dirs.exists(d, arg.contains(d)) &&
+            !arg.contains("/node_modules/") &&
+            !list.node_package_manager_data_dirs.exists(d, arg.contains(d)) &&
+            (
+              arg.endsWith(".js") ||
+              arg.endsWith(".mjs") ||
+              arg.endsWith(".cjs")
+            )
+          ) &&
+          process.ancestors.exists(a,
+            a.exec_path.endsWith("/node") &&
+            a.argv.exists(arg,
+              arg == "-e" ||
+              arg == "--eval" ||
+              arg.startsWith("--eval=")
+            )
+          )
         action: detect
         tags:
           mitre_tactic: execution
