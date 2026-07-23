@@ -193,6 +193,31 @@ func TestResolveAgentStartOptions(t *testing.T) {
 	}
 }
 
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name string
+		d    time.Duration
+		want string
+	}{
+		{name: "trims zero minutes and seconds after hours (the --job-ttl default)", d: 24 * time.Hour, want: "24h"},
+		{name: "trims zero seconds after minutes", d: 90 * time.Minute, want: "1h30m"},
+		{name: "trims zero seconds after bare minutes", d: time.Minute, want: "1m"},
+		{name: "keeps seconds-only value unchanged", d: 30 * time.Second, want: "30s"},
+		{name: "keeps zero middle unit when seconds are non-zero", d: time.Hour + 30*time.Second, want: "1h0m30s"},
+		{name: "keeps sub-second value unchanged", d: 1500 * time.Millisecond, want: "1.5s"},
+		{name: "keeps zero duration canonical form", d: 0, want: "0s"},
+		{name: "trims negative duration the same way", d: -24 * time.Hour, want: "-24h"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := formatDuration(tc.d); got != tc.want {
+				t.Fatalf("formatDuration(%v): got %q, want %q", tc.d, got, tc.want)
+			}
+		})
+	}
+}
+
 func withAgentProvider(opts agentStartOptions, provider string) agentStartOptions {
 	opts.Provider = provider
 	return opts

@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/job"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/listener"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -79,8 +81,7 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output(), "        Host scope manager bearer token. Required only when --manager-url is set.")
 		fmt.Fprintln(fs.Output(), "  --shutdown-grace DURATION")
 		fmt.Fprintln(fs.Output(), "        Best-effort drain window used after SIGTERM. (default 8s)")
-		fmt.Fprintln(fs.Output(), "  --job-ttl DURATION")
-		fmt.Fprintln(fs.Output(), "        Maximum lifetime of a job before forced finalization. (default 24h)")
+		fmt.Fprintf(fs.Output(), "  --job-ttl DURATION\n        Job age threshold after which the job is expired and forcibly finalized.\n        Expiry is checked about once per minute, so finalization may happen up to\n        about one minute after the TTL is reached. (default %s)\n", formatDuration(job.DefaultTTL))
 	}
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
 	fs.StringVar(&githubK8sRunnerSocketPath, "github-k8s-runner-socket", githubK8sRunnerSocketPath, "GitHub Kubernetes runner socket path.")
@@ -89,7 +90,7 @@ func runAgentStart(args []string) {
 	fs.StringVar(&managerURL, "manager-url", "", "Host scope manager URL.")
 	fs.StringVar(&managerTokenFilePath, "manager-token-file", "", "Path to a file containing the host scope manager bearer token. Overrides CICD_SENSOR_MANAGER_TOKEN.")
 	fs.DurationVar(&shutdownGrace, "shutdown-grace", 8*time.Second, "Best-effort drain window used after SIGTERM.")
-	fs.DurationVar(&jobTTL, "job-ttl", 24*time.Hour, "Maximum lifetime of a job before forced finalization.")
+	fs.DurationVar(&jobTTL, "job-ttl", job.DefaultTTL, "Job age threshold after which the job is expired and forcibly finalized; expiry is checked about once per minute.")
 	if err := fs.Parse(args[1:]); err != nil {
 		os.Exit(2)
 	}
@@ -221,6 +222,21 @@ func validateAgentStartRequiredOptions(opts agentStartOptions) error {
 		return fmt.Errorf("job-ttl must be positive")
 	}
 	return nil
+}
+
+// formatDuration renders d like Duration.String but without zero-valued
+// trailing units, so help text reads "24h" instead of "24h0m0s". Only
+// suffixes that follow a larger unit are trimmed; values like "30s" or
+// "1h0m30s" are returned unchanged.
+func formatDuration(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "h0m0s") {
+		return strings.TrimSuffix(s, "0m0s")
+	}
+	if strings.HasSuffix(s, "m0s") {
+		return strings.TrimSuffix(s, "0s")
+	}
+	return s
 }
 
 func resolveAgentStartOptions(opts agentStartOptions) (agentStartOptions, error) {
