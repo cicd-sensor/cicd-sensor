@@ -31,7 +31,8 @@ const (
 	JobStateClosing JobState = "closing"
 )
 
-// DefaultTTL is the maximum lifetime of a job before forced finalization.
+// DefaultTTL is the maximum lifetime of a job before forced finalization,
+// used when NewJob receives a non-positive ttl.
 const DefaultTTL = 24 * time.Hour
 
 var (
@@ -71,11 +72,15 @@ type evaluationBundle struct {
 	evaluation *evaluation.EvaluationState
 }
 
-// NewJob creates a running job.
-func NewJob(logger *slog.Logger, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, eventCh <-chan jobevent.EventRecord) *Job {
+// NewJob creates a running job. The TTL deadline is derived once here and
+// never changes afterward; a non-positive ttl falls back to DefaultTTL.
+func NewJob(logger *slog.Logger, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, eventCh <-chan jobevent.EventRecord, ttl time.Duration) *Job {
 	now := time.Now().UTC()
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if ttl <= 0 {
+		ttl = DefaultTTL
 	}
 
 	job := &Job{
@@ -87,7 +92,7 @@ func NewJob(logger *slog.Logger, identity jobcontext.JobIdentity, metadata jobco
 		eventCh:    eventCh,
 		doneCh:     make(chan struct{}),
 		startedAt:  now,
-		deadlineAt: now.Add(DefaultTTL),
+		deadlineAt: now.Add(ttl),
 	}
 	job.evaluation.Store(&evaluationBundle{})
 	if eventCh == nil {

@@ -13,6 +13,7 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 		Provider:      "github",
 		Runner:        "machine",
 		ShutdownGrace: time.Second,
+		JobTTL:        time.Hour,
 	}
 
 	tests := []struct {
@@ -27,6 +28,7 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 				Provider:      "gitlab",
 				Runner:        "kubernetes",
 				ShutdownGrace: time.Second,
+				JobTTL:        time.Hour,
 			},
 		},
 		{
@@ -53,6 +55,11 @@ func TestValidateAgentStartRequiredOptions(t *testing.T) {
 			name:        "non-positive shutdown grace",
 			opts:        withAgentShutdownGrace(valid, 0),
 			wantErrText: "shutdown-grace must be positive",
+		},
+		{
+			name:        "non-positive job ttl",
+			opts:        withAgentJobTTL(valid, 0),
+			wantErrText: "job-ttl must be positive",
 		},
 		{
 			name:        "github k8s runner socket outside github kubernetes",
@@ -85,6 +92,7 @@ func TestValidateAgentStartOptionsRequiresManagerToken(t *testing.T) {
 		Provider:      "github",
 		Runner:        "machine",
 		ShutdownGrace: time.Second,
+		JobTTL:        time.Hour,
 	}
 
 	if err := validateAgentStartOptions(opts); err != nil {
@@ -111,6 +119,7 @@ func TestValidateAgentStartOptionsRequiresManagerForKubernetes(t *testing.T) {
 		Provider:      "github",
 		Runner:        "kubernetes",
 		ShutdownGrace: time.Second,
+		JobTTL:        time.Hour,
 	}
 
 	err := validateAgentStartOptions(opts)
@@ -184,6 +193,31 @@ func TestResolveAgentStartOptions(t *testing.T) {
 	}
 }
 
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name string
+		d    time.Duration
+		want string
+	}{
+		{name: "trims zero minutes and seconds after hours (the --job-ttl default)", d: 24 * time.Hour, want: "24h"},
+		{name: "trims zero seconds after minutes", d: 90 * time.Minute, want: "1h30m"},
+		{name: "trims zero seconds after bare minutes", d: time.Minute, want: "1m"},
+		{name: "keeps seconds-only value unchanged", d: 30 * time.Second, want: "30s"},
+		{name: "keeps zero middle unit when seconds are non-zero", d: time.Hour + 30*time.Second, want: "1h0m30s"},
+		{name: "keeps sub-second value unchanged", d: 1500 * time.Millisecond, want: "1.5s"},
+		{name: "keeps zero duration canonical form", d: 0, want: "0s"},
+		{name: "trims negative duration the same way", d: -24 * time.Hour, want: "-24h"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := formatDuration(tc.d); got != tc.want {
+				t.Fatalf("formatDuration(%v): got %q, want %q", tc.d, got, tc.want)
+			}
+		})
+	}
+}
+
 func withAgentProvider(opts agentStartOptions, provider string) agentStartOptions {
 	opts.Provider = provider
 	return opts
@@ -196,6 +230,11 @@ func withAgentRunner(opts agentStartOptions, runner string) agentStartOptions {
 
 func withAgentShutdownGrace(opts agentStartOptions, shutdownGrace time.Duration) agentStartOptions {
 	opts.ShutdownGrace = shutdownGrace
+	return opts
+}
+
+func withAgentJobTTL(opts agentStartOptions, jobTTL time.Duration) agentStartOptions {
+	opts.JobTTL = jobTTL
 	return opts
 }
 
