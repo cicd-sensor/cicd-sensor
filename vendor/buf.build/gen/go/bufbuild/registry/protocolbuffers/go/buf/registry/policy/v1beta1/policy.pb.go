@@ -517,7 +517,7 @@ func (*PolicyRef_Id) isPolicyRef_Value() {}
 
 func (*PolicyRef_Name_) isPolicyRef_Value() {}
 
-// The fully-qualified name of a Policy within a BSR intance.
+// The fully-qualified name of a Policy within a BSR instance.
 //
 // A Name uniquely identifies a Policy.
 // This is used for requests when a caller only has the policy name and not the ID.
