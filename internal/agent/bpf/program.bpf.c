@@ -14,11 +14,13 @@
 #include "cgroup_helpers.bpf.h"
 #include "path_helpers.bpf.h"
 #include "dns_helpers.bpf.h"
+#include "http_helpers.bpf.h"
 #include "process_hooks.bpf.h"
 #include "cgroup_hooks.bpf.h"
 #include "file_hooks.bpf.h"
 #include "mount_hooks.bpf.h"
 #include "network_hooks.bpf.h"
 #include "dns_hooks.bpf.h"
+#include "http_hooks.bpf.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";

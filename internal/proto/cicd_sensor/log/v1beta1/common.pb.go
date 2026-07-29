@@ -227,6 +227,7 @@ type EventRecord struct {
 	FileLink          *FileLinkPayload          `protobuf:"bytes,16,opt,name=file_link,proto3" json:"file_link,omitempty"`
 	Domain            *DomainPayload            `protobuf:"bytes,18,opt,name=domain,proto3" json:"domain,omitempty"`
 	Mount             *MountPayload             `protobuf:"bytes,19,opt,name=mount,proto3" json:"mount,omitempty"`
+	HttpRequest       *HttpRequestPayload       `protobuf:"bytes,20,opt,name=http_request,proto3" json:"http_request,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -348,6 +349,13 @@ func (x *EventRecord) GetDomain() *DomainPayload {
 func (x *EventRecord) GetMount() *MountPayload {
 	if x != nil {
 		return x.Mount
+	}
+	return nil
+}
+
+func (x *EventRecord) GetHttpRequest() *HttpRequestPayload {
+	if x != nil {
+		return x.HttpRequest
 	}
 	return nil
 }
@@ -988,6 +996,78 @@ func (x *DomainPayload) GetSource() string {
 	return ""
 }
 
+// HttpRequestPayload carries only the parsed request line and Host: the path
+// is query-stripped in-kernel and no other header or body data exists here.
+// A field the parse could not capture is left empty (there is no separate
+// truncation signal).
+type HttpRequestPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Method        string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Host          string                 `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
+	Source        string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HttpRequestPayload) Reset() {
+	*x = HttpRequestPayload{}
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HttpRequestPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HttpRequestPayload) ProtoMessage() {}
+
+func (x *HttpRequestPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_cicd_sensor_log_v1beta1_common_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HttpRequestPayload.ProtoReflect.Descriptor instead.
+func (*HttpRequestPayload) Descriptor() ([]byte, []int) {
+	return file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *HttpRequestPayload) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *HttpRequestPayload) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *HttpRequestPayload) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *HttpRequestPayload) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
 var File_cicd_sensor_log_v1beta1_common_proto protoreflect.FileDescriptor
 
 const file_cicd_sensor_log_v1beta1_common_proto_rawDesc = "" +
@@ -1020,7 +1100,7 @@ const file_cicd_sensor_log_v1beta1_common_proto_rawDesc = "" +
 	"\x0fgithub_workflow\x18\x10 \x01(\tR\x0fgithub_workflow\x12$\n" +
 	"\rgitlab_job_id\x18\x11 \x01(\tR\rgitlab_job_id\x12(\n" +
 	"\x0fgitlab_job_name\x18\x12 \x01(\tR\x0fgitlab_job_name\x124\n" +
-	"\x15gitlab_config_ref_uri\x18\x13 \x01(\tR\x15gitlab_config_ref_uri\"\xbb\x06\n" +
+	"\x15gitlab_config_ref_uri\x18\x13 \x01(\tR\x15gitlab_config_ref_uri\"\x8c\a\n" +
 	"\vEventRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
@@ -1035,7 +1115,8 @@ const file_cicd_sensor_log_v1beta1_common_proto_rawDesc = "" +
 	"\tfile_move\x18\x0f \x01(\v2(.cicd_sensor.log.v1beta1.FileMovePayloadR\tfile_move\x12F\n" +
 	"\tfile_link\x18\x10 \x01(\v2(.cicd_sensor.log.v1beta1.FileLinkPayloadR\tfile_link\x12>\n" +
 	"\x06domain\x18\x12 \x01(\v2&.cicd_sensor.log.v1beta1.DomainPayloadR\x06domain\x12;\n" +
-	"\x05mount\x18\x13 \x01(\v2%.cicd_sensor.log.v1beta1.MountPayloadR\x05mount\"\x9c\x01\n" +
+	"\x05mount\x18\x13 \x01(\v2%.cicd_sensor.log.v1beta1.MountPayloadR\x05mount\x12O\n" +
+	"\fhttp_request\x18\x14 \x01(\v2+.cicd_sensor.log.v1beta1.HttpRequestPayloadR\fhttp_request\"\x9c\x01\n" +
 	"\x0eProcessSummary\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x1c\n" +
 	"\texec_path\x18\x02 \x01(\tR\texec_path\x12\x12\n" +
@@ -1078,7 +1159,12 @@ const file_cicd_sensor_log_v1beta1_common_proto_rawDesc = "" +
 	"\vtarget_path\x18\x02 \x01(\tR\vtarget_path\";\n" +
 	"\rDomainPayload\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06source\x18\x02 \x01(\tR\x06sourceB\xfa\x01\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\"l\n" +
+	"\x12HttpRequestPayload\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
+	"\x04host\x18\x03 \x01(\tR\x04host\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06sourceB\xfa\x01\n" +
 	"\x1bcom.cicd_sensor.log.v1beta1B\vCommonProtoP\x01ZTgithub.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/log/v1beta1;logv1beta1\xa2\x02\x03CLX\xaa\x02\x16CicdSensor.Log.V1beta1\xca\x02\x16CicdSensor\\Log\\V1beta1\xe2\x02\"CicdSensor\\Log\\V1beta1\\GPBMetadata\xea\x02\x18CicdSensor::Log::V1beta1b\x06proto3"
 
 var (
@@ -1093,7 +1179,7 @@ func file_cicd_sensor_log_v1beta1_common_proto_rawDescGZIP() []byte {
 	return file_cicd_sensor_log_v1beta1_common_proto_rawDescData
 }
 
-var file_cicd_sensor_log_v1beta1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_cicd_sensor_log_v1beta1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_cicd_sensor_log_v1beta1_common_proto_goTypes = []any{
 	(*LogContext)(nil),               // 0: cicd_sensor.log.v1beta1.LogContext
 	(*EventRecord)(nil),              // 1: cicd_sensor.log.v1beta1.EventRecord
@@ -1108,6 +1194,7 @@ var file_cicd_sensor_log_v1beta1_common_proto_goTypes = []any{
 	(*FileLinkPayload)(nil),          // 10: cicd_sensor.log.v1beta1.FileLinkPayload
 	(*MountPayload)(nil),             // 11: cicd_sensor.log.v1beta1.MountPayload
 	(*DomainPayload)(nil),            // 12: cicd_sensor.log.v1beta1.DomainPayload
+	(*HttpRequestPayload)(nil),       // 13: cicd_sensor.log.v1beta1.HttpRequestPayload
 }
 var file_cicd_sensor_log_v1beta1_common_proto_depIdxs = []int32{
 	2,  // 0: cicd_sensor.log.v1beta1.EventRecord.process:type_name -> cicd_sensor.log.v1beta1.ProcessSummary
@@ -1120,12 +1207,13 @@ var file_cicd_sensor_log_v1beta1_common_proto_depIdxs = []int32{
 	10, // 7: cicd_sensor.log.v1beta1.EventRecord.file_link:type_name -> cicd_sensor.log.v1beta1.FileLinkPayload
 	12, // 8: cicd_sensor.log.v1beta1.EventRecord.domain:type_name -> cicd_sensor.log.v1beta1.DomainPayload
 	11, // 9: cicd_sensor.log.v1beta1.EventRecord.mount:type_name -> cicd_sensor.log.v1beta1.MountPayload
-	3,  // 10: cicd_sensor.log.v1beta1.ProcessSummary.ancestors:type_name -> cicd_sensor.log.v1beta1.AncestorProcess
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	13, // 10: cicd_sensor.log.v1beta1.EventRecord.http_request:type_name -> cicd_sensor.log.v1beta1.HttpRequestPayload
+	3,  // 11: cicd_sensor.log.v1beta1.ProcessSummary.ancestors:type_name -> cicd_sensor.log.v1beta1.AncestorProcess
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_cicd_sensor_log_v1beta1_common_proto_init() }
@@ -1139,7 +1227,7 @@ func file_cicd_sensor_log_v1beta1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cicd_sensor_log_v1beta1_common_proto_rawDesc), len(file_cicd_sensor_log_v1beta1_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -38,6 +38,11 @@ func celInputEventFromRecord(event jobevent.EventRecord) celengine.CELInputEvent
 	case jobevent.Domain:
 		input.Domain = normalizedPayloadString(event.Payload, "domain")
 		input.Source = normalizedPayloadString(event.Payload, "source")
+	case jobevent.HTTPRequest:
+		input.Method = normalizedPayloadString(event.Payload, "method")
+		input.Path = normalizedPayloadString(event.Payload, "path")
+		input.Host = normalizedPayloadString(event.Payload, "host")
+		input.Source = normalizedPayloadString(event.Payload, "source")
 	case jobevent.UnixSocketConnect:
 		input.Path = normalizedPayloadString(event.Payload, "path")
 		input.SocketType = normalizedPayloadString(event.Payload, "socket_type")

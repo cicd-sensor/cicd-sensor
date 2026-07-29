@@ -71,9 +71,12 @@ type CELInputEvent struct {
 	ExistingPath string
 	IsHardlink   bool
 	IsSymlink    bool
-	// domain.
+	// domain / http_request.
 	Domain string
 	Source string
+	// http_request.
+	Method string
+	Host   string
 	// unix_socket_connect.
 	SocketType string
 	IsAbstract bool

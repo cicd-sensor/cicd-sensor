@@ -67,6 +67,24 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		_ = rollback.Close()
 	}()
 
+	// The HTTP parse is a tail-call pipeline: only the entry program is
+	// attached to tcp_sendmsg; the stage programs are reached via
+	// bpf_tail_call, so they must be installed in the http_stages jump table
+	// at the indices http_hooks.bpf.h expects. Populate it before attaching so
+	// the entry never tail-calls into an empty slot.
+	for idx, stage := range []*ebpf.Program{
+		kernelIO.objs.HandleTcpSendmsgHttpPathlen,  // HTTP_STAGE_PATHLEN
+		kernelIO.objs.HandleTcpSendmsgHttpPathcopy, // HTTP_STAGE_PATHCOPY
+		kernelIO.objs.HandleTcpSendmsgHttpHostfind, // HTTP_STAGE_HOSTFIND
+		kernelIO.objs.HandleTcpSendmsgHttpHostlen,  // HTTP_STAGE_HOSTLEN
+		kernelIO.objs.HandleTcpSendmsgHttpHostcopy, // HTTP_STAGE_HOSTCOPY
+		kernelIO.objs.HandleTcpSendmsgHttpEmit,     // HTTP_STAGE_EMIT
+	} {
+		if err := kernelIO.objs.HttpStages.Put(uint32(idx), stage); err != nil {
+			return nil, fmt.Errorf("install http parse stage %d: %w", idx, err)
+		}
+	}
+
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
 	// not need lsm=..., Rename/symlink observation stays in inode hooks
 	// because security_path_* cannot use bpf_d_path in container filesystems.
@@ -90,6 +108,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		{name: "udp_sendmsg", program: kernelIO.objs.HandleUdpSendmsg},
 		{name: "udpv6_sendmsg", program: kernelIO.objs.HandleUdpv6Sendmsg},
 		{name: "tcp_sendmsg", program: kernelIO.objs.HandleTcpSendmsg},
+		{name: "tcp_sendmsg_http", program: kernelIO.objs.HandleTcpSendmsgHttp},
 		{name: "unix_stream_sendmsg", program: kernelIO.objs.HandleUnixStreamSendmsg},
 		{name: "unix_stream_connect", program: kernelIO.objs.HandleUnixStreamConnect},
 		{name: "unix_dgram_connect", program: kernelIO.objs.HandleUnixDgramConnect},

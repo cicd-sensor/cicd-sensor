@@ -52,6 +52,8 @@ func handleEngineInput(state *jobTrackingState, input engineInput) []engineEffec
 		return handleMountSample(state, value)
 	case dnsSample:
 		return handleDNSSample(state, value)
+	case httpRequestSample:
+		return handleHTTPRequestSample(state, value)
 	case unixSocketConnectSample:
 		return handleUnixSocketConnectSample(state, value)
 	default:

@@ -487,3 +487,59 @@ Example event value:
   }
 }
 ```
+
+## `http_request`
+
+Evaluates the request line of an outgoing HTTP request: method, path, and host together.
+Only the request line and the `Host` header are captured — no other headers and no body.
+
+| field | Type | Example value | Meaning |
+| --- | --- | --- | --- |
+| `method` | string | `GET`, `POST` | Request method. |
+| `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Matching is case-insensitive. |
+| `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
+| `source` | string | `cleartext_http` | Capture channel. Currently `cleartext_http` (plain `http://` traffic). |
+| `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
+
+`source` currently reports `cleartext_http`: requests sent over plain HTTP,
+including cloud metadata endpoints and plain-HTTP package mirrors. HTTPS
+requests are not yet captured, so absence of an `http_request` event does not
+mean absence of egress — combine with `domain` and `network_connect` rules.
+
+The capture is best-effort at the request start: a request split across
+multiple writes, or a `host` / `path` longer than the captured prefix, surfaces
+with that field empty rather than partially guessed.
+
+Unexpected POST to the GitHub API:
+
+```yaml
+condition: |
+  method == "POST" &&
+  host == "api.github.com" &&
+  !process.exec_path.endsWith("/git")
+```
+
+Cloud metadata service access:
+
+```yaml
+condition: |
+  host == "169.254.169.254"
+```
+
+Example event value:
+
+```json
+{
+  "event_type": "http_request",
+  "process": {
+    "exec_path": "/usr/bin/curl",
+    "argv": ["curl", "http://api.example.com/upload"]
+  },
+  "payload": {
+    "method": "POST",
+    "path": "/upload",
+    "host": "api.example.com",
+    "source": "cleartext_http"
+  }
+}
+```
