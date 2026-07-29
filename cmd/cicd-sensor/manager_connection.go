@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 
@@ -17,9 +16,6 @@ func resolveManagerTokenSecret(tokenFile string, logger *slog.Logger) (string, e
 	token, err := managerauth.ResolveToken(os.Getenv("CICD_SENSOR_MANAGER_TOKEN"), tokenFile, logger)
 	if err != nil {
 		return "", err
-	}
-	if token != "" && !managerauth.IsValidToken(token) {
-		return "", fmt.Errorf("%s", managerauth.ValidTokenDescription())
 	}
 	return token, nil
 }

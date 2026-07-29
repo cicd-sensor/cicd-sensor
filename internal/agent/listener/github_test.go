@@ -18,7 +18,6 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/joblogs"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
-	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/resultdoc"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
@@ -817,9 +816,12 @@ func TestListener_ProjectStart_DisableBaselineRulesKeepsProjectRules(t *testing.
 }
 
 func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
-	managerBearerToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
+	managerBearerToken := "custom-manager-token"
 	svc := &fakeConfigService{
 		handler: func(_ context.Context, req *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
+			if got, want := req.Header().Get("Authorization"), "Bearer "+managerBearerToken; got != want {
+				t.Fatalf("authorization: got %q, want %q", got, want)
+			}
 			if req.Msg.RequestedOutputs != nil {
 				t.Fatalf("requested outputs: got %+v, want nil", req.Msg.RequestedOutputs)
 			}
@@ -894,7 +896,7 @@ func TestListener_ProjectStart_AppliesProjectManagerConfig(t *testing.T) {
 }
 
 func TestListener_ProjectStart_ManagerModeIgnoresLocalDefaultMaxAlerts(t *testing.T) {
-	managerBearerToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
+	managerBearerToken := "custom-manager-token"
 	svc := &fakeConfigService{
 		handler: func(context.Context, *connect.Request[managerv1beta1.FetchConfigRequest]) (*connect.Response[managerv1beta1.FetchConfigResponse], error) {
 			return connect.NewResponse(&managerv1beta1.FetchConfigResponse{
@@ -955,7 +957,7 @@ func TestListener_ProjectStart_RejectsProjectManagerWithDisableBaselineRules(t *
 		"github_run_attempt":        "1",
 		"github_runner_tracking_id": "github_tracking_manager_disable_baseline",
 		"manager_url":               "https://project-manager.example.com",
-		"manager_token":             managerauth.TokenPrefix + strings.Repeat("a", 64),
+		"manager_token":             "custom-manager-token",
 		"disable_baseline_rules":    true,
 	})
 	resp, err := client.Post("http://cicd-sensor/v1/github/project/start", "application/json", bytes.NewReader(body))
@@ -992,7 +994,7 @@ func TestListener_ProjectStart_RejectsProjectManagerWithMonitorMode(t *testing.T
 		"github_run_attempt":        "1",
 		"github_runner_tracking_id": "github_tracking_manager_monitor_mode",
 		"manager_url":               "https://project-manager.example.com",
-		"manager_token":             managerauth.TokenPrefix + strings.Repeat("a", 64),
+		"manager_token":             "custom-manager-token",
 		"monitor_mode":              true,
 	})
 	resp, err := client.Post("http://cicd-sensor/v1/github/project/start", "application/json", bytes.NewReader(body))
@@ -1029,6 +1031,31 @@ func TestListener_ProjectStart_RejectsProjectManagerWithoutToken(t *testing.T) {
 		"github_run_attempt":        "1",
 		"github_runner_tracking_id": "github_tracking_missing_token",
 		"manager_url":               "https://project-manager.example.com",
+	})
+	resp, err := client.Post("http://cicd-sensor/v1/github/project/start", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestListener_ProjectStart_RejectsProjectManagerTokenWithoutURL(t *testing.T) {
+	client, cleanup := setupListener(t)
+	defer cleanup()
+
+	body, _ := json.Marshal(map[string]any{
+		"provider":                  "github",
+		"provider_host":             "github.com",
+		"project_path":              "acme/example",
+		"github_run_id":             "123456789",
+		"github_job":                "build",
+		"github_run_attempt":        "1",
+		"github_runner_tracking_id": "github_tracking_token_without_manager",
+		"manager_token":             "custom-manager-token",
 	})
 	resp, err := client.Post("http://cicd-sensor/v1/github/project/start", "application/json", bytes.NewReader(body))
 	if err != nil {

@@ -314,13 +314,17 @@ func TestManagerClient_New_ValidatesConfig(t *testing.T) {
 			wantErr: "include a host",
 		},
 		{
-			name:    "invalid token",
+			name:    "empty token",
 			baseURL: "https://manager.example.com",
-			token:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			wantErr: "sk_cs_",
+			wantErr: "manager token is required",
 		},
 		{
-			name:    "valid",
+			name:    "custom token",
+			baseURL: "https://manager.example.com",
+			token:   "custom-manager-token",
+		},
+		{
+			name:    "built-in manager token remains valid",
 			baseURL: "https://manager.example.com",
 			token:   testManagerToken,
 		},

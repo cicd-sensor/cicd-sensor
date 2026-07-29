@@ -15,12 +15,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 )
 
-const testOutputManagerToken = managerauth.TokenPrefix + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const testOutputManagerToken = "custom-manager-token"
 
 var testCollectorServiceLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -77,17 +76,17 @@ func TestCollectorServiceClient_SendLogBatchRejectsEmptyBatchBeforeRequest(t *te
 	}
 }
 
-func TestCollectorServiceClient_SendBatchRejectsInvalidTokenBeforeRequest(t *testing.T) {
+func TestCollectorServiceClient_SendBatchRejectsEmptyTokenBeforeRequest(t *testing.T) {
 	svc := &fakeCollectorService{
 		handler: func(context.Context, *connect.Request[managerv1beta1.IngestLogRequest]) (*connect.Response[managerv1beta1.IngestLogResponse], error) {
-			t.Fatal("collector service should not be called with an invalid token")
+			t.Fatal("collector service should not be called with an empty token")
 			return nil, nil
 		},
 	}
-	client := &CollectorServiceClient{client: svc, token: "short-token"}
+	client := &CollectorServiceClient{client: svc}
 	err := client.sendIngestLogBatch(context.Background(), &managerv1beta1.IngestLogBatch{CompressedJsonl: []byte{0x1f, 0x8b}})
-	if err == nil || !strings.Contains(err.Error(), managerauth.ValidTokenDescription()) {
-		t.Fatalf("error: got %v, want token validation error", err)
+	if err == nil || !strings.Contains(err.Error(), "manager token is required") {
+		t.Fatalf("error: got %v, want required token error", err)
 	}
 	if svc.calls != 0 {
 		t.Fatalf("calls: got %d, want 0", svc.calls)

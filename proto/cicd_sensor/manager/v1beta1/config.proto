@@ -9,8 +9,8 @@ import "cicd_sensor/manager/v1beta1/types.proto";
 // ConfigService is the rule/output config distribution plane.
 //
 // Auth (v1):
-//   - host scope:    Authorization: Bearer sk_cs_<secret>
-//   - project scope: Authorization: Bearer sk_cs_<secret>
+//   - host scope:    Authorization: Bearer <token>
+//   - project scope: Authorization: Bearer <token>
 //     The project CLI reads CICD_SENSOR_MANAGER_TOKEN from env and forwards it
 //     via the local socket body. The agent then sets the bearer header when
 //     calling the manager.

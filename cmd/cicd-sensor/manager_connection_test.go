@@ -7,12 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 )
 
 func TestResolveManagerTokenSecret(t *testing.T) {
-	validToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
+	validToken := "custom-manager-token"
 
 	t.Run("env token", func(t *testing.T) {
 		t.Setenv("CICD_SENSOR_MANAGER_TOKEN", validToken)
@@ -42,18 +40,6 @@ func TestResolveManagerTokenSecret(t *testing.T) {
 		}
 	})
 
-	t.Run("short token rejected", func(t *testing.T) {
-		t.Setenv("CICD_SENSOR_MANAGER_TOKEN", managerauth.TokenPrefix+strings.Repeat("a", 63))
-
-		_, err := resolveManagerTokenSecret("", discardLogger())
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "at least 64 characters") {
-			t.Fatalf("error: got %q", err.Error())
-		}
-	})
-
 	t.Run("missing file error", func(t *testing.T) {
 		t.Setenv("CICD_SENSOR_MANAGER_TOKEN", "")
 
@@ -68,7 +54,7 @@ func TestResolveManagerTokenSecret(t *testing.T) {
 }
 
 func TestBuildProjectManagerConnection(t *testing.T) {
-	validToken := managerauth.TokenPrefix + strings.Repeat("a", 64)
+	validToken := "custom-manager-token"
 
 	t.Run("no manager url ignores env token", func(t *testing.T) {
 		t.Setenv("CICD_SENSOR_MANAGER_TOKEN", validToken)

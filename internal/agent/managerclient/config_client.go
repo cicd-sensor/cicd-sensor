@@ -10,7 +10,6 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 	"github.com/cicd-sensor/cicd-sensor/internal/protoconv"
@@ -45,8 +44,8 @@ func NewConfigClient(logger *slog.Logger, conn Connection) (*ConfigClient, error
 		return nil, err
 	}
 	warnIfInsecureManagerURL(component, parsed, conn.BaseURL)
-	if !managerauth.IsValidToken(conn.Token) {
-		return nil, fmt.Errorf("%s", managerauth.ValidTokenDescription())
+	if conn.Token == "" {
+		return nil, fmt.Errorf("manager token is required")
 	}
 	return &ConfigClient{
 		client: managerv1beta1connect.NewConfigServiceClient(
