@@ -58,6 +58,9 @@
         "custom.regex"
       ],
       "groupName": "github actions docs examples",
+      "schedule": [
+        "at any time"
+      ],
       "minimumReleaseAge": "0 days",
       "semanticCommitType": "docs",
       "semanticCommitScope": "examples",
