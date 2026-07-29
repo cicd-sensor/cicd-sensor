@@ -12,7 +12,6 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 	managerv1beta1 "github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1"
 	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 )
@@ -68,8 +67,8 @@ func (c *CollectorServiceClient) sendIngestLogBatch(ctx context.Context, batch *
 	if c == nil {
 		return fmt.Errorf("collector service client is nil")
 	}
-	if !managerauth.IsValidToken(c.token) {
-		return fmt.Errorf("%s", managerauth.ValidTokenDescription())
+	if c.token == "" {
+		return fmt.Errorf("manager token is required")
 	}
 	if batch == nil {
 		return fmt.Errorf("collector ingest log batch is nil")

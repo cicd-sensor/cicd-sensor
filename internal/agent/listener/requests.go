@@ -6,7 +6,6 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/projectconfig"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
-	"github.com/cicd-sensor/cicd-sensor/internal/managerauth"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
 
@@ -38,8 +37,6 @@ func (r *githubProjectStartRequest) Validate() error {
 		errs = append(errs, errors.New("manager_token requires manager_url"))
 	case r.ManagerURL != "" && r.ManagerToken == "":
 		errs = append(errs, errors.New("manager_url requires manager_token"))
-	case r.ManagerURL != "" && !managerauth.IsValidToken(r.ManagerToken):
-		errs = append(errs, errors.New(managerauth.ValidTokenDescription()))
 	}
 	if r.ManagerURL != "" && r.DisableBaselineRules {
 		errs = append(errs, errors.New("disable_baseline_rules cannot be combined with manager_url"))

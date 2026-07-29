@@ -95,10 +95,10 @@ cicd-sensor-manager
 
 ## Manager token
 
-Manager authentication uses bearer tokens.
+The built-in cicd-sensor Manager authenticates Agents with `sk_cs_` bearer tokens.
 Do not write tokens into the config file; pass them through environment variables or token files.
 
-Generate a token with `cicd-sensorctl`.
+Generate a token for the built-in Manager with `cicd-sensorctl` (third-party Manager implementations may define their own token format and provisioning workflow).
 
 ```sh
 cicd-sensorctl token generate
