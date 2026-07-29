@@ -8,6 +8,15 @@
 #define AGENT_AF_INET6 10
 #define AGENT_AF_UNIX 1
 
+// Linux 5.15-6.9 name this field `iov`; 6.10+ renamed it to `__iov`.
+// Our vmlinux.h is newer, so this minimal shadow lets CO-RE emit a
+// relocation for the old field name. preserve_access_index keeps that
+// synthetic field access visible to clang/BTF. Shared by the DNS and HTTP
+// sendmsg payload readers.
+struct iov_iter___legacy {
+    const struct iovec *iov;
+} __attribute__((preserve_access_index));
+
 static __always_inline void note_ringbuf_drop(void)
 {
     __u32 key = 0;

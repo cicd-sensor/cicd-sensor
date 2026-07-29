@@ -328,6 +328,19 @@ func (e *Env) EnvForType(eventType jobevent.Type) (*cel.Env, error) {
 			cel.Variable("domain", cel.StringType),
 			cel.Variable("source", cel.StringType),
 		)
+	case jobevent.HTTPRequest:
+		// method: upper-case request method token ("POST"). path: origin-form
+		// request target with the query already stripped in-kernel; matching
+		// is case-insensitive because every CEL string is normalized. host:
+		// Host header (h1) or :authority (h2), lowercased; may carry ":port".
+		// source: capture channel — "cleartext_http" today; the HTTPS taps
+		// add "openssl" and "nghttp2".
+		opts = append(opts,
+			cel.Variable("method", cel.StringType),
+			cel.Variable("path", cel.StringType),
+			cel.Variable("host", cel.StringType),
+			cel.Variable("source", cel.StringType),
+		)
 	default:
 		return nil, fmt.Errorf("unsupported event type %q", eventType)
 	}

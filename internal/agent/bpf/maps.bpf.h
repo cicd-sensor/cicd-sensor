@@ -18,6 +18,47 @@ struct path_scratch {
     char buf[FILE_PATH_LEN + DENTRY_NAME_BUF_LEN];
 };
 
+// HTTP/1 parse prefix cap — the number of leading request bytes parsed.
+// Defined here because it sizes http_scratch. The prefix stays in this
+// per-CPU workspace; only parsed method/path/host are copied into the
+// ringbuf sample (redaction invariant).
+#define HTTP1_PREFIX_LEN 256
+_Static_assert((HTTP1_PREFIX_LEN & (HTTP1_PREFIX_LEN - 1)) == 0,
+               "HTTP1_PREFIX_LEN must be a power of two");
+
+// Per-CPU HTTP parse workspace, passed through the tail-call parse pipeline
+// (see http_helpers.bpf.h). The raw send prefix and the staged path/host stay
+// in this map; only the final ringbuf sample leaves the kernel. Path/host are
+// copied into these staging fields (map values) rather than straight into the
+// ringbuf sample because the 6.6 verifier rejects a variable-length
+// bpf_probe_read into ringbuf memory ("R2 unbounded"); the emit stage then
+// does a fixed-size memcpy out of them. Each pipeline stage re-reads its inputs
+// from here as unknown scalars and re-bounds them, which is what keeps every
+// stage verifiable on 5.15 / 6.6 / 6.18.
+struct http_scratch {
+    char prefix[HTTP1_PREFIX_LEN];   // raw request bytes (never leave kernel)
+    char path[HTTP_PATH_LEN];        // parsed path, staged before the sample
+    char host[HTTP_HOST_LEN];        // parsed host, staged before the sample
+    __u32 data_len;                  // bytes captured in prefix
+    __u32 pos;                       // path start (method_len + 1)
+    __u32 mlen;                      // method length (3..7)
+    __u32 line_end;                  // request-line space, or data_len
+    __u32 path_n;                    // path byte count
+    __u32 host_val;                  // host value start
+    __u32 host_n;                    // host byte count
+    __u32 have_host;                 // 1 = a host value was captured
+};
+
+// Tail-call jump table for the HTTP parse pipeline. Userspace loads the stage
+// programs and installs each at its index; the entry program tail-calls
+// index 0.
+struct {
+    __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+    __uint(max_entries, 6);
+    __type(key, __u32);
+    __type(value, __u32);
+} http_stages SEC(".maps");
+
 // The hook only checks staging_map lookup hits; this value is reserved for a
 // future kernel path that may surface JobIdentity without userspace lookup.
 struct staging_value {
@@ -49,6 +90,13 @@ struct {
     __type(key, __u32);
     __type(value, struct path_scratch);
 } path_scratch SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct http_scratch);
+} http_scratch SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);

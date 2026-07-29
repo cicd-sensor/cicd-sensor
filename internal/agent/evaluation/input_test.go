@@ -278,6 +278,34 @@ func TestCELInputEventFromRecordEventTypePayloads(t *testing.T) {
 			},
 		},
 		{
+			// Every http_request string is normalized for matching — path
+			// case-insensitivity is by design (all CEL strings lowercase).
+			name: "http_request_fields_normalized",
+			event: jobevent.EventRecord{
+				EventType: jobevent.HTTPRequest,
+				Payload: map[string]any{
+					"method": "POST",
+					"path":   "/API/Upload",
+					"host":   "api.github.com",
+					"source": "cleartext_http",
+				},
+			},
+			assertion: func(t *testing.T, input celengine.CELInputEvent) {
+				if input.Method != "post" {
+					t.Fatalf("method: got %q, want post", input.Method)
+				}
+				if input.Path != "/api/upload" {
+					t.Fatalf("path: got %q, want /api/upload", input.Path)
+				}
+				if input.Host != "api.github.com" {
+					t.Fatalf("host: got %q, want api.github.com", input.Host)
+				}
+				if input.Source != "cleartext_http" {
+					t.Fatalf("source: got %q, want cleartext_http", input.Source)
+				}
+			},
+		},
+		{
 			name: "unix_socket_connect",
 			event: jobevent.EventRecord{
 				EventType: jobevent.UnixSocketConnect,

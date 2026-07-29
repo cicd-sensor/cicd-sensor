@@ -44,6 +44,7 @@ message EventRecord {
   FileLinkPayload file_link = 16 [json_name = "file_link"];
   DomainPayload domain = 18 [json_name = "domain"];
   MountPayload mount = 19 [json_name = "mount"];
+  HttpRequestPayload http_request = 20 [json_name = "http_request"];
 }
 
 message ProcessSummary {
@@ -107,4 +108,15 @@ message MountPayload {
 message DomainPayload {
   string name = 1 [json_name = "name"];
   string source = 2 [json_name = "source"];
+}
+
+// HttpRequestPayload carries only the parsed request line and Host: the path
+// is query-stripped in-kernel and no other header or body data exists here.
+// A field the parse could not capture is left empty (there is no separate
+// truncation signal).
+message HttpRequestPayload {
+  string method = 1 [json_name = "method"];
+  string path = 2 [json_name = "path"];
+  string host = 3 [json_name = "host"];
+  string source = 4 [json_name = "source"];
 }

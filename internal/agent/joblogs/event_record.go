@@ -93,6 +93,17 @@ func logEventRecord(event jobevent.EventRecord) *logv1beta1.EventRecord {
 			Name:   name,
 			Source: source,
 		}
+	case jobevent.HTTPRequest:
+		method, _ := event.Payload["method"].(string)
+		path, _ := event.Payload["path"].(string)
+		host, _ := event.Payload["host"].(string)
+		source, _ := event.Payload["source"].(string)
+		out.HttpRequest = &logv1beta1.HttpRequestPayload{
+			Method: method,
+			Path:   path,
+			Host:   host,
+			Source: source,
+		}
 	}
 	return out
 }

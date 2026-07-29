@@ -48,6 +48,21 @@ func TestLogEventRecord_PayloadsAndTags(t *testing.T) {
 				},
 			},
 		},
+		{
+			// Manager-delivered records must carry a populated payload, not
+			// type=http_request with an empty message (proto/joblogs lockstep).
+			name: "http request",
+			event: jobevent.EventRecord{
+				ID:        "event-4",
+				EventType: jobevent.HTTPRequest,
+				Payload: map[string]any{
+					"method": "POST",
+					"path":   "/api/upload",
+					"host":   "api.example.com",
+					"source": "cleartext_http",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -77,6 +92,14 @@ func TestLogEventRecord_PayloadsAndTags(t *testing.T) {
 					got.Mount.SourcePath != "/real/source" ||
 					got.Mount.TargetPath != "/mnt/target" {
 					t.Fatalf("mount payload mismatch: %+v", got.Mount)
+				}
+			case jobevent.HTTPRequest:
+				if got.HttpRequest == nil ||
+					got.HttpRequest.Method != "POST" ||
+					got.HttpRequest.Path != "/api/upload" ||
+					got.HttpRequest.Host != "api.example.com" ||
+					got.HttpRequest.Source != "cleartext_http" {
+					t.Fatalf("http request payload mismatch: %+v", got.HttpRequest)
 				}
 			}
 		})

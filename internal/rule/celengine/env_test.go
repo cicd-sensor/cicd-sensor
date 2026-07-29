@@ -291,6 +291,43 @@ func TestEnvCompileAndEval(t *testing.T) {
 			wantMatch: false,
 		},
 		{
+			name:      "http_request_post_to_api_host",
+			eventType: jobevent.HTTPRequest,
+			source:    `method == "post" && host == "api.github.com"`,
+			input: CELInputEvent{
+				Method: "post",
+				Path:   "/repos/o/r/releases",
+				Host:   "api.github.com",
+				Source: "cleartext_http",
+			},
+			wantMatch: true,
+		},
+		{
+			name:      "http_request_path_prefix_with_process",
+			eventType: jobevent.HTTPRequest,
+			source:    `path.startsWith("/api/") && !process.exec_path.endsWith("/git")`,
+			input: CELInputEvent{
+				Method:  "get",
+				Path:    "/api/upload",
+				Host:    "example.com",
+				Source:  "cleartext_http",
+				Process: CELProcess{ExecPath: "/usr/bin/python3"},
+			},
+			wantMatch: true,
+		},
+		{
+			name:      "http_request_source_filter_no_match",
+			eventType: jobevent.HTTPRequest,
+			source:    `source == "openssl"`,
+			input: CELInputEvent{
+				Method: "get",
+				Path:   "/",
+				Host:   "example.com",
+				Source: "cleartext_http",
+			},
+			wantMatch: false,
+		},
+		{
 			name:      "unix_socket_path_filesystem_match",
 			eventType: jobevent.UnixSocketConnect,
 			source:    `path == "/var/run/docker.sock"`,
