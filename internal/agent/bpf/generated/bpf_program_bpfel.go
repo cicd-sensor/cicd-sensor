@@ -184,9 +184,7 @@ type BPFProgramHttpScratch struct {
 	Pos      uint32
 	Mlen     uint32
 	LineEnd  uint32
-	PathN    uint32
 	HostVal  uint32
-	HostN    uint32
 	HaveHost uint32
 }
 
@@ -299,12 +297,9 @@ const (
 	BPFProgramProgHandleSecuritySbMount        = "handle_security_sb_mount"
 	BPFProgramProgHandleTcpSendmsg             = "handle_tcp_sendmsg"
 	BPFProgramProgHandleTcpSendmsgHttp         = "handle_tcp_sendmsg_http"
-	BPFProgramProgHandleTcpSendmsgHttpEmit     = "handle_tcp_sendmsg_http_emit"
-	BPFProgramProgHandleTcpSendmsgHttpHostcopy = "handle_tcp_sendmsg_http_hostcopy"
+	BPFProgramProgHandleTcpSendmsgHttpHost     = "handle_tcp_sendmsg_http_host"
 	BPFProgramProgHandleTcpSendmsgHttpHostfind = "handle_tcp_sendmsg_http_hostfind"
-	BPFProgramProgHandleTcpSendmsgHttpHostlen  = "handle_tcp_sendmsg_http_hostlen"
-	BPFProgramProgHandleTcpSendmsgHttpPathcopy = "handle_tcp_sendmsg_http_pathcopy"
-	BPFProgramProgHandleTcpSendmsgHttpPathlen  = "handle_tcp_sendmsg_http_pathlen"
+	BPFProgramProgHandleTcpSendmsgHttpPath     = "handle_tcp_sendmsg_http_path"
 	BPFProgramProgHandleUdpSendmsg             = "handle_udp_sendmsg"
 	BPFProgramProgHandleUdpv6Sendmsg           = "handle_udpv6_sendmsg"
 	BPFProgramProgHandleUnixDgramConnect       = "handle_unix_dgram_connect"
@@ -387,12 +382,9 @@ type BPFProgramProgramSpecs struct {
 	HandleSecuritySbMount        *ebpf.ProgramSpec `ebpf:"handle_security_sb_mount"`
 	HandleTcpSendmsg             *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg"`
 	HandleTcpSendmsgHttp         *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http"`
-	HandleTcpSendmsgHttpEmit     *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_emit"`
-	HandleTcpSendmsgHttpHostcopy *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_hostcopy"`
+	HandleTcpSendmsgHttpHost     *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_host"`
 	HandleTcpSendmsgHttpHostfind *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_hostfind"`
-	HandleTcpSendmsgHttpHostlen  *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_hostlen"`
-	HandleTcpSendmsgHttpPathcopy *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_pathcopy"`
-	HandleTcpSendmsgHttpPathlen  *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_pathlen"`
+	HandleTcpSendmsgHttpPath     *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_path"`
 	HandleUdpSendmsg             *ebpf.ProgramSpec `ebpf:"handle_udp_sendmsg"`
 	HandleUdpv6Sendmsg           *ebpf.ProgramSpec `ebpf:"handle_udpv6_sendmsg"`
 	HandleUnixDgramConnect       *ebpf.ProgramSpec `ebpf:"handle_unix_dgram_connect"`
@@ -519,12 +511,9 @@ type BPFProgramPrograms struct {
 	HandleSecuritySbMount        *ebpf.Program `ebpf:"handle_security_sb_mount"`
 	HandleTcpSendmsg             *ebpf.Program `ebpf:"handle_tcp_sendmsg"`
 	HandleTcpSendmsgHttp         *ebpf.Program `ebpf:"handle_tcp_sendmsg_http"`
-	HandleTcpSendmsgHttpEmit     *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_emit"`
-	HandleTcpSendmsgHttpHostcopy *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_hostcopy"`
+	HandleTcpSendmsgHttpHost     *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_host"`
 	HandleTcpSendmsgHttpHostfind *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_hostfind"`
-	HandleTcpSendmsgHttpHostlen  *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_hostlen"`
-	HandleTcpSendmsgHttpPathcopy *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_pathcopy"`
-	HandleTcpSendmsgHttpPathlen  *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_pathlen"`
+	HandleTcpSendmsgHttpPath     *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_path"`
 	HandleUdpSendmsg             *ebpf.Program `ebpf:"handle_udp_sendmsg"`
 	HandleUdpv6Sendmsg           *ebpf.Program `ebpf:"handle_udpv6_sendmsg"`
 	HandleUnixDgramConnect       *ebpf.Program `ebpf:"handle_unix_dgram_connect"`
@@ -551,12 +540,9 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleSecuritySbMount,
 		p.HandleTcpSendmsg,
 		p.HandleTcpSendmsgHttp,
-		p.HandleTcpSendmsgHttpEmit,
-		p.HandleTcpSendmsgHttpHostcopy,
+		p.HandleTcpSendmsgHttpHost,
 		p.HandleTcpSendmsgHttpHostfind,
-		p.HandleTcpSendmsgHttpHostlen,
-		p.HandleTcpSendmsgHttpPathcopy,
-		p.HandleTcpSendmsgHttpPathlen,
+		p.HandleTcpSendmsgHttpPath,
 		p.HandleUdpSendmsg,
 		p.HandleUdpv6Sendmsg,
 		p.HandleUnixDgramConnect,

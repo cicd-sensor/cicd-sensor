@@ -43,9 +43,7 @@ struct http_scratch {
     __u32 pos;                       // path start (method_len + 1)
     __u32 mlen;                      // method length (3..7)
     __u32 line_end;                  // request-line space, or data_len
-    __u32 path_n;                    // path byte count
     __u32 host_val;                  // host value start
-    __u32 host_n;                    // host byte count
     __u32 have_host;                 // 1 = a host value was captured
 };
 
@@ -54,7 +52,7 @@ struct http_scratch {
 // index 0.
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-    __uint(max_entries, 6);
+    __uint(max_entries, 3);
     __type(key, __u32);
     __type(value, __u32);
 } http_stages SEC(".maps");

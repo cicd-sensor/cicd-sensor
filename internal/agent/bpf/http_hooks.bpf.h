@@ -10,15 +10,12 @@
 // is what makes the whole parse loadable on Linux 5.15 / 6.6 / 6.18 — a single
 // monolithic program could not be. Path/host are copied into per-CPU staging
 // fields by their own stages because 6.6 rejects a variable-length read into
-// the ringbuf sample; the emit stage then does a fixed-size memcpy out.
+// the ringbuf sample; the host stage then does a fixed-size memcpy out.
 
 // Stage indices in the http_stages jump table.
-#define HTTP_STAGE_PATHLEN  0
-#define HTTP_STAGE_PATHCOPY 1
-#define HTTP_STAGE_HOSTFIND 2
-#define HTTP_STAGE_HOSTLEN  3
-#define HTTP_STAGE_HOSTCOPY 4
-#define HTTP_STAGE_EMIT     5
+#define HTTP_STAGE_PATH     0
+#define HTTP_STAGE_HOSTFIND 1
+#define HTTP_STAGE_HOST     2
 
 // Entry: content detection separates cleartext from ciphertext (a TLS write
 // starts with a record byte and never matches a method token; KTLS plaintext
@@ -38,29 +35,17 @@ int BPF_PROG(handle_tcp_sendmsg_http, struct sock *sk, struct msghdr *msg, size_
         return 0;
     if (http_step_reqline(s) < 0)
         return 0;
-    bpf_tail_call(ctx, &http_stages, HTTP_STAGE_PATHLEN);
+    bpf_tail_call(ctx, &http_stages, HTTP_STAGE_PATH);
     return 0;
 }
 
 SEC("fentry/tcp_sendmsg")
-int BPF_PROG(handle_tcp_sendmsg_http_pathlen, struct sock *sk, struct msghdr *msg, size_t len)
+int BPF_PROG(handle_tcp_sendmsg_http_path, struct sock *sk, struct msghdr *msg, size_t len)
 {
     struct http_scratch *s = http_scratch_get();
     if (!s)
         return 0;
-    if (http_step_pathlen(s) < 0)
-        return 0;
-    bpf_tail_call(ctx, &http_stages, HTTP_STAGE_PATHCOPY);
-    return 0;
-}
-
-SEC("fentry/tcp_sendmsg")
-int BPF_PROG(handle_tcp_sendmsg_http_pathcopy, struct sock *sk, struct msghdr *msg, size_t len)
-{
-    struct http_scratch *s = http_scratch_get();
-    if (!s)
-        return 0;
-    if (http_step_pathcopy(s) < 0)
+    if (http_step_path(s) < 0)
         return 0;
     bpf_tail_call(ctx, &http_stages, HTTP_STAGE_HOSTFIND);
     return 0;
@@ -74,39 +59,17 @@ int BPF_PROG(handle_tcp_sendmsg_http_hostfind, struct sock *sk, struct msghdr *m
         return 0;
     if (http_step_hostfind(s) < 0)
         return 0;
-    bpf_tail_call(ctx, &http_stages, HTTP_STAGE_HOSTLEN);
+    bpf_tail_call(ctx, &http_stages, HTTP_STAGE_HOST);
     return 0;
 }
 
 SEC("fentry/tcp_sendmsg")
-int BPF_PROG(handle_tcp_sendmsg_http_hostlen, struct sock *sk, struct msghdr *msg, size_t len)
+int BPF_PROG(handle_tcp_sendmsg_http_host, struct sock *sk, struct msghdr *msg, size_t len)
 {
     struct http_scratch *s = http_scratch_get();
     if (!s)
         return 0;
-    if (http_step_hostlen(s) < 0)
-        return 0;
-    bpf_tail_call(ctx, &http_stages, HTTP_STAGE_HOSTCOPY);
-    return 0;
-}
-
-SEC("fentry/tcp_sendmsg")
-int BPF_PROG(handle_tcp_sendmsg_http_hostcopy, struct sock *sk, struct msghdr *msg, size_t len)
-{
-    struct http_scratch *s = http_scratch_get();
-    if (!s)
-        return 0;
-    if (http_step_hostcopy(s) < 0)
-        return 0;
-    bpf_tail_call(ctx, &http_stages, HTTP_STAGE_EMIT);
-    return 0;
-}
-
-SEC("fentry/tcp_sendmsg")
-int BPF_PROG(handle_tcp_sendmsg_http_emit, struct sock *sk, struct msghdr *msg, size_t len)
-{
-    struct http_scratch *s = http_scratch_get();
-    if (!s)
+    if (http_step_host(s) < 0)
         return 0;
     http_step_emit(s, current_cgroup_id());
     return 0;

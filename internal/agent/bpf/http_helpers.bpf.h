@@ -222,10 +222,9 @@ static __always_inline int http_step_reqline(struct http_scratch *s)
     return 0;
 }
 
-// Step: path length. Scan for '?' (query stripped, never copied) up to the
-// request-line space; compute path_n (capped to the path field). The path
-// copy stage copies the bytes.
-static __always_inline int http_step_pathlen(struct http_scratch *s)
+// Step: path. Scan for '?' (query stripped, never copied) up to the
+// request-line space, then copy the bounded path into its staging field.
+static __always_inline int http_step_path(struct http_scratch *s)
 {
     __u32 data_len = s->data_len;
     if (data_len > HTTP1_PREFIX_LEN)
@@ -254,20 +253,6 @@ static __always_inline int http_step_pathlen(struct http_scratch *s)
     if (path_n >= HTTP_PATH_LEN)
         path_n = HTTP_PATH_LEN - 1;
 
-    s->path_n = path_n;
-    return 0;
-}
-
-// Step: copy the path into scratch->path (staged for the emit stage). A
-// separate stage rather than a direct read into the sample: the 6.6 verifier
-// rejects a variable-length bpf_probe_read into ringbuf memory, but accepts it
-// into this map value.
-static __always_inline int http_step_pathcopy(struct http_scratch *s)
-{
-    __u32 pos = s->pos;
-    __u32 path_n = s->path_n;
-    if (path_n >= HTTP_PATH_LEN)
-        return -1;
     zero_path_field(s->path);
     http_copy_field(s->path, s, pos, path_n);
     return 0;
@@ -325,10 +310,10 @@ static __always_inline int http_step_hostfind(struct http_scratch *s)
     return 0;
 }
 
-// Step: find the Host value terminator. Sets host_n, or clears have_host (emit
-// an empty host) when the value is unterminated or oversize — a silently cut
-// host must not feed host rules.
-static __always_inline int http_step_hostlen(struct http_scratch *s)
+// Step: Host value. Find its terminator and copy the bounded value into its
+// staging field. An unterminated or oversize host is emitted empty so a
+// silently cut value cannot feed host rules.
+static __always_inline int http_step_host(struct http_scratch *s)
 {
     if (!s->have_host)
         return 0;
@@ -363,20 +348,6 @@ static __always_inline int http_step_hostlen(struct http_scratch *s)
         s->have_host = 0;
         return 0;
     }
-    s->host_n = host_n;
-    return 0;
-}
-
-// Step: copy the host into scratch->host (staged for the emit stage). Split
-// out for the same 6.6 verifier reason as http_step_pathcopy.
-static __always_inline int http_step_hostcopy(struct http_scratch *s)
-{
-    if (!s->have_host)
-        return 0;
-    __u32 host_val = s->host_val;
-    __u32 host_n = s->host_n;
-    if (host_n >= HTTP_HOST_LEN)
-        return -1;
     zero_host_field(s->host);
     http_copy_field(s->host, s, host_val, host_n);
     return 0;
@@ -385,8 +356,8 @@ static __always_inline int http_step_hostcopy(struct http_scratch *s)
 // Step: emit. Reserve the ringbuf sample, copy the staged method/path/host in
 // with compile-time-size memcpys, set the header, and submit. The fixed-size
 // memcpy out of the staging fields is what the 6.6 verifier accepts into
-// ringbuf memory (a variable-length read into it is rejected — see
-// http_step_pathcopy). The ringbuf reservation is taken here and nowhere
+// ringbuf memory (a variable-length read into it is rejected). The ringbuf
+// reservation is taken here and nowhere
 // earlier: a live reference cannot survive a tail call.
 static __always_inline int http_step_emit(struct http_scratch *s, __u64 cgroup_id)
 {
@@ -510,6 +481,5 @@ static __always_inline int http_entry_capture(struct msghdr *msg)
     s->data_len = to_read;
     s->have_host = 0;
     s->host_val = 0;
-    s->host_n = 0;
     return 0;
 }
