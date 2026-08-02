@@ -52,7 +52,7 @@ struct http_scratch {
 // index 0.
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-    __uint(max_entries, 3);
+    __uint(max_entries, 2);
     __type(key, __u32);
     __type(value, __u32);
 } http_stages SEC(".maps");

@@ -14,8 +14,7 @@
 
 // Stage indices in the http_stages jump table.
 #define HTTP_STAGE_PATH     0
-#define HTTP_STAGE_HOSTFIND 1
-#define HTTP_STAGE_HOST     2
+#define HTTP_STAGE_HOST     1
 
 // Entry: content detection separates cleartext from ciphertext (a TLS write
 // starts with a record byte and never matches a method token; KTLS plaintext
@@ -46,16 +45,6 @@ int BPF_PROG(handle_tcp_sendmsg_http_path, struct sock *sk, struct msghdr *msg, 
     if (!s)
         return 0;
     if (http_step_path(s) < 0)
-        return 0;
-    bpf_tail_call(ctx, &http_stages, HTTP_STAGE_HOSTFIND);
-    return 0;
-}
-
-SEC("fentry/tcp_sendmsg")
-int BPF_PROG(handle_tcp_sendmsg_http_hostfind, struct sock *sk, struct msghdr *msg, size_t len)
-{
-    struct http_scratch *s = http_scratch_get();
-    if (!s)
         return 0;
     if (http_step_hostfind(s) < 0)
         return 0;
