@@ -297,7 +297,6 @@ const (
 	BPFProgramProgHandleSecuritySbMount        = "handle_security_sb_mount"
 	BPFProgramProgHandleTcpSendmsg             = "handle_tcp_sendmsg"
 	BPFProgramProgHandleTcpSendmsgHttp         = "handle_tcp_sendmsg_http"
-	BPFProgramProgHandleTcpSendmsgHttpHost     = "handle_tcp_sendmsg_http_host"
 	BPFProgramProgHandleTcpSendmsgHttpPath     = "handle_tcp_sendmsg_http_path"
 	BPFProgramProgHandleUdpSendmsg             = "handle_udp_sendmsg"
 	BPFProgramProgHandleUdpv6Sendmsg           = "handle_udpv6_sendmsg"
@@ -381,7 +380,6 @@ type BPFProgramProgramSpecs struct {
 	HandleSecuritySbMount      *ebpf.ProgramSpec `ebpf:"handle_security_sb_mount"`
 	HandleTcpSendmsg           *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg"`
 	HandleTcpSendmsgHttp       *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http"`
-	HandleTcpSendmsgHttpHost   *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_host"`
 	HandleTcpSendmsgHttpPath   *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_path"`
 	HandleUdpSendmsg           *ebpf.ProgramSpec `ebpf:"handle_udp_sendmsg"`
 	HandleUdpv6Sendmsg         *ebpf.ProgramSpec `ebpf:"handle_udpv6_sendmsg"`
@@ -509,7 +507,6 @@ type BPFProgramPrograms struct {
 	HandleSecuritySbMount      *ebpf.Program `ebpf:"handle_security_sb_mount"`
 	HandleTcpSendmsg           *ebpf.Program `ebpf:"handle_tcp_sendmsg"`
 	HandleTcpSendmsgHttp       *ebpf.Program `ebpf:"handle_tcp_sendmsg_http"`
-	HandleTcpSendmsgHttpHost   *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_host"`
 	HandleTcpSendmsgHttpPath   *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_path"`
 	HandleUdpSendmsg           *ebpf.Program `ebpf:"handle_udp_sendmsg"`
 	HandleUdpv6Sendmsg         *ebpf.Program `ebpf:"handle_udpv6_sendmsg"`
@@ -537,7 +534,6 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleSecuritySbMount,
 		p.HandleTcpSendmsg,
 		p.HandleTcpSendmsgHttp,
-		p.HandleTcpSendmsgHttpHost,
 		p.HandleTcpSendmsgHttpPath,
 		p.HandleUdpSendmsg,
 		p.HandleUdpv6Sendmsg,

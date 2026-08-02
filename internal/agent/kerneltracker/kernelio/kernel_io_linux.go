@@ -74,7 +74,6 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	// the entry never tail-calls into an empty slot.
 	for idx, stage := range []*ebpf.Program{
 		kernelIO.objs.HandleTcpSendmsgHttpPath, // HTTP_STAGE_PATH
-		kernelIO.objs.HandleTcpSendmsgHttpHost, // HTTP_STAGE_HOST
 	} {
 		if err := kernelIO.objs.HttpStages.Put(uint32(idx), stage); err != nil {
 			return nil, fmt.Errorf("install http parse stage %d: %w", idx, err)
