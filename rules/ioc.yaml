@@ -116,3 +116,95 @@ rule_sets:
           mitre_tactic: persistence
           ioc_date: "2026-07-14"
           source_url: https://x.com/lmt_swallow/status/2076945835313840559
+
+      - rule_id: keyv_shaihulud_malicious_domain
+        rule_name: "IOC: Keyv Shai-Hulud malicious domain"
+        description: |
+          What:
+            Terminates DNS resolution of attacker-controlled domains used by
+            the August 2026 Keyv/Cacheable npm supply-chain campaign.
+          Why:
+            The Mini Shai-Hulud descendant uses this infrastructure for payload
+            delivery or exfiltration after harvesting CI/CD and developer secrets.
+          Notes:
+            Preserve job logs and artifacts, rebuild the runner, and rotate all
+            credentials reachable from the job.
+        event_type: domain
+        condition: |
+          domain == "npm-cache.com" ||
+          domain == "pypi-get.com" ||
+          domain == "js-mirror.com"
+        action: terminate
+        tags:
+          mitre_tactic: command-and-control
+          ioc_date: "2026-08-04"
+          source_url: https://www.wiz.io/blog/keyv-and-cacheable-npm-supply-chain-attack
+
+      - rule_id: keyv_shaihulud_eth_rpc_domain
+        rule_name: "IOC: Keyv Shai-Hulud Ethereum RPC domain"
+        description: |
+          What:
+            Detects DNS resolution of Ethereum RPC services used by the August
+            2026 Keyv/Cacheable npm supply-chain campaign.
+          Why:
+            The Mini Shai-Hulud descendant contacts these services while
+            operating in compromised development and CI/CD environments.
+          Notes:
+            These are legitimate shared RPC services and may be expected in
+            blockchain CI. Review process ancestry and use a rule modifier for
+            approved workloads.
+        event_type: domain
+        condition: |
+          domain == "eth-mainnet.nodereal.io" ||
+          domain == "go.getblock.io" ||
+          domain == "eth.llamarpc.com"
+        action: detect
+        tags:
+          mitre_tactic: command-and-control
+          ioc_date: "2026-08-04"
+          source_url: https://www.wiz.io/blog/keyv-and-cacheable-npm-supply-chain-attack
+
+      - rule_id: keyv_shaihulud_math_symbol_artifact
+        rule_name: "IOC: Keyv Shai-Hulud Math_Symbol.js artifact"
+        description: |
+          What:
+            Terminates access to the Math_Symbol.js payload artifact below the
+            installed keyv package.
+          Why:
+            This exact package-relative artifact identifies the malicious keyv
+            6.0.0 payload reported in the August 2026 campaign.
+          Notes:
+            Preserve the package tree and job logs, rebuild the runner, and
+            rotate all credentials reachable from the job.
+        event_type: file_open
+        condition: |
+          (is_read || is_write) &&
+          path.endsWith("/node_modules/keyv/Math_Symbol.js")
+        action: terminate
+        tags:
+          mitre_tactic: execution
+          ioc_date: "2026-08-04"
+          source_url: https://www.wiz.io/blog/keyv-and-cacheable-npm-supply-chain-attack
+
+      - rule_id: keyv_shaihulud_bun_download_artifact
+        rule_name: "IOC: Keyv Shai-Hulud Bun download artifact"
+        description: |
+          What:
+            Detects file access below a /tmp/bun-dl-* directory associated with
+            the August 2026 Keyv/Cacheable npm supply-chain campaign.
+          Why:
+            The Mini Shai-Hulud descendant stages Bun through this temporary
+            download path before executing its payload.
+          Notes:
+            Legitimate Bun installation may use the same temporary path. Review
+            process ancestry and correlate with the campaign domain and secret
+            access detections.
+        event_type: file_open
+        condition: |
+          (is_read || is_write) &&
+          path.contains("/tmp/bun-dl-")
+        action: detect
+        tags:
+          mitre_tactic: execution
+          ioc_date: "2026-08-04"
+          source_url: https://www.wiz.io/blog/keyv-and-cacheable-npm-supply-chain-attack
