@@ -5,7 +5,7 @@
 
 FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0@sha256:3a108c4ceee9e0346a61fc0fc7085017945c664be4eaa2925855b8dd2467227b AS lambda-adapter
 
-FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:cbc3a423c5863acdadd0bd0f99b6830d78d0043bd17b6221d868836ffa9340a7 AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:ef985e7ac7a6563a590b1f063b331612126bdc9d51eaedd1d24a6d79360cf95f AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
