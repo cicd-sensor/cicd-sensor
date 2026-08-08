@@ -184,6 +184,49 @@ func TestManagerJobLogsEmitAndCloseSummaryLog(t *testing.T) {
 	}
 }
 
+func TestManagerJobLogsFlushStreamingLogsSendsBufferedRecords(t *testing.T) {
+	poster := &recordingLogBatchSender{}
+	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch,
+		jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1"),
+		jobcontext.ScopeTypeProject,
+		&managerv1beta1.OutputSettings{
+			Detection:    &managerv1beta1.OutputSetting{Enabled: true},
+			RuntimeEvent: &managerv1beta1.OutputSetting{Enabled: true},
+		},
+	)
+
+	if err := conn.WriteDetectionPayload(context.Background(), []byte(`{"type":"detection"}`)); err != nil {
+		t.Fatalf("write detection: %v", err)
+	}
+	if err := conn.WriteRuntimeEventPayload(context.Background(), []byte(`{"type":"runtime_event"}`)); err != nil {
+		t.Fatalf("write runtime event: %v", err)
+	}
+	if err := conn.FlushStreamingLogs(context.Background()); err != nil {
+		t.Fatalf("flush streaming: %v", err)
+	}
+	if got := poster.count(); got != 2 {
+		t.Fatalf("batches after flush: got %d, want 2", got)
+	}
+	// Workers stay open: later records still deliver at finalize.
+	if err := conn.WriteRuntimeEventPayload(context.Background(), []byte(`{"type":"runtime_event_late"}`)); err != nil {
+		t.Fatalf("write runtime event after flush: %v", err)
+	}
+	if err := conn.FinalizeStreamingLogs(context.Background()); err != nil {
+		t.Fatalf("finalize streaming: %v", err)
+	}
+	if got := poster.count(); got != 3 {
+		t.Fatalf("batches after finalize: got %d, want 3", got)
+	}
+}
+
+func TestManagerJobLogsFlushStreamingLogsWithoutWorkersIsNoOp(t *testing.T) {
+	var conn ManagerJobLogs
+
+	if err := conn.FlushStreamingLogs(context.Background()); err != nil {
+		t.Fatalf("flush without workers: %v", err)
+	}
+}
+
 func TestManagerJobLogsRejectsStreamingWritesAfterFinalize(t *testing.T) {
 	poster := &recordingLogBatchSender{}
 	conn := newManagerJobLogsWithSender(testLogger, poster.sendBatch,
@@ -228,5 +271,47 @@ func TestAttachRecordersForTesting(t *testing.T) {
 	}
 	if got := poster.count(); got != 2 {
 		t.Fatalf("sent batches: got %d, want 2", got)
+	}
+}
+
+func TestManagerJobLogsFinalizeStreamingLogsClosesWorkersInParallel(t *testing.T) {
+	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	blockingSend := func(ctx context.Context, _ managerclient.LogBatch) error {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	poster := &recordingLogBatchSender{}
+	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	var conn ManagerJobLogs
+	conn.AttachDetectionRecorderForTesting(identity, jobcontext.ScopeTypeProject, blockingSend)
+	conn.AttachRuntimeEventRecorderForTesting(identity, jobcontext.ScopeTypeProject, poster.sendBatch)
+
+	if err := conn.WriteDetectionPayload(context.Background(), []byte(`{"type":"detection"}`)); err != nil {
+		t.Fatalf("write detection: %v", err)
+	}
+	<-entered
+	if err := conn.WriteRuntimeEventPayload(context.Background(), []byte(`{"type":"runtime_event"}`)); err != nil {
+		t.Fatalf("write runtime event: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- conn.FinalizeStreamingLogs(context.Background()) }()
+
+	// While the detection worker is blocked in its send, the runtime event
+	// close must still drain: the closes run in parallel.
+	waitForBatchCount(t, poster, 1)
+
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("finalize streaming: %v", err)
 	}
 }

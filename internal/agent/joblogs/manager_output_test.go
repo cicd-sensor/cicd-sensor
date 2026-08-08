@@ -34,6 +34,12 @@ func (s *recordingLogBatchSender) count() int {
 	return len(s.batches)
 }
 
+func (s *recordingLogBatchSender) setErr(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.err = err
+}
+
 func TestNewManagerOutputNilSenderReturnsNil(t *testing.T) {
 	t.Parallel()
 
@@ -169,6 +175,79 @@ func TestManagerOutput_EmitAndCloseFlushesFinalRecord(t *testing.T) {
 	}
 	if err := out.Emit(context.Background(), []byte(`{"late":true}`)); err != errManagerOutputClosed {
 		t.Fatalf("emit after close: got %v, want %v", err, errManagerOutputClosed)
+	}
+}
+
+func TestManagerOutput_FlushSendsBufferedRecordsAndKeepsWorkerOpen(t *testing.T) {
+	poster := &recordingLogBatchSender{}
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{})
+
+	if err := out.Emit(context.Background(), []byte(`{"n":1}`)); err != nil {
+		t.Fatalf("emit before flush: %v", err)
+	}
+	if err := out.Flush(context.Background()); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got := poster.count(); got != 1 {
+		t.Fatalf("batches after flush: got %d, want 1", got)
+	}
+	if err := out.Emit(context.Background(), []byte(`{"n":2}`)); err != nil {
+		t.Fatalf("emit after flush: %v", err)
+	}
+	if err := out.Close(context.Background()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if got := poster.count(); got != 2 {
+		t.Fatalf("batches after close: got %d, want 2", got)
+	}
+}
+
+func TestManagerOutput_FlushWithEmptyBufferSendsNothing(t *testing.T) {
+	poster := &recordingLogBatchSender{}
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{})
+
+	if err := out.Flush(context.Background()); err != nil {
+		t.Fatalf("flush empty buffer: %v", err)
+	}
+	if err := out.Close(context.Background()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if got := poster.count(); got != 0 {
+		t.Fatalf("batches: got %d, want 0", got)
+	}
+}
+
+func TestManagerOutput_FlushAfterCloseReturnsNil(t *testing.T) {
+	poster := &recordingLogBatchSender{}
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{})
+
+	if err := out.Close(context.Background()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if err := out.Flush(context.Background()); err != nil {
+		t.Fatalf("flush after close: got %v, want nil", err)
+	}
+}
+
+func TestManagerOutput_FlushErrorRetainsRecordsForClose(t *testing.T) {
+	poster := &recordingLogBatchSender{err: errors.New("manager unavailable")}
+	out := testManagerOutput(poster.sendBatch, &managerv1beta1.OutputSetting{})
+
+	if err := out.Emit(context.Background(), []byte(`{"n":1}`)); err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	if err := out.Flush(context.Background()); err == nil {
+		t.Fatal("flush: got nil, want send error")
+	}
+	poster.setErr(nil)
+	if err := out.Close(context.Background()); err != nil {
+		t.Fatalf("close after failed flush: %v", err)
+	}
+	if got := poster.count(); got != 1 {
+		t.Fatalf("batches after close: got %d, want 1", got)
+	}
+	if got := len(poster.batches[0].Records); got != 1 {
+		t.Fatalf("retained records in close batch: got %d, want 1", got)
 	}
 }
 

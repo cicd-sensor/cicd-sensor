@@ -171,6 +171,8 @@ The control socket is mode `0o777`; request identification uses `SO_PEERCRED`:
 
 GitHub `project/start` is the mixed case: on a self-hosted runner the peer must already belong to the host Job (it attaches project scope); on a hosted runner no prior Job exists, so the peer's cgroup seeds a new project-only Job. Co-resident untrusted local users are out of scope.
 
+Endpoints reachable from inside the job may only accelerate log delivery (`project/result` flushes buffered manager logs); finalization stays with triggers the job cannot forge: cgroup lifecycle, the completed hook, TTL, and shutdown. For `host end`, the CLI's `job/health` probe before the end call is what makes a double end fail the completed hook — the agent-side handler is lenient on a missing Job.
+
 Kubernetes support keeps the GitHub k8s start endpoint on a separate runner socket because the caller is inside the ARC runner container, while the normal control socket and NRI staging callers are host-side agent components.
 This keeps the container-visible surface to job start only and preserves the boundary between runner container code and host-side staging / runtime control.
 The same runner socket may later carry GitHub Kubernetes project start/result endpoints, but the normal agent control socket should not be mounted into workflow containers.

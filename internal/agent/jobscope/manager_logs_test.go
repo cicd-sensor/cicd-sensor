@@ -623,3 +623,50 @@ func testJobScopeNetworkEvent(id, remoteIP string) jobevent.EventRecord {
 		},
 	}
 }
+
+func TestJobScopeStateFlushManagerLogs_DeliversBufferedStreamingRecords(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingJobScopeBatches{}
+	scope := jobscope.NewProject()
+	scope.ManagerJobLogsForTesting().AttachBufferedRuntimeEventRecorderForTesting(testJobIdentity, scope.Type, recorder.sendBatch)
+
+	scope.WriteRuntimeEventLog(context.Background(), testJobIdentity, testJobMetadata, "machine", testJobScopeNetworkEvent("flush-1", "203.0.113.10"), testJobScopeLogger)
+	if got := len(recorder.runtimeEventEntries(t)); got != 0 {
+		t.Fatalf("runtime event entries before flush: got %d, want 0", got)
+	}
+
+	if err := scope.FlushManagerLogs(context.Background()); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got := len(recorder.runtimeEventEntries(t)); got != 1 {
+		t.Fatalf("runtime event entries after flush: got %d, want 1", got)
+	}
+
+	// The flush must not close the worker: later records still deliver.
+	scope.WriteRuntimeEventLog(context.Background(), testJobIdentity, testJobMetadata, "machine", testJobScopeNetworkEvent("flush-2", "203.0.113.11"), testJobScopeLogger)
+	if err := scope.FinalizeStreamingLogs(context.Background()); err != nil {
+		t.Fatalf("finalize streaming: %v", err)
+	}
+	if got := len(recorder.runtimeEventEntries(t)); got != 2 {
+		t.Fatalf("runtime event entries after finalize: got %d, want 2", got)
+	}
+}
+
+func TestJobScopeStateFlushManagerLogs_NilScopeIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	var scope *jobscope.JobScopeState
+	if err := scope.FlushManagerLogs(context.Background()); err != nil {
+		t.Fatalf("nil scope flush: %v", err)
+	}
+}
+
+func TestJobScopeStateFlushManagerLogs_NoWorkersIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	scope := jobscope.NewProject()
+	if err := scope.FlushManagerLogs(context.Background()); err != nil {
+		t.Fatalf("flush without workers: %v", err)
+	}
+}

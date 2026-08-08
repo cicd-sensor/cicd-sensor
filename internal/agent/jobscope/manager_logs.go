@@ -47,6 +47,16 @@ func (s *JobScopeState) EmitSummaryLog(ctx context.Context, in SummaryLogInputs,
 	return s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
 }
 
+// FlushManagerLogs sends buffered streaming logs now, keeping the Job
+// tracked and its workers open. Reachable from inside the job, so it may
+// only accelerate delivery — never stop collection or emit the summary.
+func (s *JobScopeState) FlushManagerLogs(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.managerJobLogs.FlushStreamingLogs(ctx)
+}
+
 func (s *JobScopeState) WriteDetectionLogForHit(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, hit observations.HitEntry, event jobevent.EventRecord, logger *slog.Logger) {
 	if s == nil || hit.Identity.IsZero() {
 		return

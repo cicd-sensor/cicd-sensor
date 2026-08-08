@@ -268,3 +268,36 @@ func newFakeCollectorServer(t *testing.T, svc managerv1beta1connect.CollectorSer
 	server.Start()
 	return server
 }
+
+func TestCollectorServiceClient_SendBatchDoesNotStartBackoffItCannotFinish(t *testing.T) {
+	svc := &fakeCollectorService{
+		handler: func(context.Context, *connect.Request[managerv1beta1.IngestLogRequest]) (*connect.Response[managerv1beta1.IngestLogResponse], error) {
+			return nil, connect.NewError(connect.CodeUnavailable, errors.New("manager down"))
+		},
+	}
+	server := newFakeCollectorServer(t, svc)
+	defer server.Close()
+
+	slept := false
+	client := newCollectorServiceClient(testCollectorServiceLogger, server.Client(), Connection{BaseURL: server.URL, Token: testOutputManagerToken},
+		func(context.Context, time.Duration) error { slept = true; return nil },
+		func(d time.Duration) time.Duration { return d },
+	)
+	// Deadline shorter than the minimum jittered backoff (base/2): the client
+	// must return the send error instead of sleeping into ctx expiry.
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	err := client.sendIngestLogBatch(ctx, &managerv1beta1.IngestLogBatch{CompressedJsonl: []byte{0x1f, 0x8b}})
+	if err == nil {
+		t.Fatal("send batch: got nil, want error")
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("send batch error: got deadline exceeded, want underlying send error: %v", err)
+	}
+	if slept {
+		t.Fatal("backoff sleep started despite insufficient deadline")
+	}
+	if svc.calls != 1 {
+		t.Fatalf("calls: got %d, want 1", svc.calls)
+	}
+}

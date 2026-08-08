@@ -230,3 +230,125 @@ func decodeManagerBatchRecords(t *testing.T, batch *managerv1beta1.IngestLogBatc
 	}
 	return records
 }
+
+// gatedLogBatchSender blocks every send until release is closed, signaling
+// entered on the first blocked send.
+type gatedLogBatchSender struct {
+	release chan struct{}
+	entered chan struct{}
+}
+
+func newGatedLogBatchSender() *gatedLogBatchSender {
+	return &gatedLogBatchSender{
+		release: make(chan struct{}),
+		entered: make(chan struct{}, 1),
+	}
+}
+
+func (g *gatedLogBatchSender) sendBatch(ctx context.Context, _ managerclient.LogBatch) error {
+	select {
+	case g.entered <- struct{}{}:
+	default:
+	}
+	select {
+	case <-g.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func TestFinalizeSendsSummaryWhileStreamingFlushIsBlocked(t *testing.T) {
+	t.Parallel()
+
+	gate := newGatedLogBatchSender()
+	summaryPoster := &recordingManagerBatchPoster{}
+	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	metadata := jobcontext.JobMetadata{}
+	job, eventCh := newTestJob(identity, metadata, testEventChannelSize)
+	scope := jobscope.NewHost()
+	logs := joblogs.NewForTesting(testLogger, summaryPoster.sendBatch)
+	logs.AttachBufferedRuntimeEventRecorderForTesting(identity, scope.Type, gate.sendBatch)
+	logs.AttachSummaryRecorderForTesting(identity, scope.Type, summaryPoster.sendBatch)
+	scope.SetManagerJobLogs(logs)
+	if err := job.SetHostScope(testCtx, scope); err != nil {
+		t.Fatalf("SetHostScope: %v", err)
+	}
+	scope.WriteRuntimeEventLog(testCtx, identity, metadata, "machine", testDispatchEvent("/usr/bin/curl", "registry.npmjs.org", 443), testLogger)
+	close(eventCh)
+
+	jr := New(testLogger)
+	done := make(chan error, 1)
+	go func() {
+		done <- jr.finalizeTakenJobSync(testCtx, job, kerneltracker.EndShutdown, time.Now().UTC())
+	}()
+
+	<-gate.entered
+	// The summary must arrive while the streaming flush is still blocked in
+	// its send: it rides in parallel instead of queuing behind the backlog.
+	waitForJob(t, "summary sent while streaming flush is blocked", func() bool {
+		return len(managerBatchPosterSnapshot(summaryPoster)) == 1
+	})
+
+	close(gate.release)
+	if err := <-done; err != nil {
+		t.Fatalf("finalizeTakenJobSync: %v", err)
+	}
+}
+
+func TestFinalizeFlushesScopesInParallel(t *testing.T) {
+	t.Parallel()
+
+	gate := newGatedLogBatchSender()
+	poster := &recordingManagerBatchPoster{}
+	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	metadata := jobcontext.JobMetadata{}
+	job, eventCh := newTestJob(identity, metadata, testEventChannelSize)
+
+	host := jobscope.NewHost()
+	hostLogs := joblogs.NewForTesting(testLogger, poster.sendBatch)
+	hostLogs.AttachBufferedRuntimeEventRecorderForTesting(identity, host.Type, gate.sendBatch)
+	hostLogs.AttachSummaryRecorderForTesting(identity, host.Type, poster.sendBatch)
+	host.SetManagerJobLogs(hostLogs)
+	if err := job.SetHostScope(testCtx, host); err != nil {
+		t.Fatalf("SetHostScope: %v", err)
+	}
+
+	project := jobscope.NewProject()
+	projectLogs := joblogs.NewForTesting(testLogger, poster.sendBatch)
+	projectLogs.AttachBufferedRuntimeEventRecorderForTesting(identity, project.Type, poster.sendBatch)
+	projectLogs.AttachSummaryRecorderForTesting(identity, project.Type, poster.sendBatch)
+	project.SetManagerJobLogs(projectLogs)
+	if err := job.SetProjectScope(testCtx, project); err != nil {
+		t.Fatalf("SetProjectScope: %v", err)
+	}
+
+	host.WriteRuntimeEventLog(testCtx, identity, metadata, "machine", testDispatchEvent("/usr/bin/curl", "registry.npmjs.org", 443), testLogger)
+	project.WriteRuntimeEventLog(testCtx, identity, metadata, "machine", testDispatchEvent("/usr/bin/curl", "registry.npmjs.org", 443), testLogger)
+	close(eventCh)
+
+	jr := New(testLogger)
+	done := make(chan error, 1)
+	go func() {
+		done <- jr.finalizeTakenJobSync(testCtx, job, kerneltracker.EndShutdown, time.Now().UTC())
+	}()
+
+	<-gate.entered
+	// While the host scope's streaming flush is blocked, the project scope's
+	// flush and both summaries must still complete: 3 batches total.
+	waitForJob(t, "project flush and summaries sent while host flush is blocked", func() bool {
+		return len(managerBatchPosterSnapshot(poster)) == 3
+	})
+	types := make(map[managerv1beta1.LogType]int)
+	for _, batch := range managerBatchPosterSnapshot(poster) {
+		types[batch.LogType]++
+	}
+	if types[managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT] != 1 || types[managerv1beta1.LogType_LOG_TYPE_SUMMARY] != 2 {
+		t.Fatalf("batch types while host flush blocked: got %v, want 1 runtime_event and 2 summaries", types)
+	}
+
+	close(gate.release)
+	if err := <-done; err != nil {
+		t.Fatalf("finalizeTakenJobSync: %v", err)
+	}
+}

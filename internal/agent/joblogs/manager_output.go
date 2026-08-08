@@ -63,6 +63,28 @@ func (s *managerOutput) EmitAndClose(ctx context.Context, payload []byte) error 
 	return s.close(ctx, payload)
 }
 
+// Flush sends buffered records now and keeps the worker open for later
+// records and the final close. A closed output reports success because the
+// close path already drained the buffer.
+func (s *managerOutput) Flush(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return nil
+	}
+
+	reply := make(chan error, 1)
+	req := managerOutputRequest{ctx: ctx, flush: true, reply: reply}
+	if err := s.enqueueRequest(ctx, req); err != nil {
+		return err
+	}
+	return waitJobLogOutputClose(ctx, reply, s.done)
+}
+
 func (s *managerOutput) Close(ctx context.Context) error {
 	return s.close(ctx, nil)
 }

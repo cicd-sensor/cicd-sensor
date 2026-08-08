@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/job"
@@ -107,6 +108,8 @@ func (jr *JobRegistry) OnJobEnded(jobID jobcontext.JobIdentity, reason kerneltra
 func (jr *JobRegistry) RequestGitHubHostEnd(ctx context.Context, identity jobcontext.JobIdentity, peerPID int32) error {
 	job := jr.get(identity)
 	if job == nil {
+		// Lenient on purpose: the CLI's job/health probe before this call is
+		// the double-end failure guarantee (see postGitHubHostEnd).
 		jr.logger.WarnContext(ctx, "host_end_job_not_found", "job_identity", identity)
 		return nil
 	}
@@ -161,36 +164,49 @@ func (jr *JobRegistry) finalizeTakenJobSync(ctx context.Context, job *job.Job, r
 		}
 	}
 	<-job.Done()
-	// Flush streaming logs before the final summary row.
-	if host := job.HostScope(); host != nil {
-		if err := host.FinalizeStreamingLogs(ctx); err != nil {
-			jr.logger.WarnContext(ctx, "job_host_scope_finalize_failed", "error", err)
-		}
-	}
-	if project := job.ProjectScope(); project != nil {
-		if err := project.FinalizeStreamingLogs(ctx); err != nil {
-			jr.logger.WarnContext(ctx, "job_project_scope_finalize_failed", "error", err)
-		}
-	}
-	jr.logger.InfoContext(ctx, "job_finalized", "job_identity", job.Identity(), "reason", string(reason))
+	// The summary is sent in parallel with the streaming flush so a kill
+	// timer landing mid-drain cannot starve it behind the backlog (#143).
+	// Safe: scope state is quiescent after the drain above and each send
+	// has its own worker. Row ordering across log types is not promised.
 	summaryIn := jobscope.SummaryLogInputs{
 		Identity:   job.Identity(),
 		Metadata:   job.Metadata(),
 		RunnerType: job.RunnerType(),
 		StartedAt:  job.StartedAt(),
 	}
-	var errs []error
-	if host := job.HostScope(); host != nil {
-		if err := host.EmitSummaryLog(ctx, summaryIn, string(reason), finalizedAt); err != nil {
-			errs = append(errs, fmt.Errorf("emit host summary log: %w", err))
+	var wg sync.WaitGroup
+	var summaryErr error
+	wg.Go(func() {
+		var errs []error
+		if host := job.HostScope(); host != nil {
+			if err := host.EmitSummaryLog(ctx, summaryIn, string(reason), finalizedAt); err != nil {
+				errs = append(errs, fmt.Errorf("emit host summary log: %w", err))
+			}
 		}
+		if project := job.ProjectScope(); project != nil {
+			if err := project.EmitSummaryLog(ctx, summaryIn, string(reason), finalizedAt); err != nil {
+				errs = append(errs, fmt.Errorf("emit project summary log: %w", err))
+			}
+		}
+		summaryErr = errors.Join(errs...)
+	})
+	if host := job.HostScope(); host != nil {
+		wg.Go(func() {
+			if err := host.FinalizeStreamingLogs(ctx); err != nil {
+				jr.logger.WarnContext(ctx, "job_host_scope_finalize_failed", "error", err)
+			}
+		})
 	}
 	if project := job.ProjectScope(); project != nil {
-		if err := project.EmitSummaryLog(ctx, summaryIn, string(reason), finalizedAt); err != nil {
-			errs = append(errs, fmt.Errorf("emit project summary log: %w", err))
-		}
+		wg.Go(func() {
+			if err := project.FinalizeStreamingLogs(ctx); err != nil {
+				jr.logger.WarnContext(ctx, "job_project_scope_finalize_failed", "error", err)
+			}
+		})
 	}
-	return errors.Join(errs...)
+	wg.Wait()
+	jr.logger.InfoContext(ctx, "job_finalized", "job_identity", job.Identity(), "reason", string(reason))
+	return summaryErr
 }
 
 func (jr *JobRegistry) takeJob(identity jobcontext.JobIdentity) (*job.Job, bool) {
