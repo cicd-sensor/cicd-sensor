@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -176,18 +177,35 @@ func (o *ManagerJobLogs) DroppedLogRecords(logType managerv1beta1.LogType) uint6
 	}
 }
 
-// FinalizeStreamingLogs closes detection and runtime event logs.
-func (o *ManagerJobLogs) FinalizeStreamingLogs(ctx context.Context) error {
+// FlushStreamingLogs sends buffered detection and runtime event records now
+// while keeping the workers open for later records and the final close.
+func (o *ManagerJobLogs) FlushStreamingLogs(ctx context.Context) error {
 	var errs []error
 	if o.detection != nil {
-		if err := o.detection.Close(ctx); err != nil {
+		if err := o.detection.Flush(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	if o.runtimeEvent != nil {
-		if err := o.runtimeEvent.Close(ctx); err != nil {
+		if err := o.runtimeEvent.Flush(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// FinalizeStreamingLogs closes detection and runtime event logs in
+// parallel so one slow drain cannot serialize in front of the other during
+// a deadline-bounded shutdown (#143).
+func (o *ManagerJobLogs) FinalizeStreamingLogs(ctx context.Context) error {
+	var wg sync.WaitGroup
+	var detectionErr, runtimeEventErr error
+	if o.detection != nil {
+		wg.Go(func() { detectionErr = o.detection.Close(ctx) })
+	}
+	if o.runtimeEvent != nil {
+		wg.Go(func() { runtimeEventErr = o.runtimeEvent.Close(ctx) })
+	}
+	wg.Wait()
+	return errors.Join(detectionErr, runtimeEventErr)
 }

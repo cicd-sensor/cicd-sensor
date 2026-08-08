@@ -89,7 +89,7 @@ func runAgentStart(args []string) {
 	fs.StringVar(&runner, "runner", "", "Runner type (machine or kubernetes).")
 	fs.StringVar(&managerURL, "manager-url", "", "Host scope manager URL.")
 	fs.StringVar(&managerTokenFilePath, "manager-token-file", "", "Path to a file containing the host scope manager bearer token. Overrides CICD_SENSOR_MANAGER_TOKEN.")
-	fs.DurationVar(&shutdownGrace, "shutdown-grace", 8*time.Second, "Best-effort drain window used after SIGTERM.")
+	fs.DurationVar(&shutdownGrace, "shutdown-grace", 8*time.Second, "Best-effort drain window used after SIGTERM. Must end before the supervisor's kill timeout (for example systemd TimeoutStopSec), or the drain is cut off mid-flight.")
 	fs.DurationVar(&jobTTL, "job-ttl", job.DefaultTTL, "Job age threshold after which the job is expired and forcibly finalized; expiry is checked about once per minute.")
 	if err := fs.Parse(args[1:]); err != nil {
 		os.Exit(2)

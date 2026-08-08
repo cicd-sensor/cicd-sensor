@@ -21,6 +21,13 @@ func (o *ManagerJobLogs) AttachRuntimeEventRecorderForTesting(identity jobcontex
 	o.attachRecorderForTesting(identity, scopeType, managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT, sendBatch, func(out *managerOutput) { o.runtimeEvent = out })
 }
 
+// AttachBufferedRuntimeEventRecorderForTesting wires the runtime event output
+// of o without a flush threshold or interval, so records stay buffered until
+// an explicit flush or close. Use it to exercise flush paths.
+func (o *ManagerJobLogs) AttachBufferedRuntimeEventRecorderForTesting(identity jobcontext.JobIdentity, scopeType jobcontext.ScopeType, sendBatch func(context.Context, managerclient.LogBatch) error) {
+	o.runtimeEvent = newManagerOutput(o.logger, sendBatch, identity, scopeType, managerv1beta1.LogType_LOG_TYPE_RUNTIME_EVENT, &managerv1beta1.OutputSetting{Enabled: true}, runtimeEventManagerOutputChannelCap)
+}
+
 // AttachSummaryRecorderForTesting wires the final summary output of o to
 // deliver each batch to sendBatch.
 func (o *ManagerJobLogs) AttachSummaryRecorderForTesting(identity jobcontext.JobIdentity, scopeType jobcontext.ScopeType, sendBatch func(context.Context, managerclient.LogBatch) error) {

@@ -11,7 +11,15 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
-// RequestGitHubProjectResult builds the GitHub project-scope report document.
+// projectResultFlushTimeout keeps a slow manager from stalling the project
+// result response past the CLI's 30s socket client timeout.
+const projectResultFlushTimeout = 10 * time.Second
+
+// RequestGitHubProjectResult builds the GitHub project-scope report document
+// and flushes the scope's buffered streaming logs while the job is alive, so
+// VM-teardown finalize only carries the tail delta and the summary (#143).
+// It must not finalize the Job or emit a summary: in-job callers may only
+// accelerate delivery.
 func (jr *JobRegistry) RequestGitHubProjectResult(ctx context.Context, identity jobcontext.JobIdentity, peerPID int32) ([]byte, error) {
 	j := jr.get(identity)
 	if j == nil {
@@ -35,6 +43,18 @@ func (jr *JobRegistry) RequestGitHubProjectResult(ctx context.Context, identity 
 		return nil, fmt.Errorf("marshal project result: %w", err)
 	}
 	body = append(body, '\n')
+
+	// Fail-open: the report body must still be produced, monitoring
+	// continues, and shutdown finalize still sends the tail and summary.
+	flushCtx, cancelFlush := context.WithTimeout(ctx, projectResultFlushTimeout)
+	if err := projectScope.FlushManagerLogs(flushCtx); err != nil {
+		jr.logger.WarnContext(ctx, "project_result_flush_failed",
+			"job_identity", identity,
+			"error", err,
+		)
+	}
+	cancelFlush()
+
 	if err := projectScope.CloseDebugOutput(ctx); err != nil {
 		return nil, fmt.Errorf("close debug output before project result response: %w", err)
 	}

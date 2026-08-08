@@ -97,6 +97,13 @@ func (c *CollectorServiceClient) sendIngestLogBatch(ctx context.Context, batch *
 			)
 		}
 		attempt++
+		// jitterHalf sleeps at least delay/2. If the caller's deadline
+		// cannot cover that, a retry can never run: return the real send
+		// error now instead of burning the remaining finalize budget in a
+		// sleep that only ends in ctx.Err().
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= delay/2 {
+			return fmt.Errorf("send collector ingest log batch: %w", err)
+		}
 		if sleepErr := c.sleep(ctx, c.jitter(delay)); sleepErr != nil {
 			return fmt.Errorf("send collector ingest log batch: %w", errors.Join(err, sleepErr))
 		}

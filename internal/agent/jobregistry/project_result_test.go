@@ -2,12 +2,14 @@ package jobregistry_test
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -154,4 +156,104 @@ func readProjectResultDebugGzip(t *testing.T, debugDir string) string {
 		t.Fatalf("close gzip reader: %v", err)
 	}
 	return string(body)
+}
+
+type recordingProjectLogSender struct {
+	mu      sync.Mutex
+	err     error
+	records [][]byte
+}
+
+func (r *recordingProjectLogSender) sendBatch(_ context.Context, batch managerclient.LogBatch) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.err != nil {
+		return r.err
+	}
+	for _, record := range batch.Records {
+		r.records = append(r.records, append([]byte(nil), record...))
+	}
+	return nil
+}
+
+func (r *recordingProjectLogSender) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.records)
+}
+
+func TestJobRegistry_RequestGitHubProjectResult_FlushesBufferedStreamingLogs(t *testing.T) {
+	jr := newJobRegistry(t)
+	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	meta := jobcontext.JobMetadata{}
+
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, jobregistry.GitHubProjectStartConfig{
+		Identity:   id,
+		Metadata:   meta,
+		RunnerType: "machine",
+	}); err != nil {
+		t.Fatalf("apply project start: %v", err)
+	}
+	job := registeredJob(jr, id)
+	if job == nil || job.ProjectScope() == nil {
+		t.Fatal("project job not registered")
+	}
+	recorder := &recordingProjectLogSender{}
+	project := job.ProjectScope()
+	project.ManagerJobLogsForTesting().AttachBufferedRuntimeEventRecorderForTesting(id, project.Type, recorder.sendBatch)
+
+	project.WriteRuntimeEventLog(testCtx, id, meta, "machine", testProjectResultEvent("event-before-result"), testLogger)
+	if got := recorder.count(); got != 0 {
+		t.Fatalf("runtime event records before project result: got %d, want 0", got)
+	}
+
+	if _, err := jr.RequestGitHubProjectResult(testCtx, id, 0); err != nil {
+		t.Fatalf("request project result: %v", err)
+	}
+	if got := recorder.count(); got != 1 {
+		t.Fatalf("runtime event records after project result: got %d, want 1", got)
+	}
+
+	// A repeated project result flushes whatever buffered since.
+	project.WriteRuntimeEventLog(testCtx, id, meta, "machine", testProjectResultEvent("event-between-results"), testLogger)
+	body, err := jr.RequestGitHubProjectResult(testCtx, id, 0)
+	if err != nil {
+		t.Fatalf("second project result: %v", err)
+	}
+	if len(body) == 0 {
+		t.Fatal("second project result body is empty")
+	}
+	if got := recorder.count(); got != 2 {
+		t.Fatalf("runtime event records after second call: got %d, want 2", got)
+	}
+}
+
+func TestJobRegistry_RequestGitHubProjectResult_FlushFailureStillReturnsBody(t *testing.T) {
+	jr := newJobRegistry(t)
+	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	meta := jobcontext.JobMetadata{}
+
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, jobregistry.GitHubProjectStartConfig{
+		Identity:   id,
+		Metadata:   meta,
+		RunnerType: "machine",
+	}); err != nil {
+		t.Fatalf("apply project start: %v", err)
+	}
+	job := registeredJob(jr, id)
+	if job == nil || job.ProjectScope() == nil {
+		t.Fatal("project job not registered")
+	}
+	recorder := &recordingProjectLogSender{err: errors.New("manager unavailable")}
+	project := job.ProjectScope()
+	project.ManagerJobLogsForTesting().AttachBufferedRuntimeEventRecorderForTesting(id, project.Type, recorder.sendBatch)
+	project.WriteRuntimeEventLog(testCtx, id, meta, "machine", testProjectResultEvent("event-before-result"), testLogger)
+
+	body, err := jr.RequestGitHubProjectResult(testCtx, id, 0)
+	if err != nil {
+		t.Fatalf("project result with failing flush: %v", err)
+	}
+	if !json.Valid(body) {
+		t.Fatal("result body is not valid JSON")
+	}
 }

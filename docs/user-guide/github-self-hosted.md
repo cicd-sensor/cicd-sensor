@@ -104,6 +104,7 @@ sudo journalctl -u cicd-sensor-agent.service -f
 
 The start hook is required to begin monitoring, so failures should fail the job.
 The completed hook runs job health check and finalize inside `host end`.
+The health check is also a tamper signal: if monitoring was already finalized — for example a process inside the job invoked `host end` early to cut monitoring short — the health check fails, the completed hook exits non-zero, and the job shows the failure instead of finishing with a clean-looking summary.
 
 ## Action support
 

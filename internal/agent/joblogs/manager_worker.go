@@ -40,7 +40,10 @@ type managerOutputRequest struct {
 	ctx     context.Context
 	payload []byte
 	close   bool
-	reply   chan error
+	// flush requests a synchronous send of the buffered records without
+	// closing the worker. Failed sends keep the buffer for a later retry.
+	flush bool
+	reply chan error
 }
 
 func newManagerWorker(cfg managerWorkerConfig) *managerWorker {
@@ -145,6 +148,10 @@ func (w *managerWorker) run(requests <-chan managerOutputRequest, done chan<- st
 				}
 				req.reply <- flush(req.ctx)
 				return
+			}
+			if req.flush {
+				req.reply <- flush(req.ctx)
+				continue
 			}
 			if len(req.payload) == 0 {
 				continue

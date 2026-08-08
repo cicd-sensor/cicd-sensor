@@ -33,6 +33,10 @@ type Agent struct {
 	engineDone                <-chan error
 }
 
+// defaultAgentShutdownGrace bounds the best-effort drain in shutdown. The
+// effective window is min(grace, supervisor kill timeout): a supervisor that
+// SIGKILLs earlier (systemd TimeoutStopSec) truncates the drain mid-flight,
+// so deployments must keep the grace under that timeout (--shutdown-grace).
 const defaultAgentShutdownGrace = 8 * time.Second
 
 // NewAgent creates an agent for one provider and one control socket.

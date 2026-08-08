@@ -152,6 +152,10 @@ func runHostEnd(args []string) {
 	}
 }
 
+// The health probe is the double-end guarantee: if the Job was already
+// finalized (e.g. an early host end from inside the job), the probe fails
+// and the completed hook exits non-zero. The agent-side end handler is
+// lenient on a missing Job; only this probe fails closed.
 func postGitHubHostEnd(ctx context.Context, socketPath string, req map[string]string) error {
 	if err := postSocket(ctx, socketPath, "/v1/github/job/health", req); err != nil {
 		return fmt.Errorf("job health: %w", err)
