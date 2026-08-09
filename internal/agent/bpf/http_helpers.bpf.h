@@ -84,9 +84,9 @@ static __always_inline int http_is_ctrl(char c)
 
 // http_prefix_byte reads prefix[idx] masked to the buffer. The barrier makes
 // idx opaque to clang so it cannot prove the index in range and delete the
-// mask; the mask is then the verifier's in-bounds proof. Each pipeline stage
-// runs at most one break-scan over the prefix, so the per-read scalar does not
-// accumulate into a state explosion (the monolithic parser's failure mode).
+// mask; the mask is then the verifier's in-bounds proof. Splitting the parse
+// across two programs keeps the per-read scalars from accumulating into the
+// state explosion that sank the single-program parser.
 static __always_inline char http_prefix_byte(struct http_scratch *s, __u32 idx)
 {
     asm volatile("" : "+r"(idx));
@@ -120,23 +120,23 @@ static __always_inline struct http_scratch *http_scratch_get(void)
     return bpf_map_lookup_elem(&http_scratch, &key);
 }
 
-// The only state persisted across stages beyond the parse offsets is
-// http_scratch.have_host (1 = a host value was captured). The parse captures
-// what it can and leaves anything it cannot as empty — there is no truncation
-// signal, rules match the value or its absence, nothing finer. A "no host"
-// outcome needs no flag: the host stages simply find nothing and leave
-// have_host at 0.
+// The only state carried beyond the parse offsets is http_scratch.have_host
+// (1 = a host value was captured). The parse captures what it can and leaves
+// anything it cannot as empty — there is no truncation signal, rules match the
+// value or its absence, nothing finer. A "no host" outcome needs no flag: the
+// host steps simply find nothing and leave have_host at 0.
 
 // The parse is split between the attached entry and one tail-call target
 // (http_hooks.bpf.h), giving the target fresh verifier state. A single program
 // that did all of this exceeds the verifier instruction budget. Intermediate
 // values stay in the scratch map and are explicitly bounded before each scan.
 //
-// A step returns 0 to continue the pipeline (the program then tail-calls the
-// next stage) or -1 to drop (the program returns without tail-calling).
+// A step returns 0 to continue and -1 to drop the capture. Only the entry
+// tail-calls after its step; inside the parse target the steps run in sequence,
+// and a drop returns from the program without emitting a sample.
 
 // Step: request line. Method token, origin-form '/', scan to the ending space,
-// and validate " HTTP/1.". Stores pos / mlen / line_end / flags.
+// and validate " HTTP/1.". Stores data_len / mlen / pos / line_end.
 static __always_inline int http_step_reqline(struct http_scratch *s)
 {
     __u32 data_len = s->data_len;
@@ -172,7 +172,7 @@ static __always_inline int http_step_reqline(struct http_scratch *s)
     // validate " HTTP/1.<digit>\r" so "GET /x junk" is not accepted as HTTP. If
     // the request line ran past the prefix (no space) or the version token is
     // cut at the boundary, that is an accepted partial capture: keep the path
-    // and let the host stages find nothing (have_host stays 0). The version
+    // and let the host steps find nothing (have_host stays 0). The version
     // bytes are read only inside the length guard, so no read reaches past
     // data_len — which is why the prefix does not need pre-zeroing.
     if (space_found) {
@@ -426,8 +426,8 @@ static __always_inline int http_first_segment(struct msghdr *msg,
 
 // http_entry_capture resolves the first send segment, rejects non-HTTP with a
 // cheap method-token pre-check, copies a bounded prefix into the scratch map,
-// and initializes the pipeline state. Returns 0 to start the pipeline (the
-// entry program then tail-calls the first stage) or -1 to stop.
+// and initializes the parse state. Returns 0 to continue (the entry program
+// then parses the request line and tail-calls the parse target) or -1 to stop.
 static __always_inline int http_entry_capture(struct msghdr *msg)
 {
     const void *base = NULL;

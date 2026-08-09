@@ -4,10 +4,13 @@ package kerneltracker
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -96,6 +99,19 @@ type httpCaptureFixture struct {
 	cgroupID uint64
 	inputCh  chan engineInput
 	conn     net.Conn
+	addr     string
+}
+
+// dial opens an additional connection from the tracked cgroup. The concurrency
+// test gives each worker its own connection so the writes really do race.
+func (f *httpCaptureFixture) dial(t *testing.T) net.Conn {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp4", f.addr, 2*time.Second)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
 }
 
 func newHTTPCaptureFixture(t *testing.T) *httpCaptureFixture {
@@ -126,23 +142,25 @@ func newHTTPCaptureFixture(t *testing.T) *httpCaptureFixture {
 	}
 	t.Cleanup(func() { listener.Close() })
 	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			return
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				_, _ = io.Copy(io.Discard, conn)
+				_ = conn.Close()
+			}()
 		}
-		go func() {
-			_, _ = io.Copy(io.Discard, conn)
-			_ = conn.Close()
-		}()
 	}()
 
-	conn, err := net.DialTimeout("tcp4", listener.Addr().String(), 2*time.Second)
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
+	fixture := &httpCaptureFixture{
+		cgroupID: cgroupID,
+		inputCh:  kernelTracker.inputCh,
+		addr:     listener.Addr().String(),
 	}
-	t.Cleanup(func() { conn.Close() })
-
-	return &httpCaptureFixture{cgroupID: cgroupID, inputCh: kernelTracker.inputCh, conn: conn}
+	fixture.conn = fixture.dial(t)
+	return fixture
 }
 
 // TestLinuxKernelSampleHTTPRequestNoStaleSuffix asserts a short request after a
@@ -200,6 +218,186 @@ func TestLinuxKernelSampleHTTPRequestRejectsBadVersion(t *testing.T) {
 		}
 		return strings.TrimSpace(s.Host) == "good.example" && s.Path == "/ok"
 	})
+}
+
+// TestLinuxKernelSampleHTTPRequestConcurrentSendsStayConsistent sends from many
+// connections at once and asserts every captured sample is self-consistent:
+// method, path, and host all carry the same worker id.
+//
+// This is the load-bearing test for the parse design. The parse spans two BPF
+// programs joined by a tail call, and the intermediate offsets live in a
+// per-CPU scratch map. Correctness rests on the assumption that a tail call
+// keeps running on the same CPU and cannot be interleaved with another capture
+// on that CPU. If that assumption broke, a sample would surface with one
+// request's path and another's host — which is exactly what this asserts
+// against. Samples may legitimately be dropped under load, so the test checks
+// the integrity of what arrives, not an exact count.
+func TestLinuxKernelSampleHTTPRequestConcurrentSendsStayConsistent(t *testing.T) {
+	f := newHTTPCaptureFixture(t)
+
+	const (
+		workers      = 8
+		perWorker    = 25
+		quietPeriod  = 500 * time.Millisecond
+		collectLimit = 15 * time.Second
+	)
+
+	// Dial every connection up front: net.DialTimeout failures must be reported
+	// from the test goroutine, not from a worker.
+	conns := make([]net.Conn, workers)
+	for i := range workers {
+		conns[i] = f.dial(t)
+	}
+
+	type captured struct {
+		method string
+		path   string
+		host   string
+	}
+	var (
+		mu      sync.Mutex
+		samples []captured
+	)
+	stop := make(chan struct{})
+	collectorDone := make(chan struct{})
+	go func() {
+		defer close(collectorDone)
+		for {
+			select {
+			case <-stop:
+				return
+			case in := <-f.inputCh:
+				sample, ok := in.(httpRequestSample)
+				if !ok || sample.CgroupID != f.cgroupID {
+					continue
+				}
+				mu.Lock()
+				samples = append(samples, captured{
+					method: sample.Method,
+					path:   sample.Path,
+					host:   strings.TrimSpace(sample.Host),
+				})
+				mu.Unlock()
+			}
+		}
+	}()
+
+	var wg sync.WaitGroup
+	for id := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// The method also varies by worker: it is copied from the scratch
+			// prefix by a different code path than path/host, so a mismatch
+			// there would be invisible if every worker sent the same method.
+			method := "GET"
+			if id%2 == 1 {
+				method = "POST"
+			}
+			for seq := range perWorker {
+				request := fmt.Sprintf("%s /w%d/r%d HTTP/1.1\r\nHost: w%d.example\r\n\r\n",
+					method, id, seq, id)
+				if _, err := conns[id].Write([]byte(request)); err != nil {
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Drain until the ring buffer goes quiet: a fixed sleep would either flake
+	// or waste time depending on how fast the sampler keeps up.
+	deadline := time.Now().Add(collectLimit)
+	previous := -1
+	for time.Now().Before(deadline) {
+		time.Sleep(quietPeriod)
+		mu.Lock()
+		current := len(samples)
+		mu.Unlock()
+		if current == previous {
+			break
+		}
+		previous = current
+	}
+	close(stop)
+	<-collectorDone
+
+	mu.Lock()
+	collected := append([]captured(nil), samples...)
+	mu.Unlock()
+
+	seenWorkers := map[int]int{}
+	for _, sample := range collected {
+		pathID, ok := workerIDFromPath(sample.path)
+		if !ok {
+			continue // not one of ours (another test's traffic in the same cgroup)
+		}
+		hostID, ok := workerIDFromHost(sample.host)
+		if !ok {
+			t.Fatalf("path %q carries worker %d but host %q is not a worker host: fields came from different requests",
+				sample.path, pathID, sample.host)
+		}
+		if hostID != pathID {
+			t.Fatalf("cross-request mix: path %q (worker %d) paired with host %q (worker %d)",
+				sample.path, pathID, sample.host, hostID)
+		}
+		wantMethod := "GET"
+		if pathID%2 == 1 {
+			wantMethod = "POST"
+		}
+		if sample.method != wantMethod {
+			t.Fatalf("cross-request mix: worker %d sent %s but sample carries method %q (path %q)",
+				pathID, wantMethod, sample.method, sample.path)
+		}
+		seenWorkers[pathID]++
+	}
+
+	total := 0
+	for _, count := range seenWorkers {
+		total += count
+	}
+	// Drops are acceptable; a silent capture failure is not. Requiring several
+	// workers keeps the integrity assertions above from passing vacuously.
+	if len(seenWorkers) < 2 || total < workers {
+		t.Fatalf("captured %d samples from %d workers, want traffic from at least 2 workers and %d samples overall",
+			total, len(seenWorkers), workers)
+	}
+	t.Logf("concurrent capture: %d samples across %d workers (sent %d)",
+		total, len(seenWorkers), workers*perWorker)
+}
+
+// workerIDFromPath parses "/w<id>/r<seq>" written by the concurrency test.
+func workerIDFromPath(path string) (int, bool) {
+	rest, ok := strings.CutPrefix(path, "/w")
+	if !ok {
+		return 0, false
+	}
+	digits, _, ok := strings.Cut(rest, "/")
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0, false
+	}
+	return id, true
+}
+
+// workerIDFromHost parses "w<id>.example" written by the concurrency test.
+func workerIDFromHost(host string) (int, bool) {
+	digits, ok := strings.CutPrefix(host, "w")
+	if !ok {
+		return 0, false
+	}
+	digits, ok = strings.CutSuffix(digits, ".example")
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0, false
+	}
+	return id, true
 }
 
 // TestLinuxKernelSampleHTTPRequestQueryStripNoHost drives an HTTP/1.0 request
