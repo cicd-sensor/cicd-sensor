@@ -178,8 +178,6 @@ type BPFProgramHttpRequestSample struct {
 type BPFProgramHttpScratch struct {
 	_        structs.HostLayout
 	Prefix   [256]int8
-	Path     [256]int8
-	Host     [256]int8
 	DataLen  uint32
 	Pos      uint32
 	Mlen     uint32
@@ -300,10 +298,8 @@ const (
 	BPFProgramProgHandleTcpSendmsg             = "handle_tcp_sendmsg"
 	BPFProgramProgHandleTcpSendmsgHttp         = "handle_tcp_sendmsg_http"
 	BPFProgramProgHandleTcpSendmsgHttpEmit     = "handle_tcp_sendmsg_http_emit"
-	BPFProgramProgHandleTcpSendmsgHttpHostcopy = "handle_tcp_sendmsg_http_hostcopy"
 	BPFProgramProgHandleTcpSendmsgHttpHostfind = "handle_tcp_sendmsg_http_hostfind"
 	BPFProgramProgHandleTcpSendmsgHttpHostlen  = "handle_tcp_sendmsg_http_hostlen"
-	BPFProgramProgHandleTcpSendmsgHttpPathcopy = "handle_tcp_sendmsg_http_pathcopy"
 	BPFProgramProgHandleTcpSendmsgHttpPathlen  = "handle_tcp_sendmsg_http_pathlen"
 	BPFProgramProgHandleUdpSendmsg             = "handle_udp_sendmsg"
 	BPFProgramProgHandleUdpv6Sendmsg           = "handle_udpv6_sendmsg"
@@ -388,10 +384,8 @@ type BPFProgramProgramSpecs struct {
 	HandleTcpSendmsg             *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg"`
 	HandleTcpSendmsgHttp         *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http"`
 	HandleTcpSendmsgHttpEmit     *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_emit"`
-	HandleTcpSendmsgHttpHostcopy *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_hostcopy"`
 	HandleTcpSendmsgHttpHostfind *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_hostfind"`
 	HandleTcpSendmsgHttpHostlen  *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_hostlen"`
-	HandleTcpSendmsgHttpPathcopy *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_pathcopy"`
 	HandleTcpSendmsgHttpPathlen  *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_pathlen"`
 	HandleUdpSendmsg             *ebpf.ProgramSpec `ebpf:"handle_udp_sendmsg"`
 	HandleUdpv6Sendmsg           *ebpf.ProgramSpec `ebpf:"handle_udpv6_sendmsg"`
@@ -520,10 +514,8 @@ type BPFProgramPrograms struct {
 	HandleTcpSendmsg             *ebpf.Program `ebpf:"handle_tcp_sendmsg"`
 	HandleTcpSendmsgHttp         *ebpf.Program `ebpf:"handle_tcp_sendmsg_http"`
 	HandleTcpSendmsgHttpEmit     *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_emit"`
-	HandleTcpSendmsgHttpHostcopy *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_hostcopy"`
 	HandleTcpSendmsgHttpHostfind *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_hostfind"`
 	HandleTcpSendmsgHttpHostlen  *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_hostlen"`
-	HandleTcpSendmsgHttpPathcopy *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_pathcopy"`
 	HandleTcpSendmsgHttpPathlen  *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_pathlen"`
 	HandleUdpSendmsg             *ebpf.Program `ebpf:"handle_udp_sendmsg"`
 	HandleUdpv6Sendmsg           *ebpf.Program `ebpf:"handle_udpv6_sendmsg"`
@@ -552,10 +544,8 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleTcpSendmsg,
 		p.HandleTcpSendmsgHttp,
 		p.HandleTcpSendmsgHttpEmit,
-		p.HandleTcpSendmsgHttpHostcopy,
 		p.HandleTcpSendmsgHttpHostfind,
 		p.HandleTcpSendmsgHttpHostlen,
-		p.HandleTcpSendmsgHttpPathcopy,
 		p.HandleTcpSendmsgHttpPathlen,
 		p.HandleUdpSendmsg,
 		p.HandleUdpv6Sendmsg,

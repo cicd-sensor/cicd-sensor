@@ -27,18 +27,11 @@ _Static_assert((HTTP1_PREFIX_LEN & (HTTP1_PREFIX_LEN - 1)) == 0,
                "HTTP1_PREFIX_LEN must be a power of two");
 
 // Per-CPU HTTP parse workspace, passed through the tail-call parse pipeline
-// (see http_helpers.bpf.h). The raw send prefix and the staged path/host stay
-// in this map; only the final ringbuf sample leaves the kernel. Path/host are
-// copied into these staging fields (map values) rather than straight into the
-// ringbuf sample because the 6.6 verifier rejects a variable-length
-// bpf_probe_read into ringbuf memory ("R2 unbounded"); the emit stage then
-// does a fixed-size memcpy out of them. Each pipeline stage re-reads its inputs
-// from here as unknown scalars and re-bounds them, which is what keeps every
-// stage verifiable on 5.15 / 6.6 / 6.18.
+// (see http_helpers.bpf.h). The raw send prefix stays in this map; only parsed
+// method/path/host fields leave the kernel. Each pipeline stage re-reads its
+// inputs from here as unknown scalars and re-bounds them.
 struct http_scratch {
     char prefix[HTTP1_PREFIX_LEN];   // raw request bytes (never leave kernel)
-    char path[HTTP_PATH_LEN];        // parsed path, staged before the sample
-    char host[HTTP_HOST_LEN];        // parsed host, staged before the sample
     __u32 data_len;                  // bytes captured in prefix
     __u32 pos;                       // path start (method_len + 1)
     __u32 mlen;                      // method length (3..7)
@@ -54,7 +47,7 @@ struct http_scratch {
 // index 0.
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-    __uint(max_entries, 6);
+    __uint(max_entries, 4);
     __type(key, __u32);
     __type(value, __u32);
 } http_stages SEC(".maps");
