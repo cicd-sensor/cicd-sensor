@@ -74,10 +74,8 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	// the entry never tail-calls into an empty slot.
 	for idx, stage := range []*ebpf.Program{
 		kernelIO.objs.HandleTcpSendmsgHttpPathlen,  // HTTP_STAGE_PATHLEN
-		kernelIO.objs.HandleTcpSendmsgHttpPathcopy, // HTTP_STAGE_PATHCOPY
 		kernelIO.objs.HandleTcpSendmsgHttpHostfind, // HTTP_STAGE_HOSTFIND
 		kernelIO.objs.HandleTcpSendmsgHttpHostlen,  // HTTP_STAGE_HOSTLEN
-		kernelIO.objs.HandleTcpSendmsgHttpHostcopy, // HTTP_STAGE_HOSTCOPY
 		kernelIO.objs.HandleTcpSendmsgHttpEmit,     // HTTP_STAGE_EMIT
 	} {
 		if err := kernelIO.objs.HttpStages.Put(uint32(idx), stage); err != nil {

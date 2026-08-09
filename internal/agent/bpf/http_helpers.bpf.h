@@ -45,20 +45,6 @@ static __always_inline void zero_http_request_fields(struct http_request_sample 
     zero_http_host_bytes(sample->host);
 }
 
-// Zero the per-CPU staging fields before each capture (the map is reused).
-static __always_inline void zero_path_field(char *buf)
-{
-    volatile __u64 *words = (volatile __u64 *)buf;
-    volatile const __u64 zero_word = 0;
-    for (int i = 0; i < HTTP_PATH_LEN / 8; i++)
-        words[i] = zero_word;
-}
-
-static __always_inline void zero_host_field(char *buf)
-{
-    zero_http_host_bytes(buf);
-}
-
 // http_method_len matches a known request-method token + space at the start
 // of buf (which must hold at least 8 readable bytes) and returns the token
 // length, or 0 when the bytes cannot start an HTTP request. CONNECT is
@@ -108,11 +94,8 @@ static __always_inline char http_prefix_byte(struct http_scratch *s, __u32 idx)
     return s->prefix[idx];
 }
 
-// http_copy_field copies n bytes from the prefix at src into a staging field
-// with one bounded bpf_probe_read_kernel — no per-byte write index (the shape
-// kernel 6.6 rejected). The explicit guards hand the verifier the source and
-// length bounds directly; n is caller-bounded below HTTP1_PREFIX_LEN, which is
-// also the staging field size.
+// Keep explicit masks in the BPF instructions so Linux 6.6 sees bounded source
+// and size registers for a variable-length read into ringbuf memory.
 static __always_inline void http_copy_field(char *dst, struct http_scratch *s,
                                             __u32 src, __u32 n)
 {
@@ -120,6 +103,9 @@ static __always_inline void http_copy_field(char *dst, struct http_scratch *s,
         return;
     if (src >= HTTP1_PREFIX_LEN)
         return;
+    asm volatile("" : "+r"(src), "+r"(n));
+    src &= HTTP1_PREFIX_LEN - 1;
+    n &= HTTP1_PREFIX_LEN - 1;
     if (src + n > HTTP1_PREFIX_LEN)
         return;
     bpf_probe_read_kernel(dst, n, &s->prefix[src]);
@@ -223,8 +209,7 @@ static __always_inline int http_step_reqline(struct http_scratch *s)
 }
 
 // Step: path length. Scan for '?' (query stripped, never copied) up to the
-// request-line space; compute path_n (capped to the path field). The path
-// copy stage copies the bytes.
+// request-line space; compute path_n (capped to the path field).
 static __always_inline int http_step_pathlen(struct http_scratch *s)
 {
     __u32 data_len = s->data_len;
@@ -255,21 +240,6 @@ static __always_inline int http_step_pathlen(struct http_scratch *s)
         path_n = HTTP_PATH_LEN - 1;
 
     s->path_n = path_n;
-    return 0;
-}
-
-// Step: copy the path into scratch->path (staged for the emit stage). A
-// separate stage rather than a direct read into the sample: the 6.6 verifier
-// rejects a variable-length bpf_probe_read into ringbuf memory, but accepts it
-// into this map value.
-static __always_inline int http_step_pathcopy(struct http_scratch *s)
-{
-    __u32 pos = s->pos;
-    __u32 path_n = s->path_n;
-    if (path_n >= HTTP_PATH_LEN)
-        return -1;
-    zero_path_field(s->path);
-    http_copy_field(s->path, s, pos, path_n);
     return 0;
 }
 
@@ -367,27 +337,10 @@ static __always_inline int http_step_hostlen(struct http_scratch *s)
     return 0;
 }
 
-// Step: copy the host into scratch->host (staged for the emit stage). Split
-// out for the same 6.6 verifier reason as http_step_pathcopy.
-static __always_inline int http_step_hostcopy(struct http_scratch *s)
-{
-    if (!s->have_host)
-        return 0;
-    __u32 host_val = s->host_val;
-    __u32 host_n = s->host_n;
-    if (host_n >= HTTP_HOST_LEN)
-        return -1;
-    zero_host_field(s->host);
-    http_copy_field(s->host, s, host_val, host_n);
-    return 0;
-}
-
-// Step: emit. Reserve the ringbuf sample, copy the staged method/path/host in
-// with compile-time-size memcpys, set the header, and submit. The fixed-size
-// memcpy out of the staging fields is what the 6.6 verifier accepts into
-// ringbuf memory (a variable-length read into it is rejected — see
-// http_step_pathcopy). The ringbuf reservation is taken here and nowhere
-// earlier: a live reference cannot survive a tail call.
+// Step: emit. Reserve the ringbuf sample, copy the bounded method/path/host
+// fields out of the prefix, set the header, and submit. The ringbuf reservation
+// is taken here and nowhere earlier: a live reference cannot survive a tail
+// call.
 static __always_inline int http_step_emit(struct http_scratch *s, __u64 cgroup_id)
 {
     __u32 mlen = s->mlen;
@@ -417,9 +370,9 @@ static __always_inline int http_step_emit(struct http_scratch *s, __u64 cgroup_i
             break;
         sample->method[i] = s->prefix[i];
     }
-    __builtin_memcpy(sample->path, s->path, sizeof(sample->path));
+    http_copy_field(sample->path, s, s->pos, s->path_n);
     if (s->have_host)
-        __builtin_memcpy(sample->host, s->host, sizeof(sample->host));
+        http_copy_field(sample->host, s, s->host_val, s->host_n);
 
     bpf_ringbuf_submit(sample, 0);
     return 0;
