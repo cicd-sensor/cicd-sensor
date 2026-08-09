@@ -45,12 +45,11 @@ struct http_scratch {
     __u32 have_host;                 // 1 = a host value was captured
 };
 
-// Tail-call jump table for the HTTP parse pipeline. Userspace loads the stage
-// programs and installs each at its index; the entry program tail-calls
-// index 0.
+// Tail-call jump table for the HTTP parser. Userspace installs the parse target
+// at index 0 before attaching the entry program.
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-    __uint(max_entries, 4);
+    __uint(max_entries, 1);
     __type(key, __u32);
     __type(value, __u32);
 } http_stages SEC(".maps");

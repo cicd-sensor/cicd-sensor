@@ -127,13 +127,10 @@ static __always_inline struct http_scratch *http_scratch_get(void)
 // outcome needs no flag: the host stages simply find nothing and leave
 // have_host at 0.
 
-// The parse is a tail-call pipeline. Each step below runs in its own BPF
-// program (http_hooks.bpf.h) so it gets fresh verifier state and a fresh
-// compiler scope; a single program that did all of this could not be made to
-// pass the 5.15 / 6.6 / 6.18 verifiers at once (see the design doc). Each step
-// re-reads its inputs from the scratch map — the verifier treats a map load as
-// an unknown scalar, so the explicit `>=` bound checks below survive and hand
-// it clean ranges. Every step runs at most one break-scan over the prefix.
+// The parse is split between the attached entry and one tail-call target
+// (http_hooks.bpf.h), giving the target fresh verifier state. A single program
+// that did all of this exceeds the verifier instruction budget. Intermediate
+// values stay in the scratch map and are explicitly bounded before each scan.
 //
 // A step returns 0 to continue the pipeline (the program then tail-calls the
 // next stage) or -1 to drop (the program returns without tail-calling).
@@ -210,9 +207,9 @@ static __always_inline int http_step_reqline(struct http_scratch *s)
     return 0;
 }
 
-// Step: path length. Scan for '?' (query stripped, never copied) up to the
+// Step: path. Scan for '?' (query stripped, never copied) up to the
 // request-line space; compute path_n (capped to the path field).
-static __always_inline int http_step_pathlen(struct http_scratch *s)
+static __always_inline int http_step_path(struct http_scratch *s)
 {
     __u32 data_len = s->data_len;
     if (data_len > HTTP1_PREFIX_LEN)
