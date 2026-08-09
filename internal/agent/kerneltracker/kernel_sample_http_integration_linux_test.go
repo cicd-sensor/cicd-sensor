@@ -3,7 +3,9 @@
 package kerneltracker
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 // TestLinuxKernelSampleHTTPRequestEmitsEvent drives the cleartext tap
@@ -398,6 +402,160 @@ func workerIDFromHost(host string) (int, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// TestLinuxKernelSampleHTTPRequestRawSampleCarriesNoRequestBytes inspects the
+// bytes the kernel actually submitted, not the decoded strings.
+//
+// Decoding stops at the first NUL, so a decode-level assertion cannot see a
+// secret sitting in the padding after a short path or in the unused tail of a
+// field. This test reads the raw ring buffer record and asserts the query
+// value and the Authorization credential appear nowhere in the whole 568-byte
+// sample — the redaction invariant stated in http_helpers.bpf.h, checked end to
+// end.
+func TestLinuxKernelSampleHTTPRequestRawSampleCarriesNoRequestBytes(t *testing.T) {
+	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	t.Cleanup(func() { kernelIO.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	var (
+		mu      sync.Mutex
+		records [][]byte
+	)
+	captureRaw := func(_ context.Context, sample kernelio.KernelSample) error {
+		raw := []byte(sample)
+		if len(raw) < 4 || binary.LittleEndian.Uint32(raw[:4]) != kernelio.SampleKindHTTPRequest {
+			return nil
+		}
+		mu.Lock()
+		records = append(records, append([]byte(nil), raw...))
+		mu.Unlock()
+		return nil
+	}
+	if err := kernelIO.StartKernelSampleLoop(ctx, captureRaw); err != nil {
+		t.Fatalf("StartKernelSampleLoop: %v", err)
+	}
+
+	cgroupID, err := lookupProcessCgroupID(int32(os.Getpid()), cgroupRoot)
+	if err != nil {
+		t.Fatalf("lookupProcessCgroupID: %v", err)
+	}
+	if err := kernelIO.PutCgroupIDInTrackedCgroupsMap(ctx, cgroupID); err != nil {
+		t.Fatalf("put tracked cgroup: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(context.Background(), []uint64{cgroupID})
+	})
+
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		go func() {
+			_, _ = io.Copy(io.Discard, conn)
+			_ = conn.Close()
+		}()
+	}()
+	conn, err := net.DialTimeout("tcp4", listener.Addr().String(), 2*time.Second)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	const (
+		querySecret = "qsecret31415"
+		authSecret  = "authsecret27182"
+		cookie      = "cookiesecret16180"
+	)
+	// A deliberately short path: the sample's 256-byte path field is mostly
+	// padding, which is where a stale or over-copied secret would surface.
+	request := "GET /s?token=" + querySecret + " HTTP/1.1\r\n" +
+		"Host: raw.example\r\n" +
+		"Authorization: Bearer " + authSecret + "\r\n" +
+		"Cookie: session=" + cookie + "\r\n" +
+		"\r\n"
+	if _, err := conn.Write([]byte(request)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var captured []byte
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		if len(records) > 0 {
+			captured = records[0]
+		}
+		mu.Unlock()
+		if captured != nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if captured == nil {
+		t.Fatal("no http_request sample captured within 5s")
+	}
+
+	for _, secret := range []string{querySecret, authSecret, cookie} {
+		if bytes.Contains(captured, []byte(secret)) {
+			t.Fatalf("raw sample contains %q: request bytes crossed the kernel boundary", secret)
+		}
+	}
+	// Prove the sample really is the request we sent, so the assertions above
+	// cannot pass merely because the capture was empty.
+	if !bytes.Contains(captured, []byte("raw.example")) || !bytes.Contains(captured, []byte("/s")) {
+		t.Fatalf("captured sample does not carry the expected host/path: % x", captured[:64])
+	}
+}
+
+// TestLinuxKernelSampleHTTPRequestPrefixBoundary covers the two prefix-boundary
+// outcomes on a real kernel; until now they were only pinned by the Go mirror.
+// A request line longer than the 256-byte prefix yields the captured path with
+// an empty host, and a Host value that runs past the prefix is dropped to empty
+// rather than silently cut (a truncated host must never feed a host rule).
+func TestLinuxKernelSampleHTTPRequestPrefixBoundary(t *testing.T) {
+	f := newHTTPCaptureFixture(t)
+
+	longPath := "/" + strings.Repeat("a", 400)
+	if _, err := f.conn.Write([]byte("GET " + longPath + " HTTP/1.1\r\nHost: never.example\r\n\r\n")); err != nil {
+		t.Fatalf("Write long request line: %v", err)
+	}
+	waitForEngineInput(t, f.inputCh, 5*time.Second, "path truncated at the prefix boundary", func(in engineInput) bool {
+		sample, ok := in.(httpRequestSample)
+		if !ok || sample.CgroupID != f.cgroupID || !strings.HasPrefix(sample.Path, "/aaa") {
+			return false
+		}
+		// 4 header bytes ("GET ") leave 252 path bytes inside the 256B prefix.
+		if len(sample.Path) != 252 {
+			t.Fatalf("path length = %d, want 252 (prefix boundary)", len(sample.Path))
+		}
+		if strings.TrimSpace(sample.Host) != "" {
+			t.Fatalf("host = %q, want empty: the header block is past the prefix", sample.Host)
+		}
+		return true
+	})
+
+	longHost := strings.Repeat("h", 400) + ".example"
+	if _, err := f.conn.Write([]byte("GET /b HTTP/1.1\r\nHost: " + longHost + "\r\n\r\n")); err != nil {
+		t.Fatalf("Write long host: %v", err)
+	}
+	waitForEngineInput(t, f.inputCh, 5*time.Second, "unterminated host emitted empty", func(in engineInput) bool {
+		sample, ok := in.(httpRequestSample)
+		if !ok || sample.CgroupID != f.cgroupID || sample.Path != "/b" {
+			return false
+		}
+		if strings.TrimSpace(sample.Host) != "" {
+			t.Fatalf("host = %q, want empty: an unterminated host must not be cut and emitted", sample.Host)
+		}
+		return true
+	})
 }
 
 // TestLinuxKernelSampleHTTPRequestQueryStripNoHost drives an HTTP/1.0 request
