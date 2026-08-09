@@ -97,6 +97,52 @@ func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 	}
 }
 
+// TestHandleHTTPRequest_KeepsWireCaseExceptHost pins a deliberate asymmetry in
+// the payload: host is lowercased, method and path are not.
+//
+// Host names are case-insensitive (RFC 9110 §4.2.3), so folding the case is
+// both correct and a guard — otherwise "API.GitHub.com" would slip past a
+// `host == "api.github.com"` rule. Methods and paths are case-SENSITIVE on the
+// wire (RFC 9110 §9.1, §4.1), so the payload keeps them verbatim: the payload
+// feeds job logs, reports, and attestations, which are evidence of what was
+// actually sent.
+//
+// Rules are unaffected by this choice. Every CEL input string AND every string
+// literal in a rule go through rule.NormalizeString, so `method == "POST"` and
+// `method == "post"` both match — see celengine.normalizeStringLiterals.
+func TestHandleHTTPRequest_KeepsWireCaseExceptHost(t *testing.T) {
+	t.Parallel()
+
+	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	identity := processIdentity{PID: 101, StartBoottime: 2}
+
+	state := destinationTrackedState(jobID, 42)
+	state.recordExec(jobID, identity, "/usr/bin/curl", nil, 0)
+
+	effects := handleEngineInput(state, httpRequestSample{
+		Identity: identity,
+		CgroupID: 42,
+		Source:   HTTPSourceCleartext,
+		Method:   "POST",
+		Path:     "/API/Upload",
+		Host:     "API.Example.COM",
+	})
+
+	emit, ok := singleEmitEventRecordEffect(effects)
+	if !ok {
+		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
+	}
+	if got := emit.Record.Payload["method"]; got != "POST" {
+		t.Fatalf("payload[method] = %#v, want \"POST\" kept as sent", got)
+	}
+	if got := emit.Record.Payload["path"]; got != "/API/Upload" {
+		t.Fatalf("payload[path] = %#v, want \"/API/Upload\" kept as sent", got)
+	}
+	if got := emit.Record.Payload["host"]; got != "api.example.com" {
+		t.Fatalf("payload[host] = %#v, want \"api.example.com\" lowercased", got)
+	}
+}
+
 func TestHandleHTTPRequest_NormalizesHost(t *testing.T) {
 	t.Parallel()
 
