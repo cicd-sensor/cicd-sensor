@@ -36,6 +36,25 @@ func TestLinuxKernelIOLoadAndClose(t *testing.T) {
 	if len(kernelIO.links) == 0 {
 		t.Fatalf("expected attached BPF links")
 	}
+	for _, program := range []struct {
+		name string
+		prog *ebpf.Program
+	}{
+		{name: "entry", prog: kernelIO.objs.HandleTcpSendmsgHttp},
+		{name: "parse", prog: kernelIO.objs.HandleTcpSendmsgHttpParse},
+	} {
+		info, err := program.prog.Info()
+		if err != nil {
+			t.Fatalf("HTTP %s program info: %v", program.name, err)
+		}
+		translatedSize, err := info.TranslatedSize()
+		if err != nil {
+			t.Fatalf("HTTP %s translated size: %v", program.name, err)
+		}
+		verifiedInstructions, available := info.VerifiedInstructions()
+		t.Logf("HTTP verifier stats: program=%s verified_instructions=%d available=%t translated_size=%d",
+			program.name, verifiedInstructions, available, translatedSize)
+	}
 	if err := kernelIO.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}

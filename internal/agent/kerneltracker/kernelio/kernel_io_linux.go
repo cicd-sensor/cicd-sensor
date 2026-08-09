@@ -67,20 +67,10 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		_ = rollback.Close()
 	}()
 
-	// The HTTP parse is a tail-call pipeline: only the entry program is
-	// attached to tcp_sendmsg; the stage programs are reached via
-	// bpf_tail_call, so they must be installed in the http_stages jump table
-	// at the indices http_hooks.bpf.h expects. Populate it before attaching so
-	// the entry never tail-calls into an empty slot.
-	for idx, stage := range []*ebpf.Program{
-		kernelIO.objs.HandleTcpSendmsgHttpPathlen,  // HTTP_STAGE_PATHLEN
-		kernelIO.objs.HandleTcpSendmsgHttpHostfind, // HTTP_STAGE_HOSTFIND
-		kernelIO.objs.HandleTcpSendmsgHttpHostlen,  // HTTP_STAGE_HOSTLEN
-		kernelIO.objs.HandleTcpSendmsgHttpEmit,     // HTTP_STAGE_EMIT
-	} {
-		if err := kernelIO.objs.HttpStages.Put(uint32(idx), stage); err != nil {
-			return nil, fmt.Errorf("install http parse stage %d: %w", idx, err)
-		}
+	// Only the HTTP entry program is attached to tcp_sendmsg. Install its parse
+	// target before attaching so the entry never tail-calls into an empty slot.
+	if err := kernelIO.objs.HttpStages.Put(uint32(0), kernelIO.objs.HandleTcpSendmsgHttpParse); err != nil {
+		return nil, fmt.Errorf("install http parse target: %w", err)
 	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do

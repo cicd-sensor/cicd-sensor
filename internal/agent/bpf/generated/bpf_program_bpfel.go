@@ -297,10 +297,7 @@ const (
 	BPFProgramProgHandleSecuritySbMount        = "handle_security_sb_mount"
 	BPFProgramProgHandleTcpSendmsg             = "handle_tcp_sendmsg"
 	BPFProgramProgHandleTcpSendmsgHttp         = "handle_tcp_sendmsg_http"
-	BPFProgramProgHandleTcpSendmsgHttpEmit     = "handle_tcp_sendmsg_http_emit"
-	BPFProgramProgHandleTcpSendmsgHttpHostfind = "handle_tcp_sendmsg_http_hostfind"
-	BPFProgramProgHandleTcpSendmsgHttpHostlen  = "handle_tcp_sendmsg_http_hostlen"
-	BPFProgramProgHandleTcpSendmsgHttpPathlen  = "handle_tcp_sendmsg_http_pathlen"
+	BPFProgramProgHandleTcpSendmsgHttpParse    = "handle_tcp_sendmsg_http_parse"
 	BPFProgramProgHandleUdpSendmsg             = "handle_udp_sendmsg"
 	BPFProgramProgHandleUdpv6Sendmsg           = "handle_udpv6_sendmsg"
 	BPFProgramProgHandleUnixDgramConnect       = "handle_unix_dgram_connect"
@@ -366,32 +363,29 @@ type BPFProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BPFProgramProgramSpecs struct {
-	HandleCgroupAttachTask       *ebpf.ProgramSpec `ebpf:"handle_cgroup_attach_task"`
-	HandleCgroupConnect4         *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect4"`
-	HandleCgroupConnect6         *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect6"`
-	HandleCgroupMkdir            *ebpf.ProgramSpec `ebpf:"handle_cgroup_mkdir"`
-	HandleCgroupRmdir            *ebpf.ProgramSpec `ebpf:"handle_cgroup_rmdir"`
-	HandleSchedProcessExec       *ebpf.ProgramSpec `ebpf:"handle_sched_process_exec"`
-	HandleSchedProcessFork       *ebpf.ProgramSpec `ebpf:"handle_sched_process_fork"`
-	HandleSecurityFileOpen       *ebpf.ProgramSpec `ebpf:"handle_security_file_open"`
-	HandleSecurityInodeLink      *ebpf.ProgramSpec `ebpf:"handle_security_inode_link"`
-	HandleSecurityInodeRename    *ebpf.ProgramSpec `ebpf:"handle_security_inode_rename"`
-	HandleSecurityInodeRmdir     *ebpf.ProgramSpec `ebpf:"handle_security_inode_rmdir"`
-	HandleSecurityInodeSymlink   *ebpf.ProgramSpec `ebpf:"handle_security_inode_symlink"`
-	HandleSecurityInodeUnlink    *ebpf.ProgramSpec `ebpf:"handle_security_inode_unlink"`
-	HandleSecurityMoveMount      *ebpf.ProgramSpec `ebpf:"handle_security_move_mount"`
-	HandleSecuritySbMount        *ebpf.ProgramSpec `ebpf:"handle_security_sb_mount"`
-	HandleTcpSendmsg             *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg"`
-	HandleTcpSendmsgHttp         *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http"`
-	HandleTcpSendmsgHttpEmit     *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_emit"`
-	HandleTcpSendmsgHttpHostfind *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_hostfind"`
-	HandleTcpSendmsgHttpHostlen  *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_hostlen"`
-	HandleTcpSendmsgHttpPathlen  *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_pathlen"`
-	HandleUdpSendmsg             *ebpf.ProgramSpec `ebpf:"handle_udp_sendmsg"`
-	HandleUdpv6Sendmsg           *ebpf.ProgramSpec `ebpf:"handle_udpv6_sendmsg"`
-	HandleUnixDgramConnect       *ebpf.ProgramSpec `ebpf:"handle_unix_dgram_connect"`
-	HandleUnixStreamConnect      *ebpf.ProgramSpec `ebpf:"handle_unix_stream_connect"`
-	HandleUnixStreamSendmsg      *ebpf.ProgramSpec `ebpf:"handle_unix_stream_sendmsg"`
+	HandleCgroupAttachTask     *ebpf.ProgramSpec `ebpf:"handle_cgroup_attach_task"`
+	HandleCgroupConnect4       *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect4"`
+	HandleCgroupConnect6       *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect6"`
+	HandleCgroupMkdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_mkdir"`
+	HandleCgroupRmdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_rmdir"`
+	HandleSchedProcessExec     *ebpf.ProgramSpec `ebpf:"handle_sched_process_exec"`
+	HandleSchedProcessFork     *ebpf.ProgramSpec `ebpf:"handle_sched_process_fork"`
+	HandleSecurityFileOpen     *ebpf.ProgramSpec `ebpf:"handle_security_file_open"`
+	HandleSecurityInodeLink    *ebpf.ProgramSpec `ebpf:"handle_security_inode_link"`
+	HandleSecurityInodeRename  *ebpf.ProgramSpec `ebpf:"handle_security_inode_rename"`
+	HandleSecurityInodeRmdir   *ebpf.ProgramSpec `ebpf:"handle_security_inode_rmdir"`
+	HandleSecurityInodeSymlink *ebpf.ProgramSpec `ebpf:"handle_security_inode_symlink"`
+	HandleSecurityInodeUnlink  *ebpf.ProgramSpec `ebpf:"handle_security_inode_unlink"`
+	HandleSecurityMoveMount    *ebpf.ProgramSpec `ebpf:"handle_security_move_mount"`
+	HandleSecuritySbMount      *ebpf.ProgramSpec `ebpf:"handle_security_sb_mount"`
+	HandleTcpSendmsg           *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg"`
+	HandleTcpSendmsgHttp       *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http"`
+	HandleTcpSendmsgHttpParse  *ebpf.ProgramSpec `ebpf:"handle_tcp_sendmsg_http_parse"`
+	HandleUdpSendmsg           *ebpf.ProgramSpec `ebpf:"handle_udp_sendmsg"`
+	HandleUdpv6Sendmsg         *ebpf.ProgramSpec `ebpf:"handle_udpv6_sendmsg"`
+	HandleUnixDgramConnect     *ebpf.ProgramSpec `ebpf:"handle_unix_dgram_connect"`
+	HandleUnixStreamConnect    *ebpf.ProgramSpec `ebpf:"handle_unix_stream_connect"`
+	HandleUnixStreamSendmsg    *ebpf.ProgramSpec `ebpf:"handle_unix_stream_sendmsg"`
 }
 
 // BPFProgramMapSpecs contains maps before they are loaded into the kernel.
@@ -496,32 +490,29 @@ type BPFProgramVariables struct {
 //
 // It can be passed to LoadBPFProgramObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BPFProgramPrograms struct {
-	HandleCgroupAttachTask       *ebpf.Program `ebpf:"handle_cgroup_attach_task"`
-	HandleCgroupConnect4         *ebpf.Program `ebpf:"handle_cgroup_connect4"`
-	HandleCgroupConnect6         *ebpf.Program `ebpf:"handle_cgroup_connect6"`
-	HandleCgroupMkdir            *ebpf.Program `ebpf:"handle_cgroup_mkdir"`
-	HandleCgroupRmdir            *ebpf.Program `ebpf:"handle_cgroup_rmdir"`
-	HandleSchedProcessExec       *ebpf.Program `ebpf:"handle_sched_process_exec"`
-	HandleSchedProcessFork       *ebpf.Program `ebpf:"handle_sched_process_fork"`
-	HandleSecurityFileOpen       *ebpf.Program `ebpf:"handle_security_file_open"`
-	HandleSecurityInodeLink      *ebpf.Program `ebpf:"handle_security_inode_link"`
-	HandleSecurityInodeRename    *ebpf.Program `ebpf:"handle_security_inode_rename"`
-	HandleSecurityInodeRmdir     *ebpf.Program `ebpf:"handle_security_inode_rmdir"`
-	HandleSecurityInodeSymlink   *ebpf.Program `ebpf:"handle_security_inode_symlink"`
-	HandleSecurityInodeUnlink    *ebpf.Program `ebpf:"handle_security_inode_unlink"`
-	HandleSecurityMoveMount      *ebpf.Program `ebpf:"handle_security_move_mount"`
-	HandleSecuritySbMount        *ebpf.Program `ebpf:"handle_security_sb_mount"`
-	HandleTcpSendmsg             *ebpf.Program `ebpf:"handle_tcp_sendmsg"`
-	HandleTcpSendmsgHttp         *ebpf.Program `ebpf:"handle_tcp_sendmsg_http"`
-	HandleTcpSendmsgHttpEmit     *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_emit"`
-	HandleTcpSendmsgHttpHostfind *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_hostfind"`
-	HandleTcpSendmsgHttpHostlen  *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_hostlen"`
-	HandleTcpSendmsgHttpPathlen  *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_pathlen"`
-	HandleUdpSendmsg             *ebpf.Program `ebpf:"handle_udp_sendmsg"`
-	HandleUdpv6Sendmsg           *ebpf.Program `ebpf:"handle_udpv6_sendmsg"`
-	HandleUnixDgramConnect       *ebpf.Program `ebpf:"handle_unix_dgram_connect"`
-	HandleUnixStreamConnect      *ebpf.Program `ebpf:"handle_unix_stream_connect"`
-	HandleUnixStreamSendmsg      *ebpf.Program `ebpf:"handle_unix_stream_sendmsg"`
+	HandleCgroupAttachTask     *ebpf.Program `ebpf:"handle_cgroup_attach_task"`
+	HandleCgroupConnect4       *ebpf.Program `ebpf:"handle_cgroup_connect4"`
+	HandleCgroupConnect6       *ebpf.Program `ebpf:"handle_cgroup_connect6"`
+	HandleCgroupMkdir          *ebpf.Program `ebpf:"handle_cgroup_mkdir"`
+	HandleCgroupRmdir          *ebpf.Program `ebpf:"handle_cgroup_rmdir"`
+	HandleSchedProcessExec     *ebpf.Program `ebpf:"handle_sched_process_exec"`
+	HandleSchedProcessFork     *ebpf.Program `ebpf:"handle_sched_process_fork"`
+	HandleSecurityFileOpen     *ebpf.Program `ebpf:"handle_security_file_open"`
+	HandleSecurityInodeLink    *ebpf.Program `ebpf:"handle_security_inode_link"`
+	HandleSecurityInodeRename  *ebpf.Program `ebpf:"handle_security_inode_rename"`
+	HandleSecurityInodeRmdir   *ebpf.Program `ebpf:"handle_security_inode_rmdir"`
+	HandleSecurityInodeSymlink *ebpf.Program `ebpf:"handle_security_inode_symlink"`
+	HandleSecurityInodeUnlink  *ebpf.Program `ebpf:"handle_security_inode_unlink"`
+	HandleSecurityMoveMount    *ebpf.Program `ebpf:"handle_security_move_mount"`
+	HandleSecuritySbMount      *ebpf.Program `ebpf:"handle_security_sb_mount"`
+	HandleTcpSendmsg           *ebpf.Program `ebpf:"handle_tcp_sendmsg"`
+	HandleTcpSendmsgHttp       *ebpf.Program `ebpf:"handle_tcp_sendmsg_http"`
+	HandleTcpSendmsgHttpParse  *ebpf.Program `ebpf:"handle_tcp_sendmsg_http_parse"`
+	HandleUdpSendmsg           *ebpf.Program `ebpf:"handle_udp_sendmsg"`
+	HandleUdpv6Sendmsg         *ebpf.Program `ebpf:"handle_udpv6_sendmsg"`
+	HandleUnixDgramConnect     *ebpf.Program `ebpf:"handle_unix_dgram_connect"`
+	HandleUnixStreamConnect    *ebpf.Program `ebpf:"handle_unix_stream_connect"`
+	HandleUnixStreamSendmsg    *ebpf.Program `ebpf:"handle_unix_stream_sendmsg"`
 }
 
 func (p *BPFProgramPrograms) Close() error {
@@ -543,10 +534,7 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleSecuritySbMount,
 		p.HandleTcpSendmsg,
 		p.HandleTcpSendmsgHttp,
-		p.HandleTcpSendmsgHttpEmit,
-		p.HandleTcpSendmsgHttpHostfind,
-		p.HandleTcpSendmsgHttpHostlen,
-		p.HandleTcpSendmsgHttpPathlen,
+		p.HandleTcpSendmsgHttpParse,
 		p.HandleUdpSendmsg,
 		p.HandleUdpv6Sendmsg,
 		p.HandleUnixDgramConnect,
