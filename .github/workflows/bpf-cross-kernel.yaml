@@ -152,6 +152,11 @@ jobs:
             exit 1
           fi
 
+      - name: Report experimental HTTP verifier stats
+        run: |
+          log="_lvh/logs/bpf-integration-${{ matrix.kernel.label }}.log"
+          grep 'HTTP verifier stats' "$log" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

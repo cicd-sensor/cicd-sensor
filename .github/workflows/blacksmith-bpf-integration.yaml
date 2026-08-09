@@ -49,3 +49,9 @@ jobs:
       - name: Run BPF integration tests
         run: |
           make bpf-integration SUDO=sudo
+
+      - name: Report experimental HTTP verifier stats
+        run: |
+          sudo -n env GOCACHE="$GOCACHE" go test -mod=vendor -tags bpf_integration -count=1 -v \
+            ./internal/agent/kerneltracker/kernelio \
+            -run '^TestLinuxKernelIOLoadAndClose$'
