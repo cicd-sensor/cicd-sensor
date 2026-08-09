@@ -25,6 +25,9 @@ struct path_scratch {
 #define HTTP1_PREFIX_LEN 256
 _Static_assert((HTTP1_PREFIX_LEN & (HTTP1_PREFIX_LEN - 1)) == 0,
                "HTTP1_PREFIX_LEN must be a power of two");
+_Static_assert(HTTP_PATH_LEN >= HTTP1_PREFIX_LEN &&
+               HTTP_HOST_LEN >= HTTP1_PREFIX_LEN,
+               "HTTP fields must hold any bounded prefix copy");
 
 // Per-CPU HTTP parse workspace, passed through the tail-call parse pipeline
 // (see http_helpers.bpf.h). The raw send prefix stays in this map; only parsed

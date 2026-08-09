@@ -94,8 +94,10 @@ static __always_inline char http_prefix_byte(struct http_scratch *s, __u32 idx)
     return s->prefix[idx];
 }
 
-// Keep explicit masks in the BPF instructions so Linux 6.6 sees bounded source
-// and size registers for a variable-length read into ringbuf memory.
+// The comparisons reject invalid parser state; the masks are separate verifier
+// proofs that clang cannot optimize away. Linux 6.6 rejected both comparison-
+// bounded variable reads and the previous per-byte ringbuf writes, but accepts
+// this masked variable-length read into the fixed sample fields.
 static __always_inline void http_copy_field(char *dst, struct http_scratch *s,
                                             __u32 src, __u32 n)
 {
