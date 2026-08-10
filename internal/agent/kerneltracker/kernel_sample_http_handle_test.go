@@ -53,6 +53,18 @@ func TestNormalizeHTTPHost(t *testing.T) {
 	}
 }
 
+// TestHandleHTTPRequest_EmitsEvent drives the one emit path with the dirtiest
+// input the kernel can legally deliver — mixed-case method and path, a Host
+// still carrying its verbatim OWS — and pins the payload contract: every
+// string comes out lowercase (host additionally OWS-trimmed), and the payload
+// holds exactly these four keys.
+//
+// Lowercase everywhere means what a job log shows is exactly what a rule
+// matches on. Rule authors are unaffected: CEL string literals go through the
+// same rule.NormalizeString pass as the input, so `method == "POST"` and
+// `method == "post"` both match — covered by celengine's
+// http_request_upper_case_method_literal_matches case. The host edge cases
+// (NUL, control bytes, OWS-only) are owned by TestNormalizeHTTPHost.
 func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 	t.Parallel()
 
@@ -68,10 +80,8 @@ func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 		TsNs:     17,
 		Source:   HTTPSourceCleartext,
 		Method:   "POST",
-		Path:     "/api/upload",
-		// Mixed case: every payload string is lowercased, matching what a
-		// rule sees after normalization.
-		Host: "API.Example.COM",
+		Path:     "/API/Upload",
+		Host:     "   API.Example.COM  ",
 	})
 
 	emit, ok := singleEmitEventRecordEffect(effects)
@@ -94,80 +104,6 @@ func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 	}
 	if len(emit.Record.Payload) != len(wantPayload) {
 		t.Fatalf("payload keys = %d, want %d (%#v)", len(emit.Record.Payload), len(wantPayload), emit.Record.Payload)
-	}
-}
-
-// TestHandleHTTPRequest_LowercasesEveryField pins the payload casing contract:
-// method, path, and host are all lowercased.
-//
-// Every rule-facing string in this repo is lowercase, and the payload is what
-// job logs, reports, and attestations show. Keeping the two identical means a
-// reader never has to reconcile "the log says POST but the rule says post".
-//
-// Rule authors are unaffected: CEL string literals go through the same
-// rule.NormalizeString pass as the input (celengine.normalizeStringLiterals),
-// so `method == "POST"` and `method == "post"` both match. That is covered by
-// celengine's http_request_upper_case_method_literal_matches case.
-func TestHandleHTTPRequest_LowercasesEveryField(t *testing.T) {
-	t.Parallel()
-
-	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
-	identity := processIdentity{PID: 101, StartBoottime: 2}
-
-	state := destinationTrackedState(jobID, 42)
-	state.recordExec(jobID, identity, "/usr/bin/curl", nil, 0)
-
-	effects := handleEngineInput(state, httpRequestSample{
-		Identity: identity,
-		CgroupID: 42,
-		Source:   HTTPSourceCleartext,
-		Method:   "POST",
-		Path:     "/API/Upload",
-		Host:     "API.Example.COM",
-	})
-
-	emit, ok := singleEmitEventRecordEffect(effects)
-	if !ok {
-		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
-	}
-	wantPayload := map[string]any{
-		"method": "post",
-		"path":   "/api/upload",
-		"host":   "api.example.com",
-	}
-	for key, want := range wantPayload {
-		if got := emit.Record.Payload[key]; got != want {
-			t.Fatalf("payload[%s] = %#v, want %#v lowercased", key, got, want)
-		}
-	}
-}
-
-func TestHandleHTTPRequest_NormalizesHost(t *testing.T) {
-	t.Parallel()
-
-	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
-	identity := processIdentity{PID: 101, StartBoottime: 2}
-
-	state := destinationTrackedState(jobID, 42)
-	state.recordExec(jobID, identity, "/usr/bin/curl", nil, 0)
-
-	// The kernel copies the Host verbatim (OWS, mixed case); userspace trims
-	// and lowercases so padding cannot dodge a host rule.
-	effects := handleEngineInput(state, httpRequestSample{
-		Identity: identity,
-		CgroupID: 42,
-		Source:   HTTPSourceCleartext,
-		Method:   "GET",
-		Path:     "/",
-		Host:     "   API.Example.COM  ",
-	})
-
-	emit, ok := singleEmitEventRecordEffect(effects)
-	if !ok {
-		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
-	}
-	if got := emit.Record.Payload["host"]; got != "api.example.com" {
-		t.Fatalf("payload[host] = %#v, want \"api.example.com\"", got)
 	}
 }
 

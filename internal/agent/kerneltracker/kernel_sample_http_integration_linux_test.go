@@ -129,6 +129,21 @@ func newHTTPCaptureFixture(t *testing.T) *httpCaptureFixture {
 	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
 	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
 
+	fixture := &httpCaptureFixture{
+		cgroupID: trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot),
+		inputCh:  kernelTracker.inputCh,
+		addr:     loopbackSink(t),
+	}
+	fixture.conn = fixture.dial(t)
+	return fixture
+}
+
+// trackTestProcessCgroup registers the test process's cgroup as tracked and
+// returns its id. Cleanup unregisters it. Shared by the fixture and the
+// raw-sample test, which cannot use the fixture (it needs its own sample
+// handler instead of the tracker loop).
+func trackTestProcessCgroup(t *testing.T, ctx context.Context, kernelIO *kernelio.LinuxKernelIO, cgroupRoot string) uint64 {
+	t.Helper()
 	cgroupID, err := lookupProcessCgroupID(int32(os.Getpid()), cgroupRoot)
 	if err != nil {
 		t.Fatalf("lookupProcessCgroupID: %v", err)
@@ -139,7 +154,14 @@ func newHTTPCaptureFixture(t *testing.T) *httpCaptureFixture {
 	t.Cleanup(func() {
 		_ = kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(context.Background(), []uint64{cgroupID})
 	})
+	return cgroupID
+}
 
+// loopbackSink starts a listener that accepts and discards everything, and
+// returns its address. The hook under test fires on the client's tcp_sendmsg,
+// so nothing needs to answer.
+func loopbackSink(t *testing.T) string {
+	t.Helper()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
@@ -157,14 +179,7 @@ func newHTTPCaptureFixture(t *testing.T) *httpCaptureFixture {
 			}()
 		}
 	}()
-
-	fixture := &httpCaptureFixture{
-		cgroupID: cgroupID,
-		inputCh:  kernelTracker.inputCh,
-		addr:     listener.Addr().String(),
-	}
-	fixture.conn = fixture.dial(t)
-	return fixture
+	return listener.Addr().String()
 }
 
 // TestLinuxKernelSampleHTTPRequestNoStaleSuffix asserts a short request after a
@@ -438,33 +453,9 @@ func TestLinuxKernelSampleHTTPRequestRawSampleCarriesNoRequestBytes(t *testing.T
 		t.Fatalf("StartKernelSampleLoop: %v", err)
 	}
 
-	cgroupID, err := lookupProcessCgroupID(int32(os.Getpid()), cgroupRoot)
-	if err != nil {
-		t.Fatalf("lookupProcessCgroupID: %v", err)
-	}
-	if err := kernelIO.PutCgroupIDInTrackedCgroupsMap(ctx, cgroupID); err != nil {
-		t.Fatalf("put tracked cgroup: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(context.Background(), []uint64{cgroupID})
-	})
+	trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
 
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen: %v", err)
-	}
-	t.Cleanup(func() { listener.Close() })
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			return
-		}
-		go func() {
-			_, _ = io.Copy(io.Discard, conn)
-			_ = conn.Close()
-		}()
-	}()
-	conn, err := net.DialTimeout("tcp4", listener.Addr().String(), 2*time.Second)
+	conn, err := net.DialTimeout("tcp4", loopbackSink(t), 2*time.Second)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}

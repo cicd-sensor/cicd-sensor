@@ -19,20 +19,12 @@
 // Shortest acceptable request line: "GET / HTTP/1.0" (14 bytes).
 #define HTTP_MIN_REQUEST_LINE 14
 
-// Zero fixed-size buffers with literal-bound volatile u64 loops for the same
-// BPF-backend reason as the zero_* helpers in common_helpers.bpf.h.
-static __always_inline void zero_http_host_bytes(char *buf)
-{
-    volatile __u64 *words = (volatile __u64 *)buf;
-    volatile const __u64 zero_word = 0;
-    for (int i = 0; i < HTTP_HOST_LEN / 8; i++)
-        words[i] = zero_word;
-}
-
 // bpf_ringbuf_reserve does not zero its storage and the buffer is reused, so
 // every parsed-field byte and padding must be zeroed before partial writes —
 // otherwise stale bytes from a previous sample could leak past the parsed
 // fields. This is part of the redaction invariant, not an optimization.
+// Zeroing uses literal-bound volatile u64 loops for the same BPF-backend
+// reason as the zero_* helpers in common_helpers.bpf.h.
 static __always_inline void zero_http_request_fields(struct http_request_sample *sample)
 {
     volatile const __u64 zero_word = 0;
@@ -42,7 +34,9 @@ static __always_inline void zero_http_request_fields(struct http_request_sample 
     words = (volatile __u64 *)sample->path;
     for (int i = 0; i < HTTP_PATH_LEN / 8; i++)
         words[i] = zero_word;
-    zero_http_host_bytes(sample->host);
+    words = (volatile __u64 *)sample->host;
+    for (int i = 0; i < HTTP_HOST_LEN / 8; i++)
+        words[i] = zero_word;
 }
 
 // http_method_len matches a known request-method token + space at the start
@@ -73,13 +67,6 @@ static __always_inline __u32 http_method_len(const char *b)
         b[5] == 'N' && b[6] == 'S' && b[7] == ' ')
         return 7;
     return 0;
-}
-
-// http_is_ctrl: one deterministic terminator policy — any control byte
-// (including CR / LF / NUL) or DEL ends the field it appears in.
-static __always_inline int http_is_ctrl(char c)
-{
-    return (__u8)c < 0x20 || (__u8)c == 0x7f;
 }
 
 // http_prefix_byte reads prefix[idx] masked to the buffer. The barrier makes
@@ -164,7 +151,9 @@ static __always_inline int http_step_reqline(struct http_scratch *s)
             space_found = 1;
             break;
         }
-        if (http_is_ctrl(c))
+        // A control byte (including CR / LF / NUL) or DEL cannot appear in a
+        // valid HTTP/1 request line: reject the capture as non-HTTP.
+        if ((__u8)c < 0x20 || (__u8)c == 0x7f)
             return -1;
     }
 

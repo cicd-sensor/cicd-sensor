@@ -12,7 +12,6 @@ import (
 
 const (
 	refHTTP1PrefixLen = 256 // HTTP1_PREFIX_LEN
-	refHTTPMethodLen  = 16  // HTTP_METHOD_LEN
 	refHTTPPathLen    = 256 // HTTP_PATH_LEN
 	refHTTPHostLen    = 256 // HTTP_HOST_LEN
 	refMinRequestLine = 14  // HTTP_MIN_REQUEST_LINE ("GET / HTTP/1.0")
