@@ -69,8 +69,8 @@ func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 		Source:   HTTPSourceCleartext,
 		Method:   "POST",
 		Path:     "/api/upload",
-		// Mixed case: Host header names a case-insensitive DNS name and
-		// must be lowercased like domain events.
+		// Mixed case: every payload string is lowercased, matching what a
+		// rule sees after normalization.
 		Host: "API.Example.COM",
 	})
 
@@ -82,7 +82,7 @@ func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 		t.Fatalf("kind = %q, want %q", emit.Record.EventType, jobevent.HTTPRequest)
 	}
 	wantPayload := map[string]any{
-		"method": "POST",
+		"method": "post",
 		"path":   "/api/upload",
 		"host":   "api.example.com",
 		"source": "cleartext_http",
@@ -97,20 +97,18 @@ func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 	}
 }
 
-// TestHandleHTTPRequest_KeepsWireCaseExceptHost pins a deliberate asymmetry in
-// the payload: host is lowercased, method and path are not.
+// TestHandleHTTPRequest_LowercasesEveryField pins the payload casing contract:
+// method, path, and host are all lowercased.
 //
-// Host names are case-insensitive (RFC 9110 §4.2.3), so folding the case is
-// both correct and a guard — otherwise "API.GitHub.com" would slip past a
-// `host == "api.github.com"` rule. Methods and paths are case-SENSITIVE on the
-// wire (RFC 9110 §9.1, §4.1), so the payload keeps them verbatim: the payload
-// feeds job logs, reports, and attestations, which are evidence of what was
-// actually sent.
+// Every rule-facing string in this repo is lowercase, and the payload is what
+// job logs, reports, and attestations show. Keeping the two identical means a
+// reader never has to reconcile "the log says POST but the rule says post".
 //
-// Rules are unaffected by this choice. Every CEL input string AND every string
-// literal in a rule go through rule.NormalizeString, so `method == "POST"` and
-// `method == "post"` both match — see celengine.normalizeStringLiterals.
-func TestHandleHTTPRequest_KeepsWireCaseExceptHost(t *testing.T) {
+// Rule authors are unaffected: CEL string literals go through the same
+// rule.NormalizeString pass as the input (celengine.normalizeStringLiterals),
+// so `method == "POST"` and `method == "post"` both match. That is covered by
+// celengine's http_request_upper_case_method_literal_matches case.
+func TestHandleHTTPRequest_LowercasesEveryField(t *testing.T) {
 	t.Parallel()
 
 	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
@@ -132,14 +130,15 @@ func TestHandleHTTPRequest_KeepsWireCaseExceptHost(t *testing.T) {
 	if !ok {
 		t.Fatalf("effects = %#v, want single emitEventRecord", effects)
 	}
-	if got := emit.Record.Payload["method"]; got != "POST" {
-		t.Fatalf("payload[method] = %#v, want \"POST\" kept as sent", got)
+	wantPayload := map[string]any{
+		"method": "post",
+		"path":   "/api/upload",
+		"host":   "api.example.com",
 	}
-	if got := emit.Record.Payload["path"]; got != "/API/Upload" {
-		t.Fatalf("payload[path] = %#v, want \"/API/Upload\" kept as sent", got)
-	}
-	if got := emit.Record.Payload["host"]; got != "api.example.com" {
-		t.Fatalf("payload[host] = %#v, want \"api.example.com\" lowercased", got)
+	for key, want := range wantPayload {
+		if got := emit.Record.Payload[key]; got != want {
+			t.Fatalf("payload[%s] = %#v, want %#v lowercased", key, got, want)
+		}
 	}
 }
 

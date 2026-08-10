@@ -495,8 +495,8 @@ Only the request line and the `Host` header are captured — no other headers an
 
 | field | Type | Example value | Meaning |
 | --- | --- | --- | --- |
-| `method` | string | `GET`, `POST` | Request method. |
-| `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Matching is case-insensitive. |
+| `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |
+| `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Lowercase. |
 | `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
 | `source` | string | `cleartext_http` | Capture channel. Currently `cleartext_http` (plain `http://` traffic). |
 | `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
@@ -536,7 +536,7 @@ Example event value:
     "argv": ["curl", "http://api.example.com/upload"]
   },
   "payload": {
-    "method": "POST",
+    "method": "post",
     "path": "/upload",
     "host": "api.example.com",
     "source": "cleartext_http"

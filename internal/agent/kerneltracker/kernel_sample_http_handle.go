@@ -49,13 +49,18 @@ func handleHTTPRequestSample(state *jobTrackingState, sample httpRequestSample) 
 		return nil
 	}
 
+	// Every rule-facing string in this repo is lowercase, so the payload is
+	// lowercased here too: what a job log shows is then exactly what a rule
+	// matches on. Rules stay readable either way — CEL string literals go
+	// through the same normalization (celengine.normalizeStringLiterals), so
+	// `method == "POST"` and `method == "post"` both hit.
 	record := jobevent.EventRecord{
 		EventType: jobevent.HTTPRequest,
 		Timestamp: bootNsToUTC(sample.TsNs),
 		Process:   state.lookupProcessSummary(jobID, sample.Identity),
 		Payload: map[string]any{
-			"method": sample.Method,
-			"path":   sample.Path,
+			"method": strings.ToLower(sample.Method),
+			"path":   strings.ToLower(sample.Path),
 			"host":   normalizeHTTPHost(sample.Host),
 			"source": source,
 		},
