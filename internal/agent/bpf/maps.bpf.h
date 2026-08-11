@@ -18,6 +18,42 @@ struct path_scratch {
     char buf[FILE_PATH_LEN + DENTRY_NAME_BUF_LEN];
 };
 
+// HTTP/1 parse prefix cap — the number of leading request bytes parsed.
+// Defined here because it sizes http_scratch. The prefix stays in this
+// per-CPU workspace; only parsed method/path/host are copied into the
+// ringbuf sample (redaction invariant).
+#define HTTP1_PREFIX_LEN 256
+_Static_assert((HTTP1_PREFIX_LEN & (HTTP1_PREFIX_LEN - 1)) == 0,
+               "HTTP1_PREFIX_LEN must be a power of two");
+_Static_assert(HTTP_PATH_LEN >= HTTP1_PREFIX_LEN &&
+               HTTP_HOST_LEN >= HTTP1_PREFIX_LEN,
+               "HTTP fields must hold any bounded prefix copy");
+
+// Per-CPU HTTP parse workspace, passed through the tail-call parse pipeline
+// (see http_helpers.bpf.h). The raw send prefix stays in this map; only parsed
+// method/path/host fields leave the kernel. Each pipeline stage re-reads its
+// inputs from here as unknown scalars and re-bounds them.
+struct http_scratch {
+    char prefix[HTTP1_PREFIX_LEN];   // raw request bytes (never leave kernel)
+    __u32 data_len;                  // bytes captured in prefix
+    __u32 pos;                       // path start (method_len + 1)
+    __u32 mlen;                      // method length (3..7)
+    __u32 line_end;                  // request-line space, or data_len
+    __u32 path_n;                    // path byte count
+    __u32 host_val;                  // host value start
+    __u32 host_n;                    // host byte count
+    __u32 have_host;                 // 1 = a host value was captured
+};
+
+// Tail-call jump table for the HTTP parser. Userspace installs the parse target
+// at index 0 before attaching the entry program.
+struct {
+    __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u32);
+} http_stages SEC(".maps");
+
 // The hook only checks staging_map lookup hits; this value is reserved for a
 // future kernel path that may surface JobIdentity without userspace lookup.
 struct staging_value {
@@ -49,6 +85,13 @@ struct {
     __type(key, __u32);
     __type(value, struct path_scratch);
 } path_scratch SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct http_scratch);
+} http_scratch SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);

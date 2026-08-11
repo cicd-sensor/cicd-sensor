@@ -137,11 +137,16 @@ func (a *EventActivation) resolveLocal(name string) (any, bool) {
 		return types.Bool(a.input.IsHardlink), true
 	case "is_symlink":
 		return types.Bool(a.input.IsSymlink), true
-	// domain.
+	// domain / http_request.
 	case "domain":
 		return types.String(a.input.Domain), true
 	case "source":
 		return types.String(a.input.Source), true
+	// http_request.
+	case "method":
+		return types.String(a.input.Method), true
+	case "host":
+		return types.String(a.input.Host), true
 	// unix_socket_connect.
 	case "socket_type":
 		return types.String(a.input.SocketType), true

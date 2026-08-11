@@ -24,14 +24,6 @@ _Static_assert(DNS_PAYLOAD_LEN >= DNS_PER_IOV_MAX,
 _Static_assert((DNS_PAYLOAD_LEN % DNS_PER_IOV_MAX) == 0,
                "DNS_PAYLOAD_LEN must be a multiple of DNS_PER_IOV_MAX");
 
-// Linux 5.15-6.9 name this field `iov`; 6.10+ renamed it to `__iov`.
-// Our vmlinux.h is newer, so this minimal shadow lets CO-RE emit a
-// relocation for the old field name. preserve_access_index keeps that
-// synthetic field access visible to clang/BTF.
-struct iov_iter___legacy {
-    const struct iovec *iov;
-} __attribute__((preserve_access_index));
-
 // 6.0+ single user buffer path. count is the logical send length.
 static __always_inline int fill_dns_payload_from_ubuf(struct iov_iter *iter,
                                                       __u8 *out_buf,

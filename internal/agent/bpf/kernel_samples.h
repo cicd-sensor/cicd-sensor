@@ -26,6 +26,7 @@ enum agent_sample_kind {
     SAMPLE_KIND_DNS = 12,
     SAMPLE_KIND_UNIX_SOCKET_CONNECT = 13,
     SAMPLE_KIND_MOUNT = 14,
+    SAMPLE_KIND_HTTP_REQUEST = 15,
 };
 
 // Field-size constants below define generated Go struct layout.
@@ -42,10 +43,22 @@ enum agent_sample_kind {
 #define ARGV_BLOB_LEN 2048
 // DNS stores a prefix, not a full packet. The first question fits in this cap.
 #define DNS_PAYLOAD_LEN 512
+// http_request_sample carries parsed fields only — never a raw request
+// prefix. The raw bytes may hold Authorization / Cookie and must not cross
+// the kernel boundary (redaction invariant).
+// Longest matched token is "OPTIONS" (7); 16 leaves headroom plus NUL.
+#define HTTP_METHOD_LEN 16
+#define HTTP_PATH_LEN 256
+// RFC 1035 name max (253) plus ":port" fits in 256.
+#define HTTP_HOST_LEN 256
 
 // These capacities are used with masked indexes / fixed-size loops.
 _Static_assert((DNS_PAYLOAD_LEN & (DNS_PAYLOAD_LEN - 1)) == 0,
                "DNS_PAYLOAD_LEN must be a power of two");
+_Static_assert((HTTP_PATH_LEN & (HTTP_PATH_LEN - 1)) == 0,
+               "HTTP_PATH_LEN must be a power of two");
+_Static_assert((HTTP_HOST_LEN & (HTTP_HOST_LEN - 1)) == 0,
+               "HTTP_HOST_LEN must be a power of two");
 _Static_assert((ARGV_BLOB_LEN & (ARGV_BLOB_LEN - 1)) == 0,
                "ARGV_BLOB_LEN must be a power of two");
 _Static_assert((FILE_PATH_LEN & (FILE_PATH_LEN - 1)) == 0,
@@ -263,6 +276,24 @@ struct dns_sample {
     __u8 payload[DNS_PAYLOAD_LEN];
 };
 
+// HTTP request-line sample. method/path/host are the parsed fields only;
+// path is already query-stripped (terminated at '?') by the in-eBPF parse.
+// Shared by the cleartext tcp_sendmsg tap today and the SSL_write uprobe
+// tap later; source discriminates the channel.
+struct http_request_sample {
+    __u32 kind;
+    __u8 source;          // HTTP_SOURCE_*, mirrors kerneltracker.HTTPSource*.
+    __u8 _pad0[3];
+    __u64 ts_ns;
+    __u64 cgroup_id;
+    __u64 start_boottime;
+    __s32 tgid;
+    __u32 _pad1;
+    char method[HTTP_METHOD_LEN];
+    char path[HTTP_PATH_LEN];
+    char host[HTTP_HOST_LEN];
+};
+
 /* Force BTF emission for bpf2go. */
 const volatile struct fork_sample *unused_fork_sample;
 const volatile struct cgroup_mkdir_sample *unused_cgroup_mkdir_sample;
@@ -278,3 +309,4 @@ const volatile struct net_v4_sample *unused_net_v4_sample;
 const volatile struct net_v6_sample *unused_net_v6_sample;
 const volatile struct dns_sample *unused_dns_sample;
 const volatile struct unix_socket_connect_sample *unused_unix_socket_connect_sample;
+const volatile struct http_request_sample *unused_http_request_sample;

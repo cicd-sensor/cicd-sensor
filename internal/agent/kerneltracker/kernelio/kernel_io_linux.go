@@ -67,6 +67,12 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		_ = rollback.Close()
 	}()
 
+	// Only the HTTP entry program is attached to tcp_sendmsg. Install its parse
+	// target before attaching so the entry never tail-calls into an empty slot.
+	if err := kernelIO.objs.HttpStages.Put(uint32(0), kernelIO.objs.HandleTcpSendmsgHttpParse); err != nil {
+		return nil, fmt.Errorf("install http parse target: %w", err)
+	}
+
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
 	// not need lsm=..., Rename/symlink observation stays in inode hooks
 	// because security_path_* cannot use bpf_d_path in container filesystems.
@@ -90,6 +96,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		{name: "udp_sendmsg", program: kernelIO.objs.HandleUdpSendmsg},
 		{name: "udpv6_sendmsg", program: kernelIO.objs.HandleUdpv6Sendmsg},
 		{name: "tcp_sendmsg", program: kernelIO.objs.HandleTcpSendmsg},
+		{name: "tcp_sendmsg_http", program: kernelIO.objs.HandleTcpSendmsgHttp},
 		{name: "unix_stream_sendmsg", program: kernelIO.objs.HandleUnixStreamSendmsg},
 		{name: "unix_stream_connect", program: kernelIO.objs.HandleUnixStreamConnect},
 		{name: "unix_dgram_connect", program: kernelIO.objs.HandleUnixDgramConnect},

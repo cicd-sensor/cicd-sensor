@@ -16,6 +16,7 @@ const (
 	FileLink          Type = "file_link"
 	Mount             Type = "mount"
 	Domain            Type = "domain"
+	HTTPRequest       Type = "http_request"
 )
 
 // AncestorProcess is one captured ancestor in newest-first lineage order.
