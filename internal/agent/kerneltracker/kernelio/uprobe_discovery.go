@@ -151,6 +151,14 @@ func (d *uprobeDiscovery) run(ctx context.Context) {
 // scanProcess reads the process's executable, file-backed mappings and attaches
 // to any that define a target symbol. A dead pid or unreadable maps is skipped
 // (inconclusive; a later connect retries).
+//
+// No strict pid/cgroup recheck is done here in Stage 1b-1, by design. Emission
+// is gated on the tracked cgroup inside the uprobe program itself, so an
+// untracked process — even one that reuses a hint's pid before this scan —
+// never produces an event. The only residual effect is one wasted attach on
+// such a process's inode, bounded by the target cap and with no cross-job
+// disclosure. A pid-current-cgroup-matches-and-is-tracked recheck belongs with
+// reclaim in Stage 1b-2, where the registry lifecycle it protects exists.
 func (d *uprobeDiscovery) scanProcess(pid int32) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 	if err != nil {
