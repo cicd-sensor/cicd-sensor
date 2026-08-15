@@ -72,6 +72,12 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	if err := kernelIO.objs.HttpStages.Put(uint32(0), kernelIO.objs.HandleTcpSendmsgHttpParse); err != nil {
 		return nil, fmt.Errorf("install http parse target: %w", err)
 	}
+	// The OpenSSL uprobe HTTP parser has its own kprobe-type tail target and
+	// jump table. Install it here too; the uprobe entry programs themselves are
+	// attached later by discovery (Stage 1b), not at load time.
+	if err := kernelIO.objs.HttpTlsStages.Put(uint32(0), kernelIO.objs.HandleSslWriteParse); err != nil {
+		return nil, fmt.Errorf("install http tls parse target: %w", err)
+	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
 	// not need lsm=..., Rename/symlink observation stays in inode hooks

@@ -61,6 +61,6 @@ int BPF_PROG(handle_tcp_sendmsg_http_parse, struct sock *sk, struct msghdr *msg,
         return 0;
     if (http_step_hostlen(s) < 0)
         return 0;
-    http_step_emit(s, current_cgroup_id());
+    http_step_emit(s, current_cgroup_id(), HTTP_SOURCE_CLEARTEXT);
     return 0;
 }
