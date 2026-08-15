@@ -28,6 +28,10 @@ type LinuxKernelIO struct {
 	// otherwise watchRingbufDrops can race objs.Close on a Map.Lookup
 	// (-race detected this on the Phase 3 integration run).
 	loopWG sync.WaitGroup
+	// discovery attaches the OpenSSL HTTP uprobe to libssl inodes as tracked
+	// jobs connect. Nil unless Config.EnableOpenSSLHTTP is set. It runs in
+	// loopWG and closes its own attached links, so it is not in `links`.
+	discovery *uprobeDiscovery
 }
 
 // NewLinux loads the BPF objects, attaches programs, and opens the sample ring buffer.
@@ -77,6 +81,9 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	// attached later by discovery (Stage 1b), not at load time.
 	if err := kernelIO.objs.HttpTlsStages.Put(uint32(0), kernelIO.objs.HandleSslWriteParse); err != nil {
 		return nil, fmt.Errorf("install http tls parse target: %w", err)
+	}
+	if config.EnableOpenSSLHTTP {
+		kernelIO.discovery = newUprobeDiscovery(kernelIO.objs.HandleSslWrite, kernelIO.logger)
 	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do

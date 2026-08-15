@@ -10,6 +10,11 @@ var ErrNotSupported = errors.New("not supported")
 // Config contains the cgroup v2 root detected by KernelTracker.
 type Config struct {
 	CgroupV2RootPath string
+	// EnableOpenSSLHTTP turns on the OpenSSL uprobe HTTP tap and its attach
+	// discovery. Off by default: Stage 1b-1 ships disabled because it has no
+	// reclaim yet (attaches accumulate). Kept internal to Config until Stage
+	// 1b-2 adds reclaim and a public flag.
+	EnableOpenSSLHTTP bool
 }
 
 // KernelIO is the BPF program/map/ringbuf I/O boundary. It stays as an
