@@ -113,8 +113,12 @@ func (d *uprobeDiscovery) teeConnect(raw []byte) {
 	case d.hints <- processHint{pid: tgid, cgroupID: cgroupID}:
 	default:
 		// Never block the reader: a full queue drops the hint. The next connect
-		// from the same process is a natural retry.
+		// from the same process is a natural retry. Surface drops at a
+		// power-of-two cadence so the signal is visible without spam.
 		d.queueDropped++
+		if d.queueDropped&(d.queueDropped-1) == 0 {
+			d.warn("uprobe_hint_dropped", "total", d.queueDropped)
+		}
 	}
 }
 
@@ -238,7 +242,6 @@ func (d *uprobeDiscovery) attachTarget(id fileIdentity, ex *link.Executable) {
 	}
 	if len(got) > 0 {
 		d.targets[id] = got
-		d.warn("uprobe_attached", "symbols", len(got))
 		return
 	}
 	// Every target symbol was definitively absent: safe to cache negative.
