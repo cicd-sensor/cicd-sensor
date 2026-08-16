@@ -58,14 +58,22 @@ jobs:
 
       - name: Install BPF build and VM deps
         run: |
-          # Install qemu directly instead of via little-vm-helper's
-          # install-dependencies. That step pulls the full libvirt stack
-          # (libvirt-daemon-system -> systemd-container), which forces a
-          # libsystemd-shared upgrade that conflicts with the runner image's
-          # cached systemd-container and fails apt before any VM boots. LVH
-          # launches qemu-system-x86_64 directly, so libvirt is not needed;
-          # qemu-utils provides qemu-img for the image overlay.
           sudo apt-get update -qq
+          # Reconcile the runner image's cached systemd packages (…8.16) with
+          # the current archive (…8.17). little-vm-helper's action always
+          # simulates installing its full dependency list — including
+          # libvirt-daemon-system -> systemd-container — to build a package
+          # cache key, even with install-dependencies: false. That simulate
+          # (apt-get -s install, run under `set -e -o pipefail`) fails on the
+          # systemd-container(=8.16) vs libsystemd-shared(8.17) version skew and
+          # aborts the step before any VM boots. Upgrading the systemd set to
+          # the archive version first removes the skew so the simulate succeeds.
+          sudo apt-get install -y -qq --only-upgrade \
+            systemd systemd-container libsystemd-shared libsystemd0
+          # Install qemu ourselves and set install-dependencies: false below, so
+          # LVH does not pull the (unneeded) libvirt stack. LVH launches
+          # qemu-system-x86_64 directly; qemu-utils provides qemu-img for the
+          # image overlay.
           sudo apt-get install -y -qq clang llvm qemu-system-x86 qemu-utils
 
       - name: Enable KVM for LVH
