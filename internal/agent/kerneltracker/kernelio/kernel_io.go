@@ -10,10 +10,15 @@ var ErrNotSupported = errors.New("not supported")
 // Config contains the cgroup v2 root detected by KernelTracker.
 type Config struct {
 	CgroupV2RootPath string
-	// EnableOpenSSLHTTP turns on the OpenSSL uprobe HTTP tap and its attach
-	// discovery. Off by default: Stage 1b-1 ships disabled because it has no
-	// reclaim yet (attaches accumulate). Kept internal to Config until Stage
-	// 1b-2 adds reclaim and a public flag.
+	// EnableOpenSSLHTTP starts the OpenSSL uprobe attach-discovery worker (tee +
+	// scan + attach) — the runtime that makes the tap actually capture. It does
+	// NOT gate BPF load: the uprobe programs are loaded and verified at startup
+	// either way (LoadAndAssign loads every program), so this is a kill-switch
+	// for a new attach subsystem, not a load-safety gate. Off in Stage 1b-1
+	// because attach reclaim is missing (Stage 1b-2): without it, distinct
+	// overlay/container libssl inodes accumulate attaches up to the target cap on
+	// long-lived agents and silently lose coverage. Removal plan: default-on or
+	// drop this flag once 1b-2 reclaim lands.
 	EnableOpenSSLHTTP bool
 }
 
