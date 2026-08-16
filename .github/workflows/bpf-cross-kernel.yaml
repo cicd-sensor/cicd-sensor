@@ -56,10 +56,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install BPF build deps
+      - name: Install BPF build and VM deps
         run: |
+          # Install qemu directly instead of via little-vm-helper's
+          # install-dependencies. That step pulls the full libvirt stack
+          # (libvirt-daemon-system -> systemd-container), which forces a
+          # libsystemd-shared upgrade that conflicts with the runner image's
+          # cached systemd-container and fails apt before any VM boots. LVH
+          # launches qemu-system-x86_64 directly, so libvirt is not needed;
+          # qemu-utils provides qemu-img for the image overlay.
           sudo apt-get update -qq
-          sudo apt-get install -y -qq clang llvm
+          sudo apt-get install -y -qq clang llvm qemu-system-x86 qemu-utils
 
       - name: Enable KVM for LVH
         run: |
@@ -112,7 +119,10 @@ jobs:
           image: ${{ env.LVH_IMAGE }}
           image-version: ${{ matrix.kernel.version }}
           host-mount: ./
-          install-dependencies: 'true'
+          # Dependencies are installed by the step above; LVH's own installer
+          # pulls the libvirt stack and breaks apt on the runner (see comment
+          # on "Install BPF build and VM deps").
+          install-dependencies: 'false'
           # LVH interpolates this through a shell; escape literal $ as \$.
           # The kind rootfs is minimal, so install DNS/NSS packages for DNS and
           # systemd-resolved tests. Use /dev/shm to avoid overlayfs dentries in
