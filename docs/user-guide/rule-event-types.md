@@ -498,7 +498,7 @@ Only the request line and the `Host` header are captured — no other headers an
 | `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |
 | `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Lowercase. |
 | `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
-| `source` | string | `cleartext_http`, `openssl` | Capture channel: `cleartext_http` (plain `http://`) or `openssl` (HTTPS via OpenSSL). |
+| `source` | string | `cleartext_http`, `openssl` | Capture channel: `cleartext_http` (plain `http://`) or `openssl` (HTTPS via OpenSSL; opt-in, ships enabled in a later release — see below). |
 | `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
 
 `source` reports where the request line was read:

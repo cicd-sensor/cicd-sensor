@@ -24,11 +24,13 @@ binary.
 
 ## Generated artifacts (do not edit)
 
-- `generated/bpf_program_bpfel.go`
-- `generated/bpf_program_bpfel.o`
+- `generated/bpf_program_x86_bpfel.go` / `generated/bpf_program_x86_bpfel.o`
+- `generated/bpf_program_arm64_bpfel.go` / `generated/bpf_program_arm64_bpfel.o`
 
-The agent intentionally ships only the `bpfel` object because supported Linux
-targets are little-endian (`amd64` / `arm64`).
+Supported Linux targets are little-endian, so only `bpfel` objects ship. The
+build is split per architecture (`amd64` / `arm64`) because the OpenSSL uprobe
+reads its arguments through `PT_REGS_PARM*`, which is arch-specific and cannot
+be compiled with a single arch-neutral target.
 
 Regenerate with:
 
