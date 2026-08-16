@@ -2,7 +2,97 @@
 
 package kernelio
 
-import "testing"
+import (
+	"encoding/binary"
+	"testing"
+
+	"golang.org/x/sys/unix"
+)
+
+// connectSample builds a NetworkConnect sample header with the fixed fields
+// teeConnect reads: kind@0 (u32), protocol@4 (u8), tgid@32 (s32). It is padded
+// to 40 bytes so the tgid offset is in range.
+func connectSample(kind uint32, proto uint8, tgid int32) []byte {
+	raw := make([]byte, 40)
+	binary.LittleEndian.PutUint32(raw[0:4], kind)
+	raw[4] = proto
+	binary.LittleEndian.PutUint32(raw[32:36], uint32(tgid))
+	return raw
+}
+
+func TestTeeConnect(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		raw     []byte
+		wantPID int32
+		wantHit bool
+	}{
+		{
+			name:    "v4 TCP connect enqueues the pid",
+			raw:     connectSample(SampleKindNetworkConnectV4, unix.IPPROTO_TCP, 4321),
+			wantPID: 4321,
+			wantHit: true,
+		},
+		{
+			name:    "v6 TCP connect enqueues the pid (same fixed offsets)",
+			raw:     connectSample(SampleKindNetworkConnectV6, unix.IPPROTO_TCP, 99),
+			wantPID: 99,
+			wantHit: true,
+		},
+		{
+			name:    "non-TCP connect is ignored (uprobe target is HTTP-over-TCP)",
+			raw:     connectSample(SampleKindNetworkConnectV4, unix.IPPROTO_UDP, 7),
+			wantHit: false,
+		},
+		{
+			name:    "non-connect sample kind is ignored",
+			raw:     connectSample(0, unix.IPPROTO_TCP, 7),
+			wantHit: false,
+		},
+		{
+			name:    "sample too short for the tgid offset is ignored",
+			raw:     make([]byte, 20),
+			wantHit: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := &uprobeDiscovery{hints: make(chan int32, 1)}
+			d.teeConnect(tt.raw)
+			if tt.wantHit {
+				select {
+				case got := <-d.hints:
+					if got != tt.wantPID {
+						t.Fatalf("hinted pid = %d, want %d", got, tt.wantPID)
+					}
+				default:
+					t.Fatal("expected a hint, queue was empty")
+				}
+				return
+			}
+			if len(d.hints) != 0 {
+				t.Fatalf("expected no hint, queue held %d", len(d.hints))
+			}
+		})
+	}
+
+	t.Run("full queue drops the hint without blocking", func(t *testing.T) {
+		t.Parallel()
+		d := &uprobeDiscovery{hints: make(chan int32, 1)}
+		d.teeConnect(connectSample(SampleKindNetworkConnectV4, unix.IPPROTO_TCP, 1)) // fills the queue
+		d.teeConnect(connectSample(SampleKindNetworkConnectV4, unix.IPPROTO_TCP, 2)) // must not block
+		if len(d.hints) != 1 {
+			t.Fatalf("queue len = %d, want 1 (second hint must be dropped)", len(d.hints))
+		}
+		if d.queueDropped != 1 {
+			t.Fatalf("queueDropped = %d, want 1", d.queueDropped)
+		}
+	})
+}
 
 func TestParseExecMapping(t *testing.T) {
 	t.Parallel()

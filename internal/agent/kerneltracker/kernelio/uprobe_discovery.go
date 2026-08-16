@@ -60,31 +60,29 @@ type fileIdentity struct {
 	ctimeNano int64
 }
 
-// processHint is a tee'd TCP connect: scan this pid, which belongs to this
-// tracked cgroup.
-type processHint struct {
-	pid      int32
-	cgroupID uint64
-}
-
 type uprobeDiscovery struct {
 	prog   *ebpf.Program
 	logger *slog.Logger
-	hints  chan processHint
+	hints  chan int32 // pid of a tracked process that just did a TCP connect
 
 	// Worker-owned state (single goroutine, no locking).
 	targets   map[fileIdentity][]link.Link
 	negatives *fifoSet
 
-	// Reader-owned counter.
+	// Throttled-warning counters. queueDropped is reader-owned (teeConnect);
+	// permDenied / opErrors / capReached are worker-owned (the scan path). Each
+	// counter is touched by a single goroutine, so no atomics are needed.
 	queueDropped uint64
+	permDenied   uint64
+	opErrors     uint64
+	capReached   uint64
 }
 
 func newUprobeDiscovery(prog *ebpf.Program, logger *slog.Logger) *uprobeDiscovery {
 	return &uprobeDiscovery{
 		prog:      prog,
 		logger:    logger,
-		hints:     make(chan processHint, 256),
+		hints:     make(chan int32, 256),
 		targets:   make(map[fileIdentity][]link.Link),
 		negatives: newFIFOSet(negativeCacheSize),
 	}
@@ -95,7 +93,10 @@ func newUprobeDiscovery(prog *ebpf.Program, logger *slog.Logger) *uprobeDiscover
 // v4 and v6 layouts), never blocks, and is called from the reader goroutine
 // before the sample is forwarded normally.
 func (d *uprobeDiscovery) teeConnect(raw []byte) {
-	// Header: kind@0 (u32), protocol@4 (u8), cgroup_id@16 (u64), tgid@32 (s32).
+	// Header: kind@0 (u32), protocol@4 (u8), tgid@32 (s32). Identical in the v4
+	// and v6 layouts. The connect-time cgroup is deliberately not read: emission
+	// is gated on the tracked cgroup inside the uprobe program itself, and a
+	// strict pid/cgroup recheck belongs with reclaim in Stage 1b-2.
 	if len(raw) < 36 {
 		return
 	}
@@ -106,19 +107,14 @@ func (d *uprobeDiscovery) teeConnect(raw []byte) {
 	if raw[4] != unix.IPPROTO_TCP {
 		return
 	}
-	cgroupID := binary.LittleEndian.Uint64(raw[16:24])
 	tgid := int32(binary.LittleEndian.Uint32(raw[32:36]))
 
 	select {
-	case d.hints <- processHint{pid: tgid, cgroupID: cgroupID}:
+	case d.hints <- tgid:
 	default:
 		// Never block the reader: a full queue drops the hint. The next connect
-		// from the same process is a natural retry. Surface drops at a
-		// power-of-two cadence so the signal is visible without spam.
-		d.queueDropped++
-		if d.queueDropped&(d.queueDropped-1) == 0 {
-			d.warn("uprobe_hint_dropped", "total", d.queueDropped)
-		}
+		// from the same process is a natural retry.
+		d.warnThrottled(&d.queueDropped, "uprobe_hint_dropped")
 	}
 }
 
@@ -133,11 +129,11 @@ func (d *uprobeDiscovery) run(ctx context.Context) {
 		case first := <-d.hints:
 			// Coalesce whatever is already queued and dedupe by pid so a burst
 			// scans each process once.
-			pids := map[int32]struct{}{first.pid: {}}
+			pids := map[int32]struct{}{first: {}}
 			for draining := true; draining; {
 				select {
 				case h := <-d.hints:
-					pids[h.pid] = struct{}{}
+					pids[h] = struct{}{}
 				default:
 					draining = false
 				}
@@ -166,6 +162,12 @@ func (d *uprobeDiscovery) run(ctx context.Context) {
 func (d *uprobeDiscovery) scanProcess(pid int32) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 	if err != nil {
+		// A gone pid (ENOENT) is the normal end-of-job case and stays silent. A
+		// permission error means discovery is systematically blind, so surface
+		// it (throttled) rather than looking healthy while capturing nothing.
+		if errors.Is(err, os.ErrPermission) {
+			d.warnThrottled(&d.permDenied, "uprobe_discovery_permission_denied", "op", "open_maps")
+		}
 		return
 	}
 	defer f.Close()
@@ -182,7 +184,7 @@ func (d *uprobeDiscovery) scanProcess(pid int32) {
 		}
 		seen[devIno] = struct{}{}
 		if len(d.targets) >= maxUprobeTargets {
-			d.warn("uprobe_target_cap_reached", "targets", len(d.targets))
+			d.warnThrottled(&d.capReached, "uprobe_target_cap_reached", "targets", len(d.targets))
 			break
 		}
 		d.classifyAndAttach(pid, rng)
@@ -198,12 +200,19 @@ func (d *uprobeDiscovery) scanProcess(pid int32) {
 func (d *uprobeDiscovery) classifyAndAttach(pid int32, rng string) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, rng))
 	if err != nil {
-		return // pid gone / EPERM: inconclusive, do not cache
+		// map_files needs CAP_SYS_PTRACE/root: a systematic EPERM here blocks
+		// every attach, so surface it (throttled). ENOENT is a raced-away
+		// mapping and stays silent. Either way it is inconclusive, not cached.
+		if errors.Is(err, os.ErrPermission) {
+			d.warnThrottled(&d.permDenied, "uprobe_discovery_permission_denied", "op", "open_map_files")
+		}
+		return
 	}
 	defer f.Close()
 
 	var st unix.Stat_t
 	if err := unix.Fstat(int(f.Fd()), &st); err != nil {
+		d.warnThrottled(&d.opErrors, "uprobe_discovery_unexpected_error", "op", "fstat", "error", err)
 		return
 	}
 	id := fileIdentity{dev: st.Dev, ino: st.Ino, size: st.Size, ctimeNano: st.Ctim.Nano()}
@@ -216,6 +225,7 @@ func (d *uprobeDiscovery) classifyAndAttach(pid int32, rng string) {
 
 	ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
 	if err != nil {
+		d.warnThrottled(&d.opErrors, "uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
 		return
 	}
 	d.attachTarget(id, ex)
@@ -236,6 +246,9 @@ func (d *uprobeDiscovery) attachTarget(id fileIdentity, ex *link.Executable) {
 			// Symbol not defined in this file (a UND reference or absent).
 		default:
 			// Inconclusive: do not cache. Undo partial attaches and retry later.
+			// Unlike a plain "symbol absent", an unexpected attach failure is a
+			// real signal, so surface it (throttled).
+			d.warnThrottled(&d.opErrors, "uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", symbol, "error", err)
 			closeLinks(got)
 			return
 		}
@@ -257,6 +270,18 @@ func (d *uprobeDiscovery) closeAll() {
 func (d *uprobeDiscovery) warn(msg string, args ...any) {
 	if d.logger != nil {
 		d.logger.Warn(msg, args...)
+	}
+}
+
+// warnThrottled logs at a power-of-two cadence (1st, 2nd, 4th, 8th, ... event)
+// so a systematic failure — a permission error that leaves discovery blind, a
+// saturated hint queue — is visible without emitting one line per connect. The
+// counter must be owned by the calling goroutine.
+func (d *uprobeDiscovery) warnThrottled(counter *uint64, msg string, args ...any) {
+	*counter++
+	n := *counter
+	if n&(n-1) == 0 {
+		d.warn(msg, append([]any{"count", n}, args...)...)
 	}
 }
 

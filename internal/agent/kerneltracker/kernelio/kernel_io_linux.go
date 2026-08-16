@@ -77,8 +77,12 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		return nil, fmt.Errorf("install http parse target: %w", err)
 	}
 	// The OpenSSL uprobe HTTP parser has its own kprobe-type tail target and
-	// jump table. Install it here too; the uprobe entry programs themselves are
-	// attached later by discovery (Stage 1b), not at load time.
+	// jump table. It is installed unconditionally: the slot must be populated
+	// before any entry program is attached — whether by discovery or by a manual
+	// attach in tests — or the entry's tail call would hit an empty slot. Only
+	// the discovery worker (which drives the runtime attaches) is gated on the
+	// tap being enabled. The entry programs themselves always load with the
+	// object and are verified at load time regardless of this flag.
 	if err := kernelIO.objs.HttpTlsStages.Put(uint32(0), kernelIO.objs.HandleSslWriteParse); err != nil {
 		return nil, fmt.Errorf("install http tls parse target: %w", err)
 	}
