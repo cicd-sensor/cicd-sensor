@@ -112,6 +112,10 @@ jobs:
           image: ${{ env.LVH_IMAGE }}
           image-version: ${{ matrix.kernel.version }}
           host-mount: ./
+          # The action caches its apt .deb set (lvh-pkgs-*) keyed only on
+          # top-level dep versions (upstream PR #515), so a transitive systemd
+          # bump can leave it stale and fail apt. Fix: delete the lvh-pkgs-*
+          # cache (gh cache delete) and re-run.
           install-dependencies: 'true'
           # LVH interpolates this through a shell; escape literal $ as \$.
           # The kind rootfs is minimal, so install DNS/NSS packages for DNS and
