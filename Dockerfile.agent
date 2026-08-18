@@ -4,7 +4,7 @@
 #
 # Runtime requires CAP_BPF + CAP_PERFMON + cgroup v2 access.
 
-FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:2ff317e00c15628b463b5d37d56a132cf46b7870411e35ff3208260441898803 AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:cfb2ab6a85d95e86be7bc6b6a1ded04750228c61e2faa778b0e01e6540a9e80d AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
         -o /out/cicd-sensorctl \
         ./cmd/cicd-sensorctl
 
-FROM cgr.dev/chainguard/static:latest@sha256:24dd7ff8788fdfadda39eeeaefefb6d1cec6002a545935a5f7e017484053734f
+FROM cgr.dev/chainguard/static:latest@sha256:f68e3a8244c7d0f4cd56635aaff8e6a533cf6cc3850d8fb339567a5782d6a0b0
 COPY --from=builder /out/cicd-sensor /usr/local/bin/cicd-sensor
 COPY --from=builder /out/cicd-sensorctl /usr/local/bin/cicd-sensorctl
 
