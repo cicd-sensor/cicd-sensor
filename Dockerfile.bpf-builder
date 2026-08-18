@@ -7,7 +7,7 @@
 # clang / llvm from Wolfi; libbpf and vmlinux headers are vendored under
 # internal/agent/bpf/include/ so no header packages are installed in the image.
 
-FROM cgr.dev/chainguard/go:latest-dev@sha256:e75592c2b11eca5ed85022e4b9227babadf3ca0f293532a8743ca7886db65e87
+FROM cgr.dev/chainguard/go:latest-dev@sha256:5a8216d95409f3f23b360c7508986744fb542eff35bd269ae2759f4d1ca3fbf6
 
 USER root
 # clang-22 / llvm-22 matches the default pinned by cilium/ebpf upstream; bump
