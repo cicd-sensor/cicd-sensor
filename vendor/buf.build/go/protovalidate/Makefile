@@ -18,6 +18,8 @@ GOLANGCI_LINT_VERSION ?= v2.9.0
 # Should be kept in sync with the version referenced in buf.yaml and
 # 'buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go' in go.mod.
 CONFORMANCE_VERSION ?= v1.2.0
+LICENSE_IGNORE := -e .github/ -e .golangci.yml -e buf.gen.yaml -e buf.yaml -e conformance/expected_failures.yaml
+BUF_VERSION := 1.69.0
 
 .PHONY: help
 help: ## Describe useful make targets
@@ -32,7 +34,7 @@ clean: ## Delete intermediate build artifacts
 	git clean -Xdf
 
 .PHONY: test
-test: ## Run all unit tests
+test: ## Run all unit tests with and without native rules
 	$(GO) test -race -cover ./...
 
 .PHONY: test-opaque
@@ -59,6 +61,7 @@ lint-fix:
 .PHONY: conformance
 conformance: $(BIN)/protovalidate-conformance protovalidate-conformance-go ## Run conformance tests
 	$(BIN)/protovalidate-conformance $(ARGS) $(BIN)/protovalidate-conformance-go --expected_failures=conformance/expected_failures.yaml
+	DISABLE_NATIVE_RULES=true $(BIN)/protovalidate-conformance $(ARGS) $(BIN)/protovalidate-conformance-go --expected_failures=conformance/expected_failures.yaml
 
 .PHONY: conformance-hyperpb
 conformance-hyperpb: ## Run conformance tests against hyperpb
@@ -79,7 +82,8 @@ generate-license: $(BIN)/license-header
 	$(BIN)/license-header \
 		--license-type apache \
 		--copyright-holder "Buf Technologies, Inc." \
-		--year-range "$(COPYRIGHT_YEARS)"
+		--year-range "$(COPYRIGHT_YEARS)" \
+		$(LICENSE_IGNORE)
 
 .PHONY: checkgenerate
 checkgenerate: generate
@@ -98,6 +102,9 @@ bench: $(BENCH_TMP)
 		-count $(BENCH_COUNT) \
 		| tee "$(BENCH_TMP)/$(BENCH_NAME).bench.txt"
 
+.PHONY: bench-cel
+bench-cel: $(BENCH_TMP)
+	DISABLE_NATIVE_RULES=true $(MAKE) bench
 
 .PHONY: upgrade-go
 upgrade-go:
@@ -110,11 +117,11 @@ $(BIN):
 	@mkdir -p $(BIN)
 
 $(BIN)/buf: $(BIN) Makefile
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/bufbuild/buf/cmd/buf@v1.67.0
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/bufbuild/buf/cmd/buf@v$(BUF_VERSION)
 
 $(BIN)/license-header: $(BIN) Makefile
 	GOBIN=$(abspath $(@D)) $(GO) install \
-		  github.com/bufbuild/buf/private/pkg/licenseheader/cmd/license-header@v1.67.0
+		  github.com/bufbuild/buf/private/pkg/licenseheader/cmd/license-header@v$(BUF_VERSION)
 
 $(BIN)/golangci-lint: $(BIN) Makefile
 	GOBIN=$(abspath $(@D)) $(GO) install \
