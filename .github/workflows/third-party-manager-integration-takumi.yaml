@@ -12,6 +12,10 @@ name: Third-Party Manager Integration (Takumi)
     # Weekly smoke test; external service, so keep the cadence low.
     - cron: "0 3 * * 1"
   workflow_dispatch:
+  # Self-test: run when this workflow itself changes in a PR.
+  pull_request:
+    paths:
+      - .github/workflows/third-party-manager-integration-takumi.yaml
   # Allow release-sensor to reuse this as a release gate.
   workflow_call:
 
