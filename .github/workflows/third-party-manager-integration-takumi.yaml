@@ -27,40 +27,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  auth:
-    name: Authenticate with Shisho Cloud
+  integration:
+    name: Sensor with third-party hosted manager (Takumi)
     # OIDC trust and the bot only exist for the canonical repo; skip forks.
     if: github.repository == 'cicd-sensor/cicd-sensor'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    # Keyless OIDC auth. Kept as a separate job so that id-token: write is
-    # not granted to the job that runs the monitored workload.
+    timeout-minutes: 15
+    # id-token: write is needed by the Shisho Cloud auth step. Auth runs in
+    # the same job as the sensor because GitHub drops secret-masked values
+    # from job outputs, so the token cannot cross a job boundary.
     permissions:
+      contents: read
       id-token: write
-    outputs:
-      token: ${{ steps.auth.outputs.token }}
     steps:
-      - name: Authenticate with Shisho Cloud
+      - name: Authenticate with Shisho Cloud (keyless OIDC)
         id: auth
         uses: flatt-security/shisho-cloud-action@9b68d33503ebf75d7c285d489b288f96ef3df758 # v1.1.0
         with:
           bot-id: "BT01M0D9877ZSZK7DAX0G2WCKCRB" # cicd-sensor
           export-token: true
-          # Must cover the full run of the monitored job; tokens cannot be
-          # refreshed mid-job.
+          # Must cover the full run of this job; tokens cannot be refreshed
+          # mid-job.
           expires-in-minutes: 60
 
-  integration:
-    name: Sensor with third-party hosted manager (Takumi)
-    needs: auth
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
       - name: Start cicd-sensor (third-party Takumi manager)
         uses: cicd-sensor/cicd-sensor-action@6511eb44c91d71b2b93d71193b1bf2cb18352f66 # v0.0.38
         with:
           manager-url: https://manager.cicdsensor.cloud.shisho.dev
-          manager-token: ${{ needs.auth.outputs.token }}
+          manager-token: ${{ steps.auth.outputs.token }}
 
       - name: Generate one event of every type
         run: |
