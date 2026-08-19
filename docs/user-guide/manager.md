@@ -58,6 +58,14 @@ Design HTTPS / TLS, authentication boundaries, and private network exposure with
 Use HTTPS for production deployments.
 Plain HTTP is supported for trusted private networks where the network boundary is the accepted protection, and the Agent logs `manager_url_insecure_scheme` when configured with an HTTP Manager URL.
 
+### Hosted manager (third party)
+
+Hosting the manager yourself is not the only option. A third-party service can run the manager for you, and the Agent or the Action points at it through `manager-url` / `manager-token` exactly as it would for a self-hosted manager.
+
+[Takumi Runner](https://flatt.tech/takumi) by GMO Flatt Security works as a hosted cicd-sensor Manager: it terminates the Agent's config fetch and log ingest, and adds the vendor's own threat detection and trace analysis over the collected logs. See the vendor's integration guide ([English](https://shisho.dev/docs/r/202608-takumi-runner-cicd-sensor-integration/) / [Japanese](https://shisho.dev/docs/ja/r/202608-takumi-runner-cicd-sensor-integration/)) for setup. It is a separate commercial product, not operated by the cicd-sensor project.
+
+Other vendors and services are equally welcome to integrate with cicd-sensor; any service can operate a manager the same way.
+
 ## Network requirements
 
 Allow outbound HTTPS from the manager to the following hosts when baseline rules are enabled.
