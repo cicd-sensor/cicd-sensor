@@ -83,9 +83,19 @@ jobs:
     needs: [validate]
     uses: ./.github/workflows/blacksmith-bpf-integration.yaml
 
+  takumi-integration:
+    name: Third-party manager integration gate
+    needs: [validate]
+    # Third-party service (Takumi Runner by GMO Flatt Security); the called
+    # workflow's auth job needs OIDC to authenticate with Shisho Cloud.
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/third-party-manager-integration-takumi.yaml
+
   approval:
     name: Approve release
-    needs: [validate, ci, bpf-integration, blacksmith-bpf-integration]
+    needs: [validate, ci, bpf-integration, blacksmith-bpf-integration, takumi-integration]
     runs-on: ubuntu-24.04
     environment: sensor-releases/approval
     permissions:

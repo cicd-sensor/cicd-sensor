@@ -1,0 +1,102 @@
+---
+name: Third-Party Manager Integration (Takumi)
+
+# Third-party integration test. Takumi Runner (a commercial service by GMO
+# Flatt Security, not operated by the cicd-sensor project) runs a hosted
+# cicd-sensor Manager; this workflow verifies that cicd-sensor-action can
+# authenticate to and deliver trace logs through that third-party manager.
+# https://shisho.dev/docs/t/runner/features/cicdsensor-integration/
+
+"on":
+  schedule:
+    # Weekly smoke test; external service, so keep the cadence low.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+  # Self-test: run when this workflow itself changes in a PR.
+  pull_request:
+    paths:
+      - .github/workflows/third-party-manager-integration-takumi.yaml
+  # Allow release-sensor to reuse this as a release gate.
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: takumi-integration-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    name: Sensor with third-party hosted manager (Takumi)
+    # OIDC trust and the bot only exist for the canonical repo; skip forks.
+    if: github.repository == 'cicd-sensor/cicd-sensor'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # id-token: write is needed by the Shisho Cloud auth step. Auth runs in
+    # the same job as the sensor because GitHub drops secret-masked values
+    # from job outputs, so the token cannot cross a job boundary.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate with Shisho Cloud (keyless OIDC)
+        id: auth
+        uses: flatt-security/shisho-cloud-action@9b68d33503ebf75d7c285d489b288f96ef3df758 # v1.1.0
+        with:
+          bot-id: "BT01M0D9877ZSZK7DAX0G2WCKCRB" # cicd-sensor
+          export-token: true
+          # Must cover the full run of this job; tokens cannot be refreshed
+          # mid-job.
+          expires-in-minutes: 60
+
+      - name: Start cicd-sensor (third-party Takumi manager)
+        uses: cicd-sensor/cicd-sensor-action@6511eb44c91d71b2b93d71193b1bf2cb18352f66 # v0.0.38
+        with:
+          manager-url: https://manager.cicdsensor.cloud.shisho.dev
+          manager-token: ${{ steps.auth.outputs.token }}
+
+      - name: Generate one event of every type
+        run: |
+          set -eu
+          # Cover every sensor event type so the delivered trace exercises
+          # the full schema: process_exec, domain, network_connect,
+          # http_request, unix_socket_connect, file_open, file_move,
+          # file_link, file_remove, and mount.
+
+          # process_exec: every command below is an exec event.
+          uname -a
+
+          # domain + network_connect (tcp/443 over TLS)
+          curl -sS -o /dev/null https://api.github.com/zen
+
+          # http_request: cleartext HTTP request line (tcp/80)
+          curl -sS -o /dev/null http://example.com/
+
+          # domain: DNS resolution without a follow-up connection
+          getent hosts example.org >/dev/null
+
+          # unix_socket_connect: dockerd control socket
+          docker version >/dev/null
+
+          # file_open (write, then read) / file_move / file_link / file_remove
+          workdir=$(mktemp -d)
+          echo "sample" > "$workdir/sample.txt"
+          cat "$workdir/sample.txt" >/dev/null
+          mv "$workdir/sample.txt" "$workdir/sample.moved"
+          ln "$workdir/sample.moved" "$workdir/sample.link"
+          rm "$workdir/sample.link"
+
+          # mount + umount
+          sudo mount -t tmpfs takumi-itest /mnt
+          sudo umount /mnt
+
+      - name: Verify sensor is tracking the job
+        run: |
+          set -eu
+          pgrep -x cicd-sensor >/dev/null || {
+            echo "cicd-sensor agent is not running" >&2
+            exit 1
+          }
+      # Log delivery to the manager happens in the action's post step at job
+      # end; a delivery failure surfaces there.
