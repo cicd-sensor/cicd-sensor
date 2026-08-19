@@ -106,6 +106,14 @@ cicd-sensor ships with a set of baseline rules. See the [Baseline Rules guide](h
 - [Attestation predicate](https://cicd-sensor.github.io/user-guide/attestation-predicate.html): runtime-trace predicate for CI/CD runtime evidence.
 - [Developer Guide](https://cicd-sensor.github.io/developer-guide/overview.html): agent, eBPF runtime, manager, and rule engine internals.
 
+## Third-party services
+
+cicd-sensor is a vendor-neutral open-source project: it works on its own, and any manager it talks to is one you choose to run. Instead of hosting the manager yourself, you can point cicd-sensor at a vendor-operated one.
+
+[Takumi Runner](https://flatt.tech/takumi) by GMO Flatt Security acts as a hosted cicd-sensor Manager and adds its own threat detection and trace analysis on top of the collected logs. See their integration guide ([English](https://shisho.dev/docs/r/202608-takumi-runner-cicd-sensor-integration/) / [Japanese](https://shisho.dev/docs/ja/r/202608-takumi-runner-cicd-sensor-integration/)) for setup. It is a separate commercial product, and cicd-sensor works without it.
+
+Other vendors and services are equally welcome to integrate with cicd-sensor.
+
 ## About the project
 
 > [!NOTE]
