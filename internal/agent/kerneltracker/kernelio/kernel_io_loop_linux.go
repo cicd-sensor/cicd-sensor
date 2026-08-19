@@ -30,11 +30,9 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 
 	kernelIO.loopWG.Add(3)
 	if kernelIO.discovery != nil {
-		kernelIO.loopWG.Add(1)
-		go func() {
-			defer kernelIO.loopWG.Done()
+		kernelIO.loopWG.Go(func() {
 			kernelIO.discovery.run(loopCtx)
-		}()
+		})
 	}
 	go func() {
 		defer kernelIO.loopWG.Done()
