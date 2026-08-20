@@ -61,9 +61,11 @@ For platform and runner environment status, see [Platform support](user-guide/ov
 
 ## Third-party services
 
-cicd-sensor is vendor-neutral: it works on its own, and any manager it talks to is one you choose to run. If you would rather not host the manager yourself, [Takumi Runner](https://flatt.tech/takumi) by GMO Flatt Security acts as a hosted cicd-sensor Manager and adds its own threat detection and trace analysis over the collected logs. See their integration guide ([English](https://shisho.dev/docs/r/202608-takumi-runner-cicd-sensor-integration/) / [Japanese](https://shisho.dev/docs/ja/r/202608-takumi-runner-cicd-sensor-integration/)), and [Hosted manager (third party)](user-guide/manager.md#hosted-manager-third-party) for where it fits.
+If you would rather not host the manager yourself, Takumi Runner by GMO Flatt Security acts as a hosted cicd-sensor Manager and adds its own threat detection and trace analysis over the collected logs. See their integration guide ([English](https://shisho.dev/docs/r/202608-takumi-runner-cicd-sensor-integration/) / [Japanese](https://shisho.dev/docs/ja/r/202608-takumi-runner-cicd-sensor-integration/)), and [Hosted manager (third party)](user-guide/manager.md#hosted-manager-third-party) for where it fits.
 
-Other vendors and services are equally welcome to integrate with cicd-sensor.
+<sub>cicd-sensor is vendor-neutral: it works on its own, and any manager it talks to is one you choose to run. Other vendors and services are equally welcome to integrate with cicd-sensor.</sub>
+
+<sub>When cicd-sensor is pointed at a third-party hosted manager, the logs and events it collects are sent to that vendor's service.</sub>
 
 ## About the project
 
