@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -120,11 +121,11 @@ func TestLinuxOpenSSLUprobeDoubleAttachDuplicatesEvents(t *testing.T) {
 // (the connecting process's connect is tee'd, its libssl is found and attached)
 // — no manual attach.
 //
-// curl is run repeatedly against a local HTTP/1.1 TLS server. The first
-// connect triggers discovery and the attach to the shared libssl inode; later
-// requests over the now-attached inode are captured. This proves the mechanism;
-// it is a steady-state check, not a first-call-rate measurement (that needs
-// fresh inodes and a real remote — see the design's M1 gate).
+// One curl process sends several requests to a local HTTP/1.1 TLS server. The
+// first connect triggers discovery and the attach to its mapped libssl inode;
+// later requests from the same live process are captured. This proves the
+// steady-state mechanism without depending on discovery winning a race against
+// a short-lived one-request process. First-call capture is a separate M1 gate.
 func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
 	curl := requireBinary(t, "curl")
 
@@ -150,7 +151,11 @@ func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
 
 	// HTTP/1.1-only TLS server so the request line is plaintext to SSL_write
 	// (an h2 client would hand SSL_write HPACK, which the tap rejects by design).
+	var firstRequest sync.Once
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Keep the first client process alive long enough for connect-triggered
+		// discovery to inspect its maps and attach before its later requests.
+		firstRequest.Do(func() { time.Sleep(2 * time.Second) })
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
@@ -158,22 +163,13 @@ func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
 	t.Cleanup(server.Close)
 	url := server.URL + "/openssl-probe?token=secret"
 
-	// Drive curl until the sample arrives or the wait times out.
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			// curl on this host must link OpenSSL for SSL_write to fire; if it
-			// links GnuTLS/NSS the wait below fails, which is the correct signal.
-			_ = exec.Command(curl, "-sk", "--http1.1", "--max-time", "3", url).Run()
-			time.Sleep(300 * time.Millisecond)
-		}
-	}()
+	// curl must link OpenSSL for SSL_write to fire. Repeating the URL in one
+	// invocation keeps one mapped libssl target alive across discovery and the
+	// requests that follow it.
+	args := []string{"-sk", "--http1.1", "--max-time", "10", url, url, url, url}
+	if output, err := exec.Command(curl, args...).CombinedOutput(); err != nil {
+		t.Fatalf("curl HTTPS requests: %v: %s", err, output)
+	}
 
 	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "openssl http_request for /openssl-probe",
 		func(in engineInput) bool {

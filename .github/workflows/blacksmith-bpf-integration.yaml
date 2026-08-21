@@ -43,6 +43,17 @@ jobs:
             uname -a
             cat /etc/os-release
             go version
+            echo '$ curl --version'
+            curl --version
+            curl_path="$(command -v curl)"
+            printf '$ curl binary: %s -> %s\n' "$curl_path" "$(readlink -f "$curl_path")"
+            ldd "$curl_path"
+            echo '$ openssl version -a'
+            if command -v openssl >/dev/null 2>&1; then
+              openssl version -a
+            else
+              echo 'openssl CLI not installed'
+            fi
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
