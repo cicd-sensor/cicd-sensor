@@ -145,7 +145,9 @@ func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
+	// Use the real KernelIO here: decoded connect samples must reach
+	// QueueHTTPUprobeDiscovery for this test to exercise runtime discovery.
+	kernelTracker := newTestKernelTracker(nil, nil, kernelIO, cgroupRoot)
 	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
 	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
 
