@@ -105,11 +105,11 @@ rule_sets:
         rule_name: "Supply-chain: network egress from Rust build script or rustc lineage"
         description: |
           What:
-            Collects non-loopback network connections made by a cargo build script, rustc, or any process below them.
+            Detects non-loopback network connections made by a cargo build script, rustc, or any process below them.
           Why:
             cargo performs registry and git fetches itself; build scripts and proc-macros normally have no reason to reach the network. Build-time droppers download their payload from here, and the spawned payload inherits the lineage.
           Notes:
-            Some sys crates download prebuilt libraries in build.rs (rusty_v8, torch-sys, esp-idf-sys, onnxruntime-sys) and compile-time database macros (sqlx query!) connect to a database. Collect level so those stay reviewable; exclude known crates with a rule modifier. Combine with rust_build_staged_payload_exec and credential rules.
+            Some sys crates download prebuilt libraries in build.rs (rusty_v8, torch-sys, esp-idf-sys, onnxruntime-sys) and compile-time database macros (sqlx query!) connect to a database; exclude those known crates with a rule modifier. Review the destination and the crate that owns the build script, and combine with rust_build_staged_payload_exec and credential rules.
         event_type: network_connect
         condition: |
           !(family == "ipv4" && inIpRange(remote_ip, "127.0.0.0/8")) &&
@@ -129,6 +129,6 @@ rule_sets:
               )
             )
           )
-        action: collect
+        action: detect
         tags:
           mitre_tactic: command-and-control

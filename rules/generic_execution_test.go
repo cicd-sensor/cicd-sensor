@@ -198,19 +198,19 @@ func TestRustBuildRules(t *testing.T) {
 			wantMatch: false,
 		},
 		{
-			name:      "collects the payload download performed by the build script itself",
+			name:      "detects the payload download performed by the build script itself",
 			ruleID:    "rust_build_egress",
 			input:     celengine.CELInputEvent{Process: celengine.NewCELProcess("/work/target/debug/build/proc-macro1-0c1d/build-script-build", nil, nil), RemoteIP: "23.254.165.112", RemotePort: 9089, Protocol: "tcp", Family: "ipv4"},
 			wantMatch: true,
 		},
 		{
-			name:      "collects the C2 beacon from the detached payload below the build script",
+			name:      "detects the C2 beacon from the detached payload below the build script",
 			ruleID:    "rust_build_egress",
 			input:     celengine.CELInputEvent{Process: celengine.NewCELProcess("/tmp/rust-setup", nil, buildScriptLineage), RemoteIP: "23.254.165.112", RemotePort: 443, Protocol: "tcp", Family: "ipv4"},
 			wantMatch: true,
 		},
 		{
-			name:      "collects IPv6 egress below rustc",
+			name:      "detects IPv6 egress below rustc",
 			ruleID:    "rust_build_egress",
 			input:     celengine.CELInputEvent{Process: celengine.NewCELProcess("/usr/bin/curl", nil, rustcLineage), RemoteIP: "2001:db8::1", RemotePort: 443, Protocol: "tcp", Family: "ipv6"},
 			wantMatch: true,
@@ -269,7 +269,7 @@ func TestRustBuildRules(t *testing.T) {
 
 	wantActions := map[string]rule.RuleAction{
 		"rust_build_staged_payload_exec": rule.RuleActionDetect,
-		"rust_build_egress":              rule.RuleActionCollect,
+		"rust_build_egress":              rule.RuleActionDetect,
 	}
 	for id, want := range wantActions {
 		r, ok := byID[id]
