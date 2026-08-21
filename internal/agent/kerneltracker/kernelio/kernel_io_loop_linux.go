@@ -29,6 +29,11 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 	kernelIO.cancelLoop = cancelLoop
 
 	kernelIO.loopWG.Add(3)
+	if kernelIO.httpUprobeDiscovery != nil {
+		kernelIO.loopWG.Go(func() {
+			kernelIO.httpUprobeDiscovery.run(loopCtx)
+		})
+	}
 	go func() {
 		defer kernelIO.loopWG.Done()
 		<-loopCtx.Done()

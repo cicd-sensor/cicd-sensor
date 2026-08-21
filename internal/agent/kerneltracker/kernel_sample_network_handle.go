@@ -6,6 +6,8 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 )
 
+const ipProtocolTCP uint8 = 6
+
 type netConnectV4Sample struct {
 	Identity   processIdentity
 	CgroupID   uint64
@@ -97,7 +99,7 @@ func remoteIPAndFamily(raw []byte) (string, string) {
 
 func protocolName(protocol uint8) string {
 	switch protocol {
-	case 6:
+	case ipProtocolTCP:
 		return "tcp"
 	case 17:
 		return "udp"

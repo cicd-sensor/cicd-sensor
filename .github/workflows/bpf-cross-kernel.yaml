@@ -112,11 +112,15 @@ jobs:
           image: ${{ env.LVH_IMAGE }}
           image-version: ${{ matrix.kernel.version }}
           host-mount: ./
+          # The action caches its apt .deb set (lvh-pkgs-*) keyed only on
+          # top-level dep versions (upstream PR #515), so a transitive systemd
+          # bump can leave it stale and fail apt. Fix: delete the lvh-pkgs-*
+          # cache (gh cache delete) and re-run.
           install-dependencies: 'true'
           # LVH interpolates this through a shell; escape literal $ as \$.
           # The kind rootfs is minimal, so install DNS/NSS packages for DNS and
-          # systemd-resolved tests. Use /dev/shm to avoid overlayfs dentries in
-          # file path tests.
+          # systemd-resolved tests plus both OpenSSL E2E clients. Use /dev/shm
+          # to avoid overlayfs dentries in file path tests.
           cmd: |
             set -eo pipefail
             cd /host
@@ -127,7 +131,7 @@ jobs:
             test -e /sys/kernel/btf/vmlinux && echo "BTF: present" | tee -a "\$log"
             export DEBIAN_FRONTEND=noninteractive
             apt-get update -q | tee -a "\$log"
-            apt-get install -y -q dnsutils libnss-resolve | tee -a "\$log"
+            apt-get install -y -q curl dnsutils libnss-resolve python3 | tee -a "\$log"
             export TMPDIR=/dev/shm
             /host/${{ env.KERNELTRACKER_INTEGRATION_TEST_BIN }} -test.v -test.count=1 -test.timeout=15m 2>&1 | tee -a "\$log"
             /host/${{ env.KERNELIO_INTEGRATION_TEST_BIN }} -test.v -test.count=1 -test.timeout=15m 2>&1 | tee -a "\$log"

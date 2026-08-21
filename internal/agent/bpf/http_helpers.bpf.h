@@ -15,6 +15,7 @@
 
 // HTTP_SOURCE_* values are ringbuf ABI and mirror kerneltracker.HTTPSource*.
 #define HTTP_SOURCE_CLEARTEXT 0
+#define HTTP_SOURCE_OPENSSL   1
 
 // Shortest acceptable request line: "GET / HTTP/1.0" (14 bytes).
 #define HTTP_MIN_REQUEST_LINE 14
@@ -329,7 +330,8 @@ static __always_inline int http_step_hostlen(struct http_scratch *s)
 // fields out of the prefix, set the header, and submit. The ringbuf reservation
 // is taken here and nowhere earlier: a live reference cannot survive a tail
 // call.
-static __always_inline int http_step_emit(struct http_scratch *s, __u64 cgroup_id)
+static __always_inline int http_step_emit(struct http_scratch *s, __u64 cgroup_id,
+                                          __u8 source)
 {
     __u32 mlen = s->mlen;
     if (mlen < 3)
@@ -344,7 +346,7 @@ static __always_inline int http_step_emit(struct http_scratch *s, __u64 cgroup_i
         return 0;
     }
     sample->kind = SAMPLE_KIND_HTTP_REQUEST;
-    sample->source = HTTP_SOURCE_CLEARTEXT;
+    sample->source = source;
     sample->_pad0[0] = 0;
     sample->_pad0[1] = 0;
     sample->_pad0[2] = 0;
@@ -413,16 +415,13 @@ static __always_inline int http_first_segment(struct msghdr *msg,
     return 0;
 }
 
-// http_entry_capture resolves the first send segment, rejects non-HTTP with a
-// cheap method-token pre-check, copies a bounded prefix into the scratch map,
-// and initializes the parse state. Returns 0 to continue (the entry program
-// then parses the request line and tail-calls the parse target) or -1 to stop.
-static __always_inline int http_entry_capture(struct msghdr *msg)
+// http_capture_user_buffer rejects non-HTTP with a cheap method-token pre-check,
+// copies a bounded prefix of a user-space send buffer into the scratch map, and
+// initializes the parse state. Shared by both taps: the cleartext tap
+// (http_entry_capture, from a msghdr segment) and the OpenSSL uprobe tap (from
+// the SSL_write plaintext buffer). Returns 0 to continue, -1 to stop.
+static __always_inline int http_capture_user_buffer(const void *base, __u64 seg_len)
 {
-    const void *base = NULL;
-    __u64 seg_len = 0;
-    if (http_first_segment(msg, &base, &seg_len) < 0)
-        return -1;
     if (seg_len < HTTP_MIN_REQUEST_LINE)
         return -1;
 
@@ -453,4 +452,16 @@ static __always_inline int http_entry_capture(struct msghdr *msg)
     s->host_val = 0;
     s->host_n = 0;
     return 0;
+}
+
+// http_entry_capture resolves the first send segment of a sendmsg and captures
+// it. Returns 0 to continue (the entry program then parses the request line and
+// tail-calls the parse target) or -1 to stop.
+static __always_inline int http_entry_capture(struct msghdr *msg)
+{
+    const void *base = NULL;
+    __u64 seg_len = 0;
+    if (http_first_segment(msg, &base, &seg_len) < 0)
+        return -1;
+    return http_capture_user_buffer(base, seg_len);
 }

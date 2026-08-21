@@ -54,6 +54,18 @@ struct {
     __type(value, __u32);
 } http_stages SEC(".maps");
 
+// Separate jump table for the OpenSSL uprobe HTTP parser (tls_hooks.bpf.h). It
+// needs its own PROG_ARRAY because a uprobe program is kprobe-type and a tail
+// call cannot cross program types, so the fentry-type http_stages target above
+// is not reusable. The parse target shares the same http_scratch and the same
+// http_step_* helpers; only the entry program type and the source tag differ.
+struct {
+    __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u32);
+} http_tls_stages SEC(".maps");
+
 // The hook only checks staging_map lookup hits; this value is reserved for a
 // future kernel path that may surface JobIdentity without userspace lookup.
 struct staging_value {

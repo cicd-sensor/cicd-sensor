@@ -498,13 +498,26 @@ Only the request line and the `Host` header are captured — no other headers an
 | `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |
 | `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Lowercase. |
 | `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
-| `source` | string | `cleartext_http` | Capture channel. Currently `cleartext_http` (plain `http://` traffic). |
+| `source` | string | `cleartext_http`, `openssl` | Capture channel: `cleartext_http` (plain `http://`) or `openssl` (HTTPS via OpenSSL; opt-in, ships enabled in a later release — see below). |
 | `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
 
-`source` currently reports `cleartext_http`: requests sent over plain HTTP,
-including cloud metadata endpoints and plain-HTTP package mirrors. HTTPS
-requests are not yet captured, so absence of an `http_request` event does not
-mean absence of egress — combine with `domain` and `network_connect` rules.
+`source` reports where the request line was read:
+
+- `cleartext_http` — plain HTTP (`http://`) traffic, including cloud metadata
+  endpoints and plain-HTTP package mirrors.
+- `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's `SSL_write`
+  (covers curl / wget / Python `pip`/`requests` / most Node). This tap is
+  **opt-in** and enabled together with attach reclaim in a later release.
+
+Known gaps (absence of an `http_request` event does **not** mean absence of
+egress — combine with `domain` and `network_connect` rules):
+
+- **HTTPS HTTP/2** (including `git clone`/`fetch` over HTTPS, which negotiates
+  h2) is not yet captured — it is HPACK-encoded at `SSL_write`.
+- Go `crypto/tls`, Java JSSE, rustls, and other non-OpenSSL stacks are not
+  captured. A fully symbol-stripped static binary is not captured either.
+- Capture is best-effort against uncooperative code: a process can evade a
+  uprobe, and the very first request of a brand-new process can beat the attach.
 
 The capture is best-effort at the request start: a request split across
 multiple writes, or a `host` / `path` longer than the captured prefix, surfaces

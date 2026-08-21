@@ -12,6 +12,7 @@ import (
 
 	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
 	"github.com/moby/sys/mountinfo"
 	"golang.org/x/sys/unix"
 )
@@ -39,6 +40,54 @@ func TestLinuxKernelIOLoadAndClose(t *testing.T) {
 	if err := kernelIO.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
+}
+
+// TestLinuxKernelIOOpenSSLUprobeAttaches proves the OpenSSL HTTP uprobe entry
+// program is attachable to a real libssl inode for both symbols it targets —
+// the load-and-attach half of Stage 1b-1 M0. A single program is attached to
+// SSL_write and SSL_write_ex, as the design intends. Discovery (choosing which
+// inode, and when) is later; here we attach a known libssl directly. Skips if
+// no libssl is present on the host.
+func TestLinuxKernelIOOpenSSLUprobeAttaches(t *testing.T) {
+	libssl := findLibssl(t)
+
+	kernelIO, err := NewLinux(nil, testLinuxConfig(t))
+	if err != nil {
+		t.Fatalf("NewLinux: %v", err)
+	}
+	defer kernelIO.Close()
+
+	ex, err := link.OpenExecutable(libssl)
+	if err != nil {
+		t.Fatalf("OpenExecutable(%s): %v", libssl, err)
+	}
+	for _, symbol := range []string{"SSL_write", "SSL_write_ex"} {
+		uprobe, err := ex.Uprobe(symbol, kernelIO.objs.HandleSslWrite, nil)
+		if err != nil {
+			t.Fatalf("Uprobe(%s) on %s: %v", symbol, libssl, err)
+		}
+		if err := uprobe.Close(); err != nil {
+			t.Fatalf("close uprobe(%s): %v", symbol, err)
+		}
+	}
+}
+
+// findLibssl returns a libssl shared object path on the host, or skips.
+func findLibssl(t *testing.T) string {
+	t.Helper()
+	for _, pattern := range []string{
+		"/usr/lib/*/libssl.so.3",
+		"/lib/*/libssl.so.3",
+		"/usr/lib64/libssl.so.3",
+		"/usr/lib/libssl.so.3",
+		"/usr/lib/*/libssl.so.1.1",
+	} {
+		if matches, _ := filepath.Glob(pattern); len(matches) > 0 {
+			return matches[0]
+		}
+	}
+	t.Skip("no libssl found on host; skipping OpenSSL uprobe attach test")
+	return ""
 }
 
 func TestLinuxKernelIOTrackedCgroupsMapOperations(t *testing.T) {
