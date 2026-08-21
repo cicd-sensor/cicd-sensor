@@ -7,6 +7,19 @@ rule_sets:
       node_package_manager_data_dirs:
         - "/.local/share/pnpm/"
 
+      # proc-macro code runs inside rustc. Build scripts are matched inline:
+      # cargo always places them at
+      # <target>/<profile>/build/<crate>-<hash>/build-script-<name>
+      # (build-script-build for build.rs), so the rules require the /build/
+      # parent and match the build-script- prefix rather than the full name.
+      rustc_fragments:
+        - "/bin/rustc"
+
+      staged_exec_dirs:
+        - "/tmp/"
+        - "/var/tmp/"
+        - "/dev/shm/"
+
     rules:
       - rule_id: python_tmp_pyz_exec
         rule_name: "Supply-chain: Python archive payload executed from /tmp"
@@ -61,3 +74,61 @@ rule_sets:
         action: detect
         tags:
           mitre_tactic: execution
+
+      - rule_id: rust_build_staged_payload_exec
+        rule_name: "Supply-chain: staged payload executed below Rust build script or rustc"
+        description: |
+          What:
+            Detects execution of a binary from /tmp, /var/tmp, /dev/shm, or memfd when the process ancestry contains a cargo build script (build-script-*) or rustc.
+          Why:
+            cargo runs build scripts and proc-macros automatically during build, check, and test. The proc-macro1 dropper used by the August 2026 arrayref compromise downloaded a binary to /tmp and spawned it detached from build.rs; the same shape fits any build-time dropper.
+          Notes:
+            Legitimate build scripts run toolchain binaries (cc, cmake, pkg-config) and write to OUT_DIR, not to temporary directories. A toolchain unpacked under /tmp (ad-hoc downloads, Bazel with an output root or sandbox base in /tmp or /dev/shm) also matches; exclude it with a rule modifier. Review the crate that owns the build script and the downloaded artifact.
+        event_type: process_exec
+        condition: |
+          (
+            is_memfd ||
+            list.staged_exec_dirs.exists(d, process.exec_path.startsWith(d))
+          ) &&
+          process.ancestors.exists(a,
+            list.rustc_fragments.exists(p, a.exec_path.contains(p)) ||
+            (
+              a.exec_path.contains("/build/") &&
+              a.exec_path.contains("/build-script-")
+            )
+          )
+        action: detect
+        tags:
+          mitre_tactic: execution
+
+      - rule_id: rust_build_egress
+        rule_name: "Supply-chain: network egress from Rust build script or rustc lineage"
+        description: |
+          What:
+            Detects non-loopback network connections made by a cargo build script, rustc, or any process below them.
+          Why:
+            cargo performs registry and git fetches itself; build scripts and proc-macros normally have no reason to reach the network. Build-time droppers download their payload from here, and the spawned payload inherits the lineage.
+          Notes:
+            Some sys crates download prebuilt libraries in build.rs (rusty_v8, torch-sys, esp-idf-sys, onnxruntime-sys) and compile-time database macros (sqlx query!) connect to a database; exclude those known crates with a rule modifier. Review the destination and the crate that owns the build script, and combine with rust_build_staged_payload_exec and credential rules.
+        event_type: network_connect
+        condition: |
+          !(family == "ipv4" && inIpRange(remote_ip, "127.0.0.0/8")) &&
+          remote_ip != "::1" &&
+          !remote_ip.startsWith("::ffff:127.") &&
+          (
+            list.rustc_fragments.exists(p, process.exec_path.contains(p)) ||
+            (
+              process.exec_path.contains("/build/") &&
+              process.exec_path.contains("/build-script-")
+            ) ||
+            process.ancestors.exists(a,
+              list.rustc_fragments.exists(p, a.exec_path.contains(p)) ||
+              (
+                a.exec_path.contains("/build/") &&
+                a.exec_path.contains("/build-script-")
+              )
+            )
+          )
+        action: detect
+        tags:
+          mitre_tactic: command-and-control
