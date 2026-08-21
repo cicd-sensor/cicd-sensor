@@ -29,9 +29,9 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 	kernelIO.cancelLoop = cancelLoop
 
 	kernelIO.loopWG.Add(3)
-	if kernelIO.discovery != nil {
+	if kernelIO.httpUprobeDiscovery != nil {
 		kernelIO.loopWG.Go(func() {
-			kernelIO.discovery.run(loopCtx)
+			kernelIO.httpUprobeDiscovery.run(loopCtx)
 		})
 	}
 	go func() {
@@ -57,12 +57,6 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 					kernelIO.logger.WarnContext(ctx, "bpf_reader_failed", "error", err)
 					return
 				}
-			}
-
-			// Tee TCP connects to attach discovery before normal delivery. The
-			// tee never blocks and never affects delivery.
-			if kernelIO.discovery != nil {
-				kernelIO.discovery.teeConnect(record.RawSample)
 			}
 
 			if err := handle(loopCtx, KernelSample(record.RawSample)); err != nil {

@@ -10,8 +10,8 @@ var ErrNotSupported = errors.New("not supported")
 // Config contains the cgroup v2 root detected by KernelTracker.
 type Config struct {
 	CgroupV2RootPath string
-	// EnableOpenSSLHTTP starts the OpenSSL uprobe attach-discovery worker (tee +
-	// scan + attach) — the runtime that makes the tap actually capture. It does
+	// EnableOpenSSLHTTP starts the OpenSSL uprobe attach-discovery worker (connect
+	// hint + process scan + attach) — the runtime that makes the tap capture. It does
 	// NOT gate BPF load: the uprobe programs are loaded and verified at startup
 	// either way (LoadAndAssign loads every program), so this is a kill-switch
 	// for a new attach subsystem, not a load-safety gate. Off in Stage 1b-1
@@ -29,6 +29,9 @@ type KernelIO interface {
 	DeleteCgroupIDsFromTrackedCgroupsMap(ctx context.Context, cgroupIDs []uint64) error
 	PutCgroupBasenameInStagingMap(ctx context.Context, basename string) error
 	DeleteCgroupBasenamesFromStagingMap(ctx context.Context, basenames []string) error
+	// QueueHTTPUprobeDiscovery schedules a non-blocking process mapping scan
+	// after a TCP connect. It is a no-op when HTTP uprobe capture is disabled.
+	QueueHTTPUprobeDiscovery(pid int32)
 	StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error
 	Close() error
 }

@@ -115,7 +115,7 @@ func fixedStagingMapValue(value []byte) ([]byte, error) {
 
 // TestOnlyOpenSSLProgram returns the OpenSSL uprobe entry program so
 // integration tests can attach it directly to a libssl inode. Not for
-// production use — production attaches via discovery.
+// production use — production attaches via OpenSSL uprobe discovery.
 func (kernelIO *LinuxKernelIO) TestOnlyOpenSSLProgram() *ebpf.Program {
 	return kernelIO.objs.HandleSslWrite
 }

@@ -28,10 +28,10 @@ type LinuxKernelIO struct {
 	// otherwise watchRingbufDrops can race objs.Close on a Map.Lookup
 	// (-race detected this on the Phase 3 integration run).
 	loopWG sync.WaitGroup
-	// discovery attaches the OpenSSL HTTP uprobe to libssl inodes as tracked
-	// jobs connect. Nil unless Config.EnableOpenSSLHTTP is set. It runs in
-	// loopWG and closes its own attached links, so it is not in `links`.
-	discovery *uprobeDiscovery
+	// httpUprobeDiscovery finds and attaches HTTP uprobes as tracked jobs connect.
+	// Stage 1b-1 enables only the OpenSSL target. It runs in loopWG and closes its
+	// own attached links, so it is not in `links`.
+	httpUprobeDiscovery *httpUprobeDiscovery
 }
 
 // NewLinux loads the BPF objects, attaches programs, and opens the sample ring buffer.
@@ -78,16 +78,16 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	}
 	// The OpenSSL uprobe HTTP parser has its own kprobe-type tail target and
 	// jump table. It is installed unconditionally: the slot must be populated
-	// before any entry program is attached — whether by discovery or by a manual
-	// attach in tests — or the entry's tail call would hit an empty slot. Only
-	// the discovery worker (which drives the runtime attaches) is gated on the
-	// tap being enabled. The entry programs themselves always load with the
-	// object and are verified at load time regardless of this flag.
+	// before any entry program is attached — whether by OpenSSL uprobe discovery
+	// or by a manual attach in tests — or the entry's tail call would hit an empty
+	// slot. Only the OpenSSL uprobe discovery worker (which drives the runtime
+	// attaches) is gated on the tap being enabled. The entry programs themselves
+	// always load with the object and are verified regardless of this flag.
 	if err := kernelIO.objs.HttpTlsStages.Put(uint32(0), kernelIO.objs.HandleSslWriteParse); err != nil {
 		return nil, fmt.Errorf("install http tls parse target: %w", err)
 	}
 	if config.EnableOpenSSLHTTP {
-		kernelIO.discovery = newUprobeDiscovery(kernelIO.objs.HandleSslWrite, kernelIO.logger)
+		kernelIO.httpUprobeDiscovery = newHTTPUprobeDiscovery(kernelIO.objs.HandleSslWrite, kernelIO.logger)
 	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do

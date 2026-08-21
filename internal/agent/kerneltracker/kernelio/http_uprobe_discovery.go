@@ -5,7 +5,6 @@ package kernelio
 import (
 	"bufio"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,19 +16,19 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// uprobe_discovery.go — attach discovery for the OpenSSL HTTP uprobe tap.
+// http_uprobe_discovery.go — attach discovery for HTTP uprobe taps.
 //
 // The BPF side is passive: the existing cgroup/connect4/6 hooks already emit a
-// tracked-cgroup-only NetworkConnect sample. The ringbuf reader tees each TCP
-// connect to this component, and a single worker scans the connecting process's
-// maps, finds the file that defines SSL_write / SSL_write_ex (a shared libssl or
-// a statically-linked binary), and attaches the uprobe entry program to it. One
-// attach on an inode covers every process mapping it; the cgroup gate keeps
-// emission scoped to tracked jobs.
+// tracked-cgroup-only NetworkConnect sample. After decoding that sample,
+// KernelTracker queues the connecting PID here before normal engine delivery. A
+// single worker scans the process's maps, finds the file that defines SSL_write
+// / SSL_write_ex (a shared libssl or a statically-linked binary), and attaches
+// the uprobe entry program to it. One attach on an inode covers every process
+// mapping it; the cgroup gate keeps emission scoped to tracked jobs.
 //
 // Ownership: this is KernelIO's. All mutable state (the attached-target registry
 // and the negative cache) is touched only by the single worker goroutine, so no
-// locking is needed. The reader only sends on the hints channel.
+// locking is needed. KernelTracker only sends on the hints channel.
 //
 // Stage 1b-1 scope: no reclaim (attaches live until Close), no strict pid/cgroup
 // recheck. Those are Stage 1b-2 / M2.
@@ -60,16 +59,16 @@ type fileIdentity struct {
 	ctimeNano int64
 }
 
-type uprobeDiscovery struct {
-	prog   *ebpf.Program
-	logger *slog.Logger
-	hints  chan int32 // pid of a tracked process that just did a TCP connect
+type httpUprobeDiscovery struct {
+	openSSLProgram *ebpf.Program
+	logger         *slog.Logger
+	hints          chan int32 // pid of a tracked process that just did a TCP connect
 
 	// Worker-owned state (single goroutine, no locking).
 	targets   map[fileIdentity][]link.Link
 	negatives *fifoSet
 
-	// Throttled-warning counters. queueDropped is reader-owned (teeConnect);
+	// Throttled-warning counters. queueDropped is sample-reader-owned (enqueuePID);
 	// permDenied / opErrors / capReached are worker-owned (the scan path). Each
 	// counter is touched by a single goroutine, so no atomics are needed.
 	queueDropped uint64
@@ -78,49 +77,37 @@ type uprobeDiscovery struct {
 	capReached   uint64
 }
 
-func newUprobeDiscovery(prog *ebpf.Program, logger *slog.Logger) *uprobeDiscovery {
-	return &uprobeDiscovery{
-		prog:      prog,
-		logger:    logger,
-		hints:     make(chan int32, 256),
-		targets:   make(map[fileIdentity][]link.Link),
-		negatives: newFIFOSet(negativeCacheSize),
+func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger) *httpUprobeDiscovery {
+	return &httpUprobeDiscovery{
+		openSSLProgram: openSSLProgram,
+		logger:         logger,
+		hints:          make(chan int32, 256),
+		targets:        make(map[fileIdentity][]link.Link),
+		negatives:      newFIFOSet(negativeCacheSize),
 	}
 }
 
-// teeConnect enqueues a discovery hint for a TCP NetworkConnect sample. It reads
-// only the fixed header fields (kind/protocol/cgroup_id/tgid, identical in the
-// v4 and v6 layouts), never blocks, and is called from the reader goroutine
-// before the sample is forwarded normally.
-func (d *uprobeDiscovery) teeConnect(raw []byte) {
-	// Header: kind@0 (u32), protocol@4 (u8), tgid@32 (s32). Identical in the v4
-	// and v6 layouts. The connect-time cgroup is deliberately not read: emission
-	// is gated on the tracked cgroup inside the uprobe program itself, and a
-	// strict pid/cgroup recheck belongs with reclaim in Stage 1b-2.
-	if len(raw) < 36 {
-		return
-	}
-	kind := binary.LittleEndian.Uint32(raw[0:4])
-	if kind != SampleKindNetworkConnectV4 && kind != SampleKindNetworkConnectV6 {
-		return
-	}
-	if raw[4] != unix.IPPROTO_TCP {
-		return
-	}
-	tgid := int32(binary.LittleEndian.Uint32(raw[32:36]))
-
+// enqueuePID schedules one process mapping scan without blocking kernel sample
+// intake. A later TCP connect is a natural retry when the bounded queue is full.
+func (d *httpUprobeDiscovery) enqueuePID(tgid int32) {
 	select {
 	case d.hints <- tgid:
 	default:
-		// Never block the reader: a full queue drops the hint. The next connect
-		// from the same process is a natural retry.
-		d.warnThrottled(&d.queueDropped, "uprobe_hint_dropped")
+		d.warnThrottled(&d.queueDropped, "http_uprobe_discovery_hint_dropped")
 	}
+}
+
+// QueueHTTPUprobeDiscovery schedules discovery for a decoded TCP connect.
+func (kernelIO *LinuxKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
+	if kernelIO.httpUprobeDiscovery == nil {
+		return
+	}
+	kernelIO.httpUprobeDiscovery.enqueuePID(pid)
 }
 
 // run drains hints and scans the connecting processes until ctx is cancelled,
 // then closes every attached link. It is the sole owner of targets/negatives.
-func (d *uprobeDiscovery) run(ctx context.Context) {
+func (d *httpUprobeDiscovery) run(ctx context.Context) {
 	defer d.closeAll()
 	for {
 		select {
@@ -159,14 +146,14 @@ func (d *uprobeDiscovery) run(ctx context.Context) {
 // such a process's inode, bounded by the target cap and with no cross-job
 // disclosure. A pid-current-cgroup-matches-and-is-tracked recheck belongs with
 // reclaim in Stage 1b-2, where the registry lifecycle it protects exists.
-func (d *uprobeDiscovery) scanProcess(pid int32) {
+func (d *httpUprobeDiscovery) scanProcess(pid int32) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 	if err != nil {
 		// A gone pid (ENOENT) is the normal end-of-job case and stays silent. A
 		// permission error means discovery is systematically blind, so surface
 		// it (throttled) rather than looking healthy while capturing nothing.
 		if errors.Is(err, os.ErrPermission) {
-			d.warnThrottled(&d.permDenied, "uprobe_discovery_permission_denied", "op", "open_maps")
+			d.warnThrottled(&d.permDenied, "http_uprobe_discovery_permission_denied", "op", "open_maps")
 		}
 		return
 	}
@@ -184,7 +171,7 @@ func (d *uprobeDiscovery) scanProcess(pid int32) {
 		}
 		seen[devIno] = struct{}{}
 		if len(d.targets) >= maxUprobeTargets {
-			d.warnThrottled(&d.capReached, "uprobe_target_cap_reached", "targets", len(d.targets))
+			d.warnThrottled(&d.capReached, "http_uprobe_target_cap_reached", "targets", len(d.targets))
 			break
 		}
 		d.classifyAndAttach(pid, rng)
@@ -197,14 +184,14 @@ func (d *uprobeDiscovery) scanProcess(pid int32) {
 // classifyAndAttach opens the mapped file by FD (surviving unlink / mount-ns /
 // path replacement), computes its identity, and attaches the uprobe program to
 // each target symbol it defines. The FD is held until every attach completes.
-func (d *uprobeDiscovery) classifyAndAttach(pid int32, rng string) {
+func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, rng))
 	if err != nil {
 		// map_files needs CAP_SYS_PTRACE/root: a systematic EPERM here blocks
 		// every attach, so surface it (throttled). ENOENT is a raced-away
 		// mapping and stays silent. Either way it is inconclusive, not cached.
 		if errors.Is(err, os.ErrPermission) {
-			d.warnThrottled(&d.permDenied, "uprobe_discovery_permission_denied", "op", "open_map_files")
+			d.warnThrottled(&d.permDenied, "http_uprobe_discovery_permission_denied", "op", "open_map_files")
 		}
 		return
 	}
@@ -212,7 +199,7 @@ func (d *uprobeDiscovery) classifyAndAttach(pid int32, rng string) {
 
 	var st unix.Stat_t
 	if err := unix.Fstat(int(f.Fd()), &st); err != nil {
-		d.warnThrottled(&d.opErrors, "uprobe_discovery_unexpected_error", "op", "fstat", "error", err)
+		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "fstat", "error", err)
 		return
 	}
 	id := fileIdentity{dev: st.Dev, ino: st.Ino, size: st.Size, ctimeNano: st.Ctim.Nano()}
@@ -225,7 +212,7 @@ func (d *uprobeDiscovery) classifyAndAttach(pid int32, rng string) {
 
 	ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
 	if err != nil {
-		d.warnThrottled(&d.opErrors, "uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
+		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
 		return
 	}
 	d.attachTarget(id, ex)
@@ -235,10 +222,10 @@ func (d *uprobeDiscovery) classifyAndAttach(pid int32, rng string) {
 // outcome. Classification is conservative: only a definitive "no symbol" caches
 // a negative; anything else (ErrNotSupported, I/O, permission) is inconclusive
 // and retried on a later connect.
-func (d *uprobeDiscovery) attachTarget(id fileIdentity, ex *link.Executable) {
+func (d *httpUprobeDiscovery) attachTarget(id fileIdentity, ex *link.Executable) {
 	var got []link.Link
 	for _, symbol := range opensslSymbols {
-		l, err := ex.Uprobe(symbol, d.prog, nil)
+		l, err := ex.Uprobe(symbol, d.openSSLProgram, nil)
 		switch {
 		case err == nil:
 			got = append(got, l)
@@ -248,7 +235,7 @@ func (d *uprobeDiscovery) attachTarget(id fileIdentity, ex *link.Executable) {
 			// Inconclusive: do not cache. Undo partial attaches and retry later.
 			// Unlike a plain "symbol absent", an unexpected attach failure is a
 			// real signal, so surface it (throttled).
-			d.warnThrottled(&d.opErrors, "uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", symbol, "error", err)
+			d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", symbol, "error", err)
 			closeLinks(got)
 			return
 		}
@@ -261,13 +248,13 @@ func (d *uprobeDiscovery) attachTarget(id fileIdentity, ex *link.Executable) {
 	d.negatives.add(id)
 }
 
-func (d *uprobeDiscovery) closeAll() {
+func (d *httpUprobeDiscovery) closeAll() {
 	for _, links := range d.targets {
 		closeLinks(links)
 	}
 }
 
-func (d *uprobeDiscovery) warn(msg string, args ...any) {
+func (d *httpUprobeDiscovery) warn(msg string, args ...any) {
 	if d.logger != nil {
 		d.logger.Warn(msg, args...)
 	}
@@ -277,7 +264,7 @@ func (d *uprobeDiscovery) warn(msg string, args ...any) {
 // so a systematic failure — a permission error that leaves discovery blind, a
 // saturated hint queue — is visible without emitting one line per connect. The
 // counter must be owned by the calling goroutine.
-func (d *uprobeDiscovery) warnThrottled(counter *uint64, msg string, args ...any) {
+func (d *httpUprobeDiscovery) warnThrottled(counter *uint64, msg string, args ...any) {
 	*counter++
 	n := *counter
 	if n&(n-1) == 0 {
