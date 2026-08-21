@@ -302,32 +302,44 @@ func parseExecMapping(line string) (rng, devIno string, ok bool) {
 }
 
 // fifoSet is a fixed-size set with FIFO eviction. It is a cache: eviction only
-// costs a re-classify, never correctness.
+// costs a re-classify, never correctness. This intentionally mirrors
+// fileOpenDedupState; if a third use appears, move the shared algorithm to a
+// dependency-neutral generic package.
 type fifoSet struct {
-	set   map[fileIdentity]struct{}
+	limit int
+	seen  map[fileIdentity]struct{}
 	order []fileIdentity
 	next  int
 }
 
-func newFIFOSet(size int) *fifoSet {
-	return &fifoSet{set: make(map[fileIdentity]struct{}, size), order: make([]fileIdentity, 0, size)}
+func newFIFOSet(limit int) *fifoSet {
+	return &fifoSet{
+		limit: limit,
+		seen:  make(map[fileIdentity]struct{}),
+	}
 }
 
 func (s *fifoSet) has(id fileIdentity) bool {
-	_, ok := s.set[id]
+	if s == nil {
+		return false
+	}
+	_, ok := s.seen[id]
 	return ok
 }
 
 func (s *fifoSet) add(id fileIdentity) {
-	if _, ok := s.set[id]; ok {
+	if s == nil || s.limit <= 0 {
 		return
 	}
-	if len(s.order) < cap(s.order) {
+	if _, ok := s.seen[id]; ok {
+		return
+	}
+	if len(s.order) < s.limit {
 		s.order = append(s.order, id)
 	} else {
-		delete(s.set, s.order[s.next])
+		delete(s.seen, s.order[s.next])
 		s.order[s.next] = id
-		s.next = (s.next + 1) % len(s.order)
+		s.next = (s.next + 1) % s.limit
 	}
-	s.set[id] = struct{}{}
+	s.seen[id] = struct{}{}
 }

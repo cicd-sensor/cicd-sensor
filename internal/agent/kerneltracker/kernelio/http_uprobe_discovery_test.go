@@ -101,6 +101,15 @@ func TestFIFOSet(t *testing.T) {
 
 	id := func(n uint64) fileIdentity { return fileIdentity{dev: 1, ino: n} }
 
+	t.Run("non-positive limit disables the set", func(t *testing.T) {
+		t.Parallel()
+		s := newFIFOSet(0)
+		s.add(id(1))
+		if s.has(id(1)) {
+			t.Fatal("disabled set reports membership")
+		}
+	})
+
 	t.Run("add then has", func(t *testing.T) {
 		t.Parallel()
 		s := newFIFOSet(4)
