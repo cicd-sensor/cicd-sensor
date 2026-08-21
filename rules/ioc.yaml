@@ -208,3 +208,58 @@ rule_sets:
           mitre_tactic: execution
           ioc_date: "2026-08-04"
           source_url: https://www.wiz.io/blog/keyv-and-cacheable-npm-supply-chain-attack
+
+      - rule_id: arrayref_proc_macro1_c2_ip
+        rule_name: "IOC: arrayref / proc-macro1 crate compromise C2 IP"
+        description: |
+          What:
+            Terminates outbound connections to the payload host and C2 servers
+            of the August 2026 arrayref / append-only-vec / internment crates.io
+            compromise (proc-macro1 build.rs dropper).
+          Why:
+            Active-compromise IOC. The build script fetches the stage-2 binary
+            from 23.254.165.112:9089 and the binary beacons to
+            23.254.165.112:443; 23.254.167.107 / .216 are follow-on C2 hosts in
+            the same Hostwinds range (.216 is from third-party reports cited by
+            StepSecurity). The dropper dials raw IPs over rustls with
+            certificate checks disabled, so no domain or http_request event
+            precedes this connection.
+          Notes:
+            Preserve job logs and artifacts, rebuild the runner, and rotate all
+            credentials reachable from the job.
+        event_type: network_connect
+        condition: |
+          family == "ipv4" &&
+          (
+            remote_ip == "23.254.165.112" ||
+            remote_ip == "23.254.167.107" ||
+            remote_ip == "23.254.167.216"
+          )
+        action: terminate
+        tags:
+          mitre_tactic: command-and-control
+          ioc_date: "2026-08-20"
+          source_url: https://www.stepsecurity.io/blog/arrayref-rust-crate-supply-chain-attack
+
+      - rule_id: arrayref_proc_macro1_dropper_exec
+        rule_name: "IOC: arrayref / proc-macro1 dropper executed from /tmp/rust-setup"
+        description: |
+          What:
+            Terminates execution of /tmp/rust-setup, the stage-2 infostealer and
+            backdoor launched by the proc-macro1 build script.
+          Why:
+            Active-compromise IOC. The binary receives the C2 address as its
+            first argument, steals Chromium browser credentials, and installs
+            systemd user persistence.
+          Notes:
+            Review the lineage (build-script-build below cargo) and the lockfile
+            for arrayref 0.3.10, append-only-vec 0.1.9, internment 0.8.7, or any
+            proc-macro1 dependency. Preserve job logs and artifacts, rebuild the
+            runner, and rotate all credentials reachable from the job.
+        event_type: process_exec
+        condition: process.exec_path == "/tmp/rust-setup"
+        action: terminate
+        tags:
+          mitre_tactic: execution
+          ioc_date: "2026-08-20"
+          source_url: https://safedep.io/arrayref-proc-macro1-rust-build-time-malware/
