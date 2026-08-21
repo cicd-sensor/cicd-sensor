@@ -33,7 +33,7 @@ jobs:
       - name: Install BPF integration deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq dnsutils libnss-resolve
+          sudo apt-get install -y -qq dnsutils libnss-resolve python3
 
       - name: Environment info
         run: |
@@ -54,6 +54,10 @@ jobs:
             else
               echo 'openssl CLI not installed'
             fi
+            echo '$ python3 OpenSSL linkage'
+            python3 -c 'import _ssl, ssl, sys; print(sys.version); print(ssl.OPENSSL_VERSION); print(_ssl.__file__)'
+            python_ssl_module="$(python3 -c 'import _ssl; print(_ssl.__file__)')"
+            ldd "$python_ssl_module"
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 

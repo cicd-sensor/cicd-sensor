@@ -56,6 +56,7 @@ func TestLinuxOpenSSLUprobeDoubleAttachDuplicatesEvents(t *testing.T) {
 	libssl := findLibsslPath(t)
 
 	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	t.Cleanup(func() { _ = kernelIO.Close() })
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
@@ -115,19 +116,58 @@ func TestLinuxOpenSSLUprobeDoubleAttachDuplicatesEvents(t *testing.T) {
 	}
 }
 
-// TestLinuxOpenSSLUprobeCapturesHTTPS drives Stage 1b-1 end to end: with the
-// OpenSSL tap enabled, a tracked job's HTTPS request is captured as an
-// http_request event with source=openssl, and the attach happens by discovery
-// (the connecting process's connect is tee'd, its libssl is found and attached)
-// — no manual attach.
-//
-// One curl process sends several requests to a local HTTP/1.1 TLS server. The
-// first connect triggers discovery and the attach to its mapped libssl inode;
-// later requests from the same live process are captured. This proves the
-// steady-state mechanism without depending on discovery winning a race against
-// a short-lived one-request process. First-call capture is a separate M1 gate.
+// TestLinuxOpenSSLUprobeCapturesHTTPS drives Stage 1b-1 end to end for clients
+// that use SSL_write and SSL_write_ex. Each tracked client maps libssl, triggers
+// discovery with its first connect, and emits a decoded openssl http_request
+// through the production KernelIO and KernelTracker path.
 func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
-	curl := requireBinary(t, "curl")
+	tests := []struct {
+		name       string
+		binary     string
+		path       string
+		clientArgs func(string) []string
+	}{
+		{
+			name:   "curl exercises SSL_write",
+			binary: "curl",
+			path:   "/curl-ssl-write",
+			clientArgs: func(url string) []string {
+				return []string{"-sk", "--http1.1", "--max-time", "10", url, url, url, url}
+			},
+		},
+		{
+			name:   "python exercises SSL_write_ex",
+			binary: "python3",
+			path:   "/python-ssl-write-ex",
+			clientArgs: func(url string) []string {
+				const script = `
+import ssl
+import sys
+import urllib.request
+
+context = ssl._create_unverified_context()
+for _ in range(4):
+    with urllib.request.urlopen(sys.argv[1], context=context, timeout=10) as response:
+        response.read()
+`
+				return []string{"-c", script, url}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := requireBinary(t, test.binary)
+			testOpenSSLUprobeCapturesHTTPS(t, client, test.path, test.clientArgs)
+		})
+	}
+}
+
+// testOpenSSLUprobeCapturesHTTPS verifies steady-state discovery without
+// depending on it winning a race against a one-request process. First-call
+// capture remains a separate M1 gate.
+func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArgs func(string) []string) {
+	t.Helper()
 
 	cgroupRoot, err := getCgroupV2Root()
 	if err != nil {
@@ -163,24 +203,22 @@ func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
 	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
 	server.StartTLS()
 	t.Cleanup(server.Close)
-	url := server.URL + "/openssl-probe?token=secret"
+	url := server.URL + path + "?token=secret"
 
-	// curl must link OpenSSL for SSL_write to fire. Repeating the URL in one
-	// invocation keeps one mapped libssl target alive across discovery and the
-	// requests that follow it.
-	args := []string{"-sk", "--http1.1", "--max-time", "10", url, url, url, url}
-	if output, err := exec.Command(curl, args...).CombinedOutput(); err != nil {
-		t.Fatalf("curl HTTPS requests: %v: %s", err, output)
+	// Multiple requests in one process keep its mapped libssl target alive
+	// across discovery and the requests that follow the first connect.
+	if output, err := exec.Command(client, clientArgs(url)...).CombinedOutput(); err != nil {
+		t.Fatalf("HTTPS client %s: %v: %s", client, err, output)
 	}
 
-	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "openssl http_request for /openssl-probe",
+	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "openssl http_request for "+path,
 		func(in engineInput) bool {
 			sample, ok := in.(httpRequestSample)
 			if !ok || sample.CgroupID != cgroupID || sample.Source != HTTPSourceOpenSSL {
 				return false
 			}
-			if sample.Path != "/openssl-probe" {
-				t.Fatalf("path = %q, want /openssl-probe (query must be stripped in-kernel)", sample.Path)
+			if sample.Path != path {
+				t.Fatalf("path = %q, want %s (query must be stripped in-kernel)", sample.Path, path)
 			}
 			return true
 		})
