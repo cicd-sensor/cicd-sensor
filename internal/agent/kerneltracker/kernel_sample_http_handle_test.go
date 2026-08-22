@@ -9,9 +9,12 @@ import (
 )
 
 // TestNormalizeHTTPHost pins the rule-facing Host normalization directly. The
-// kernel copies the Host value verbatim up to the header CR/LF; this is the one
-// place OWS trimming, lowercasing, and the control-byte drop happen, so an
-// attacker cannot pad or splice a value to dodge a `host == "..."` rule.
+// kernel copies the Host value verbatim up to the header CR/LF; this is where
+// OWS trimming, lowercasing, and the drop of control bytes that survive decode
+// happen, so an attacker cannot pad or splice a value to dodge a
+// `host == "..."` rule. An embedded NUL never reaches this function — the
+// fixed-size array decodes as a C string, so it is truncated at the decode
+// boundary instead (TestDecodeHTTPRequestSample).
 func TestNormalizeHTTPHost(t *testing.T) {
 	t.Parallel()
 
@@ -31,13 +34,10 @@ func TestNormalizeHTTPHost(t *testing.T) {
 		},
 		{name: "trailing OWS trimmed", raw: "evil.example   ", want: "evil.example"},
 		{name: "OWS on both sides trimmed then lowercased", raw: "  API.example.com  ", want: "api.example.com"},
-		{
-			// A parser differential: the NUL could read as a benign prefix to us
-			// but split differently upstream, so the whole value is dropped.
-			name: "embedded NUL drops the value to empty",
-			raw:  "safe.example\x00evil.example",
-			want: "",
-		},
+		// An embedded NUL is not a case for this function: the real decode path
+		// terminates the C string at the first NUL before normalizeHTTPHost runs,
+		// so it can never observe one. That boundary is pinned by
+		// TestDecodeHTTPRequestSampleHostNULBoundary on the decode path instead.
 		{name: "embedded control byte drops the value to empty", raw: "exam\x01ple.com", want: ""},
 		{name: "empty stays empty", raw: "", want: ""},
 		{name: "only OWS trims to empty", raw: "  \t ", want: ""},
@@ -63,8 +63,10 @@ func TestNormalizeHTTPHost(t *testing.T) {
 // matches on. Rule authors are unaffected: CEL string literals go through the
 // same rule.NormalizeString pass as the input, so `method == "POST"` and
 // `method == "post"` both match — covered by celengine's
-// http_request_upper_case_method_literal_matches case. The host edge cases
-// (NUL, control bytes, OWS-only) are owned by TestNormalizeHTTPHost.
+// http_request_upper_case_method_literal_matches case. Host edge cases split
+// by where they are decided: an embedded NUL is truncated at the decode
+// boundary (TestDecodeHTTPRequestSample); control bytes and OWS that survive
+// decode are handled by normalizeHTTPHost (TestNormalizeHTTPHost).
 func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 	t.Parallel()
 

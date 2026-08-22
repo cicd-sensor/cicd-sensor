@@ -301,8 +301,12 @@ static __always_inline int http_step_hostlen(struct http_scratch *s)
 
     // The Host value ends at the header line's CR/LF, not at any control byte:
     // a bare CR/LF is the only valid terminator (RFC 9112 §5). An embedded
-    // control byte (e.g. NUL) is left in the value and rejected in userspace,
-    // so it cannot silently truncate the host into a benign-looking prefix.
+    // control byte is left in the value as copied. Note the resulting contract:
+    // the sample's Host is a fixed-size char array, and userspace decodes it as
+    // a C string, so an embedded NUL terminates the decoded value there (e.g.
+    // "a.example\0.evil" decodes to "a.example"); other control bytes reach
+    // userspace and drop the value to empty. NUL is a malformed field value
+    // (RFC 9110); this is best-effort observability, not a strict parser.
     __u32 host_end = data_len;
     __u8 host_terminated = 0;
     for (int i = 0; i < HTTP1_PREFIX_LEN; i++) {
