@@ -1,6 +1,7 @@
 package kerneltracker
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -300,7 +301,7 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		jobID := newJob("100")
 		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 
-		removed := s.reconcileCgroupLiveness(map[uint64]struct{}{42: {}}, scanStartedAt, checkedAt)
+		removed := s.reconcileCgroupLiveness(map[uint64]string{42: "/live"}, scanStartedAt, checkedAt)
 		if len(removed) != 0 {
 			t.Fatalf("removed cgroups = %#v, want none", removed)
 		}
@@ -317,7 +318,7 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 		s.bindAt(jobID, 84, scanStartedAt.Add(-time.Second))
 
-		removed := s.reconcileCgroupLiveness(map[uint64]struct{}{84: {}}, scanStartedAt, checkedAt)
+		removed := s.reconcileCgroupLiveness(map[uint64]string{84: "/live"}, scanStartedAt, checkedAt)
 		if len(removed) != 1 || removed[0].JobID != jobID || removed[0].JobDrained {
 			t.Fatalf("removed result = %#v, want one non-drained result for %v", removed, jobID)
 		}
@@ -415,6 +416,55 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		removed := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
 		if len(removed) != 0 {
 			t.Fatalf("removed result = %#v, want none", removed)
+		}
+	})
+}
+
+func TestJobTrackingState_ActiveCgroupPaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns sorted paths for active cgroups only", func(t *testing.T) {
+		t.Parallel()
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bind(jobID, 42)
+		s.bind(jobID, 84)
+		s.markTrackedCgroupRemoved(42, time.Now())
+
+		paths, complete := s.activeCgroupPaths(map[uint64]string{42: "/removed", 84: "/active"})
+		if !complete {
+			t.Fatal("complete = false, want true")
+		}
+		if !slices.Equal(paths, []string{"/active"}) {
+			t.Fatalf("paths = %v, want [/active]", paths)
+		}
+	})
+
+	t.Run("missing active path makes reclaim snapshot incomplete", func(t *testing.T) {
+		t.Parallel()
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		s.bind(jobID, 42)
+
+		paths, complete := s.activeCgroupPaths(nil)
+		if complete {
+			t.Fatal("complete = true, want false")
+		}
+		if len(paths) != 0 {
+			t.Fatalf("paths = %v, want empty", paths)
+		}
+	})
+
+	t.Run("no active cgroups is a complete empty snapshot", func(t *testing.T) {
+		t.Parallel()
+		s := newJobTrackingState()
+
+		paths, complete := s.activeCgroupPaths(nil)
+		if !complete {
+			t.Fatal("complete = false, want true")
+		}
+		if len(paths) != 0 {
+			t.Fatalf("paths = %v, want empty", paths)
 		}
 	})
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -78,21 +79,17 @@ type registryEntry struct {
 	missedScans uint8
 }
 
-// MappedProcessSnapshot is one maps-liveness observation for tracked processes.
-type MappedProcessSnapshot struct {
-	ScanStartedAt time.Time
-	Complete      bool
-	PIDs          []int32
-
-	result chan<- int // optional buffered completion result for integration tests
+type httpUprobeReconcileRequest struct {
+	snapshot HTTPUprobeLivenessSnapshot
+	result   chan<- int // optional buffered completion result for integration tests
 }
 
 type httpUprobeDiscovery struct {
 	openSSLProgram *ebpf.Program
 	logger         *slog.Logger
-	hints          chan int32                 // pid of a tracked process that just did a TCP connect
-	snapshots      chan MappedProcessSnapshot // immutable reclaim input from KernelTracker
-	now            func() time.Time           // injectable clock for tests
+	hints          chan int32                      // pid of a tracked process that just did a TCP connect
+	snapshots      chan httpUprobeReconcileRequest // immutable reclaim input from KernelTracker
+	now            func() time.Time                // injectable clock for tests
 
 	// Worker-owned state (single goroutine, no locking).
 	targets   map[mappingIdentity]*registryEntry
@@ -112,19 +109,19 @@ func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger) *
 		openSSLProgram: openSSLProgram,
 		logger:         logger,
 		hints:          make(chan int32, 256),
-		snapshots:      make(chan MappedProcessSnapshot, 1),
+		snapshots:      make(chan httpUprobeReconcileRequest, 1),
 		now:            time.Now,
 		targets:        make(map[mappingIdentity]*registryEntry),
 		negatives:      newFIFOSet(negativeCacheSize),
 	}
 }
 
-func finishSnapshot(snapshot MappedProcessSnapshot, targetCount int) {
-	if snapshot.result == nil {
+func finishReconcile(request httpUprobeReconcileRequest, targetCount int) {
+	if request.result == nil {
 		return
 	}
 	select {
-	case snapshot.result <- targetCount:
+	case request.result <- targetCount:
 	default:
 	}
 }
@@ -132,27 +129,28 @@ func finishSnapshot(snapshot MappedProcessSnapshot, targetCount int) {
 // enqueueSnapshot hands the worker a reclaim snapshot without blocking the
 // caller. The buffer is 1: a newer snapshot replaces a stale queued one,
 // because only the latest liveness picture matters.
-func (d *httpUprobeDiscovery) enqueueSnapshot(snapshot MappedProcessSnapshot) {
+func (d *httpUprobeDiscovery) enqueueSnapshot(snapshot HTTPUprobeLivenessSnapshot, result chan<- int) {
+	request := httpUprobeReconcileRequest{snapshot: snapshot, result: result}
 	select {
 	case stale := <-d.snapshots: // drop a stale queued snapshot; only the latest matters
-		finishSnapshot(stale, -1)
+		finishReconcile(stale, -1)
 	default:
 	}
 	select {
-	case d.snapshots <- snapshot:
+	case d.snapshots <- request:
 	default:
-		finishSnapshot(snapshot, -1)
+		finishReconcile(request, -1)
 	}
 }
 
-// ReconcileHTTPUprobeTargets hands the reclaim worker an immutable PID
+// QueueHTTPUprobeReconciliation hands the reclaim worker an immutable cgroup
 // snapshot. No-op when HTTP uprobe capture is disabled.
-func (kernelIO *LinuxKernelIO) ReconcileHTTPUprobeTargets(snapshot MappedProcessSnapshot) {
+func (kernelIO *LinuxKernelIO) QueueHTTPUprobeReconciliation(snapshot HTTPUprobeLivenessSnapshot) {
 	if kernelIO.httpUprobeDiscovery == nil {
 		return
 	}
-	snapshot.PIDs = slices.Clone(snapshot.PIDs)
-	kernelIO.httpUprobeDiscovery.enqueueSnapshot(snapshot)
+	snapshot.CgroupPaths = slices.Clone(snapshot.CgroupPaths)
+	kernelIO.httpUprobeDiscovery.enqueueSnapshot(snapshot, nil)
 }
 
 // enqueuePID schedules one process mapping scan without blocking kernel sample
@@ -180,8 +178,8 @@ func (d *httpUprobeDiscovery) run(ctx context.Context) {
 	defer func() {
 		d.closeAll()
 		select {
-		case snapshot := <-d.snapshots:
-			finishSnapshot(snapshot, -1)
+		case request := <-d.snapshots:
+			finishReconcile(request, -1)
 		default:
 		}
 	}()
@@ -189,9 +187,9 @@ func (d *httpUprobeDiscovery) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case snapshot := <-d.snapshots:
-			d.reconcile(snapshot)
-			finishSnapshot(snapshot, len(d.targets))
+		case request := <-d.snapshots:
+			d.reconcile(request.snapshot)
+			finishReconcile(request, len(d.targets))
 		case first := <-d.hints:
 			// Coalesce whatever is already queued and dedupe by pid so a burst
 			// scans each process once.
@@ -346,15 +344,22 @@ func (d *httpUprobeDiscovery) closeAll() {
 	}
 }
 
-// reconcile is the reclaim sweep. Scanning the snapshot's PIDs attaches
-// (backstop) and is always safe; only detach is fail-keep: an incomplete
-// snapshot neither advances nor resets missedScans and closes nothing. A
-// target observed at or after ScanStartedAt is not closed by that snapshot;
-// a hint still queued then can lose the race and be re-attached later.
-func (d *httpUprobeDiscovery) reconcile(snapshot MappedProcessSnapshot) {
+// reconcile is the reclaim sweep. Expanding the snapshot's cgroups through
+// cgroup.procs and scanning their process maps also provides backstop attach.
+// Only detach is fail-keep: an incomplete snapshot neither advances nor resets
+// missedScans and closes nothing. A target observed at or after ScanStartedAt
+// is not closed by that snapshot; a hint still queued then can lose the race
+// and be re-attached later.
+func (d *httpUprobeDiscovery) reconcile(snapshot HTTPUprobeLivenessSnapshot) {
 	present := make(map[mappingIdentity]struct{})
 	complete := snapshot.Complete
-	for _, pid := range snapshot.PIDs {
+	pids := make(map[int32]struct{})
+	for _, cgroupPath := range snapshot.CgroupPaths {
+		if !d.collectCgroupPIDs(cgroupPath, pids) {
+			complete = false
+		}
+	}
+	for pid := range pids {
 		if !d.scanProcessInto(pid, present) {
 			complete = false
 		}
@@ -391,9 +396,45 @@ func (d *httpUprobeDiscovery) reconcile(snapshot MappedProcessSnapshot) {
 			"closed", closed,
 			"targets", len(d.targets),
 			"mapped_identities", len(present),
-			"scanned_pids", len(snapshot.PIDs),
+			"scanned_cgroups", len(snapshot.CgroupPaths),
+			"scanned_pids", len(pids),
 		)
 	}
+}
+
+// collectCgroupPIDs adds the current members of one tracked cgroup. A vanished
+// cgroup is the normal teardown race; every other read or parse error may hide
+// a live mapper and therefore makes the reclaim snapshot incomplete.
+func (d *httpUprobeDiscovery) collectCgroupPIDs(cgroupPath string, pids map[int32]struct{}) bool {
+	f, err := os.Open(filepath.Join(cgroupPath, "cgroup.procs"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return true
+		}
+		if errors.Is(err, os.ErrPermission) {
+			d.warnThrottled(&d.permDenied, "http_uprobe_discovery_permission_denied", "op", "open_cgroup_procs")
+		} else {
+			d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_cgroup_procs", "error", err)
+		}
+		return false
+	}
+	defer f.Close()
+
+	complete := true
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		pid, err := strconv.ParseInt(scanner.Text(), 10, 32)
+		if err != nil || pid <= 0 {
+			complete = false
+			continue
+		}
+		pids[int32(pid)] = struct{}{}
+	}
+	if err := scanner.Err(); err != nil {
+		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "read_cgroup_procs", "error", err)
+		return false
+	}
+	return complete
 }
 
 func (d *httpUprobeDiscovery) logInfo(msg string, args ...any) {

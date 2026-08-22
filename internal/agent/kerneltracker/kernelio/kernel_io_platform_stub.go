@@ -45,6 +45,10 @@ func (kernelIO *StubKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
 	_ = pid
 }
 
+func (kernelIO *StubKernelIO) QueueHTTPUprobeReconciliation(snapshot HTTPUprobeLivenessSnapshot) {
+	_ = snapshot
+}
+
 func (kernelIO *StubKernelIO) StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error {
 	_ = ctx
 	_ = handle

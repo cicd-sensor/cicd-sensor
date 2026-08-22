@@ -373,13 +373,14 @@ func TestTransitionInvariants(t *testing.T) {
 				effects := handleEngineInput(state, commandReconcileCgroupLiveness{
 					ScanStartedAt:  time.Now().UTC().Add(time.Second),
 					CheckedAt:      time.Now().UTC().Add(2 * time.Second),
-					LiveCgroupIDs:  map[uint64]struct{}{},
+					LiveCgroups:    map[uint64]string{},
 					StatErrorCount: 1,
 				})
 				if !hasNotifyJobEndedEffect(effects) {
 					t.Fatalf("expected notifyJobEnded when final active cgroup is missing")
 				}
 				assertEffectOrder(t, effects,
+					reconcileHTTPUprobeTargets{},
 					notifyJobEnded{},
 				)
 				logOutput := logs.String()
@@ -405,10 +406,16 @@ func TestTransitionInvariants(t *testing.T) {
 				effects := handleEngineInput(state, commandReconcileCgroupLiveness{
 					ScanStartedAt: time.Now().UTC().Add(time.Second),
 					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
-					LiveCgroupIDs: map[uint64]struct{}{42: {}},
+					LiveCgroups:   map[uint64]string{42: "/sys/fs/cgroup/live"},
 				})
-				if len(effects) != 0 {
-					t.Fatalf("live cgroup reconciliation emitted effects: %#v", effects)
+				assertEffectOrder(t, effects, reconcileHTTPUprobeTargets{})
+				snapshot := effects[0].(reconcileHTTPUprobeTargets).Snapshot
+				if !snapshot.Complete || len(snapshot.CgroupPaths) != 1 || snapshot.CgroupPaths[0] != "/sys/fs/cgroup/live" {
+					t.Fatalf("HTTP uprobe snapshot = %#v, want one complete live path", snapshot)
+				}
+				kernelIO := runTestEffects(t, state, effects)
+				if len(kernelIO.httpUprobeSnapshots) != 1 || kernelIO.httpUprobeSnapshots[0].CgroupPaths[0] != "/sys/fs/cgroup/live" {
+					t.Fatalf("queued HTTP uprobe snapshots = %#v, want one live path", kernelIO.httpUprobeSnapshots)
 				}
 				if got := logs.String(); got != "" {
 					t.Fatalf("live cgroup reconciliation log = %s, want empty", got)
@@ -427,11 +434,9 @@ func TestTransitionInvariants(t *testing.T) {
 				scanEffects := handleEngineInput(state, commandReconcileCgroupLiveness{
 					ScanStartedAt: time.Now().UTC().Add(time.Second),
 					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
-					LiveCgroupIDs: map[uint64]struct{}{84: {}},
+					LiveCgroups:   map[uint64]string{84: "/sys/fs/cgroup/live"},
 				})
-				if len(scanEffects) != 0 {
-					t.Fatalf("scan after non-final rmdir emitted effects: %#v", scanEffects)
-				}
+				assertEffectOrder(t, scanEffects, reconcileHTTPUprobeTargets{})
 				if got := len(state.removedCgroupQueue); got != 1 {
 					t.Fatalf("removed cgroup queue length = %d, want 1", got)
 				}
@@ -455,12 +460,13 @@ func TestTransitionInvariants(t *testing.T) {
 				scanEffects := handleEngineInput(state, commandReconcileCgroupLiveness{
 					ScanStartedAt: time.Now().UTC().Add(time.Second),
 					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
-					LiveCgroupIDs: map[uint64]struct{}{},
+					LiveCgroups:   map[uint64]string{},
 				})
 				if !hasNotifyJobEndedEffect(scanEffects) {
 					t.Fatalf("expected scan to notify when remaining active cgroup is missing")
 				}
 				assertEffectOrder(t, scanEffects,
+					reconcileHTTPUprobeTargets{},
 					notifyJobEnded{},
 				)
 				if got := len(state.removedCgroupQueue); got != 2 {
@@ -475,11 +481,9 @@ func TestTransitionInvariants(t *testing.T) {
 				scanEffects := handleEngineInput(state, commandReconcileCgroupLiveness{
 					ScanStartedAt: time.Now().UTC().Add(time.Second),
 					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
-					LiveCgroupIDs: map[uint64]struct{}{84: {}},
+					LiveCgroups:   map[uint64]string{84: "/sys/fs/cgroup/live"},
 				})
-				if len(scanEffects) != 0 {
-					t.Fatalf("non-final scan emitted effects: %#v", scanEffects)
-				}
+				assertEffectOrder(t, scanEffects, reconcileHTTPUprobeTargets{})
 
 				rmdirEffects := handleEngineInput(state, cgroupRmdirSample{CgroupID: 84})
 				if !hasNotifyJobEndedEffect(rmdirEffects) {
@@ -505,11 +509,9 @@ func TestTransitionInvariants(t *testing.T) {
 				scanEffects := handleEngineInput(state, commandReconcileCgroupLiveness{
 					ScanStartedAt: time.Now().UTC().Add(time.Second),
 					CheckedAt:     time.Now().UTC().Add(2 * time.Second),
-					LiveCgroupIDs: map[uint64]struct{}{},
+					LiveCgroups:   map[uint64]string{},
 				})
-				if len(scanEffects) != 0 {
-					t.Fatalf("scan after final rmdir emitted effects: %#v", scanEffects)
-				}
+				assertEffectOrder(t, scanEffects, reconcileHTTPUprobeTargets{})
 				if got := len(state.removedCgroupQueue); got != 1 {
 					t.Fatalf("removed cgroup queue length = %d, want 1", got)
 				}

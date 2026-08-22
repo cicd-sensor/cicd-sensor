@@ -3,7 +3,10 @@
 package kernelio
 
 import (
+	"maps"
 	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -38,7 +41,7 @@ func (h *reclaimHarness) attached(id fileIdentity) *registryEntry {
 // complete/incomplete snapshots with no PIDs: every target is absent.
 func (h *reclaimHarness) sweep(complete bool) {
 	h.now = h.now.Add(time.Minute)
-	h.d.reconcile(MappedProcessSnapshot{ScanStartedAt: h.now, Complete: complete})
+	h.d.reconcile(HTTPUprobeLivenessSnapshot{ScanStartedAt: h.now, Complete: complete})
 }
 
 func TestHTTPUprobeReclaim(t *testing.T) {
@@ -92,7 +95,7 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		scanStart := h.now.Add(time.Minute)
 		e.lastSeenAt = scanStart.Add(time.Second)
 		h.now = scanStart
-		h.d.reconcile(MappedProcessSnapshot{ScanStartedAt: scanStart, Complete: true})
+		h.d.reconcile(HTTPUprobeLivenessSnapshot{ScanStartedAt: scanStart, Complete: true})
 		if e.missedScans != 1 {
 			t.Fatalf("observed-during-scan target had missedScans advanced to %d, want 1", e.missedScans)
 		}
@@ -116,15 +119,15 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil)
 		staleResult := make(chan int, 1)
-		d.enqueueSnapshot(MappedProcessSnapshot{PIDs: []int32{1}, result: staleResult})
-		d.enqueueSnapshot(MappedProcessSnapshot{PIDs: []int32{2}}) // must not block on a full buffer
+		d.enqueueSnapshot(HTTPUprobeLivenessSnapshot{CgroupPaths: []string{"one"}}, staleResult)
+		d.enqueueSnapshot(HTTPUprobeLivenessSnapshot{CgroupPaths: []string{"two"}}, nil) // must not block on a full buffer
 		if result := <-staleResult; result != -1 {
 			t.Fatalf("replaced snapshot result = %d, want -1", result)
 		}
 		select {
 		case got := <-d.snapshots:
-			if len(got.PIDs) != 1 || got.PIDs[0] != 2 {
-				t.Fatalf("queued snapshot PIDs = %v, want [2]", got.PIDs)
+			if !slices.Equal(got.snapshot.CgroupPaths, []string{"two"}) {
+				t.Fatalf("queued snapshot paths = %v, want [two]", got.snapshot.CgroupPaths)
 			}
 		default:
 			t.Fatal("no snapshot queued")
@@ -135,14 +138,55 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil)
 		kernelIO := &LinuxKernelIO{httpUprobeDiscovery: d}
-		pids := []int32{1}
-		kernelIO.ReconcileHTTPUprobeTargets(MappedProcessSnapshot{PIDs: pids})
-		pids[0] = 2
+		paths := []string{"one"}
+		kernelIO.QueueHTTPUprobeReconciliation(HTTPUprobeLivenessSnapshot{CgroupPaths: paths})
+		paths[0] = "two"
 		got := <-d.snapshots
-		if got.PIDs[0] != 1 {
-			t.Fatalf("queued PIDs = %v, want immutable copy [1]", got.PIDs)
+		if !slices.Equal(got.snapshot.CgroupPaths, []string{"one"}) {
+			t.Fatalf("queued paths = %v, want immutable copy [one]", got.snapshot.CgroupPaths)
 		}
 	})
+}
+
+func TestCollectCgroupPIDs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		contents string
+		missing  bool
+		complete bool
+		want     []int32
+	}{
+		{name: "valid members are deduplicated", contents: "123\n456\n123\n", complete: true, want: []int32{123, 456}},
+		{name: "malformed member makes the snapshot incomplete", contents: "123\ninvalid\n0\n-1\n", complete: false, want: []int32{123}},
+		{name: "vanished cgroup is a complete teardown race", missing: true, complete: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "tracked")
+			if !test.missing {
+				if err := os.Mkdir(path, 0o755); err != nil {
+					t.Fatalf("mkdir tracked cgroup: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(path, "cgroup.procs"), []byte(test.contents), 0o644); err != nil {
+					t.Fatalf("write cgroup.procs: %v", err)
+				}
+			}
+
+			d := newHTTPUprobeDiscovery(nil, nil)
+			got := make(map[int32]struct{})
+			if complete := d.collectCgroupPIDs(path, got); complete != test.complete {
+				t.Fatalf("complete = %v, want %v", complete, test.complete)
+			}
+			gotPIDs := slices.Sorted(maps.Keys(got))
+			if !slices.Equal(gotPIDs, test.want) {
+				t.Fatalf("PIDs = %v, want %v", gotPIDs, test.want)
+			}
+		})
+	}
 }
 
 func TestScanProcessIntoCompleteness(t *testing.T) {

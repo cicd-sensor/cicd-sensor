@@ -12,14 +12,14 @@ const cgroupLivenessScanInterval = time.Minute
 // It contains only immutable scan output; ownership decisions stay inside the
 // loop when commandReconcileCgroupLiveness is handled.
 type cgroupLivenessSnapshot struct {
-	LiveCgroupIDs  map[uint64]struct{}
+	LiveCgroups    map[uint64]string
 	DirectoryCount int
 	StatErrorCount int
 }
 
 // startCgroupLivenessScanner runs filesystem work outside the state-owner loop.
 // Scanning /sys/fs/cgroup can block briefly, so the goroutine sends only a
-// completed live-ID snapshot back through inputCh for serialized reconciliation.
+// completed ID/path snapshot back through inputCh for serialized reconciliation.
 func (engine *KernelTracker) startCgroupLivenessScanner(ctx context.Context) func() {
 	if engine.cgroupV2RootPath == "" {
 		return func() {}
@@ -50,7 +50,7 @@ func (engine *KernelTracker) startCgroupLivenessScanner(ctx context.Context) fun
 // progress, because those cgroups may legitimately be absent from the snapshot.
 func (engine *KernelTracker) scanAndQueueCgroupLiveness(ctx context.Context) {
 	scanStartedAt := time.Now().UTC()
-	snapshot, err := scanLiveCgroupIDs(engine.cgroupV2RootPath)
+	snapshot, err := scanLiveCgroups(engine.cgroupV2RootPath)
 	checkedAt := time.Now().UTC()
 	if err != nil {
 		engine.logger.WarnContext(ctx, "cgroup_liveness_scan_failed", "error", err)
@@ -61,7 +61,7 @@ func (engine *KernelTracker) scanAndQueueCgroupLiveness(ctx context.Context) {
 	case engine.inputCh <- commandReconcileCgroupLiveness{
 		ScanStartedAt:  scanStartedAt,
 		CheckedAt:      checkedAt,
-		LiveCgroupIDs:  snapshot.LiveCgroupIDs,
+		LiveCgroups:    snapshot.LiveCgroups,
 		StatErrorCount: snapshot.StatErrorCount,
 	}:
 	case <-ctx.Done():

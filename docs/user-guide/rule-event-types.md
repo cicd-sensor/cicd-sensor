@@ -507,8 +507,9 @@ Only the request line and the `Host` header are captured — no other headers an
   endpoints and plain-HTTP package mirrors.
 - `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's `SSL_write`
   (covers curl / wget / Python `pip`/`requests` / most Node). This tap is
-  **not yet enabled** in shipped builds; it turns on by default once attach
-  reclaim lands and its rollout gates pass (there is no separate opt-in).
+  **not yet enabled** in shipped builds; default enablement waits for the
+  privileged reclaim E2E and the remaining rollout gates (there is no separate
+  opt-in).
 
 Known gaps (absence of an `http_request` event does **not** mean absence of
 egress — combine with `domain` and `network_connect` rules):
