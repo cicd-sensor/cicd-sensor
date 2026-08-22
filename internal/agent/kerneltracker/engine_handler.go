@@ -30,6 +30,8 @@ func handleEngineInput(state *jobTrackingState, input engineInput) []engineEffec
 		return handlePurgeTick(state)
 	case commandReconcileCgroupLiveness:
 		return handleCgroupLivenessReconciliation(state, value)
+	case commandSnapshotActiveCgroupIDs:
+		return []engineEffect{replyActiveCgroupIDs{Reply: value.Reply, IDs: state.activeCgroupIDs()}}
 	case cgroupMkdirSample:
 		return handleCgroupMkdirSample(state, value)
 	case cgroupAttachSample:

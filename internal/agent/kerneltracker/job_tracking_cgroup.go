@@ -159,6 +159,23 @@ func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroupIDs map[uint64]stru
 	return removed
 }
 
+// activeCgroupIDs returns a copy of every active (not removed) tracked cgroup
+// ID across all jobs. It is called on the engine loop; the copy is handed to the
+// off-loop HTTP uprobe liveness scanner so loop-owned state is never read
+// concurrently. Removed cgroups are excluded on purpose: their processes are
+// gone or leaving, so they must not count as "still using" an attached inode.
+func (s *jobTrackingState) activeCgroupIDs() map[uint64]struct{} {
+	ids := make(map[uint64]struct{})
+	for _, cgroups := range s.cgroupsByJob {
+		for cgroupID, tracked := range cgroups {
+			if tracked.State == trackedCgroupActive {
+				ids[cgroupID] = struct{}{}
+			}
+		}
+	}
+	return ids
+}
+
 func (s *jobTrackingState) activeCgroupCount(jobID jobcontext.JobIdentity) int {
 	count := 0
 	for _, cgroup := range s.cgroupsByJob[jobID] {
