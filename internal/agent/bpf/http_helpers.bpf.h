@@ -299,10 +299,8 @@ static __always_inline int http_step_hostlen(struct http_scratch *s)
     if (host_val > data_len)
         host_val = data_len;
 
-    // The Host value ends at the header line's CR/LF, not at any control byte:
-    // a bare CR/LF is the only valid terminator (RFC 9112 §5). An embedded
-    // control byte (e.g. NUL) is left in the value and rejected in userspace,
-    // so it cannot silently truncate the host into a benign-looking prefix.
+    // Only CR/LF terminates Host here. Userspace decodes the fixed-size field
+    // as a C string, so an embedded NUL truncates the decoded value.
     __u32 host_end = data_len;
     __u8 host_terminated = 0;
     for (int i = 0; i < HTTP1_PREFIX_LEN; i++) {

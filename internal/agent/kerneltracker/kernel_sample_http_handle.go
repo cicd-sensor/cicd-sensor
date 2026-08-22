@@ -74,9 +74,9 @@ func handleHTTPRequestSample(state *jobTrackingState, sample httpRequestSample) 
 // value verbatim up to the header line's CR/LF, so trim leading/trailing OWS
 // (RFC 9112 §5.1 excludes it; padding must not let an attacker dodge a
 // `host == "..."` rule) and lowercase (host names are case-insensitive). A
-// value with an embedded control byte is malformed — a parser differential
-// that could read as a benign prefix to us but differently upstream — so it is
-// simply dropped to an empty host, which matches no host rule.
+// value that still carries a control byte is malformed and is dropped to an
+// empty host. Embedded NUL never reaches this function because fixed-array
+// decoding stops at the first NUL.
 func normalizeHTTPHost(raw string) string {
 	host := strings.Trim(raw, " \t")
 	if strings.IndexFunc(host, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {

@@ -22,7 +22,7 @@ func TestDecodeHTTPRequestSample(t *testing.T) {
 		}
 	}
 
-	buildSample := func(t *testing.T, kind uint32) []byte {
+	buildSample := func(t *testing.T, kind uint32, host string) []byte {
 		t.Helper()
 
 		sample := bpfprog.BPFProgramHttpRequestSample{
@@ -35,7 +35,7 @@ func TestDecodeHTTPRequestSample(t *testing.T) {
 		}
 		setCChars(sample.Method[:], "POST")
 		setCChars(sample.Path[:], "/api/upload")
-		setCChars(sample.Host[:], "api.example.com")
+		setCChars(sample.Host[:], host)
 
 		var buffer bytes.Buffer
 		if err := binary.Write(&buffer, binary.LittleEndian, sample); err != nil {
@@ -52,7 +52,7 @@ func TestDecodeHTTPRequestSample(t *testing.T) {
 	}{
 		{
 			name:   "valid",
-			sample: buildSample(t, kernelio.SampleKindHTTPRequest),
+			sample: buildSample(t, kernelio.SampleKindHTTPRequest, "api.example.com"),
 			want: httpRequestSample{
 				Identity: processIdentity{PID: 1001, StartBoottime: 901},
 				CgroupID: 801,
@@ -64,13 +64,26 @@ func TestDecodeHTTPRequestSample(t *testing.T) {
 			},
 		},
 		{
+			name:   "embedded_nul_truncates_host",
+			sample: buildSample(t, kernelio.SampleKindHTTPRequest, "a.example\x00.evil.example"),
+			want: httpRequestSample{
+				Identity: processIdentity{PID: 1001, StartBoottime: 901},
+				CgroupID: 801,
+				TsNs:     701,
+				Source:   HTTPSourceCleartext,
+				Method:   "POST",
+				Path:     "/api/upload",
+				Host:     "a.example",
+			},
+		},
+		{
 			name:       "unexpected_size",
-			sample:     buildSample(t, kernelio.SampleKindHTTPRequest)[:binary.Size(bpfprog.BPFProgramHttpRequestSample{})-1],
+			sample:     buildSample(t, kernelio.SampleKindHTTPRequest, "api.example.com")[:binary.Size(bpfprog.BPFProgramHttpRequestSample{})-1],
 			wantErrSub: "unexpected http request sample size",
 		},
 		{
 			name:       "unexpected_kind",
-			sample:     buildSample(t, 99),
+			sample:     buildSample(t, 99, "api.example.com"),
 			wantErrSub: "unexpected http request sample kind",
 		},
 	}

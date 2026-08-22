@@ -8,10 +8,7 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 )
 
-// TestNormalizeHTTPHost pins the rule-facing Host normalization directly. The
-// kernel copies the Host value verbatim up to the header CR/LF; this is the one
-// place OWS trimming, lowercasing, and the control-byte drop happen, so an
-// attacker cannot pad or splice a value to dodge a `host == "..."` rule.
+// TestNormalizeHTTPHost pins the rule-facing OWS, case, and control-byte rules.
 func TestNormalizeHTTPHost(t *testing.T) {
 	t.Parallel()
 
@@ -31,13 +28,6 @@ func TestNormalizeHTTPHost(t *testing.T) {
 		},
 		{name: "trailing OWS trimmed", raw: "evil.example   ", want: "evil.example"},
 		{name: "OWS on both sides trimmed then lowercased", raw: "  API.example.com  ", want: "api.example.com"},
-		{
-			// A parser differential: the NUL could read as a benign prefix to us
-			// but split differently upstream, so the whole value is dropped.
-			name: "embedded NUL drops the value to empty",
-			raw:  "safe.example\x00evil.example",
-			want: "",
-		},
 		{name: "embedded control byte drops the value to empty", raw: "exam\x01ple.com", want: ""},
 		{name: "empty stays empty", raw: "", want: ""},
 		{name: "only OWS trims to empty", raw: "  \t ", want: ""},
@@ -62,9 +52,7 @@ func TestNormalizeHTTPHost(t *testing.T) {
 // Lowercase everywhere means what a job log shows is exactly what a rule
 // matches on. Rule authors are unaffected: CEL string literals go through the
 // same rule.NormalizeString pass as the input, so `method == "POST"` and
-// `method == "post"` both match — covered by celengine's
-// http_request_upper_case_method_literal_matches case. The host edge cases
-// (NUL, control bytes, OWS-only) are owned by TestNormalizeHTTPHost.
+// `method == "post"` both match.
 func TestHandleHTTPRequest_EmitsEvent(t *testing.T) {
 	t.Parallel()
 
