@@ -168,8 +168,7 @@ func parseHTTP1RequestReference(data []byte) (refHTTP1Request, bool) {
 	// The raw host is normalized in userspace, not re-implemented here:
 	// TestNormalizeHTTPHost pins normalizeHTTPHost's OWS/case/control-byte
 	// rules directly, and this mirror delegates to the same function so the
-	// two never drift. (An embedded NUL is a decode-boundary matter —
-	// TestDecodeHTTPRequestSample — and does not reach normalizeHTTPHost.)
+	// two never drift.
 	out.Host = normalizeHTTPHost(string(host))
 	return out, true
 }

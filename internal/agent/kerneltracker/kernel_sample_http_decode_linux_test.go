@@ -22,8 +22,6 @@ func TestDecodeHTTPRequestSample(t *testing.T) {
 		}
 	}
 
-	// host is the raw Host bytes written into the fixed-size array; a NUL
-	// inside it exercises the C-string decode boundary.
 	buildSample := func(t *testing.T, kind uint32, host string) []byte {
 		t.Helper()
 
@@ -66,10 +64,6 @@ func TestDecodeHTTPRequestSample(t *testing.T) {
 			},
 		},
 		{
-			// Host is a fixed-size char array decoded as a C string, so an
-			// embedded NUL terminates the value: the suffix is lost (truncation,
-			// not rejection). NUL is a malformed field value (RFC 9110); this is
-			// accepted best-effort behavior and normalizeHTTPHost never sees it.
 			name:   "embedded_nul_truncates_host",
 			sample: buildSample(t, kernelio.SampleKindHTTPRequest, "a.example\x00.evil.example"),
 			want: httpRequestSample{

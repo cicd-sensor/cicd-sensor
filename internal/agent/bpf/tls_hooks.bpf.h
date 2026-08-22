@@ -46,11 +46,8 @@ struct user_pt_regs {
 // Entry: PARM2 is the plaintext buffer, PARM3 its length, for both
 // SSL_write(SSL*, const void*, int) and
 // SSL_write_ex(SSL*, const void*, size_t, size_t*). One program is attached to
-// both symbols by userspace. `num < HTTP_MIN_REQUEST_LINE` rejects short
-// buffers. A negative SSL_write int may appear here as a large register-width
-// value (a 32-bit write zero-extends the register). Capture remains bounded,
-// but this best-effort tap does not distinguish that malformed call from a
-// large valid SSL_write_ex buffer.
+// both symbols by userspace. Capture is bounded, but a negative SSL_write int
+// is indistinguishable here from a large SSL_write_ex length after zero-extension.
 SEC("uprobe/SSL_write")
 int BPF_UPROBE(handle_ssl_write, void *ssl, const void *buf, long num)
 {
