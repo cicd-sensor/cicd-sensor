@@ -113,31 +113,27 @@ func fixedStagingMapValue(value []byte) ([]byte, error) {
 	return fixed, nil
 }
 
-// TestOnlyOpenSSLProgram returns the OpenSSL uprobe entry program so
-// integration tests can attach it directly to a libssl inode. Not for
-// production use — production attaches via OpenSSL uprobe discovery.
-// TestOnlyHTTPUprobeTargetCount returns how many inodes currently hold an
-// attached HTTP uprobe. The answer comes from the discovery worker itself, so
-// it is consistent with every mutation (no locking: the worker owns targets).
-// Returns -1 when discovery is disabled or the worker is not running.
-func (kernelIO *LinuxKernelIO) TestOnlyHTTPUprobeTargetCount(ctx context.Context) int {
+// TestOnlyReconcileHTTPUprobeTargets waits for one reclaim snapshot and returns
+// its worker-owned target count. A negative result means disabled, replaced, or
+// cancelled.
+func (kernelIO *LinuxKernelIO) TestOnlyReconcileHTTPUprobeTargets(ctx context.Context, snapshot MappedProcessSnapshot) int {
 	if kernelIO.httpUprobeDiscovery == nil {
 		return -1
 	}
-	reply := make(chan int, 1)
+	result := make(chan int, 1)
+	snapshot.result = result
+	kernelIO.ReconcileHTTPUprobeTargets(snapshot)
 	select {
-	case kernelIO.httpUprobeDiscovery.queries <- reply:
-	case <-ctx.Done():
-		return -1
-	}
-	select {
-	case n := <-reply:
-		return n
+	case count := <-result:
+		return count
 	case <-ctx.Done():
 		return -1
 	}
 }
 
+// TestOnlyOpenSSLProgram returns the OpenSSL uprobe entry program so
+// integration tests can attach it directly to a libssl inode. Not for
+// production use — production attaches via OpenSSL uprobe discovery.
 func (kernelIO *LinuxKernelIO) TestOnlyOpenSSLProgram() *ebpf.Program {
 	return kernelIO.objs.HandleSslWrite
 }

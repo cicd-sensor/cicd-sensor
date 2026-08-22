@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,9 +22,9 @@ import (
 // http_uprobe_discovery.go — attach discovery and reclaim for HTTP uprobe taps.
 //
 // A single worker owns all mutable state (attached targets, negative cache), so
-// no locking. KernelTracker sends connect hints (attach) and PID snapshots
-// (reclaim); it never reads the registry. cgroup gates emission and scopes the
-// scan; it does not own link lifetime — reclaim is a maps-liveness sweep.
+// no locking. Connect hints and reclaim snapshots only enter this worker; no
+// caller reads the registry. cgroup gates emission and scopes the scan, but does
+// not own link lifetime.
 
 // opensslSymbols are the write entry points attached with the same program.
 // SSL_write covers curl/wget/node; SSL_write_ex is what Python (pip/requests)
@@ -42,8 +44,9 @@ const reclaimMissThreshold = 2
 // connect burst does not re-parse libc / the loader every time.
 const negativeCacheSize = 8192
 
-// fileIdentity identifies a mapped file by content, not by path or mount. dev+ino
-// is the file; ctime+size catches inode reuse. mnt_id is deliberately excluded:
+// fileIdentity identifies one classification result, not a pathname. dev+ino is
+// the mapped file; ctime+size invalidates a cached result after metadata reuse.
+// mnt_id is deliberately excluded:
 // it is mount identity, and including it would over-split (the same file via two
 // mounts) into a double attach, which the kernel runs as two consumers = two
 // events.
@@ -52,6 +55,18 @@ type fileIdentity struct {
 	ino       uint64
 	size      int64
 	ctimeNano int64
+}
+
+// mappingIdentity is the stable identity available directly from /proc/pid/maps.
+// Reclaim uses it so a map_files open race or metadata change cannot hide a live
+// mapping. fileIdentity remains the stricter key for classification caches.
+type mappingIdentity struct {
+	dev uint64
+	ino uint64
+}
+
+func (id fileIdentity) mappingIdentity() mappingIdentity {
+	return mappingIdentity{dev: id.dev, ino: id.ino}
 }
 
 // registryEntry is one attached inode. lastSeenAt is refreshed on every
@@ -63,16 +78,24 @@ type registryEntry struct {
 	missedScans uint8
 }
 
+// MappedProcessSnapshot is one maps-liveness observation for tracked processes.
+type MappedProcessSnapshot struct {
+	ScanStartedAt time.Time
+	Complete      bool
+	PIDs          []int32
+
+	result chan<- int // optional buffered completion result for integration tests
+}
+
 type httpUprobeDiscovery struct {
 	openSSLProgram *ebpf.Program
 	logger         *slog.Logger
 	hints          chan int32                 // pid of a tracked process that just did a TCP connect
 	snapshots      chan MappedProcessSnapshot // immutable reclaim input from KernelTracker
-	queries        chan chan int              // test-only: worker answers the attached-target count
 	now            func() time.Time           // injectable clock for tests
 
 	// Worker-owned state (single goroutine, no locking).
-	targets   map[fileIdentity]*registryEntry
+	targets   map[mappingIdentity]*registryEntry
 	negatives *fifoSet
 
 	// Throttled-warning counters. queueDropped is sample-reader-owned (enqueuePID);
@@ -90,10 +113,19 @@ func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger) *
 		logger:         logger,
 		hints:          make(chan int32, 256),
 		snapshots:      make(chan MappedProcessSnapshot, 1),
-		queries:        make(chan chan int),
 		now:            time.Now,
-		targets:        make(map[fileIdentity]*registryEntry),
+		targets:        make(map[mappingIdentity]*registryEntry),
 		negatives:      newFIFOSet(negativeCacheSize),
+	}
+}
+
+func finishSnapshot(snapshot MappedProcessSnapshot, targetCount int) {
+	if snapshot.result == nil {
+		return
+	}
+	select {
+	case snapshot.result <- targetCount:
+	default:
 	}
 }
 
@@ -102,22 +134,24 @@ func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger) *
 // because only the latest liveness picture matters.
 func (d *httpUprobeDiscovery) enqueueSnapshot(snapshot MappedProcessSnapshot) {
 	select {
-	case <-d.snapshots: // drop a stale queued snapshot; only the latest matters
+	case stale := <-d.snapshots: // drop a stale queued snapshot; only the latest matters
+		finishSnapshot(stale, -1)
 	default:
 	}
 	select {
 	case d.snapshots <- snapshot:
-	default: // worker drained it concurrently and the buffer refilled: nothing to do
+	default:
+		finishSnapshot(snapshot, -1)
 	}
 }
 
 // ReconcileHTTPUprobeTargets hands the reclaim worker an immutable PID
 // snapshot. No-op when HTTP uprobe capture is disabled.
-func (kernelIO *LinuxKernelIO) ReconcileHTTPUprobeTargets(ctx context.Context, snapshot MappedProcessSnapshot) {
-	_ = ctx
+func (kernelIO *LinuxKernelIO) ReconcileHTTPUprobeTargets(snapshot MappedProcessSnapshot) {
 	if kernelIO.httpUprobeDiscovery == nil {
 		return
 	}
+	snapshot.PIDs = slices.Clone(snapshot.PIDs)
 	kernelIO.httpUprobeDiscovery.enqueueSnapshot(snapshot)
 }
 
@@ -143,18 +177,21 @@ func (kernelIO *LinuxKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
 // is cancelled, then closes every attached link. It is the sole owner of
 // targets/negatives; there is no separate closer goroutine.
 func (d *httpUprobeDiscovery) run(ctx context.Context) {
-	defer d.closeAll()
+	defer func() {
+		d.closeAll()
+		select {
+		case snapshot := <-d.snapshots:
+			finishSnapshot(snapshot, -1)
+		default:
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case snapshot := <-d.snapshots:
 			d.reconcile(snapshot)
-			if snapshot.Done != nil {
-				close(snapshot.Done)
-			}
-		case reply := <-d.queries:
-			reply <- len(d.targets)
+			finishSnapshot(snapshot, len(d.targets))
 		case first := <-d.hints:
 			// Coalesce whatever is already queued and dedupe by pid so a burst
 			// scans each process once.
@@ -181,8 +218,7 @@ func (d *httpUprobeDiscovery) run(ctx context.Context) {
 // target symbol and, when present is non-nil, records every mapping's identity
 // into it (reclaim's liveness probe). Returns false if an error could have
 // hidden a live mapping.
-func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[fileIdentity]struct{}) (complete bool) {
-	complete = true
+func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[mappingIdentity]struct{}) bool {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 	if err != nil {
 		// Only a gone pid (ENOENT) is the benign race; anything else could hide
@@ -199,25 +235,31 @@ func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[fileIdentit
 	}
 	defer f.Close()
 
-	seen := make(map[string]struct{}) // dedupe by dev:inode within this scan
+	seen := make(map[mappingIdentity]struct{})
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		rng, devIno, ok := parseExecMapping(scanner.Text())
+		rng, mapped, ok := parseExecMapping(scanner.Text())
 		if !ok {
 			continue
 		}
-		if _, dup := seen[devIno]; dup {
+		if _, dup := seen[mapped]; dup {
 			continue
 		}
-		seen[devIno] = struct{}{}
+		seen[mapped] = struct{}{}
+		if present != nil {
+			present[mapped] = struct{}{}
+		}
+		if entry, have := d.targets[mapped]; have {
+			entry.lastSeenAt = d.now()
+			continue
+		}
 		if len(d.targets) >= maxUprobeTargets {
-			// Unscanned mappings may hold live attached inodes: not complete.
+			// Presence is already recorded. Refuse only this new mapping; existing
+			// targets remain visible to reclaim so the cap can clear.
 			d.warnThrottled(&d.capReached, "http_uprobe_target_cap_reached", "targets", len(d.targets))
-			return false
+			continue
 		}
-		if !d.classifyAndAttach(pid, rng, present) {
-			complete = false
-		}
+		d.classifyAndAttach(pid, rng, mapped)
 	}
 	// A read error means a partial scan (e.g. the process exited mid-read). For
 	// attach that is fine (the next connect retries); for reclaim it could hide a
@@ -225,58 +267,46 @@ func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[fileIdentit
 	if err := scanner.Err(); err != nil {
 		return false
 	}
-	return complete
+	return true
 }
 
 // classifyAndAttach opens the mapped file by FD (surviving unlink / mount-ns /
 // path replacement), computes its identity, and attaches the uprobe program to
 // each target symbol it defines. The FD is held until every attach completes.
-// It returns false if an error could have hidden a live mapping (permission /
-// unexpected I/O), which reclaim treats as an incomplete probe; a raced-away
-// mapping (ENOENT) is the normal case and returns true.
-func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, present map[fileIdentity]struct{}) bool {
+// Presence was already recorded from maps, so classification failures affect
+// attach only and do not make reclaim incomplete.
+func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped mappingIdentity) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, rng))
 	if err != nil {
-		// ENOENT is a raced-away mapping (benign). Anything else could hide a
-		// live mapping; EPERM additionally means discovery is blind. Never cached.
+		// ENOENT is a raced-away or non-openable range. Presence was already
+		// recorded; other errors are attach failures and are surfaced for retry.
 		if errors.Is(err, os.ErrNotExist) {
-			return true
+			return
 		}
 		if errors.Is(err, os.ErrPermission) {
 			d.warnThrottled(&d.permDenied, "http_uprobe_discovery_permission_denied", "op", "open_map_files")
 		} else {
 			d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_map_files", "error", err)
 		}
-		return false
+		return
 	}
 	defer f.Close()
 
 	var st unix.Stat_t
 	if err := unix.Fstat(int(f.Fd()), &st); err != nil {
 		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "fstat", "error", err)
-		return false
+		return
 	}
-	id := fileIdentity{dev: st.Dev, ino: st.Ino, size: st.Size, ctimeNano: st.Ctim.Nano()}
-	if present != nil {
-		present[id] = struct{}{}
-	}
-	if entry, have := d.targets[id]; have {
-		// Record the observation so an older in-flight snapshot cannot reclaim
-		// a target just seen live.
-		entry.lastSeenAt = d.now()
-		return true
-	}
+	id := fileIdentity{dev: mapped.dev, ino: mapped.ino, size: st.Size, ctimeNano: st.Ctim.Nano()}
 	if d.negatives.has(id) {
-		return true
+		return
 	}
-
 	ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
 	if err != nil {
 		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
-		return false
+		return
 	}
 	d.attachTarget(id, ex)
-	return true
 }
 
 // attachTarget attaches the program to the file's target symbols and records the
@@ -302,7 +332,8 @@ func (d *httpUprobeDiscovery) attachTarget(id fileIdentity, ex *link.Executable)
 		}
 	}
 	if len(got) > 0 {
-		d.targets[id] = &registryEntry{links: got, lastSeenAt: d.now()}
+		mapped := id.mappingIdentity()
+		d.targets[mapped] = &registryEntry{links: got, lastSeenAt: d.now()}
 		return
 	}
 	// Every target symbol was definitively absent: safe to cache negative.
@@ -321,7 +352,7 @@ func (d *httpUprobeDiscovery) closeAll() {
 // target observed at or after ScanStartedAt is not closed by that snapshot;
 // a hint still queued then can lose the race and be re-attached later.
 func (d *httpUprobeDiscovery) reconcile(snapshot MappedProcessSnapshot) {
-	present := make(map[fileIdentity]struct{})
+	present := make(map[mappingIdentity]struct{})
 	complete := snapshot.Complete
 	for _, pid := range snapshot.PIDs {
 		if !d.scanProcessInto(pid, present) {
@@ -332,8 +363,8 @@ func (d *httpUprobeDiscovery) reconcile(snapshot MappedProcessSnapshot) {
 	closed := 0
 	if complete {
 		now := d.now()
-		for id, entry := range d.targets {
-			_, mapped := present[id]
+		for mappedID, entry := range d.targets {
+			_, mapped := present[mappedID]
 			switch {
 			case mapped:
 				entry.missedScans = 0
@@ -346,7 +377,7 @@ func (d *httpUprobeDiscovery) reconcile(snapshot MappedProcessSnapshot) {
 			}
 			if entry.missedScans >= reclaimMissThreshold {
 				closeLinks(entry.links)
-				delete(d.targets, id)
+				delete(d.targets, mappedID)
 				closed++
 			}
 		}
@@ -354,16 +385,13 @@ func (d *httpUprobeDiscovery) reconcile(snapshot MappedProcessSnapshot) {
 
 	// Summary only when something happened; an unchanged complete sweep is
 	// silent (a 60 s unchanged line would be steady-state noise).
-	if closed > 0 || !complete || snapshot.ReadErrors > 0 {
+	if closed > 0 || !complete {
 		d.logInfo("http_uprobe_reclaim",
 			"complete", complete,
 			"closed", closed,
 			"targets", len(d.targets),
 			"mapped_identities", len(present),
-			"scanned_cgroups", snapshot.ScannedCgroups,
 			"scanned_pids", len(snapshot.PIDs),
-			"pids_gone", snapshot.PIDsGone,
-			"read_errors", snapshot.ReadErrors,
 		)
 	}
 }
@@ -398,27 +426,40 @@ func closeLinks(links []link.Link) {
 	}
 }
 
-// parseExecMapping returns the address range and a "dev:inode" key for an
+// parseExecMapping returns the address range and device/inode identity for an
 // executable, file-backed mapping with a non-zero inode. Lines for anonymous or
 // special ([vdso], [heap], ...) mappings return ok=false.
 //
 // /proc/<pid>/maps line: "start-end perms offset dev inode pathname".
-func parseExecMapping(line string) (rng, devIno string, ok bool) {
+func parseExecMapping(line string) (rng string, mapped mappingIdentity, ok bool) {
 	fields := strings.Fields(line)
 	if len(fields) < 6 { // needs a pathname field
-		return "", "", false
+		return "", mappingIdentity{}, false
 	}
 	perms := fields[1]
 	if len(perms) < 3 || perms[2] != 'x' {
-		return "", "", false
+		return "", mappingIdentity{}, false
 	}
-	if fields[4] == "0" { // inode 0 = anonymous
-		return "", "", false
+	majorText, minorText, found := strings.Cut(fields[3], ":")
+	if !found {
+		return "", mappingIdentity{}, false
+	}
+	major, err := strconv.ParseUint(majorText, 16, 32)
+	if err != nil {
+		return "", mappingIdentity{}, false
+	}
+	minor, err := strconv.ParseUint(minorText, 16, 32)
+	if err != nil {
+		return "", mappingIdentity{}, false
+	}
+	ino, err := strconv.ParseUint(fields[4], 10, 64)
+	if err != nil || ino == 0 {
+		return "", mappingIdentity{}, false
 	}
 	if strings.HasPrefix(fields[5], "[") { // [vdso] etc.
-		return "", "", false
+		return "", mappingIdentity{}, false
 	}
-	return fields[0], fields[3] + ":" + fields[4], true
+	return fields[0], mappingIdentity{dev: unix.Mkdev(uint32(major), uint32(minor)), ino: ino}, true
 }
 
 // fifoSet is a fixed-size set with FIFO eviction. It is a cache: eviction only

@@ -33,10 +33,6 @@ type KernelIO interface {
 	// QueueHTTPUprobeDiscovery schedules a non-blocking process mapping scan
 	// after a TCP connect. It is a no-op when HTTP uprobe capture is disabled.
 	QueueHTTPUprobeDiscovery(pid int32)
-	// ReconcileHTTPUprobeTargets hands the attach-reclaim worker an immutable
-	// snapshot of the processes currently in tracked cgroups. It never blocks the
-	// caller and is a no-op when HTTP uprobe capture is disabled.
-	ReconcileHTTPUprobeTargets(ctx context.Context, snapshot MappedProcessSnapshot)
 	StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error
 	Close() error
 }

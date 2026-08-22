@@ -31,8 +31,6 @@ func (noopKernelIO) DeleteCgroupBasenamesFromStagingMap(context.Context, []strin
 
 func (noopKernelIO) QueueHTTPUprobeDiscovery(int32) {}
 
-func (noopKernelIO) ReconcileHTTPUprobeTargets(context.Context, kernelio.MappedProcessSnapshot) {}
-
 func (noopKernelIO) StartKernelSampleLoop(context.Context, kernelio.KernelSampleHandler) error {
 	return kernelio.ErrNotSupported
 }
@@ -55,7 +53,6 @@ type recordingKernelIO struct {
 	putStaging              []string
 	deleteStaging           []string
 	httpUprobeDiscoveryPIDs []int32
-	httpUprobeSnapshots     []kernelio.MappedProcessSnapshot
 }
 
 func (kernelIO *recordingKernelIO) StartKernelSampleLoop(context.Context, kernelio.KernelSampleHandler) error {
@@ -100,10 +97,6 @@ func (kernelIO *recordingKernelIO) DeleteCgroupBasenamesFromStagingMap(_ context
 
 func (kernelIO *recordingKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
 	kernelIO.httpUprobeDiscoveryPIDs = append(kernelIO.httpUprobeDiscoveryPIDs, pid)
-}
-
-func (kernelIO *recordingKernelIO) ReconcileHTTPUprobeTargets(_ context.Context, snapshot kernelio.MappedProcessSnapshot) {
-	kernelIO.httpUprobeSnapshots = append(kernelIO.httpUprobeSnapshots, snapshot)
 }
 
 func (kernelIO *recordingKernelIO) Close() error {

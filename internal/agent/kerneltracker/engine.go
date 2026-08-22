@@ -77,9 +77,6 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 	// Start periodic maintenance such as process context GC and lazy cgroup purge.
 	stopTrackingStatePurgeTicker := engine.startTrackingStatePurgeTicker(ctx)
 	stopCgroupLivenessScanner := engine.startCgroupLivenessScanner(ctx)
-	// The HTTP uprobe reclaim scanner is not started here yet: the tap is
-	// default-off and KernelTracker has no enable signal, so a per-minute cgroup +
-	// cgroup.procs walk would be pure waste. It is added by the default-on change.
 	defer engine.closeRemainingChannels()
 	defer stopCgroupLivenessScanner()
 	defer stopTrackingStatePurgeTicker()

@@ -63,15 +63,6 @@ type replyJobForCgroup struct {
 
 func (replyJobForCgroup) sealedEngineEffect() {}
 
-// replyActiveCgroupIDs delivers the loop-made copy of the active tracked
-// cgroup ID set to the HTTP uprobe liveness scanner.
-type replyActiveCgroupIDs struct {
-	Reply chan<- map[uint64]struct{}
-	IDs   map[uint64]struct{}
-}
-
-func (replyActiveCgroupIDs) sealedEngineEffect() {}
-
 type closeEventChannel struct {
 	Channel chan jobevent.EventRecord
 }
@@ -200,8 +191,6 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 			}
 		case replyJobForCgroup:
 			value.Reply <- value.Result
-		case replyActiveCgroupIDs:
-			value.Reply <- value.IDs
 		case closeEventChannel:
 			if value.Channel != nil {
 				close(value.Channel)

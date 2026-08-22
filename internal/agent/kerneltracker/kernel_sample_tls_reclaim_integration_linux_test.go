@@ -18,7 +18,7 @@ import (
 // Stage 1b-2 reclaim E2E. These drive the discovery worker's reconcile directly
 // with constructed MappedProcessSnapshots (via ReconcileHTTPUprobeTargets), so
 // the tests are deterministic and do not wait on the 60 s ticker. The
-// attached-target count is read back from the worker itself.
+// attached-target count is returned with each reconciled snapshot.
 
 // startLibsslMapper starts a long-lived process that keeps libssl mapped:
 // python3 importing ssl (libssl is dlopen'd and stays mapped while the process
@@ -51,7 +51,7 @@ func mapsLibssl(pid int32) bool {
 	return strings.Contains(string(data), "libssl.so") || strings.Contains(string(data), "libssl3")
 }
 
-func newReclaimTestKernelIO(t *testing.T) (*kernelio.LinuxKernelIO, string) {
+func newReclaimTestKernelIO(t *testing.T) *kernelio.LinuxKernelIO {
 	t.Helper()
 	cgroupRoot, err := getCgroupV2Root()
 	if err != nil {
@@ -62,116 +62,94 @@ func newReclaimTestKernelIO(t *testing.T) (*kernelio.LinuxKernelIO, string) {
 		t.Fatalf("kernelio.NewLinux: %v", err)
 	}
 	t.Cleanup(func() { _ = kernelIO.Close() })
-	return kernelIO, cgroupRoot
+	return kernelIO
 }
 
-// waitTargets polls the worker-owned target count until it equals want.
-func waitTargets(t *testing.T, ctx context.Context, kernelIO *kernelio.LinuxKernelIO, want int, why string) {
+func startReclaimWorker(t *testing.T, ctx context.Context, kernelIO *kernelio.LinuxKernelIO) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if n := kernelIO.TestOnlyHTTPUprobeTargetCount(ctx); n == want {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
+	if err := kernelIO.StartKernelSampleLoop(ctx, func(context.Context, kernelio.KernelSample) error { return nil }); err != nil {
+		t.Fatalf("start kernel sample loop: %v", err)
 	}
-	t.Fatalf("%s: target count = %d, want %d", why, kernelIO.TestOnlyHTTPUprobeTargetCount(ctx), want)
 }
 
-// reconcileAndSettle enqueues one snapshot and returns only after the worker has
-// reconciled it, by waiting on the snapshot's own Done channel (closed by the
-// worker after reconcile). This is ordered by construction — unlike a query on a
-// separate channel, which the worker's select does not serialize after the
-// snapshot. Without it the latest-wins buffer (size 1) could replace a queued
-// complete miss with the next incomplete one.
-func reconcileAndSettle(ctx context.Context, kernelIO *kernelio.LinuxKernelIO, snapshot kernelio.MappedProcessSnapshot) {
-	done := make(chan struct{})
-	snapshot.Done = done
-	kernelIO.ReconcileHTTPUprobeTargets(ctx, snapshot)
-	select {
-	case <-done:
-	case <-ctx.Done():
+// reconcileAndSettle waits for the worker and returns its target count.
+func reconcileAndSettle(t *testing.T, ctx context.Context, kernelIO *kernelio.LinuxKernelIO, snapshot kernelio.MappedProcessSnapshot) int {
+	t.Helper()
+	count := kernelIO.TestOnlyReconcileHTTPUprobeTargets(ctx, snapshot)
+	if count < 0 {
+		t.Fatalf("reconcile did not complete: %v", ctx.Err())
 	}
+	return count
 }
 
 func snapshotOf(complete bool, pids ...int32) kernelio.MappedProcessSnapshot {
-	return kernelio.NewMappedProcessSnapshot(time.Now().UTC(), complete, pids, 1, 0, 0)
+	return kernelio.MappedProcessSnapshot{ScanStartedAt: time.Now(), Complete: complete, PIDs: pids}
 }
 
 // TestLinuxHTTPUprobeReclaimSharedInode: an inode mapped by two tracked processes
 // stays attached while EITHER maps it, and is closed only after two complete
 // snapshots see neither — never because one of them left.
 func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
-	kernelIO, cgroupRoot := newReclaimTestKernelIO(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
-	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
-	_ = trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
+	kernelIO := newReclaimTestKernelIO(t)
+	ctx := t.Context()
+	startReclaimWorker(t, ctx, kernelIO)
 
 	a := startLibsslMapper(t)
 	b := startLibsslMapper(t)
 
 	// Discovery attaches via the snapshot scan itself (backstop path).
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true, a, b))
-	waitTargets(t, ctx, kernelIO, 1, "shared libssl inode attached once for two mappers")
+	if got := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true, a, b)); got != 1 {
+		t.Fatalf("shared libssl inode target count = %d, want 1", got)
+	}
 
 	// Two complete snapshots that only list b: a left, but b still maps it.
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true, b))
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true, b))
-	time.Sleep(500 * time.Millisecond)
-	if n := kernelIO.TestOnlyHTTPUprobeTargetCount(ctx); n != 1 {
+	reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true, b))
+	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true, b)); n != 1 {
 		t.Fatalf("target closed while still mapped by b: count = %d, want 1", n)
 	}
 
 	// Neither maps it: first complete miss keeps it, second closes it.
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true))
-	time.Sleep(300 * time.Millisecond)
-	if n := kernelIO.TestOnlyHTTPUprobeTargetCount(ctx); n != 1 {
+	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true)); n != 1 {
 		t.Fatalf("closed after a single miss: count = %d, want 1", n)
 	}
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true))
-	waitTargets(t, ctx, kernelIO, 0, "closed after two complete misses")
+	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true)); n != 0 {
+		t.Fatalf("target count after second complete miss = %d, want 0", n)
+	}
 }
 
 // TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep: an incomplete snapshot never
 // closes, and does not count toward the two misses.
 func TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep(t *testing.T) {
-	kernelIO, cgroupRoot := newReclaimTestKernelIO(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
-	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
-	_ = trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
+	kernelIO := newReclaimTestKernelIO(t)
+	ctx := t.Context()
+	startReclaimWorker(t, ctx, kernelIO)
 
 	a := startLibsslMapper(t)
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true, a))
-	waitTargets(t, ctx, kernelIO, 1, "attached")
+	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true, a)); n != 1 {
+		t.Fatalf("target count after attach = %d, want 1", n)
+	}
 
 	// complete-missing, then several INCOMPLETE empties: must stay attached.
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true))
-	for range 3 {
-		reconcileAndSettle(ctx, kernelIO, snapshotOf(false))
+	reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true))
+	for range 2 {
+		reconcileAndSettle(t, ctx, kernelIO, snapshotOf(false))
 	}
-	time.Sleep(500 * time.Millisecond)
-	if n := kernelIO.TestOnlyHTTPUprobeTargetCount(ctx); n != 1 {
+	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(false)); n != 1 {
 		t.Fatalf("incomplete snapshots closed a target: count = %d, want 1", n)
 	}
 	// A second COMPLETE miss closes it (incomplete ones neither advanced nor reset).
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true))
-	waitTargets(t, ctx, kernelIO, 0, "closed by the second complete miss across incomplete scans")
+	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true)); n != 0 {
+		t.Fatalf("target count after second complete miss = %d, want 0", n)
+	}
 }
 
 // TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept: a mapped libssl whose file
 // was unlinked (in-place library upgrade mid-job) is NOT detached — the
 // predicate is "still mapped by a tracked process", not file-existence.
 func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
-	kernelIO, cgroupRoot := newReclaimTestKernelIO(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
-	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
-	_ = trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
+	kernelIO := newReclaimTestKernelIO(t)
+	ctx := t.Context()
+	startReclaimWorker(t, ctx, kernelIO)
 
 	// Copy libssl to a temp file, map it from a process, then unlink the copy.
 	src := findLibsslPath(t)
@@ -199,17 +177,16 @@ func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true, pid))
-	waitTargets(t, ctx, kernelIO, 1, "attached to the copied libssl")
+	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true, pid)); n != 1 {
+		t.Fatalf("target count after copied libssl attach = %d, want 1", n)
+	}
 
 	if err := os.Remove(dst); err != nil { // unlink while still mapped
 		t.Fatal(err)
 	}
 	// Still mapped by pid: complete snapshots listing pid must keep it.
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true, pid))
-	reconcileAndSettle(ctx, kernelIO, snapshotOf(true, pid))
-	time.Sleep(500 * time.Millisecond)
-	if n := kernelIO.TestOnlyHTTPUprobeTargetCount(ctx); n != 1 {
+	reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true, pid))
+	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(true, pid)); n != 1 {
 		t.Fatalf("unlinked-but-mapped inode was detached: count = %d, want 1", n)
 	}
 }

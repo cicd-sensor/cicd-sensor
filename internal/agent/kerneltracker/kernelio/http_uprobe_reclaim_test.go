@@ -3,7 +3,6 @@
 package kernelio
 
 import (
-	"bufio"
 	"os"
 	"testing"
 	"time"
@@ -30,8 +29,9 @@ func newReclaimHarness(t *testing.T) *reclaimHarness {
 }
 
 func (h *reclaimHarness) attached(id fileIdentity) *registryEntry {
+	mapped := id.mappingIdentity()
 	e := &registryEntry{lastSeenAt: h.now}
-	h.d.targets[id] = e
+	h.d.targets[mapped] = e
 	return e
 }
 
@@ -53,11 +53,11 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		if e.missedScans != 1 {
 			t.Fatalf("after 1st miss: missedScans = %d, want 1", e.missedScans)
 		}
-		if _, still := h.d.targets[id]; !still {
+		if _, still := h.d.targets[id.mappingIdentity()]; !still {
 			t.Fatal("closed after a single miss; must survive the first")
 		}
 		h.sweep(true)
-		if _, still := h.d.targets[id]; still {
+		if _, still := h.d.targets[id.mappingIdentity()]; still {
 			t.Fatal("still attached after two complete misses; must be closed")
 		}
 	})
@@ -71,12 +71,12 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		if e.missedScans != 1 {
 			t.Fatalf("incomplete scan changed missedScans to %d, want 1 (untouched)", e.missedScans)
 		}
-		if _, still := h.d.targets[id]; !still {
+		if _, still := h.d.targets[id.mappingIdentity()]; !still {
 			t.Fatal("incomplete scan must never close")
 		}
 		// complete-missing, incomplete, complete-missing  => closes
 		h.sweep(true)
-		if _, still := h.d.targets[id]; still {
+		if _, still := h.d.targets[id.mappingIdentity()]; still {
 			t.Fatal("second complete miss across an incomplete scan must close")
 		}
 	})
@@ -96,7 +96,7 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		if e.missedScans != 1 {
 			t.Fatalf("observed-during-scan target had missedScans advanced to %d, want 1", e.missedScans)
 		}
-		if _, still := h.d.targets[id]; !still {
+		if _, still := h.d.targets[id.mappingIdentity()]; !still {
 			t.Fatal("observed-during-scan target was closed")
 		}
 	})
@@ -115,15 +115,32 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 	t.Run("enqueueSnapshot never blocks and keeps only the latest", func(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil)
-		d.enqueueSnapshot(MappedProcessSnapshot{ScannedCgroups: 1})
-		d.enqueueSnapshot(MappedProcessSnapshot{ScannedCgroups: 2}) // must not block on a full buffer
+		staleResult := make(chan int, 1)
+		d.enqueueSnapshot(MappedProcessSnapshot{PIDs: []int32{1}, result: staleResult})
+		d.enqueueSnapshot(MappedProcessSnapshot{PIDs: []int32{2}}) // must not block on a full buffer
+		if result := <-staleResult; result != -1 {
+			t.Fatalf("replaced snapshot result = %d, want -1", result)
+		}
 		select {
 		case got := <-d.snapshots:
-			if got.ScannedCgroups != 2 {
-				t.Fatalf("queued snapshot = %d, want the latest (2)", got.ScannedCgroups)
+			if len(got.PIDs) != 1 || got.PIDs[0] != 2 {
+				t.Fatalf("queued snapshot PIDs = %v, want [2]", got.PIDs)
 			}
 		default:
 			t.Fatal("no snapshot queued")
+		}
+	})
+
+	t.Run("reconcile handoff copies the PID slice", func(t *testing.T) {
+		t.Parallel()
+		d := newHTTPUprobeDiscovery(nil, nil)
+		kernelIO := &LinuxKernelIO{httpUprobeDiscovery: d}
+		pids := []int32{1}
+		kernelIO.ReconcileHTTPUprobeTargets(MappedProcessSnapshot{PIDs: pids})
+		pids[0] = 2
+		got := <-d.snapshots
+		if got.PIDs[0] != 1 {
+			t.Fatalf("queued PIDs = %v, want immutable copy [1]", got.PIDs)
 		}
 	})
 }
@@ -142,13 +159,14 @@ func TestScanProcessIntoCompleteness(t *testing.T) {
 
 	t.Run("target cap reached: presence still probed, scan still complete, no new attach", func(t *testing.T) {
 		t.Parallel()
-		requireMapFilesAccess(t) // presence is derived via /proc/<pid>/map_files (needs CAP_SYS_ADMIN/CHECKPOINT_RESTORE)
 		d := newHTTPUprobeDiscovery(nil, nil)
 		for i := 0; i < maxUprobeTargets; i++ { // fill the registry to the cap
-			d.targets[fileIdentity{dev: 1, ino: uint64(i) + 1}] = &registryEntry{}
+			id := fileIdentity{dev: 1, ino: uint64(i) + 1}
+			mapped := id.mappingIdentity()
+			d.targets[mapped] = &registryEntry{}
 		}
 		before := len(d.targets)
-		present := map[fileIdentity]struct{}{}
+		present := map[mappingIdentity]struct{}{}
 		// The cap must only refuse NEW attaches. The probe still walks every
 		// mapping and records presence, and stays complete — otherwise a capped
 		// registry could never reclaim a stale link and would never clear.
@@ -162,36 +180,15 @@ func TestScanProcessIntoCompleteness(t *testing.T) {
 			t.Fatalf("targets grew at cap: %d -> %d (refuse-not-evict violated)", before, len(d.targets))
 		}
 	})
-}
 
-// requireMapFilesAccess skips when this process cannot open its own
-// /proc/self/map_files entries (EPERM without CAP_SYS_ADMIN or
-// CAP_CHECKPOINT_RESTORE — e.g. an unprivileged container). The presence probe
-// depends on that access, so the test is only meaningful where it works.
-func requireMapFilesAccess(t *testing.T) {
-	t.Helper()
-	f, err := os.Open("/proc/self/maps")
-	if err != nil {
-		t.Skipf("cannot read /proc/self/maps: %v", err)
-	}
-	defer f.Close()
-	// Try every executable file-backed mapping: on some kernels the main
-	// executable's low mapping is not an exact VMA (ENOENT via map_files) even
-	// for root, while shared-library mappings open fine. Skip only if none do.
-	scanner := bufio.NewScanner(f)
-	var lastErr error
-	for scanner.Scan() {
-		rng, _, ok := parseExecMapping(scanner.Text())
-		if !ok {
-			continue
+	t.Run("active target identity ignores classification metadata", func(t *testing.T) {
+		t.Parallel()
+		d := newHTTPUprobeDiscovery(nil, nil)
+		before := fileIdentity{dev: 1, ino: 2, size: 10, ctimeNano: 20}
+		after := fileIdentity{dev: 1, ino: 2, size: 30, ctimeNano: 40}
+		d.targets[before.mappingIdentity()] = &registryEntry{}
+		if _, ok := d.targets[after.mappingIdentity()]; !ok {
+			t.Fatal("ctime/size change hid an active mapping")
 		}
-		mf, err := os.Open("/proc/self/map_files/" + rng)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		mf.Close()
-		return
-	}
-	t.Skipf("no map_files entry openable here (last: %v); needs CAP_SYS_ADMIN/CAP_CHECKPOINT_RESTORE", lastErr)
+	})
 }

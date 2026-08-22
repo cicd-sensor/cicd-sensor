@@ -64,15 +64,6 @@ type commandPurgeExpiredTrackingState struct{}
 
 func (commandPurgeExpiredTrackingState) sealedEngineInput() {}
 
-// commandSnapshotActiveCgroupIDs asks the engine loop for a copy of the active
-// tracked cgroup ID set. The copy is made on the loop, serialized with state
-// ownership; the HTTP uprobe liveness scanner only reads the reply.
-type commandSnapshotActiveCgroupIDs struct {
-	Reply chan<- map[uint64]struct{}
-}
-
-func (commandSnapshotActiveCgroupIDs) sealedEngineInput() {}
-
 type commandReconcileCgroupLiveness struct {
 	ScanStartedAt  time.Time
 	CheckedAt      time.Time
