@@ -14,10 +14,9 @@ import (
 // reclaimHarness drives reconcile() against a worker whose registry is seeded
 // with link-less entries (closeLinks on an empty slice is a no-op), so the
 // tests exercise the reclaim decision logic — miss counting, the
-// ScanStartedAt contract, fail-keep — without real uprobe links. Identities
-// are "present" only if a snapshot PID's maps list them; here no PIDs are
-// scanned (PIDs is empty), so every attached target is absent unless a test
-// injects presence via the seen-during-scan path (lastSeenAt).
+// ScanStartedAt contract, fail-keep — without real uprobe links. The snapshots
+// contain no cgroup paths, so every attached target is absent unless a test
+// injects presence through lastSeenAt.
 type reclaimHarness struct {
 	d   *httpUprobeDiscovery
 	now time.Time
@@ -38,7 +37,7 @@ func (h *reclaimHarness) attached(id fileIdentity) *registryEntry {
 	return e
 }
 
-// complete/incomplete snapshots with no PIDs: every target is absent.
+// Complete/incomplete snapshots with no cgroups make every target absent.
 func (h *reclaimHarness) sweep(complete bool) {
 	h.now = h.now.Add(time.Minute)
 	h.d.reconcile(HTTPUprobeLivenessSnapshot{ScanStartedAt: h.now, Complete: complete})
@@ -134,7 +133,7 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		}
 	})
 
-	t.Run("reconcile handoff copies the PID slice", func(t *testing.T) {
+	t.Run("reconcile handoff copies the cgroup path slice", func(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil)
 		kernelIO := &LinuxKernelIO{httpUprobeDiscovery: d}
