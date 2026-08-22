@@ -3,6 +3,8 @@
 package kernelio
 
 import (
+	"bufio"
+	"os"
 	"testing"
 	"time"
 )
@@ -124,4 +126,72 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 			t.Fatal("no snapshot queued")
 		}
 	})
+}
+
+func TestScanProcessIntoCompleteness(t *testing.T) {
+	t.Parallel()
+
+	t.Run("gone pid (ENOENT) is the benign race: complete", func(t *testing.T) {
+		t.Parallel()
+		d := newHTTPUprobeDiscovery(nil, nil)
+		// PID 2^31-1 does not exist on any sane box.
+		if !d.scanProcessInto(2147483647, nil) {
+			t.Fatal("ENOENT on /proc/<pid>/maps must be reported complete (benign race)")
+		}
+	})
+
+	t.Run("target cap reached: presence still probed, scan still complete, no new attach", func(t *testing.T) {
+		t.Parallel()
+		requireMapFilesAccess(t) // presence is derived via /proc/<pid>/map_files (needs CAP_SYS_ADMIN/CHECKPOINT_RESTORE)
+		d := newHTTPUprobeDiscovery(nil, nil)
+		for i := 0; i < maxUprobeTargets; i++ { // fill the registry to the cap
+			d.targets[fileIdentity{dev: 1, ino: uint64(i) + 1}] = &registryEntry{}
+		}
+		before := len(d.targets)
+		present := map[fileIdentity]struct{}{}
+		// The cap must only refuse NEW attaches. The probe still walks every
+		// mapping and records presence, and stays complete — otherwise a capped
+		// registry could never reclaim a stale link and would never clear.
+		if !d.scanProcessInto(int32(os.Getpid()), present) {
+			t.Fatal("cap-reached scan reported incomplete; reclaim would be frozen at the cap forever")
+		}
+		if len(present) == 0 {
+			t.Fatal("cap-reached scan recorded no presence; liveness of attached targets would be invisible")
+		}
+		if len(d.targets) != before {
+			t.Fatalf("targets grew at cap: %d -> %d (refuse-not-evict violated)", before, len(d.targets))
+		}
+	})
+}
+
+// requireMapFilesAccess skips when this process cannot open its own
+// /proc/self/map_files entries (EPERM without CAP_SYS_ADMIN or
+// CAP_CHECKPOINT_RESTORE — e.g. an unprivileged container). The presence probe
+// depends on that access, so the test is only meaningful where it works.
+func requireMapFilesAccess(t *testing.T) {
+	t.Helper()
+	f, err := os.Open("/proc/self/maps")
+	if err != nil {
+		t.Skipf("cannot read /proc/self/maps: %v", err)
+	}
+	defer f.Close()
+	// Try every executable file-backed mapping: on some kernels the main
+	// executable's low mapping is not an exact VMA (ENOENT via map_files) even
+	// for root, while shared-library mappings open fine. Skip only if none do.
+	scanner := bufio.NewScanner(f)
+	var lastErr error
+	for scanner.Scan() {
+		rng, _, ok := parseExecMapping(scanner.Text())
+		if !ok {
+			continue
+		}
+		mf, err := os.Open("/proc/self/map_files/" + rng)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		mf.Close()
+		return
+	}
+	t.Skipf("no map_files entry openable here (last: %v); needs CAP_SYS_ADMIN/CAP_CHECKPOINT_RESTORE", lastErr)
 }

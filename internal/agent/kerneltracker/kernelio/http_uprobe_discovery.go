@@ -210,10 +210,11 @@ func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[fileIdentit
 			continue
 		}
 		seen[devIno] = struct{}{}
-		// Keep probing every mapping even at the cap: the liveness of already
-		// attached targets must still be observed, or stale links could never
-		// be reclaimed and the cap would never clear. The cap only refuses NEW
-		// attaches (inside classifyAndAttach).
+		if len(d.targets) >= maxUprobeTargets {
+			// Unscanned mappings may hold live attached inodes: not complete.
+			d.warnThrottled(&d.capReached, "http_uprobe_target_cap_reached", "targets", len(d.targets))
+			return false
+		}
 		if !d.classifyAndAttach(pid, rng, present) {
 			complete = false
 		}
@@ -266,12 +267,6 @@ func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, present m
 		return true
 	}
 	if d.negatives.has(id) {
-		return true
-	}
-	if len(d.targets) >= maxUprobeTargets {
-		// Refuse-not-evict: decline the new inode, keep every live link.
-		// Presence was already recorded above, so reclaim still sees it.
-		d.warnThrottled(&d.capReached, "http_uprobe_target_cap_reached", "targets", len(d.targets))
 		return true
 	}
 

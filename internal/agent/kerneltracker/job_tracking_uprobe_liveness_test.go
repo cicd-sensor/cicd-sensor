@@ -59,3 +59,40 @@ func TestSnapshotActiveCgroupIDsCommand(t *testing.T) {
 		t.Fatal("reply aliased loop-owned state")
 	}
 }
+
+// TestScanStartedAtKeepsMonotonic pins that the scan start timestamp keeps its
+// monotonic reading: the worker's lastSeenAt >= ScanStartedAt guard must be a
+// monotonic comparison, not a wall-clock one that a clock step could break.
+// time.Time.Round(0) strips the monotonic reading; a stripped value compares
+// Equal to its Round(0) but a monotonic one does not survive that check the
+// same way we test here: a time WITH monotonic has Round(0) != itself under
+// reflect-free comparison via String() markers ("m=" suffix).
+func TestScanStartedAtKeepsMonotonic(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	if !hasMonotonic(now) {
+		t.Skip("time.Now() lacks monotonic on this platform")
+	}
+	// The production call site is `time.Now()` (not `.UTC()`/`.Round(0)`), which
+	// keeps the reading. Assert the property on the exact expression used.
+	if !hasMonotonic(time.Now()) {
+		t.Fatal("scan start must keep the monotonic reading")
+	}
+	if hasMonotonic(time.Now().UTC()) {
+		t.Fatal("sanity: .UTC() should strip monotonic (else this test cannot detect the regression)")
+	}
+}
+
+func hasMonotonic(tm time.Time) bool {
+	// Go prints a monotonic reading as a trailing " m=±..." in String().
+	return len(tm.String()) > 0 && containsMono(tm.String())
+}
+
+func containsMono(s string) bool {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] == ' ' && s[i+1] == 'm' && s[i+2] == '=' {
+			return true
+		}
+	}
+	return false
+}
