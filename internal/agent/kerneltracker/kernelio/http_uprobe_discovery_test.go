@@ -2,7 +2,11 @@
 
 package kernelio
 
-import "testing"
+import (
+	"testing"
+
+	"golang.org/x/sys/unix"
+)
 
 func TestHTTPUprobeDiscoveryEnqueuePID(t *testing.T) {
 	t.Parallel()
@@ -41,18 +45,18 @@ func TestParseExecMapping(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		line       string
-		wantOK     bool
-		wantRange  string
-		wantDevIno string
+		name        string
+		line        string
+		wantOK      bool
+		wantRange   string
+		wantMapping mappingIdentity
 	}{
 		{
-			name:       "executable file-backed mapping",
-			line:       "55a1b2c00000-55a1b2c21000 r-xp 00000000 fd:01 1443212 /usr/lib/x86_64-linux-gnu/libssl.so.3",
-			wantOK:     true,
-			wantRange:  "55a1b2c00000-55a1b2c21000",
-			wantDevIno: "fd:01:1443212",
+			name:        "executable file-backed mapping",
+			line:        "55a1b2c00000-55a1b2c21000 r-xp 00000000 fd:01 1443212 /usr/lib/x86_64-linux-gnu/libssl.so.3",
+			wantOK:      true,
+			wantRange:   "55a1b2c00000-55a1b2c21000",
+			wantMapping: mappingIdentity{dev: unix.Mkdev(0xfd, 0x01), ino: 1443212},
 		},
 		{
 			name:   "non-executable mapping is skipped",
@@ -79,7 +83,7 @@ func TestParseExecMapping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			rng, devIno, ok := parseExecMapping(tt.line)
+			rng, mapped, ok := parseExecMapping(tt.line)
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
 			}
@@ -89,8 +93,8 @@ func TestParseExecMapping(t *testing.T) {
 			if rng != tt.wantRange {
 				t.Fatalf("range = %q, want %q", rng, tt.wantRange)
 			}
-			if devIno != tt.wantDevIno {
-				t.Fatalf("devIno = %q, want %q", devIno, tt.wantDevIno)
+			if mapped != tt.wantMapping {
+				t.Fatalf("mapping = %+v, want %+v", mapped, tt.wantMapping)
 			}
 		})
 	}

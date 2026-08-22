@@ -67,7 +67,7 @@ func (commandPurgeExpiredTrackingState) sealedEngineInput() {}
 type commandReconcileCgroupLiveness struct {
 	ScanStartedAt  time.Time
 	CheckedAt      time.Time
-	LiveCgroupIDs  map[uint64]struct{}
+	LiveCgroups    map[uint64]string
 	StatErrorCount int
 }
 

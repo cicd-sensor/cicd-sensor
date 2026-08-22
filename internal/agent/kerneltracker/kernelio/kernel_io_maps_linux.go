@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/cilium/ebpf"
 )
@@ -111,6 +112,24 @@ func fixedStagingMapValue(value []byte) ([]byte, error) {
 	fixed := make([]byte, StagingValueLen)
 	copy(fixed, value)
 	return fixed, nil
+}
+
+// TestOnlyReconcileHTTPUprobeTargets waits for one reclaim snapshot and returns
+// its worker-owned target count. A negative result means disabled, replaced, or
+// cancelled.
+func (kernelIO *LinuxKernelIO) TestOnlyReconcileHTTPUprobeTargets(ctx context.Context, snapshot HTTPUprobeLivenessSnapshot) int {
+	if kernelIO.httpUprobeDiscovery == nil {
+		return -1
+	}
+	result := make(chan int, 1)
+	snapshot.CgroupPaths = slices.Clone(snapshot.CgroupPaths)
+	kernelIO.httpUprobeDiscovery.enqueueSnapshot(snapshot, result)
+	select {
+	case count := <-result:
+		return count
+	case <-ctx.Done():
+		return -1
+	}
 }
 
 // TestOnlyOpenSSLProgram returns the OpenSSL uprobe entry program so

@@ -17,8 +17,9 @@ type Config struct {
 	// for a new attach subsystem, not a load-safety gate. Off in Stage 1b-1
 	// because attach reclaim is missing (Stage 1b-2): without it, distinct
 	// overlay/container libssl inodes accumulate attaches up to the target cap on
-	// long-lived agents and silently lose coverage. Removal plan: default-on or
-	// drop this flag once 1b-2 reclaim lands.
+	// long-lived agents and silently lose coverage. Temporary: once 1b-2 reclaim
+	// lands and its gates pass, the tap defaults on and this flag is removed; it
+	// is not a long-lived opt-in/opt-out surface.
 	EnableOpenSSLHTTP bool
 }
 
@@ -32,6 +33,9 @@ type KernelIO interface {
 	// QueueHTTPUprobeDiscovery schedules a non-blocking process mapping scan
 	// after a TCP connect. It is a no-op when HTTP uprobe capture is disabled.
 	QueueHTTPUprobeDiscovery(pid int32)
+	// QueueHTTPUprobeReconciliation schedules a non-blocking maps-liveness sweep.
+	// It is a no-op when HTTP uprobe capture is disabled.
+	QueueHTTPUprobeReconciliation(snapshot HTTPUprobeLivenessSnapshot)
 	StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error
 	Close() error
 }

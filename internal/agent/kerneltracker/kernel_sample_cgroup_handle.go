@@ -3,6 +3,8 @@ package kerneltracker
 import (
 	"path/filepath"
 	"time"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 type cgroupMkdirSample struct {
@@ -102,12 +104,14 @@ func handleCgroupRmdirSample(state *jobTrackingState, sample cgroupRmdirSample) 
 }
 
 func handleCgroupLivenessReconciliation(state *jobTrackingState, command commandReconcileCgroupLiveness) []engineEffect {
-	removed := state.reconcileCgroupLiveness(command.LiveCgroupIDs, command.ScanStartedAt, command.CheckedAt)
-	if len(removed) == 0 {
-		return nil
-	}
+	removed := state.reconcileCgroupLiveness(command.LiveCgroups, command.ScanStartedAt, command.CheckedAt)
+	cgroupPaths, complete := state.activeCgroupPaths(command.LiveCgroups)
+	effects := []engineEffect{reconcileHTTPUprobeTargets{Snapshot: kernelio.HTTPUprobeLivenessSnapshot{
+		ScanStartedAt: command.ScanStartedAt,
+		Complete:      complete,
+		CgroupPaths:   cgroupPaths,
+	}}}
 
-	var effects []engineEffect
 	drainedJobs := 0
 	for _, result := range removed {
 		if result.JobDrained {
@@ -115,11 +119,11 @@ func handleCgroupLivenessReconciliation(state *jobTrackingState, command command
 			effects = append(effects, notifyJobEnded{JobID: result.JobID, Reason: EndCgroupRmdir})
 		}
 	}
-	if state.logger != nil {
+	if len(removed) > 0 && state.logger != nil {
 		state.logger.Info("cgroup_liveness_reconciled",
 			"removed_count", len(removed),
 			"drained_job_count", drainedJobs,
-			"live_cgroup_count", len(command.LiveCgroupIDs),
+			"live_cgroup_count", len(command.LiveCgroups),
 			"stat_error_count", command.StatErrorCount,
 		)
 	}

@@ -1,6 +1,7 @@
 package kerneltracker
 
 import (
+	"slices"
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -137,7 +138,7 @@ func (s *jobTrackingState) markTrackedCgroupRemoved(cgroupID uint64, now time.Ti
 // removed-pending queue used by the rmdir handler. The scan itself runs outside
 // the engine loop; this method is the only place that interprets the live-ID
 // snapshot and mutates tracked cgroup ownership.
-func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroupIDs map[uint64]struct{}, scanStartedAt time.Time, checkedAt time.Time) []cgroupDetachResult {
+func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroups map[uint64]string, scanStartedAt time.Time, checkedAt time.Time) []cgroupDetachResult {
 	var removed []cgroupDetachResult
 	for _, cgroups := range s.cgroupsByJob {
 		for cgroupID, cgroup := range cgroups {
@@ -147,7 +148,7 @@ func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroupIDs map[uint64]stru
 			if cgroup.TrackedAt.After(scanStartedAt) {
 				continue
 			}
-			if _, ok := liveCgroupIDs[cgroupID]; ok {
+			if _, ok := liveCgroups[cgroupID]; ok {
 				continue
 			}
 			result := s.markTrackedCgroupRemoved(cgroupID, checkedAt)
@@ -157,6 +158,30 @@ func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroupIDs map[uint64]stru
 		}
 	}
 	return removed
+}
+
+// activeCgroupPaths selects the filesystem paths that the completed cgroup
+// scan actually observed for active tracked cgroups. A missing path makes the
+// HTTP uprobe snapshot incomplete: it may be a cgroup tracked after the scan
+// started, and reclaim must not interpret that gap as proof of absence.
+func (s *jobTrackingState) activeCgroupPaths(liveCgroups map[uint64]string) ([]string, bool) {
+	complete := true
+	paths := make([]string, 0)
+	for _, cgroups := range s.cgroupsByJob {
+		for cgroupID, cgroup := range cgroups {
+			if cgroup == nil || cgroup.State != trackedCgroupActive {
+				continue
+			}
+			path, ok := liveCgroups[cgroupID]
+			if !ok {
+				complete = false
+				continue
+			}
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	return paths, complete
 }
 
 func (s *jobTrackingState) activeCgroupCount(jobID jobcontext.JobIdentity) int {
