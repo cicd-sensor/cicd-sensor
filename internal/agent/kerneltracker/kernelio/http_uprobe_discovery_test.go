@@ -45,7 +45,7 @@ func TestParseExecMapping(t *testing.T) {
 		line        string
 		wantOK      bool
 		wantRange   string
-		wantMapping mappedFileID
+		wantMapping mappedFileIdentity
 	}{
 		{
 			name:        "executable file-backed mapping",
@@ -99,7 +99,7 @@ func TestParseExecMapping(t *testing.T) {
 func TestFIFOSet(t *testing.T) {
 	t.Parallel()
 
-	id := func(n uint64) fileClassificationKey { return fileClassificationKey{size: int64(n)} }
+	id := func(n uint64) nonTargetFileCacheKey { return nonTargetFileCacheKey{ctimeNano: int64(n)} }
 
 	t.Run("non-positive limit disables the set", func(t *testing.T) {
 		t.Parallel()

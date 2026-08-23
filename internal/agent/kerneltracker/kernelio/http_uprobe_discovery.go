@@ -46,23 +46,22 @@ const missingScanLimit = 2
 // or the loader on every connect.
 const nonTargetFileCacheSize = 8192
 
-// fileClassificationKey identifies one non-target cache entry, not a pathname.
-// mappedFile is the mapped device/inode; ctime+size invalidates a cached result
-// after metadata reuse.
+// nonTargetFileCacheKey identifies one non-target cache entry, not a pathname.
+// ctime invalidates the cached classification after an inode metadata change
+// or ordinary inode reuse. This is a cache discriminator, not a generation ID.
 // mnt_id is deliberately excluded:
 // it is mount identity, and including it would over-split (the same file via two
 // mounts) into a double attach, which the kernel runs as two consumers = two
 // events.
-type fileClassificationKey struct {
-	mappedFile mappedFileID
-	size       int64
+type nonTargetFileCacheKey struct {
+	mappedFile mappedFileIdentity
 	ctimeNano  int64
 }
 
-// mappedFileID is the device/inode identity available directly from /proc/pid/maps.
+// mappedFileIdentity is the device/inode identity available directly from /proc/pid/maps.
 // Reclaim uses it so a map_files open race or metadata change cannot hide a live
-// mapping. fileClassificationKey remains the stricter non-target cache key.
-type mappedFileID string
+// mapping. nonTargetFileCacheKey remains the stricter cache key.
+type mappedFileIdentity string
 
 // attachedUprobeTarget is one attached inode. It keeps only the links and the
 // number of complete scans that have missed the inode since it was last seen.
@@ -83,7 +82,7 @@ type httpUprobeDiscovery struct {
 	reconciliations chan httpUprobeReconcileRequest // immutable reclaim input from KernelTracker
 
 	// Worker-owned state (single goroutine, no locking).
-	attachedTargets    map[mappedFileID]*attachedUprobeTarget
+	attachedTargets    map[mappedFileIdentity]*attachedUprobeTarget
 	nonTargetFileCache *fifoSet
 
 	// Throttled-warning counters. queueDropped is sample-reader-owned (enqueuePID);
@@ -101,7 +100,7 @@ func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger) *
 		logger:             logger,
 		hints:              make(chan int32, 256),
 		reconciliations:    make(chan httpUprobeReconcileRequest, 1),
-		attachedTargets:    make(map[mappedFileID]*attachedUprobeTarget),
+		attachedTargets:    make(map[mappedFileIdentity]*attachedUprobeTarget),
 		nonTargetFileCache: newFIFOSet(nonTargetFileCacheSize),
 	}
 }
@@ -205,7 +204,7 @@ func (d *httpUprobeDiscovery) run(ctx context.Context) {
 // target symbol and, when present is non-nil, records every mapping's identity
 // into it (reclaim's liveness probe). Returns false if an error could have
 // hidden a live mapping.
-func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[mappedFileID]struct{}) bool {
+func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[mappedFileIdentity]struct{}) bool {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 	if err != nil {
 		// Only a gone pid (ENOENT) is the benign race; anything else could hide
@@ -222,7 +221,7 @@ func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[mappedFileI
 	}
 	defer f.Close()
 
-	seen := make(map[mappedFileID]struct{})
+	seen := make(map[mappedFileIdentity]struct{})
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		rng, mapped, ok := parseExecMapping(scanner.Text())
@@ -262,7 +261,7 @@ func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[mappedFileI
 // each target symbol it defines. The FD is held until every attach completes.
 // Presence was already recorded from maps, so classification failures affect
 // attach only and do not make reclaim incomplete.
-func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped mappedFileID) {
+func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped mappedFileIdentity) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, rng))
 	if err != nil {
 		// ENOENT is a raced-away or non-openable range. Presence was already
@@ -284,7 +283,7 @@ func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped ma
 		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "fstat", "error", err)
 		return
 	}
-	id := fileClassificationKey{mappedFile: mapped, size: st.Size, ctimeNano: st.Ctim.Nano()}
+	id := nonTargetFileCacheKey{mappedFile: mapped, ctimeNano: st.Ctim.Nano()}
 	if d.nonTargetFileCache.has(id) {
 		return
 	}
@@ -300,7 +299,7 @@ func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped ma
 // outcome. Classification is conservative: only a definitive "no symbol" caches
 // a negative; anything else (ErrNotSupported, I/O, permission) is inconclusive
 // and retried on a later connect.
-func (d *httpUprobeDiscovery) attachTarget(id fileClassificationKey, ex *link.Executable) {
+func (d *httpUprobeDiscovery) attachTarget(id nonTargetFileCacheKey, ex *link.Executable) {
 	var got []link.Link
 	for _, symbol := range opensslSymbols {
 		l, err := ex.Uprobe(symbol, d.openSSLProgram, nil)
@@ -339,7 +338,7 @@ func (d *httpUprobeDiscovery) closeAll() {
 // reset to zero. We do not retain the prior scan result; each attached target
 // only records how many complete scans have omitted it.
 func (d *httpUprobeDiscovery) reconcile(cgroupPaths []string) {
-	present := make(map[mappedFileID]struct{})
+	present := make(map[mappedFileIdentity]struct{})
 	complete := true
 	pids := make(map[int32]struct{})
 	for _, cgroupPath := range cgroupPaths {
@@ -453,7 +452,7 @@ func closeLinks(links []link.Link) {
 // special ([vdso], [heap], ...) mappings return ok=false.
 //
 // /proc/<pid>/maps line: "start-end perms offset dev inode pathname".
-func parseExecMapping(line string) (rng string, mapped mappedFileID, ok bool) {
+func parseExecMapping(line string) (rng string, mapped mappedFileIdentity, ok bool) {
 	fields := strings.Fields(line)
 	if len(fields) < 6 { // needs a pathname field
 		return "", "", false
@@ -468,7 +467,7 @@ func parseExecMapping(line string) (rng string, mapped mappedFileID, ok bool) {
 	if strings.HasPrefix(fields[5], "[") { // [vdso] etc.
 		return "", "", false
 	}
-	return fields[0], mappedFileID(fields[3] + ":" + fields[4]), true
+	return fields[0], mappedFileIdentity(fields[3] + ":" + fields[4]), true
 }
 
 // fifoSet is a fixed-size set with FIFO eviction. It is a cache: eviction only
@@ -477,19 +476,19 @@ func parseExecMapping(line string) (rng string, mapped mappedFileID, ok bool) {
 // dependency-neutral generic package.
 type fifoSet struct {
 	limit int
-	seen  map[fileClassificationKey]struct{}
-	order []fileClassificationKey
+	seen  map[nonTargetFileCacheKey]struct{}
+	order []nonTargetFileCacheKey
 	next  int
 }
 
 func newFIFOSet(limit int) *fifoSet {
 	return &fifoSet{
 		limit: limit,
-		seen:  make(map[fileClassificationKey]struct{}),
+		seen:  make(map[nonTargetFileCacheKey]struct{}),
 	}
 }
 
-func (s *fifoSet) has(id fileClassificationKey) bool {
+func (s *fifoSet) has(id nonTargetFileCacheKey) bool {
 	if s == nil {
 		return false
 	}
@@ -497,7 +496,7 @@ func (s *fifoSet) has(id fileClassificationKey) bool {
 	return ok
 }
 
-func (s *fifoSet) add(id fileClassificationKey) {
+func (s *fifoSet) add(id nonTargetFileCacheKey) {
 	if s == nil || s.limit <= 0 {
 		return
 	}

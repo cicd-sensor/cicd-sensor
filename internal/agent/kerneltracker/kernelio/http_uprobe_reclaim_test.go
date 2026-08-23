@@ -25,7 +25,7 @@ func newReclaimHarness(t *testing.T) *reclaimHarness {
 	return &reclaimHarness{d: newHTTPUprobeDiscovery(nil, nil)}
 }
 
-func (h *reclaimHarness) attached(id fileClassificationKey) *attachedUprobeTarget {
+func (h *reclaimHarness) attached(id nonTargetFileCacheKey) *attachedUprobeTarget {
 	e := &attachedUprobeTarget{}
 	h.d.attachedTargets[id.mappedFile] = e
 	return e
@@ -38,7 +38,7 @@ func (h *reclaimHarness) sweep() {
 
 func TestHTTPUprobeReclaim(t *testing.T) {
 	t.Parallel()
-	id := fileClassificationKey{mappedFile: "1:42"}
+	id := nonTargetFileCacheKey{mappedFile: "1:42"}
 
 	t.Run("two complete missing observations close the target", func(t *testing.T) {
 		t.Parallel()
@@ -195,11 +195,11 @@ func TestScanProcessIntoCompleteness(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil)
 		for i := 0; i < maxAttachedUprobeTargets; i++ { // fill the registry to the cap
-			mapped := mappedFileID(strconv.Itoa(i + 1))
+			mapped := mappedFileIdentity(strconv.Itoa(i + 1))
 			d.attachedTargets[mapped] = &attachedUprobeTarget{}
 		}
 		before := len(d.attachedTargets)
-		present := map[mappedFileID]struct{}{}
+		present := map[mappedFileIdentity]struct{}{}
 		// The cap must only refuse NEW attaches. The probe still walks every
 		// mapping and records presence, and stays complete — otherwise a capped
 		// registry could never reclaim a stale link and would never clear.
