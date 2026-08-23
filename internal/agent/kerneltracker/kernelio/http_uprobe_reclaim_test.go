@@ -15,7 +15,7 @@ import (
 // reclaimHarness drives reconcile() against a worker whose registry is seeded
 // with link-less entries (closeLinks on an empty slice is a no-op), so the
 // tests exercise miss counting and fail-keep without real uprobe links. The
-// reconciliations contain no cgroup paths, so every attached target is absent.
+// Reconcile requests contain no cgroup paths, so every target is absent.
 type reclaimHarness struct {
 	d *httpUprobeDiscovery
 }
@@ -79,19 +79,15 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 			t.Fatal("second complete miss across an incomplete scan must close")
 		}
 	})
-	t.Run("enqueueReconciliation never blocks and keeps only the latest", func(t *testing.T) {
+	t.Run("queueReconciliation never blocks and keeps only the latest", func(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil)
-		staleResult := make(chan int, 1)
-		d.enqueueReconciliation([]string{"one"}, staleResult)
-		d.enqueueReconciliation([]string{"two"}, nil) // must not block on a full buffer
-		if result := <-staleResult; result != -1 {
-			t.Fatalf("replaced reconciliation result = %d, want -1", result)
-		}
+		d.queueReconciliation([]string{"one"})
+		d.queueReconciliation([]string{"two"}) // must not block on a full buffer
 		select {
-		case got := <-d.reconciliations:
-			if !slices.Equal(got.cgroupPaths, []string{"two"}) {
-				t.Fatalf("queued cgroup paths = %v, want [two]", got.cgroupPaths)
+		case got := <-d.reconcileRequests:
+			if !slices.Equal(got, []string{"two"}) {
+				t.Fatalf("queued cgroup paths = %v, want [two]", got)
 			}
 		default:
 			t.Fatal("no reconciliation queued")
@@ -105,9 +101,9 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		paths := []string{"one"}
 		kernelIO.QueueHTTPUprobeReconciliation(paths)
 		paths[0] = "two"
-		got := <-d.reconciliations
-		if !slices.Equal(got.cgroupPaths, []string{"one"}) {
-			t.Fatalf("queued paths = %v, want immutable copy [one]", got.cgroupPaths)
+		got := <-d.reconcileRequests
+		if !slices.Equal(got, []string{"one"}) {
+			t.Fatalf("queued paths = %v, want immutable copy [one]", got)
 		}
 	})
 }

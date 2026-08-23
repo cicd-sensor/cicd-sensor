@@ -22,7 +22,7 @@ import (
 // http_uprobe_discovery.go — attach discovery and reclaim for HTTP uprobe taps.
 //
 // A single worker owns all attached targets and the non-target file cache, so
-// no locking. Connect hints and reclaim requests only enter this worker; no
+// no locking. Process-scan and reconcile requests only enter this worker; no
 // caller reads this state. cgroup gates emission and scopes the scan, but does
 // not own link lifetime.
 
@@ -70,65 +70,48 @@ type attachedUprobeTarget struct {
 	missingScanCount uint8
 }
 
-type httpUprobeReconcileRequest struct {
-	cgroupPaths []string
-	result      chan<- int // optional buffered completion result for integration tests
-}
-
 type httpUprobeDiscovery struct {
-	openSSLProgram  *ebpf.Program
-	logger          *slog.Logger
-	hints           chan int32                      // pid of a tracked process that just did a TCP connect
-	reconciliations chan httpUprobeReconcileRequest // immutable reclaim input from KernelTracker
+	openSSLProgram *ebpf.Program
+	logger         *slog.Logger
+
+	// Worker inputs. run consumes both serially.
+	processScanRequests chan int32    // pid of a tracked process that just did a TCP connect
+	reconcileRequests   chan []string // immutable tracked cgroup paths from KernelTracker
 
 	// Worker-owned state (single goroutine, no locking).
 	attachedTargets    map[mappedFileIdentity]*attachedUprobeTarget
 	nonTargetFileCache *fifoSet
 
-	// Throttled-warning counters. queueDropped is sample-reader-owned (enqueuePID);
-	// permDenied / opErrors / capReached are worker-owned (the scan path). Each
-	// counter is touched by a single goroutine, so no atomics are needed.
-	queueDropped uint64
-	permDenied   uint64
-	opErrors     uint64
-	capReached   uint64
+	// Throttled-warning counters. processScanQueueDropped is sample-reader-owned;
+	// the others are worker-owned. Each counter is touched by one goroutine.
+	processScanQueueDropped uint64
+	permDenied              uint64
+	opErrors                uint64
+	capReached              uint64
 }
 
 func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger) *httpUprobeDiscovery {
 	return &httpUprobeDiscovery{
-		openSSLProgram:     openSSLProgram,
-		logger:             logger,
-		hints:              make(chan int32, 256),
-		reconciliations:    make(chan httpUprobeReconcileRequest, 1),
-		attachedTargets:    make(map[mappedFileIdentity]*attachedUprobeTarget),
-		nonTargetFileCache: newFIFOSet(nonTargetFileCacheSize),
+		openSSLProgram:      openSSLProgram,
+		logger:              logger,
+		processScanRequests: make(chan int32, 256),
+		reconcileRequests:   make(chan []string, 1),
+		attachedTargets:     make(map[mappedFileIdentity]*attachedUprobeTarget),
+		nonTargetFileCache:  newFIFOSet(nonTargetFileCacheSize),
 	}
 }
 
-func finishReconcile(request httpUprobeReconcileRequest, targetCount int) {
-	if request.result == nil {
-		return
-	}
-	select {
-	case request.result <- targetCount:
-	default:
-	}
-}
-
-// enqueueReconciliation hands the worker tracked cgroup paths without blocking
+// queueReconciliation hands the worker tracked cgroup paths without blocking
 // the caller. The buffer is 1: newer paths replace a stale queued request,
 // because only the latest liveness picture matters.
-func (d *httpUprobeDiscovery) enqueueReconciliation(cgroupPaths []string, result chan<- int) {
-	request := httpUprobeReconcileRequest{cgroupPaths: cgroupPaths, result: result}
+func (d *httpUprobeDiscovery) queueReconciliation(cgroupPaths []string) {
 	select {
-	case stale := <-d.reconciliations: // drop a stale queued request; only the latest matters
-		finishReconcile(stale, -1)
+	case <-d.reconcileRequests: // drop a stale queued snapshot; only the latest matters
 	default:
 	}
 	select {
-	case d.reconciliations <- request:
+	case d.reconcileRequests <- cgroupPaths:
 	default:
-		finishReconcile(request, -1)
 	}
 }
 
@@ -138,16 +121,16 @@ func (kernelIO *LinuxKernelIO) QueueHTTPUprobeReconciliation(cgroupPaths []strin
 	if kernelIO.httpUprobeDiscovery == nil {
 		return
 	}
-	kernelIO.httpUprobeDiscovery.enqueueReconciliation(slices.Clone(cgroupPaths), nil)
+	kernelIO.httpUprobeDiscovery.queueReconciliation(slices.Clone(cgroupPaths))
 }
 
-// enqueuePID schedules one process mapping scan without blocking kernel sample
+// queueProcessScan schedules one process mapping scan without blocking sample
 // intake. A later TCP connect is a natural retry when the bounded queue is full.
-func (d *httpUprobeDiscovery) enqueuePID(tgid int32) {
+func (d *httpUprobeDiscovery) queueProcessScan(tgid int32) {
 	select {
-	case d.hints <- tgid:
+	case d.processScanRequests <- tgid:
 	default:
-		d.warnThrottled(&d.queueDropped, "http_uprobe_discovery_hint_dropped")
+		d.warnThrottled(&d.processScanQueueDropped, "http_uprobe_discovery_hint_dropped")
 	}
 }
 
@@ -156,35 +139,27 @@ func (kernelIO *LinuxKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
 	if kernelIO.httpUprobeDiscovery == nil {
 		return
 	}
-	kernelIO.httpUprobeDiscovery.enqueuePID(pid)
+	kernelIO.httpUprobeDiscovery.queueProcessScan(pid)
 }
 
-// run drains hints (attach) and reconciliations (reclaim) on one goroutine until ctx
+// run processes scan and reconcile requests on one goroutine until ctx
 // is cancelled, then closes every attached link. It is the sole owner of
 // attachedTargets/nonTargetFileCache; there is no separate closer goroutine.
 func (d *httpUprobeDiscovery) run(ctx context.Context) {
-	defer func() {
-		d.closeAll()
-		select {
-		case request := <-d.reconciliations:
-			finishReconcile(request, -1)
-		default:
-		}
-	}()
+	defer d.closeAll()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case request := <-d.reconciliations:
-			d.reconcile(request.cgroupPaths)
-			finishReconcile(request, len(d.attachedTargets))
-		case first := <-d.hints:
+		case cgroupPaths := <-d.reconcileRequests:
+			d.reconcile(cgroupPaths)
+		case first := <-d.processScanRequests:
 			// Coalesce whatever is already queued and dedupe by pid so a burst
 			// scans each process once.
 			pids := map[int32]struct{}{first: {}}
 			for draining := true; draining; {
 				select {
-				case h := <-d.hints:
+				case h := <-d.processScanRequests:
 					pids[h] = struct{}{}
 				default:
 					draining = false

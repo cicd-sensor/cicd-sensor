@@ -4,16 +4,16 @@ package kernelio
 
 import "testing"
 
-func TestHTTPUprobeDiscoveryEnqueuePID(t *testing.T) {
+func TestHTTPUprobeDiscoveryQueueProcessScan(t *testing.T) {
 	t.Parallel()
 
 	t.Run("available queue records the process pid", func(t *testing.T) {
 		t.Parallel()
 
-		d := &httpUprobeDiscovery{hints: make(chan int32, 1)}
-		d.enqueuePID(4321)
+		d := &httpUprobeDiscovery{processScanRequests: make(chan int32, 1)}
+		d.queueProcessScan(4321)
 		select {
-		case got := <-d.hints:
+		case got := <-d.processScanRequests:
 			if got != 4321 {
 				t.Fatalf("hinted pid = %d, want 4321", got)
 			}
@@ -25,14 +25,14 @@ func TestHTTPUprobeDiscoveryEnqueuePID(t *testing.T) {
 	t.Run("full queue drops the hint without blocking", func(t *testing.T) {
 		t.Parallel()
 
-		d := &httpUprobeDiscovery{hints: make(chan int32, 1)}
-		d.enqueuePID(1) // fills the queue
-		d.enqueuePID(2) // must not block
-		if len(d.hints) != 1 {
-			t.Fatalf("queue len = %d, want 1 (second hint must be dropped)", len(d.hints))
+		d := &httpUprobeDiscovery{processScanRequests: make(chan int32, 1)}
+		d.queueProcessScan(1) // fills the queue
+		d.queueProcessScan(2) // must not block
+		if len(d.processScanRequests) != 1 {
+			t.Fatalf("queue len = %d, want 1 (second request must be dropped)", len(d.processScanRequests))
 		}
-		if d.queueDropped != 1 {
-			t.Fatalf("queueDropped = %d, want 1", d.queueDropped)
+		if d.processScanQueueDropped != 1 {
+			t.Fatalf("processScanQueueDropped = %d, want 1", d.processScanQueueDropped)
 		}
 	})
 }
