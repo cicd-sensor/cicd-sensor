@@ -33,9 +33,9 @@ type KernelIO interface {
 	// QueueHTTPUprobeDiscovery schedules a non-blocking process mapping scan
 	// after a TCP connect. It is a no-op when HTTP uprobe capture is disabled.
 	QueueHTTPUprobeDiscovery(pid int32)
-	// QueueHTTPUprobeReconciliation schedules a non-blocking maps-liveness sweep.
+	// QueueHTTPUprobeTargetReconciliation schedules a non-blocking maps-liveness sweep.
 	// It is a no-op when HTTP uprobe capture is disabled.
-	QueueHTTPUprobeReconciliation(cgroupPaths []string)
+	QueueHTTPUprobeTargetReconciliation(activeCgroupPaths []string)
 	StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error
 	Close() error
 }

@@ -131,34 +131,40 @@ func (s *jobTrackingState) markTrackedCgroupRemoved(cgroupID uint64, now time.Ti
 	}
 }
 
-// reconcileCgroupLiveness applies a filesystem scan result to loop-owned state.
+type cgroupReconciliationResult struct {
+	Removed           []cgroupDetachResult
+	ActiveCgroupPaths []string
+}
+
+// reconcileCgroupFilesystem applies a filesystem scan result to loop-owned state.
 // The scan is a safety net for missed cgroup_rmdir samples: it detects active
 // tracked cgroups that no longer exist, then moves them into the same
 // removed-pending queue used by the rmdir handler. The scan itself runs outside
 // the engine loop; this method is the only place that interprets the live-ID
-// snapshot and mutates tracked cgroup ownership.
-func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroups map[uint64]string, scanStartedAt time.Time, checkedAt time.Time) ([]cgroupDetachResult, []string) {
-	var removed []cgroupDetachResult
-	var activePaths []string
+// snapshot and mutates tracked cgroup ownership. It also returns the paths of
+// cgroups that were active when the scan started, so KernelIO can inspect their
+// cgroup.procs files without walking the cgroup filesystem again.
+func (s *jobTrackingState) reconcileCgroupFilesystem(snapshot cgroupFilesystemSnapshot) cgroupReconciliationResult {
+	var result cgroupReconciliationResult
 	for _, cgroups := range s.cgroupsByJob {
 		for cgroupID, cgroup := range cgroups {
 			if cgroup == nil || cgroup.State != trackedCgroupActive {
 				continue
 			}
-			if cgroup.TrackedAt.After(scanStartedAt) {
+			if cgroup.TrackedAt.After(snapshot.ScanStartedAt) {
 				continue
 			}
-			if path, ok := liveCgroups[cgroupID]; ok {
-				activePaths = append(activePaths, path)
+			if path, ok := snapshot.CgroupPathsByID[cgroupID]; ok {
+				result.ActiveCgroupPaths = append(result.ActiveCgroupPaths, path)
 				continue
 			}
-			result := s.markTrackedCgroupRemoved(cgroupID, checkedAt)
-			if result.Found {
-				removed = append(removed, result)
+			detached := s.markTrackedCgroupRemoved(cgroupID, snapshot.CheckedAt)
+			if detached.Found {
+				result.Removed = append(result.Removed, detached)
 			}
 		}
 	}
-	return removed, activePaths
+	return result
 }
 
 func (s *jobTrackingState) activeCgroupCount(jobID jobcontext.JobIdentity) int {

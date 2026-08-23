@@ -287,11 +287,18 @@ func TestJobTrackingState_BindDoesNotReactivateSameJobRemovedCgroup(t *testing.T
 	}
 }
 
-func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
+func TestJobTrackingState_ReconcileCgroupFilesystem(t *testing.T) {
 	t.Parallel()
 
 	scanStartedAt := time.Unix(200, 0)
 	checkedAt := time.Unix(210, 0)
+	snapshot := func(cgroupPathsByID map[uint64]string) cgroupFilesystemSnapshot {
+		return cgroupFilesystemSnapshot{
+			ScanStartedAt:   scanStartedAt,
+			CheckedAt:       checkedAt,
+			CgroupPathsByID: cgroupPathsByID,
+		}
+	}
 
 	t.Run("live active cgroup remains active", func(t *testing.T) {
 		t.Parallel()
@@ -300,12 +307,12 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		jobID := newJob("100")
 		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 
-		removed, paths := s.reconcileCgroupLiveness(map[uint64]string{42: "/live"}, scanStartedAt, checkedAt)
-		if len(removed) != 0 {
-			t.Fatalf("removed cgroups = %#v, want none", removed)
+		result := s.reconcileCgroupFilesystem(snapshot(map[uint64]string{42: "/live"}))
+		if len(result.Removed) != 0 {
+			t.Fatalf("removed cgroups = %#v, want none", result.Removed)
 		}
-		if len(paths) != 1 || paths[0] != "/live" {
-			t.Fatalf("active paths = %v, want [/live]", paths)
+		if len(result.ActiveCgroupPaths) != 1 || result.ActiveCgroupPaths[0] != "/live" {
+			t.Fatalf("active paths = %v, want [/live]", result.ActiveCgroupPaths)
 		}
 		if state := s.cgroupsByJob[jobID][42].State; state != trackedCgroupActive {
 			t.Fatalf("cgroup state = %v, want active", state)
@@ -320,12 +327,12 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 		s.bindAt(jobID, 84, scanStartedAt.Add(-time.Second))
 
-		removed, paths := s.reconcileCgroupLiveness(map[uint64]string{84: "/live"}, scanStartedAt, checkedAt)
-		if len(removed) != 1 || removed[0].JobID != jobID || removed[0].JobDrained {
-			t.Fatalf("removed result = %#v, want one non-drained result for %v", removed, jobID)
+		result := s.reconcileCgroupFilesystem(snapshot(map[uint64]string{84: "/live"}))
+		if len(result.Removed) != 1 || result.Removed[0].JobID != jobID || result.Removed[0].JobDrained {
+			t.Fatalf("removed result = %#v, want one non-drained result for %v", result.Removed, jobID)
 		}
-		if len(paths) != 1 || paths[0] != "/live" {
-			t.Fatalf("active paths = %v, want [/live]", paths)
+		if len(result.ActiveCgroupPaths) != 1 || result.ActiveCgroupPaths[0] != "/live" {
+			t.Fatalf("active paths = %v, want [/live]", result.ActiveCgroupPaths)
 		}
 		if state := s.cgroupsByJob[jobID][42].State; state != trackedCgroupRemoved {
 			t.Fatalf("missing cgroup state = %v, want removed", state)
@@ -345,9 +352,9 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		jobID := newJob("100")
 		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 
-		removed, _ := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
-		if len(removed) != 1 || removed[0].JobID != jobID || !removed[0].JobDrained {
-			t.Fatalf("removed result = %#v, want one drained result for %v", removed, jobID)
+		result := s.reconcileCgroupFilesystem(snapshot(nil))
+		if len(result.Removed) != 1 || result.Removed[0].JobID != jobID || !result.Removed[0].JobDrained {
+			t.Fatalf("removed result = %#v, want one drained result for %v", result.Removed, jobID)
 		}
 	})
 
@@ -359,21 +366,21 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 		s.bindAt(jobID, 84, scanStartedAt.Add(-time.Second))
 
-		removed, _ := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
-		if len(removed) != 2 {
-			t.Fatalf("removed result count = %d, want 2: %#v", len(removed), removed)
+		result := s.reconcileCgroupFilesystem(snapshot(nil))
+		if len(result.Removed) != 2 {
+			t.Fatalf("removed result count = %d, want 2: %#v", len(result.Removed), result.Removed)
 		}
 		drained := 0
-		for _, result := range removed {
-			if result.JobID != jobID {
-				t.Fatalf("removed result job = %v, want %v", result.JobID, jobID)
+		for _, removed := range result.Removed {
+			if removed.JobID != jobID {
+				t.Fatalf("removed result job = %v, want %v", removed.JobID, jobID)
 			}
-			if result.JobDrained {
+			if removed.JobDrained {
 				drained++
 			}
 		}
 		if drained != 1 {
-			t.Fatalf("drained result count = %d, want 1: %#v", drained, removed)
+			t.Fatalf("drained result count = %d, want 1: %#v", drained, result.Removed)
 		}
 	})
 
@@ -385,9 +392,9 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 		s.markTrackedCgroupRemoved(42, checkedAt.Add(-time.Second))
 
-		removed, _ := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
-		if len(removed) != 0 {
-			t.Fatalf("removed result = %#v, want none", removed)
+		result := s.reconcileCgroupFilesystem(snapshot(nil))
+		if len(result.Removed) != 0 {
+			t.Fatalf("removed result = %#v, want none", result.Removed)
 		}
 		if got := len(s.removedCgroupQueue); got != 1 {
 			t.Fatalf("removed cgroup queue length = %d, want 1", got)
@@ -401,12 +408,12 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		jobID := newJob("100")
 		s.bindAt(jobID, 42, scanStartedAt.Add(time.Second))
 
-		removed, paths := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
-		if len(removed) != 0 {
-			t.Fatalf("removed result = %#v, want none", removed)
+		result := s.reconcileCgroupFilesystem(snapshot(nil))
+		if len(result.Removed) != 0 {
+			t.Fatalf("removed result = %#v, want none", result.Removed)
 		}
-		if len(paths) != 0 {
-			t.Fatalf("active paths = %v, want none", paths)
+		if len(result.ActiveCgroupPaths) != 0 {
+			t.Fatalf("active paths = %v, want none", result.ActiveCgroupPaths)
 		}
 		if state := s.cgroupsByJob[jobID][42].State; state != trackedCgroupActive {
 			t.Fatalf("new cgroup state = %v, want active", state)
@@ -421,12 +428,12 @@ func TestJobTrackingState_ReconcileCgroupLiveness(t *testing.T) {
 		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 		s.removeJob(jobID)
 
-		removed, paths := s.reconcileCgroupLiveness(nil, scanStartedAt, checkedAt)
-		if len(removed) != 0 {
-			t.Fatalf("removed result = %#v, want none", removed)
+		result := s.reconcileCgroupFilesystem(snapshot(nil))
+		if len(result.Removed) != 0 {
+			t.Fatalf("removed result = %#v, want none", result.Removed)
 		}
-		if len(paths) != 0 {
-			t.Fatalf("active paths = %v, want none", paths)
+		if len(result.ActiveCgroupPaths) != 0 {
+			t.Fatalf("active paths = %v, want none", result.ActiveCgroupPaths)
 		}
 	})
 }

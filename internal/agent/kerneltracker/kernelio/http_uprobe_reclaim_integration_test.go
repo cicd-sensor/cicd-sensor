@@ -69,8 +69,8 @@ func newReclaimTestDiscovery(t *testing.T) *httpUprobeDiscovery {
 	return discovery
 }
 
-func reconcileAndCount(discovery *httpUprobeDiscovery, cgroupPaths []string) int {
-	discovery.reconcile(cgroupPaths)
+func reconcileAndCount(discovery *httpUprobeDiscovery, activeCgroupPaths []string) int {
+	discovery.reconcileTargets(activeCgroupPaths)
 	return len(discovery.attachedTargets)
 }
 

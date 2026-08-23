@@ -101,23 +101,32 @@ func handleCgroupRmdirSample(state *jobTrackingState, sample cgroupRmdirSample) 
 	return nil
 }
 
-func handleCgroupLivenessReconciliation(state *jobTrackingState, command commandReconcileCgroupLiveness) []engineEffect {
-	removed, cgroupPaths := state.reconcileCgroupLiveness(command.LiveCgroups, command.ScanStartedAt, command.CheckedAt)
-	effects := []engineEffect{reconcileHTTPUprobeTargets{CgroupPaths: cgroupPaths}}
+func handleCgroupFilesystemSnapshot(state *jobTrackingState, snapshot cgroupFilesystemSnapshot) []engineEffect {
+	// Apply the filesystem snapshot to loop-owned cgroup state first. This
+	// excludes cgroups tracked after ScanStartedAt and returns only paths that
+	// were both tracked and present in this snapshot.
+	reconciliation := state.reconcileCgroupFilesystem(snapshot)
+
+	// After cgroup state is reconciled, queue its active paths for the
+	// single-owner HTTP uprobe worker. It expands cgroup.procs and reconciles
+	// mapped files asynchronously.
+	effects := []engineEffect{queueHTTPUprobeTargetReconciliation{
+		ActiveCgroupPaths: reconciliation.ActiveCgroupPaths,
+	}}
 
 	drainedJobs := 0
-	for _, result := range removed {
+	for _, result := range reconciliation.Removed {
 		if result.JobDrained {
 			drainedJobs++
 			effects = append(effects, notifyJobEnded{JobID: result.JobID, Reason: EndCgroupRmdir})
 		}
 	}
-	if len(removed) > 0 && state.logger != nil {
+	if len(reconciliation.Removed) > 0 && state.logger != nil {
 		state.logger.Info("cgroup_liveness_reconciled",
-			"removed_count", len(removed),
+			"removed_count", len(reconciliation.Removed),
 			"drained_job_count", drainedJobs,
-			"live_cgroup_count", len(command.LiveCgroups),
-			"stat_error_count", command.StatErrorCount,
+			"live_cgroup_count", len(snapshot.CgroupPathsByID),
+			"stat_error_count", snapshot.StatErrorCount,
 		)
 	}
 	return effects

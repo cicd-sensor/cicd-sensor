@@ -76,9 +76,9 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 
 	// Start periodic maintenance such as process context GC and lazy cgroup purge.
 	stopTrackingStatePurgeTicker := engine.startTrackingStatePurgeTicker(ctx)
-	stopCgroupLivenessScanner := engine.startCgroupLivenessScanner(ctx)
+	stopCgroupFilesystemScanner := engine.startCgroupFilesystemScanner(ctx)
 	defer engine.closeRemainingChannels()
-	defer stopCgroupLivenessScanner()
+	defer stopCgroupFilesystemScanner()
 	defer stopTrackingStatePurgeTicker()
 
 	for {

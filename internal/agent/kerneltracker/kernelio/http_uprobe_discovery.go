@@ -75,8 +75,8 @@ type httpUprobeDiscovery struct {
 	logger         *slog.Logger
 
 	// Worker inputs. run consumes both serially.
-	processScanRequests chan int32    // pid of a tracked process that just did a TCP connect
-	reconcileRequests   chan []string // immutable tracked cgroup paths from KernelTracker
+	processScanRequests     chan int32    // pid of a tracked process that just did a TCP connect
+	targetReconcileRequests chan []string // immutable active cgroup paths from KernelTracker
 
 	// Worker-owned state (single goroutine, no locking).
 	attachedTargets    map[mappedFileIdentity]*attachedUprobeTarget
@@ -92,36 +92,36 @@ type httpUprobeDiscovery struct {
 
 func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger) *httpUprobeDiscovery {
 	return &httpUprobeDiscovery{
-		openSSLProgram:      openSSLProgram,
-		logger:              logger,
-		processScanRequests: make(chan int32, 256),
-		reconcileRequests:   make(chan []string, 1),
-		attachedTargets:     make(map[mappedFileIdentity]*attachedUprobeTarget),
-		nonTargetFileCache:  newFIFOSet(nonTargetFileCacheSize),
+		openSSLProgram:          openSSLProgram,
+		logger:                  logger,
+		processScanRequests:     make(chan int32, 256),
+		targetReconcileRequests: make(chan []string, 1),
+		attachedTargets:         make(map[mappedFileIdentity]*attachedUprobeTarget),
+		nonTargetFileCache:      newFIFOSet(nonTargetFileCacheSize),
 	}
 }
 
-// queueReconciliation hands the worker tracked cgroup paths without blocking
+// queueTargetReconciliation hands the worker active cgroup paths without blocking
 // the caller. The buffer is 1: newer paths replace a stale queued request,
 // because only the latest liveness picture matters.
-func (d *httpUprobeDiscovery) queueReconciliation(cgroupPaths []string) {
+func (d *httpUprobeDiscovery) queueTargetReconciliation(activeCgroupPaths []string) {
 	select {
-	case <-d.reconcileRequests: // drop a stale queued snapshot; only the latest matters
+	case <-d.targetReconcileRequests: // drop a stale queued snapshot; only the latest matters
 	default:
 	}
 	select {
-	case d.reconcileRequests <- cgroupPaths:
+	case d.targetReconcileRequests <- activeCgroupPaths:
 	default:
 	}
 }
 
-// QueueHTTPUprobeReconciliation hands the reclaim worker cloned cgroup paths.
+// QueueHTTPUprobeTargetReconciliation hands the worker cloned active cgroup paths.
 // No-op when HTTP uprobe capture is disabled.
-func (kernelIO *LinuxKernelIO) QueueHTTPUprobeReconciliation(cgroupPaths []string) {
+func (kernelIO *LinuxKernelIO) QueueHTTPUprobeTargetReconciliation(activeCgroupPaths []string) {
 	if kernelIO.httpUprobeDiscovery == nil {
 		return
 	}
-	kernelIO.httpUprobeDiscovery.queueReconciliation(slices.Clone(cgroupPaths))
+	kernelIO.httpUprobeDiscovery.queueTargetReconciliation(slices.Clone(activeCgroupPaths))
 }
 
 // queueProcessScan schedules one process mapping scan without blocking sample
@@ -151,8 +151,8 @@ func (d *httpUprobeDiscovery) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case cgroupPaths := <-d.reconcileRequests:
-			d.reconcile(cgroupPaths)
+		case activeCgroupPaths := <-d.targetReconcileRequests:
+			d.reconcileTargets(activeCgroupPaths)
 		case first := <-d.processScanRequests:
 			// Coalesce whatever is already queued and dedupe by pid so a burst
 			// scans each process once.
@@ -306,17 +306,17 @@ func (d *httpUprobeDiscovery) closeAll() {
 	}
 }
 
-// reconcile is the reclaim sweep. Expanding the supplied cgroups through
+// reconcileTargets is the reclaim sweep. Expanding the supplied cgroups through
 // cgroup.procs and scanning their process maps also provides backstop attach.
 // Only detach is fail-keep: an incomplete scan never advances a missing
 // count or closes links, though a target positively observed before an error is
 // reset to zero. We do not retain the prior scan result; each attached target
 // only records how many complete scans have omitted it.
-func (d *httpUprobeDiscovery) reconcile(cgroupPaths []string) {
+func (d *httpUprobeDiscovery) reconcileTargets(activeCgroupPaths []string) {
 	present := make(map[mappedFileIdentity]struct{})
 	complete := true
 	pids := make(map[int32]struct{})
-	for _, cgroupPath := range cgroupPaths {
+	for _, cgroupPath := range activeCgroupPaths {
 		if !d.collectCgroupPIDs(cgroupPath, pids) {
 			complete = false
 		}
@@ -351,7 +351,7 @@ func (d *httpUprobeDiscovery) reconcile(cgroupPaths []string) {
 			"closed", closed,
 			"targets", len(d.attachedTargets),
 			"mapped_identities", len(present),
-			"scanned_cgroups", len(cgroupPaths),
+			"scanned_cgroups", len(activeCgroupPaths),
 			"scanned_pids", len(pids),
 		)
 	}

@@ -32,7 +32,7 @@ func (noopKernelIO) DeleteCgroupBasenamesFromStagingMap(context.Context, []strin
 
 func (noopKernelIO) QueueHTTPUprobeDiscovery(int32) {}
 
-func (noopKernelIO) QueueHTTPUprobeReconciliation([]string) {}
+func (noopKernelIO) QueueHTTPUprobeTargetReconciliation([]string) {}
 
 func (noopKernelIO) StartKernelSampleLoop(context.Context, kernelio.KernelSampleHandler) error {
 	return kernelio.ErrNotSupported
@@ -50,13 +50,13 @@ type recordingKernelIO struct {
 	deleteStagingErr error
 	closeErr         error
 
-	startCalls              int
-	putTracked              []uint64
-	deleteTracked           []uint64
-	putStaging              []string
-	deleteStaging           []string
-	httpUprobeDiscoveryPIDs []int32
-	httpUprobeCgroupPaths   [][]string
+	startCalls                        int
+	putTracked                        []uint64
+	deleteTracked                     []uint64
+	putStaging                        []string
+	deleteStaging                     []string
+	httpUprobeDiscoveryPIDs           []int32
+	queuedHTTPUprobeActiveCgroupPaths [][]string
 }
 
 func (kernelIO *recordingKernelIO) StartKernelSampleLoop(context.Context, kernelio.KernelSampleHandler) error {
@@ -103,8 +103,8 @@ func (kernelIO *recordingKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
 	kernelIO.httpUprobeDiscoveryPIDs = append(kernelIO.httpUprobeDiscoveryPIDs, pid)
 }
 
-func (kernelIO *recordingKernelIO) QueueHTTPUprobeReconciliation(cgroupPaths []string) {
-	kernelIO.httpUprobeCgroupPaths = append(kernelIO.httpUprobeCgroupPaths, slices.Clone(cgroupPaths))
+func (kernelIO *recordingKernelIO) QueueHTTPUprobeTargetReconciliation(activeCgroupPaths []string) {
+	kernelIO.queuedHTTPUprobeActiveCgroupPaths = append(kernelIO.queuedHTTPUprobeActiveCgroupPaths, slices.Clone(activeCgroupPaths))
 }
 
 func (kernelIO *recordingKernelIO) Close() error {

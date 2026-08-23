@@ -33,7 +33,7 @@ func (h *reclaimHarness) attached(id nonTargetFileCacheKey) *attachedUprobeTarge
 
 // An empty path set makes every target absent.
 func (h *reclaimHarness) sweep() {
-	h.d.reconcile(nil)
+	h.d.reconcileTargets(nil)
 }
 
 func TestHTTPUprobeReclaim(t *testing.T) {
@@ -66,7 +66,7 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		if err := os.WriteFile(notDirectory, nil, 0o644); err != nil {
 			t.Fatalf("write non-directory cgroup path: %v", err)
 		}
-		h.d.reconcile([]string{notDirectory})
+		h.d.reconcileTargets([]string{notDirectory})
 		if e.missingScanCount != 1 {
 			t.Fatalf("empty incomplete scan changed missingScanCount to %d, want 1", e.missingScanCount)
 		}
@@ -79,13 +79,13 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 			t.Fatal("second complete miss across an incomplete scan must close")
 		}
 	})
-	t.Run("queueReconciliation never blocks and keeps only the latest", func(t *testing.T) {
+	t.Run("queueTargetReconciliation never blocks and keeps only the latest", func(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil)
-		d.queueReconciliation([]string{"one"})
-		d.queueReconciliation([]string{"two"}) // must not block on a full buffer
+		d.queueTargetReconciliation([]string{"one"})
+		d.queueTargetReconciliation([]string{"two"}) // must not block on a full buffer
 		select {
-		case got := <-d.reconcileRequests:
+		case got := <-d.targetReconcileRequests:
 			if !slices.Equal(got, []string{"two"}) {
 				t.Fatalf("queued cgroup paths = %v, want [two]", got)
 			}
@@ -99,9 +99,9 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		d := newHTTPUprobeDiscovery(nil, nil)
 		kernelIO := &LinuxKernelIO{httpUprobeDiscovery: d}
 		paths := []string{"one"}
-		kernelIO.QueueHTTPUprobeReconciliation(paths)
+		kernelIO.QueueHTTPUprobeTargetReconciliation(paths)
 		paths[0] = "two"
-		got := <-d.reconcileRequests
+		got := <-d.targetReconcileRequests
 		if !slices.Equal(got, []string{"one"}) {
 			t.Fatalf("queued paths = %v, want immutable copy [one]", got)
 		}

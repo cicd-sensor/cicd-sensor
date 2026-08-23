@@ -45,8 +45,8 @@ func (kernelIO *StubKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
 	_ = pid
 }
 
-func (kernelIO *StubKernelIO) QueueHTTPUprobeReconciliation(cgroupPaths []string) {
-	_ = cgroupPaths
+func (kernelIO *StubKernelIO) QueueHTTPUprobeTargetReconciliation(activeCgroupPaths []string) {
+	_ = activeCgroupPaths
 }
 
 func (kernelIO *StubKernelIO) StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error {
