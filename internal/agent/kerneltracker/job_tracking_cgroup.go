@@ -161,15 +161,19 @@ func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroups map[uint64]string
 }
 
 // activeCgroupPaths selects the filesystem paths that the completed cgroup
-// scan actually observed for active tracked cgroups. A missing path makes the
-// HTTP uprobe snapshot incomplete: it may be a cgroup tracked after the scan
-// started, and reclaim must not interpret that gap as proof of absence.
-func (s *jobTrackingState) activeCgroupPaths(liveCgroups map[uint64]string) ([]string, bool) {
+// scan actually observed for active tracked cgroups. Cgroups first tracked
+// after the scan began are outside that snapshot. A missing older cgroup path
+// makes the HTTP uprobe snapshot incomplete, because reclaim must not interpret
+// an unexplained gap as proof of absence.
+func (s *jobTrackingState) activeCgroupPaths(liveCgroups map[uint64]string, scanStartedAt time.Time) ([]string, bool) {
 	complete := true
 	paths := make([]string, 0)
 	for _, cgroups := range s.cgroupsByJob {
 		for cgroupID, cgroup := range cgroups {
 			if cgroup == nil || cgroup.State != trackedCgroupActive {
+				continue
+			}
+			if cgroup.TrackedAt.After(scanStartedAt) {
 				continue
 			}
 			path, ok := liveCgroups[cgroupID]

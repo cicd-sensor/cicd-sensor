@@ -427,11 +427,12 @@ func TestJobTrackingState_ActiveCgroupPaths(t *testing.T) {
 		t.Parallel()
 		s := newJobTrackingState()
 		jobID := newJob("100")
-		s.bind(jobID, 42)
-		s.bind(jobID, 84)
+		scanStartedAt := time.Now()
+		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
+		s.bindAt(jobID, 84, scanStartedAt.Add(-time.Second))
 		s.markTrackedCgroupRemoved(42, time.Now())
 
-		paths, complete := s.activeCgroupPaths(map[uint64]string{42: "/removed", 84: "/active"})
+		paths, complete := s.activeCgroupPaths(map[uint64]string{42: "/removed", 84: "/active"}, scanStartedAt)
 		if !complete {
 			t.Fatal("complete = false, want true")
 		}
@@ -444,9 +445,10 @@ func TestJobTrackingState_ActiveCgroupPaths(t *testing.T) {
 		t.Parallel()
 		s := newJobTrackingState()
 		jobID := newJob("100")
-		s.bind(jobID, 42)
+		scanStartedAt := time.Now()
+		s.bindAt(jobID, 42, scanStartedAt.Add(-time.Second))
 
-		paths, complete := s.activeCgroupPaths(nil)
+		paths, complete := s.activeCgroupPaths(nil, scanStartedAt)
 		if complete {
 			t.Fatal("complete = true, want false")
 		}
@@ -459,7 +461,23 @@ func TestJobTrackingState_ActiveCgroupPaths(t *testing.T) {
 		t.Parallel()
 		s := newJobTrackingState()
 
-		paths, complete := s.activeCgroupPaths(nil)
+		paths, complete := s.activeCgroupPaths(nil, time.Now())
+		if !complete {
+			t.Fatal("complete = false, want true")
+		}
+		if len(paths) != 0 {
+			t.Fatalf("paths = %v, want empty", paths)
+		}
+	})
+
+	t.Run("cgroup tracked after scan start is outside the snapshot", func(t *testing.T) {
+		t.Parallel()
+		s := newJobTrackingState()
+		jobID := newJob("100")
+		scanStartedAt := time.Now()
+		s.bindAt(jobID, 42, scanStartedAt.Add(time.Second))
+
+		paths, complete := s.activeCgroupPaths(nil, scanStartedAt)
 		if !complete {
 			t.Fatal("complete = false, want true")
 		}

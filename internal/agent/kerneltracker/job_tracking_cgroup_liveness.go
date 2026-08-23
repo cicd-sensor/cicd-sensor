@@ -49,7 +49,9 @@ func (engine *KernelTracker) startCgroupLivenessScanner(ctx context.Context) fun
 // engine loop uses it to ignore cgroups first tracked while this scan was in
 // progress, because those cgroups may legitimately be absent from the snapshot.
 func (engine *KernelTracker) scanAndQueueCgroupLiveness(ctx context.Context) {
-	scanStartedAt := time.Now().UTC()
+	// Keep the monotonic reading: HTTP uprobe reclaim compares this timestamp
+	// with in-process observations to reject stale scan results.
+	scanStartedAt := time.Now()
 	snapshot, err := scanLiveCgroups(engine.cgroupV2RootPath)
 	checkedAt := time.Now().UTC()
 	if err != nil {

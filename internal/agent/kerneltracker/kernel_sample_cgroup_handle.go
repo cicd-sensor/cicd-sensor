@@ -105,7 +105,7 @@ func handleCgroupRmdirSample(state *jobTrackingState, sample cgroupRmdirSample) 
 
 func handleCgroupLivenessReconciliation(state *jobTrackingState, command commandReconcileCgroupLiveness) []engineEffect {
 	removed := state.reconcileCgroupLiveness(command.LiveCgroups, command.ScanStartedAt, command.CheckedAt)
-	cgroupPaths, complete := state.activeCgroupPaths(command.LiveCgroups)
+	cgroupPaths, complete := state.activeCgroupPaths(command.LiveCgroups, command.ScanStartedAt)
 	effects := []engineEffect{reconcileHTTPUprobeTargets{Snapshot: kernelio.HTTPUprobeLivenessSnapshot{
 		ScanStartedAt: command.ScanStartedAt,
 		Complete:      complete,
