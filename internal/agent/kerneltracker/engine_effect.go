@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 )
@@ -102,7 +101,7 @@ type deleteExpiredCgroupsFromKernel struct {
 func (deleteExpiredCgroupsFromKernel) sealedEngineEffect() {}
 
 type reconcileHTTPUprobeTargets struct {
-	Snapshot kernelio.HTTPUprobeLivenessSnapshot
+	CgroupPaths []string
 }
 
 func (reconcileHTTPUprobeTargets) sealedEngineEffect() {}
@@ -187,7 +186,7 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 				engine.jobTracking.purgeRemovedCgroups(value.Cgroups)
 			}
 		case reconcileHTTPUprobeTargets:
-			engine.kernelIO.QueueHTTPUprobeReconciliation(value.Snapshot)
+			engine.kernelIO.QueueHTTPUprobeReconciliation(value.CgroupPaths)
 		case replyRegisterJob:
 			value.Reply <- registerJobReply{EventCh: value.EventCh, Err: value.Err}
 		case replyBindCgroup:

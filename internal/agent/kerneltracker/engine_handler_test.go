@@ -409,13 +409,13 @@ func TestTransitionInvariants(t *testing.T) {
 					LiveCgroups:   map[uint64]string{42: "/sys/fs/cgroup/live"},
 				})
 				assertEffectOrder(t, effects, reconcileHTTPUprobeTargets{})
-				snapshot := effects[0].(reconcileHTTPUprobeTargets).Snapshot
-				if !snapshot.Complete || len(snapshot.CgroupPaths) != 1 || snapshot.CgroupPaths[0] != "/sys/fs/cgroup/live" {
-					t.Fatalf("HTTP uprobe snapshot = %#v, want one complete live path", snapshot)
+				cgroupPaths := effects[0].(reconcileHTTPUprobeTargets).CgroupPaths
+				if len(cgroupPaths) != 1 || cgroupPaths[0] != "/sys/fs/cgroup/live" {
+					t.Fatalf("HTTP uprobe cgroup paths = %#v, want one live path", cgroupPaths)
 				}
 				kernelIO := runTestEffects(t, state, effects)
-				if len(kernelIO.httpUprobeSnapshots) != 1 || kernelIO.httpUprobeSnapshots[0].CgroupPaths[0] != "/sys/fs/cgroup/live" {
-					t.Fatalf("queued HTTP uprobe snapshots = %#v, want one live path", kernelIO.httpUprobeSnapshots)
+				if len(kernelIO.httpUprobeCgroupPaths) != 1 || kernelIO.httpUprobeCgroupPaths[0][0] != "/sys/fs/cgroup/live" {
+					t.Fatalf("queued HTTP uprobe cgroup paths = %#v, want one live path", kernelIO.httpUprobeCgroupPaths)
 				}
 				if got := logs.String(); got != "" {
 					t.Fatalf("live cgroup reconciliation log = %s, want empty", got)

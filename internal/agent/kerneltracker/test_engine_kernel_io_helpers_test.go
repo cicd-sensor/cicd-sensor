@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
 	"testing"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
@@ -31,7 +32,7 @@ func (noopKernelIO) DeleteCgroupBasenamesFromStagingMap(context.Context, []strin
 
 func (noopKernelIO) QueueHTTPUprobeDiscovery(int32) {}
 
-func (noopKernelIO) QueueHTTPUprobeReconciliation(kernelio.HTTPUprobeLivenessSnapshot) {}
+func (noopKernelIO) QueueHTTPUprobeReconciliation([]string) {}
 
 func (noopKernelIO) StartKernelSampleLoop(context.Context, kernelio.KernelSampleHandler) error {
 	return kernelio.ErrNotSupported
@@ -55,7 +56,7 @@ type recordingKernelIO struct {
 	putStaging              []string
 	deleteStaging           []string
 	httpUprobeDiscoveryPIDs []int32
-	httpUprobeSnapshots     []kernelio.HTTPUprobeLivenessSnapshot
+	httpUprobeCgroupPaths   [][]string
 }
 
 func (kernelIO *recordingKernelIO) StartKernelSampleLoop(context.Context, kernelio.KernelSampleHandler) error {
@@ -102,8 +103,8 @@ func (kernelIO *recordingKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
 	kernelIO.httpUprobeDiscoveryPIDs = append(kernelIO.httpUprobeDiscoveryPIDs, pid)
 }
 
-func (kernelIO *recordingKernelIO) QueueHTTPUprobeReconciliation(snapshot kernelio.HTTPUprobeLivenessSnapshot) {
-	kernelIO.httpUprobeSnapshots = append(kernelIO.httpUprobeSnapshots, snapshot)
+func (kernelIO *recordingKernelIO) QueueHTTPUprobeReconciliation(cgroupPaths []string) {
+	kernelIO.httpUprobeCgroupPaths = append(kernelIO.httpUprobeCgroupPaths, slices.Clone(cgroupPaths))
 }
 
 func (kernelIO *recordingKernelIO) Close() error {

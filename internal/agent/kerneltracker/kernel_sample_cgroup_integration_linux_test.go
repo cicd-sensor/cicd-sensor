@@ -343,9 +343,9 @@ func TestLinuxKernelSampleCgroupLivenessReconciliation(t *testing.T) {
 		LiveCgroups:   liveSnapshot.LiveCgroups,
 	})
 	assertEffectOrder(t, liveEffects, reconcileHTTPUprobeTargets{})
-	gotSnapshot := liveEffects[0].(reconcileHTTPUprobeTargets).Snapshot
-	if !gotSnapshot.Complete || len(gotSnapshot.CgroupPaths) != 1 || gotSnapshot.CgroupPaths[0] != childFullPath {
-		t.Fatalf("HTTP uprobe snapshot = %#v, want complete path %q", gotSnapshot, childFullPath)
+	gotPaths := liveEffects[0].(reconcileHTTPUprobeTargets).CgroupPaths
+	if len(gotPaths) != 1 || gotPaths[0] != childFullPath {
+		t.Fatalf("HTTP uprobe cgroup paths = %#v, want path %q", gotPaths, childFullPath)
 	}
 
 	if err := os.Remove(childFullPath); err != nil {

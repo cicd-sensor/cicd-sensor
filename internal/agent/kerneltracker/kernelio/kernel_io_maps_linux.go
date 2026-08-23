@@ -117,13 +117,12 @@ func fixedStagingMapValue(value []byte) ([]byte, error) {
 // TestOnlyReconcileHTTPUprobeTargets waits for one reclaim snapshot and returns
 // its worker-owned target count. A negative result means disabled, replaced, or
 // cancelled.
-func (kernelIO *LinuxKernelIO) TestOnlyReconcileHTTPUprobeTargets(ctx context.Context, snapshot HTTPUprobeLivenessSnapshot) int {
+func (kernelIO *LinuxKernelIO) TestOnlyReconcileHTTPUprobeTargets(ctx context.Context, cgroupPaths []string) int {
 	if kernelIO.httpUprobeDiscovery == nil {
 		return -1
 	}
 	result := make(chan int, 1)
-	snapshot.CgroupPaths = slices.Clone(snapshot.CgroupPaths)
-	kernelIO.httpUprobeDiscovery.enqueueSnapshot(snapshot, result)
+	kernelIO.httpUprobeDiscovery.enqueueReconciliation(slices.Clone(cgroupPaths), result)
 	select {
 	case count := <-result:
 		return count

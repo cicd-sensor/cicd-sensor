@@ -1,7 +1,6 @@
 package kerneltracker
 
 import (
-	"slices"
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -49,7 +48,7 @@ type cgroupPurgeCandidate struct {
 // bind mirrors a cgroup -> Job attribution already accepted by KernelIO/eBPF.
 // It is non-overwriting so one cgroup cannot silently move between Jobs.
 func (s *jobTrackingState) bind(jobID jobcontext.JobIdentity, cgroupID uint64) bool {
-	return s.bindAt(jobID, cgroupID, time.Now().UTC())
+	return s.bindAt(jobID, cgroupID, time.Now())
 }
 
 // bindAt records when this userspace mirror first accepted the cgroup. Tests
@@ -138,8 +137,9 @@ func (s *jobTrackingState) markTrackedCgroupRemoved(cgroupID uint64, now time.Ti
 // removed-pending queue used by the rmdir handler. The scan itself runs outside
 // the engine loop; this method is the only place that interprets the live-ID
 // snapshot and mutates tracked cgroup ownership.
-func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroups map[uint64]string, scanStartedAt time.Time, checkedAt time.Time) []cgroupDetachResult {
+func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroups map[uint64]string, scanStartedAt time.Time, checkedAt time.Time) ([]cgroupDetachResult, []string) {
 	var removed []cgroupDetachResult
+	var activePaths []string
 	for _, cgroups := range s.cgroupsByJob {
 		for cgroupID, cgroup := range cgroups {
 			if cgroup == nil || cgroup.State != trackedCgroupActive {
@@ -148,7 +148,8 @@ func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroups map[uint64]string
 			if cgroup.TrackedAt.After(scanStartedAt) {
 				continue
 			}
-			if _, ok := liveCgroups[cgroupID]; ok {
+			if path, ok := liveCgroups[cgroupID]; ok {
+				activePaths = append(activePaths, path)
 				continue
 			}
 			result := s.markTrackedCgroupRemoved(cgroupID, checkedAt)
@@ -157,35 +158,7 @@ func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroups map[uint64]string
 			}
 		}
 	}
-	return removed
-}
-
-// activeCgroupPaths selects the filesystem paths that the completed cgroup
-// scan actually observed for active tracked cgroups. Cgroups first tracked
-// after the scan began are outside that snapshot. A missing older cgroup path
-// makes the HTTP uprobe snapshot incomplete, because reclaim must not interpret
-// an unexplained gap as proof of absence.
-func (s *jobTrackingState) activeCgroupPaths(liveCgroups map[uint64]string, scanStartedAt time.Time) ([]string, bool) {
-	complete := true
-	paths := make([]string, 0)
-	for _, cgroups := range s.cgroupsByJob {
-		for cgroupID, cgroup := range cgroups {
-			if cgroup == nil || cgroup.State != trackedCgroupActive {
-				continue
-			}
-			if cgroup.TrackedAt.After(scanStartedAt) {
-				continue
-			}
-			path, ok := liveCgroups[cgroupID]
-			if !ok {
-				complete = false
-				continue
-			}
-			paths = append(paths, path)
-		}
-	}
-	slices.Sort(paths)
-	return paths, complete
+	return removed, activePaths
 }
 
 func (s *jobTrackingState) activeCgroupCount(jobID jobcontext.JobIdentity) int {

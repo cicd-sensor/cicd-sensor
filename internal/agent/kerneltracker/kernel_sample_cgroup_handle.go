@@ -3,8 +3,6 @@ package kerneltracker
 import (
 	"path/filepath"
 	"time"
-
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 type cgroupMkdirSample struct {
@@ -104,13 +102,8 @@ func handleCgroupRmdirSample(state *jobTrackingState, sample cgroupRmdirSample) 
 }
 
 func handleCgroupLivenessReconciliation(state *jobTrackingState, command commandReconcileCgroupLiveness) []engineEffect {
-	removed := state.reconcileCgroupLiveness(command.LiveCgroups, command.ScanStartedAt, command.CheckedAt)
-	cgroupPaths, complete := state.activeCgroupPaths(command.LiveCgroups, command.ScanStartedAt)
-	effects := []engineEffect{reconcileHTTPUprobeTargets{Snapshot: kernelio.HTTPUprobeLivenessSnapshot{
-		ScanStartedAt: command.ScanStartedAt,
-		Complete:      complete,
-		CgroupPaths:   cgroupPaths,
-	}}}
+	removed, cgroupPaths := state.reconcileCgroupLiveness(command.LiveCgroups, command.ScanStartedAt, command.CheckedAt)
+	effects := []engineEffect{reconcileHTTPUprobeTargets{CgroupPaths: cgroupPaths}}
 
 	drainedJobs := 0
 	for _, result := range removed {

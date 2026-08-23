@@ -16,7 +16,7 @@ import (
 )
 
 // Stage 1b-2 reclaim E2E. These drive the discovery worker with constructed
-// tracked-cgroup snapshots, so the tests cover cgroup.procs -> PID -> maps ->
+// tracked cgroup paths, so the tests cover cgroup.procs -> PID -> maps ->
 // uprobe lifecycle without waiting on the 60 s ticker.
 
 // startLibsslMapper starts a long-lived process that keeps libssl mapped:
@@ -72,19 +72,19 @@ func startReclaimWorker(t *testing.T, ctx context.Context, kernelIO *kernelio.Li
 }
 
 // reconcileAndSettle waits for the worker and returns its target count.
-func reconcileAndSettle(t *testing.T, ctx context.Context, kernelIO *kernelio.LinuxKernelIO, snapshot kernelio.HTTPUprobeLivenessSnapshot) int {
+func reconcileAndSettle(t *testing.T, ctx context.Context, kernelIO *kernelio.LinuxKernelIO, cgroupPaths []string) int {
 	t.Helper()
-	count := kernelIO.TestOnlyReconcileHTTPUprobeTargets(ctx, snapshot)
+	count := kernelIO.TestOnlyReconcileHTTPUprobeTargets(ctx, cgroupPaths)
 	if count < 0 {
 		t.Fatalf("reconcile did not complete: %v", ctx.Err())
 	}
 	return count
 }
 
-func snapshotOf(t *testing.T, complete bool, pids ...int32) kernelio.HTTPUprobeLivenessSnapshot {
+func cgroupPathsForPIDs(t *testing.T, pids ...int32) []string {
 	t.Helper()
 	if len(pids) == 0 {
-		return kernelio.HTTPUprobeLivenessSnapshot{ScanStartedAt: time.Now(), Complete: complete}
+		return nil
 	}
 	cgroupPath := t.TempDir()
 	lines := make([]string, 0, len(pids))
@@ -94,16 +94,21 @@ func snapshotOf(t *testing.T, complete bool, pids ...int32) kernelio.HTTPUprobeL
 	if err := os.WriteFile(filepath.Join(cgroupPath, "cgroup.procs"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatalf("write cgroup.procs: %v", err)
 	}
-	return kernelio.HTTPUprobeLivenessSnapshot{
-		ScanStartedAt: time.Now(),
-		Complete:      complete,
-		CgroupPaths:   []string{cgroupPath},
+	return []string{cgroupPath}
+}
+
+func unreadableCgroupPaths(t *testing.T) []string {
+	t.Helper()
+	notDirectory := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(notDirectory, nil, 0o644); err != nil {
+		t.Fatalf("write non-directory cgroup path: %v", err)
 	}
+	return []string{notDirectory}
 }
 
 // TestLinuxHTTPUprobeReclaimSharedInode: an inode mapped by two tracked processes
 // stays attached while EITHER maps it, and is closed only after two complete
-// snapshots see neither — never because one of them left.
+// scans see neither — never because one of them left.
 func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 	kernelIO := newReclaimTestKernelIO(t)
 	ctx := t.Context()
@@ -112,27 +117,29 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 	a := startLibsslMapper(t)
 	b := startLibsslMapper(t)
 
-	// Discovery attaches via the snapshot scan itself (backstop path).
-	if got := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true, a, b)); got != 1 {
+	// Discovery attaches via reconciliation itself (backstop path).
+	if got := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t, a, b)); got != 1 {
 		t.Fatalf("shared libssl inode target count = %d, want 1", got)
 	}
 
-	// Two complete snapshots that only list b: a left, but b still maps it.
-	reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true, b))
-	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true, b)); n != 1 {
+	// One miss followed by seeing b resets the target's missing count.
+	if n := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t)); n != 1 {
+		t.Fatalf("closed after a single miss: count = %d, want 1", n)
+	}
+	if n := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t, b)); n != 1 {
 		t.Fatalf("target closed while still mapped by b: count = %d, want 1", n)
 	}
 
-	// Neither maps it: first complete miss keeps it, second closes it.
-	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true)); n != 1 {
-		t.Fatalf("closed after a single miss: count = %d, want 1", n)
+	// Because seeing b reset the count, the next miss still keeps the target.
+	if n := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t)); n != 1 {
+		t.Fatalf("closed after a miss following reappearance: count = %d, want 1", n)
 	}
-	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true)); n != 0 {
+	if n := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t)); n != 0 {
 		t.Fatalf("target count after second complete miss = %d, want 0", n)
 	}
 }
 
-// TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep: an incomplete snapshot never
+// TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep: an incomplete scan never
 // closes, and does not count toward the two misses.
 func TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep(t *testing.T) {
 	kernelIO := newReclaimTestKernelIO(t)
@@ -140,20 +147,17 @@ func TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep(t *testing.T) {
 	startReclaimWorker(t, ctx, kernelIO)
 
 	a := startLibsslMapper(t)
-	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true, a)); n != 1 {
+	if n := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t, a)); n != 1 {
 		t.Fatalf("target count after attach = %d, want 1", n)
 	}
 
 	// complete-missing, then several INCOMPLETE empties: must stay attached.
-	reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true))
-	for range 2 {
-		reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, false))
-	}
-	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, false)); n != 1 {
-		t.Fatalf("incomplete snapshots closed a target: count = %d, want 1", n)
+	reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t))
+	if n := reconcileAndSettle(t, ctx, kernelIO, unreadableCgroupPaths(t)); n != 1 {
+		t.Fatalf("incomplete scan closed a target: count = %d, want 1", n)
 	}
 	// A second COMPLETE miss closes it (incomplete ones neither advanced nor reset).
-	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true)); n != 0 {
+	if n := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t)); n != 0 {
 		t.Fatalf("target count after second complete miss = %d, want 0", n)
 	}
 }
@@ -192,16 +196,16 @@ func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true, pid)); n != 1 {
+	if n := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t, pid)); n != 1 {
 		t.Fatalf("target count after copied libssl attach = %d, want 1", n)
 	}
 
 	if err := os.Remove(dst); err != nil { // unlink while still mapped
 		t.Fatal(err)
 	}
-	// Still mapped by pid: complete snapshots listing pid must keep it.
-	reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true, pid))
-	if n := reconcileAndSettle(t, ctx, kernelIO, snapshotOf(t, true, pid)); n != 1 {
+	// Still mapped by pid: complete scans listing pid must keep it.
+	reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t, pid))
+	if n := reconcileAndSettle(t, ctx, kernelIO, cgroupPathsForPIDs(t, pid)); n != 1 {
 		t.Fatalf("unlinked-but-mapped inode was detached: count = %d, want 1", n)
 	}
 }

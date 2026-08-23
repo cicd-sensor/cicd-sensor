@@ -2,11 +2,7 @@
 
 package kernelio
 
-import (
-	"testing"
-
-	"golang.org/x/sys/unix"
-)
+import "testing"
 
 func TestHTTPUprobeDiscoveryEnqueuePID(t *testing.T) {
 	t.Parallel()
@@ -49,14 +45,14 @@ func TestParseExecMapping(t *testing.T) {
 		line        string
 		wantOK      bool
 		wantRange   string
-		wantMapping mappingIdentity
+		wantMapping mappedFileID
 	}{
 		{
 			name:        "executable file-backed mapping",
 			line:        "55a1b2c00000-55a1b2c21000 r-xp 00000000 fd:01 1443212 /usr/lib/x86_64-linux-gnu/libssl.so.3",
 			wantOK:      true,
 			wantRange:   "55a1b2c00000-55a1b2c21000",
-			wantMapping: mappingIdentity{dev: unix.Mkdev(0xfd, 0x01), ino: 1443212},
+			wantMapping: "fd:01:1443212",
 		},
 		{
 			name:   "non-executable mapping is skipped",
@@ -103,7 +99,7 @@ func TestParseExecMapping(t *testing.T) {
 func TestFIFOSet(t *testing.T) {
 	t.Parallel()
 
-	id := func(n uint64) fileIdentity { return fileIdentity{dev: 1, ino: n} }
+	id := func(n uint64) fileClassificationKey { return fileClassificationKey{size: int64(n)} }
 
 	t.Run("non-positive limit disables the set", func(t *testing.T) {
 		t.Parallel()
