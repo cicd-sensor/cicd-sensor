@@ -15,14 +15,14 @@ func TestHTTPUprobeDiscoveryQueueProcessScan(t *testing.T) {
 		select {
 		case got := <-d.processScanRequests:
 			if got != 4321 {
-				t.Fatalf("hinted pid = %d, want 4321", got)
+				t.Fatalf("queued pid = %d, want 4321", got)
 			}
 		default:
-			t.Fatal("expected a hint, queue was empty")
+			t.Fatal("expected a process scan request, queue was empty")
 		}
 	})
 
-	t.Run("full queue drops the hint without blocking", func(t *testing.T) {
+	t.Run("full queue drops the request without blocking", func(t *testing.T) {
 		t.Parallel()
 
 		d := &httpUprobeDiscovery{processScanRequests: make(chan int32, 1)}

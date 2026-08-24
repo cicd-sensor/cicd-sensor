@@ -100,7 +100,7 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 	}
 }
 
-// enqueueKernelSample decodes one raw ringbuf sample, forwards any attach hint,
+// enqueueKernelSample decodes one raw ringbuf sample, queues any process-scan request,
 // and queues the decoded input.
 func (engine *KernelTracker) enqueueKernelSample(ctx context.Context, sample kernelio.KernelSample) error {
 	input, err := decodeKernelSample(sample)

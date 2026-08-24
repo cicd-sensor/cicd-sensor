@@ -128,7 +128,7 @@ func (d *httpUprobeDiscovery) queueProcessScan(tgid int32) {
 	select {
 	case d.processScanRequests <- tgid:
 	default:
-		d.warnThrottled(&d.processScanQueueDropped, "http_uprobe_discovery_hint_dropped")
+		d.warnThrottled(&d.processScanQueueDropped, "http_uprobe_process_scan_request_dropped")
 	}
 }
 
@@ -449,7 +449,7 @@ func (d *httpUprobeDiscovery) warn(msg string, args ...any) {
 
 // warnThrottled logs at a power-of-two cadence (1st, 2nd, 4th, 8th, ... event)
 // so a systematic failure — a permission error that leaves discovery blind, a
-// saturated hint queue — is visible without emitting one line per connect. The
+// saturated process-scan queue — is visible without emitting one line per connect. The
 // counter must be owned by the calling goroutine.
 func (d *httpUprobeDiscovery) warnThrottled(counter *uint64, msg string, args ...any) {
 	*counter++

@@ -10,9 +10,9 @@ var ErrNotSupported = errors.New("not supported")
 // Config contains the cgroup v2 root detected by KernelTracker.
 type Config struct {
 	CgroupV2RootPath string
-	// EnableOpenSSLHTTP starts the OpenSSL uprobe attach-discovery worker (connect
-	// hint, process scan, attach, and maps-liveness reclaim). It does not gate BPF
-	// load: LoadAndAssign loads and verifies the programs at startup either way.
+	// EnableOpenSSLHTTP starts the OpenSSL uprobe attach-discovery worker
+	// (connect-triggered process scan, attach, and maps-liveness reclaim). It does
+	// not gate BPF load: LoadAndAssign loads and verifies the programs at startup.
 	// Keep this rollout switch off until the Stage 1b-2 environment gates pass;
 	// it is not intended as a long-lived user-facing setting.
 	EnableOpenSSLHTTP bool
