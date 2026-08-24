@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -185,64 +184,47 @@ func TestCollectCgroupPIDs(t *testing.T) {
 	}
 }
 
-func TestScanProcessIntoCompleteness(t *testing.T) {
+func TestScanProcessMappingsCompleteness(t *testing.T) {
 	t.Parallel()
 
 	t.Run("gone pid (ENOENT) is the benign race: complete", func(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
 		// PID 2^31-1 does not exist on any sane box.
-		if !d.scanProcessInto(2147483647, nil) {
+		mappings, complete := d.scanProcessMappings(2147483647)
+		if !complete {
 			t.Fatal("ENOENT on /proc/<pid>/maps must be reported complete (benign race)")
 		}
+		if len(mappings) != 0 {
+			t.Fatalf("mappings = %d, want 0", len(mappings))
+		}
 	})
 
-	t.Run("observed targets reset their missing count", func(t *testing.T) {
+	t.Run("own executable file mappings are returned", func(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
-		data, err := os.ReadFile("/proc/self/maps")
-		if err != nil {
-			t.Fatalf("read own maps: %v", err)
-		}
-		for line := range strings.Lines(string(data)) {
-			_, mapped, ok := parseExecMapping(line)
-			if ok {
-				d.attachedTargets[mapped] = &attachedUprobeTarget{missingScanCount: 1}
-			}
-		}
-		if len(d.attachedTargets) == 0 {
-			t.Fatal("own maps contained no executable file mapping")
-		}
-		if !d.scanProcessInto(int32(os.Getpid()), nil) {
+		mappings, complete := d.scanProcessMappings(int32(os.Getpid()))
+		if !complete {
 			t.Fatal("scan of own maps reported incomplete")
 		}
-		for mapped, target := range d.attachedTargets {
-			if target.missingScanCount != 0 {
-				t.Fatalf("target %v missingScanCount = %d, want 0", mapped, target.missingScanCount)
-			}
+		if len(mappings) == 0 {
+			t.Fatal("own maps contained no executable file mapping")
 		}
 	})
 
-	t.Run("target cap reached: presence still probed, scan still complete, no new attach", func(t *testing.T) {
+	t.Run("target cap does not affect mapping scan", func(t *testing.T) {
 		t.Parallel()
 		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
 		for i := 0; i < maxAttachedUprobeTargets; i++ { // fill the registry to the cap
 			mapped := mappedFileIdentity(strconv.Itoa(i + 1))
 			d.attachedTargets[mapped] = &attachedUprobeTarget{}
 		}
-		before := len(d.attachedTargets)
-		present := map[mappedFileIdentity]struct{}{}
-		// The cap must only refuse NEW attaches. The probe still walks every
-		// mapping and records presence, and stays complete — otherwise a capped
-		// registry could never reclaim a stale link and would never clear.
-		if !d.scanProcessInto(int32(os.Getpid()), present) {
+		mappings, complete := d.scanProcessMappings(int32(os.Getpid()))
+		if !complete {
 			t.Fatal("cap-reached scan reported incomplete; reclaim would be frozen at the cap forever")
 		}
-		if len(present) == 0 {
+		if len(mappings) == 0 {
 			t.Fatal("cap-reached scan recorded no presence; liveness of attached targets would be invisible")
-		}
-		if len(d.attachedTargets) != before {
-			t.Fatalf("targets grew at cap: %d -> %d (refuse-not-evict violated)", before, len(d.attachedTargets))
 		}
 	})
 }

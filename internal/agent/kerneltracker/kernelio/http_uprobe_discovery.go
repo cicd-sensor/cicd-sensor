@@ -63,6 +63,11 @@ type nonTargetFileCacheKey struct {
 // mapping. nonTargetFileCacheKey remains the stricter cache key.
 type mappedFileIdentity string
 
+type processMapping struct {
+	addressRange string
+	mappedFile   mappedFileIdentity
+}
+
 // attachedUprobeTarget is one attached inode. It keeps only the links and the
 // number of complete scans that have missed the inode since it was last seen.
 type attachedUprobeTarget struct {
@@ -167,33 +172,33 @@ func (d *httpUprobeDiscovery) run(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				d.scanProcessInto(pid, nil)
+				d.discoverAndAttachTargets(pid)
 			}
 		}
 	}
 }
 
-// scanProcessInto attaches to any executable mapping of pid that defines a
-// target symbol and, when present is non-nil, records every mapping's identity
-// into it (reclaim's liveness probe). Returns false if an error could have
-// hidden a live mapping.
-func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[mappedFileIdentity]struct{}) bool {
+// scanProcessMappings returns the executable file mappings of pid. It returns
+// false if an error could have hidden a live mapping; mappings read before the
+// error are still returned as positive observations.
+func (d *httpUprobeDiscovery) scanProcessMappings(pid int32) ([]processMapping, bool) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 	if err != nil {
 		// Only a gone pid (ENOENT) is the benign race; anything else could hide
 		// a live mapping. Permission errors are surfaced (discovery is blind).
 		if errors.Is(err, os.ErrNotExist) {
-			return true
+			return nil, true
 		}
 		if errors.Is(err, os.ErrPermission) {
 			d.warnThrottled(&d.permDenied, "http_uprobe_discovery_permission_denied", "op", "open_maps")
 		} else {
 			d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_maps", "error", err)
 		}
-		return false
+		return nil, false
 	}
 	defer f.Close()
 
+	var mappings []processMapping
 	seen := make(map[mappedFileIdentity]struct{})
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -205,35 +210,37 @@ func (d *httpUprobeDiscovery) scanProcessInto(pid int32, present map[mappedFileI
 			continue
 		}
 		seen[mapped] = struct{}{}
-		if present != nil {
-			present[mapped] = struct{}{}
-		}
-		if entry, have := d.attachedTargets[mapped]; have {
-			entry.missingScanCount = 0
-			continue
-		}
-		if len(d.attachedTargets) >= maxAttachedUprobeTargets {
-			// Presence is already recorded. Refuse only this new mapping; existing
-			// targets remain visible to reclaim so the cap can clear.
-			d.warnThrottled(&d.capReached, "http_uprobe_target_cap_reached", "targets", len(d.attachedTargets))
-			continue
-		}
-		d.classifyAndAttach(pid, rng, mapped)
+		mappings = append(mappings, processMapping{addressRange: rng, mappedFile: mapped})
 	}
 	// A read error means a partial scan (e.g. the process exited mid-read). For
 	// attach that is fine (the next connect retries); for reclaim it could hide a
 	// live mapping, so report incomplete.
 	if err := scanner.Err(); err != nil {
-		return false
+		return mappings, false
 	}
-	return true
+	return mappings, true
+}
+
+// discoverAndAttachTargets attaches to process mappings that define an OpenSSL
+// target symbol. Reclaim is intentionally handled by reconcileTargets.
+func (d *httpUprobeDiscovery) discoverAndAttachTargets(pid int32) {
+	mappings, _ := d.scanProcessMappings(pid)
+	for _, mapping := range mappings {
+		if _, have := d.attachedTargets[mapping.mappedFile]; have {
+			continue
+		}
+		if len(d.attachedTargets) >= maxAttachedUprobeTargets {
+			d.warnThrottled(&d.capReached, "http_uprobe_target_cap_reached", "targets", len(d.attachedTargets))
+			continue
+		}
+		d.classifyAndAttach(pid, mapping.addressRange, mapping.mappedFile)
+	}
 }
 
 // classifyAndAttach opens the mapped file by FD (surviving unlink / mount-ns /
 // path replacement), computes its identity, and attaches the uprobe program to
 // each target symbol it defines. The FD is held until every attach completes.
-// Presence was already recorded from maps, so classification failures affect
-// attach only and do not make reclaim incomplete.
+// Classification failures are inconclusive and retried on a later connect.
 func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped mappedFileIdentity) {
 	f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, rng))
 	if err != nil {
@@ -306,13 +313,14 @@ func (d *httpUprobeDiscovery) closeAll() {
 
 // reconcileTargets is the reclaim sweep. It resolves the immutable active-ID
 // snapshot to current filesystem paths, then expands cgroup.procs and scans
-// process maps. The process scan also provides backstop attach.
+// process maps. It only observes liveness; connect-triggered discovery owns
+// target classification and attach.
 // Only detach is fail-keep: an incomplete scan never advances a missing
 // count or closes links, though a target positively observed before an error is
 // reset to zero. We do not retain the prior scan result; each attached target
 // only records how many complete scans have omitted it.
 func (d *httpUprobeDiscovery) reconcileTargets(activeCgroupIDs []uint64) {
-	present := make(map[mappedFileIdentity]struct{})
+	observedMappedFiles := make(map[mappedFileIdentity]struct{})
 	activeCgroupPaths, complete := resolveActiveCgroupPaths(d.cgroupRootPath, activeCgroupIDs)
 	pids := make(map[int32]struct{})
 	for _, cgroupPath := range activeCgroupPaths {
@@ -321,24 +329,29 @@ func (d *httpUprobeDiscovery) reconcileTargets(activeCgroupIDs []uint64) {
 		}
 	}
 	for pid := range pids {
-		if !d.scanProcessInto(pid, present) {
+		mappings, scanComplete := d.scanProcessMappings(pid)
+		if !scanComplete {
 			complete = false
+		}
+		for _, mapping := range mappings {
+			observedMappedFiles[mapping.mappedFile] = struct{}{}
 		}
 	}
 
 	closed := 0
-	if complete {
-		for mappedID, entry := range d.attachedTargets {
-			if _, mapped := present[mappedID]; mapped {
-				entry.missingScanCount = 0
-			} else {
-				entry.missingScanCount++
-			}
-			if entry.missingScanCount >= missingScanLimit {
-				closeLinks(entry.links)
-				delete(d.attachedTargets, mappedID)
-				closed++
-			}
+	for mappedID, entry := range d.attachedTargets {
+		if _, observed := observedMappedFiles[mappedID]; observed {
+			entry.missingScanCount = 0
+			continue
+		}
+		if !complete {
+			continue
+		}
+		entry.missingScanCount++
+		if entry.missingScanCount >= missingScanLimit {
+			closeLinks(entry.links)
+			delete(d.attachedTargets, mappedID)
+			closed++
 		}
 	}
 
@@ -349,7 +362,7 @@ func (d *httpUprobeDiscovery) reconcileTargets(activeCgroupIDs []uint64) {
 			"complete", complete,
 			"closed", closed,
 			"targets", len(d.attachedTargets),
-			"mapped_identities", len(present),
+			"mapped_identities", len(observedMappedFiles),
 			"scanned_cgroups", len(activeCgroupPaths),
 			"scanned_pids", len(pids),
 		)

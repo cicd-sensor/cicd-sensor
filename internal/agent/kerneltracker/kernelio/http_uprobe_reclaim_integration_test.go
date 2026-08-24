@@ -75,6 +75,13 @@ func reconcileAndCount(discovery *httpUprobeDiscovery, activeCgroupIDs []uint64)
 	return len(discovery.attachedTargets)
 }
 
+func discoverAndCount(discovery *httpUprobeDiscovery, pids ...int32) int {
+	for _, pid := range pids {
+		discovery.discoverAndAttachTargets(pid)
+	}
+	return len(discovery.attachedTargets)
+}
+
 func cgroupIDsForPIDs(t *testing.T, discovery *httpUprobeDiscovery, pids ...int32) []uint64 {
 	t.Helper()
 	if len(pids) == 0 {
@@ -113,9 +120,10 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 	a := startLibsslMapper(t)
 	b := startLibsslMapper(t)
 
-	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a, b)); got != 1 {
+	if got := discoverAndCount(discovery, a, b); got != 1 {
 		t.Fatalf("shared libssl inode target count = %d, want 1", got)
 	}
+	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a, b))
 	if got := reconcileAndCount(discovery, nil); got != 1 {
 		t.Fatalf("closed after a single miss: count = %d, want 1", got)
 	}
@@ -135,9 +143,10 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 func TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep(t *testing.T) {
 	discovery := newReclaimTestDiscovery(t)
 	a := startLibsslMapper(t)
-	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a)); got != 1 {
+	if got := discoverAndCount(discovery, a); got != 1 {
 		t.Fatalf("target count after attach = %d, want 1", got)
 	}
+	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a))
 
 	reconcileAndCount(discovery, nil)
 	if got := reconcileAndCount(discovery, unreadableCgroupIDs(t, discovery)); got != 1 {
@@ -177,9 +186,10 @@ func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid)); got != 1 {
+	if got := discoverAndCount(discovery, pid); got != 1 {
 		t.Fatalf("target count after copied libssl attach = %d, want 1", got)
 	}
+	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid))
 	if err := os.Remove(dst); err != nil {
 		t.Fatal(err)
 	}
