@@ -30,7 +30,7 @@
 - [Agent Architecture](developer-guide/agent.md)
   - [Agent Ownership Boundaries](developer-guide/agent-ownership-boundaries.md)
   - [eBPF Runtime](developer-guide/ebpf-runtime.md)
-    - [HTTP Uprobe Coverage](developer-guide/http-uprobes.md)
+    - [HTTP Uprobe Runtime](developer-guide/ebpf/http-uprobes.md)
   - [Kubernetes Runtime](developer-guide/kubernetes-runtime.md)
 - [Rule Engine](developer-guide/rule-engine.md)
 - [Manager Architecture](developer-guide/manager.md)

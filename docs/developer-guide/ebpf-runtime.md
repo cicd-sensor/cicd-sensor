@@ -80,8 +80,8 @@ start with a record byte and never match a method token; KTLS plaintext sends
 are intercepted by the TLS ULP before `tcp_sendmsg` and do not reach the
 hook. The rollout-disabled OpenSSL uprobe path reads HTTP/1.x before encryption.
 HTTP/2 via nghttp2 is planned, not current coverage. See
-[HTTP Uprobe Coverage](http-uprobes.md) for the selected functions, verified
-clients, and known gaps.
+[HTTP Uprobe Runtime](ebpf/http-uprobes.md) for the attach and event lifecycle,
+selected functions, verified clients, and known gaps.
 
 The `mount` event records classic bind/move and new-API `move_mount` attempts;
 ordinary classic filesystem mounts are filtered before ring-buffer
