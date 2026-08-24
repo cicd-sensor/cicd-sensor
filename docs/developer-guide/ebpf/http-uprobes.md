@@ -119,6 +119,23 @@ The parser emits only method, query-stripped path, host, source, and process
 identity. An untracked process reaches the same attached function but is dropped
 at the cgroup gate before parsing.
 
+#### Captured fields
+
+`http_request` adds the HTTP operation to the network context. In particular,
+`path` distinguishes requests to different APIs on the same otherwise legitimate
+host, which cannot be determined from `domain` or `network_connect` alone.
+
+| Field | Captured value |
+| --- | --- |
+| `method` | Request method, normalized to lowercase for rule evaluation. |
+| `path` | Request path with the query removed in eBPF, then normalized to lowercase. |
+| `host` | HTTP/1.x `Host` or planned HTTP/2 `:authority`, normalized to lowercase; a port can remain. |
+| `source` | Capture path: `openssl` today and `nghttp2` when the planned HTTP/2 tap is implemented. |
+| `process` | KernelTracker's process snapshot for the caller: executable, arguments, and ancestors. |
+
+No query, other request header, or body is emitted. This is both the event
+contract and the redaction boundary.
+
 ### 3. Reconcile and close
 
 A link does not disappear when one process exits, and one target can be shared
@@ -186,15 +203,12 @@ call path.
 One BPF entry is shared when selected symbols have the same argument and parse
 contract. Adjacent APIs are not hooked preemptively.
 
-### Not selected
+### Deferred adjacent functions
 
-| Function or stack | Reason |
+| Function | Reason |
 | --- | --- |
 | `SSL_write_early_data`, `SSL_write_ex2` | No verified CI workload requires them. |
 | `nghttp2_submit_headers` | No inspected common CI client creates ordinary requests through it; it has a different argument ABI. |
-| Go `crypto/tls` / `net/http2` | Does not use the selected OpenSSL or nghttp2 APIs. |
-| Java JSSE, Rust rustls / `h2`, Python `h2` | Uses a different TLS or HTTP/2 implementation. |
-| BoringSSL and other OpenSSL-like forks | Not part of the supported ABI contract unless separately verified. |
 
 ### Workload status
 
@@ -216,9 +230,16 @@ can change the actual function path.
 
 ## Known limits
 
+- Only calls through the selected library functions are visible. HTTPS through
+  Go `crypto/tls`, Java JSSE, Rust rustls, Python `h2`, a non-nghttp2 HTTP/2
+  stack, or an unverified OpenSSL-like fork does not expose request fields to
+  these uprobes.
+- Static linking is not itself unsupported. A dynamically or statically linked
+  target is attachable only when the selected function can be resolved from its
+  `.symtab` or `.dynsym`. A stripped static binary without that symbol is not
+  captured.
 - Discovery is best-effort; the first request from a newly observed target can
   occur before attachment.
-- A target absent from both `.symtab` and `.dynsym` cannot be attached by name.
 - HTTP/1.x parsing starts at one write boundary. Split request lines or a `Host`
   outside the bounded prefix can be missed.
 - HTTP/2 is visible only before HPACK in a selected nghttp2 API. HTTP/2 already
