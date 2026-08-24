@@ -7,10 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -73,10 +73,11 @@ type attachedUprobeTarget struct {
 type httpUprobeDiscovery struct {
 	openSSLProgram *ebpf.Program
 	logger         *slog.Logger
+	cgroupRootPath string
 
 	// Worker inputs. run consumes both serially.
-	processScanRequests     chan int32    // pid of a tracked process that just did a TCP connect
-	targetReconcileRequests chan []string // immutable active cgroup paths from KernelTracker
+	processScanRequests chan int32    // pid of a tracked process that just did a TCP connect
+	reconcileRequests   chan []uint64 // immutable active cgroup IDs from KernelTracker
 
 	// Worker-owned state (single goroutine, no locking).
 	attachedTargets    map[mappedFileIdentity]*attachedUprobeTarget
@@ -90,38 +91,35 @@ type httpUprobeDiscovery struct {
 	capReached              uint64
 }
 
-func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger) *httpUprobeDiscovery {
+func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger, cgroupRootPath string) *httpUprobeDiscovery {
 	return &httpUprobeDiscovery{
-		openSSLProgram:          openSSLProgram,
-		logger:                  logger,
-		processScanRequests:     make(chan int32, 256),
-		targetReconcileRequests: make(chan []string, 1),
-		attachedTargets:         make(map[mappedFileIdentity]*attachedUprobeTarget),
-		nonTargetFileCache:      newFIFOSet(nonTargetFileCacheSize),
+		openSSLProgram:      openSSLProgram,
+		logger:              logger,
+		cgroupRootPath:      cgroupRootPath,
+		processScanRequests: make(chan int32, 256),
+		reconcileRequests:   make(chan []uint64, 1),
+		attachedTargets:     make(map[mappedFileIdentity]*attachedUprobeTarget),
+		nonTargetFileCache:  newFIFOSet(nonTargetFileCacheSize),
 	}
 }
 
-// queueTargetReconciliation hands the worker active cgroup paths without blocking
-// the caller. The buffer is 1: newer paths replace a stale queued request,
-// because only the latest liveness picture matters.
-func (d *httpUprobeDiscovery) queueTargetReconciliation(activeCgroupPaths []string) {
+// queueTargetReconciliation hands the worker one immutable active-cgroup
+// snapshot without blocking the KernelTracker loop. One pending sweep is enough;
+// if it takes longer than the interval, the next ticker retries.
+func (d *httpUprobeDiscovery) queueTargetReconciliation(activeCgroupIDs []uint64) {
 	select {
-	case <-d.targetReconcileRequests: // drop a stale queued snapshot; only the latest matters
-	default:
-	}
-	select {
-	case d.targetReconcileRequests <- activeCgroupPaths:
+	case d.reconcileRequests <- activeCgroupIDs:
 	default:
 	}
 }
 
-// QueueHTTPUprobeTargetReconciliation hands the worker cloned active cgroup paths.
+// QueueHTTPUprobeReconciliation hands the worker active cgroup IDs.
 // No-op when HTTP uprobe capture is disabled.
-func (kernelIO *LinuxKernelIO) QueueHTTPUprobeTargetReconciliation(activeCgroupPaths []string) {
+func (kernelIO *LinuxKernelIO) QueueHTTPUprobeReconciliation(activeCgroupIDs []uint64) {
 	if kernelIO.httpUprobeDiscovery == nil {
 		return
 	}
-	kernelIO.httpUprobeDiscovery.queueTargetReconciliation(slices.Clone(activeCgroupPaths))
+	kernelIO.httpUprobeDiscovery.queueTargetReconciliation(activeCgroupIDs)
 }
 
 // queueProcessScan schedules one process mapping scan without blocking sample
@@ -151,8 +149,8 @@ func (d *httpUprobeDiscovery) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case activeCgroupPaths := <-d.targetReconcileRequests:
-			d.reconcileTargets(activeCgroupPaths)
+		case activeCgroupIDs := <-d.reconcileRequests:
+			d.reconcileTargets(activeCgroupIDs)
 		case first := <-d.processScanRequests:
 			// Coalesce whatever is already queued and dedupe by pid so a burst
 			// scans each process once.
@@ -306,15 +304,16 @@ func (d *httpUprobeDiscovery) closeAll() {
 	}
 }
 
-// reconcileTargets is the reclaim sweep. Expanding the supplied cgroups through
-// cgroup.procs and scanning their process maps also provides backstop attach.
+// reconcileTargets is the reclaim sweep. It resolves the immutable active-ID
+// snapshot to current filesystem paths, then expands cgroup.procs and scans
+// process maps. The process scan also provides backstop attach.
 // Only detach is fail-keep: an incomplete scan never advances a missing
 // count or closes links, though a target positively observed before an error is
 // reset to zero. We do not retain the prior scan result; each attached target
 // only records how many complete scans have omitted it.
-func (d *httpUprobeDiscovery) reconcileTargets(activeCgroupPaths []string) {
+func (d *httpUprobeDiscovery) reconcileTargets(activeCgroupIDs []uint64) {
 	present := make(map[mappedFileIdentity]struct{})
-	complete := true
+	activeCgroupPaths, complete := resolveActiveCgroupPaths(d.cgroupRootPath, activeCgroupIDs)
 	pids := make(map[int32]struct{})
 	for _, cgroupPath := range activeCgroupPaths {
 		if !d.collectCgroupPIDs(cgroupPath, pids) {
@@ -355,6 +354,50 @@ func (d *httpUprobeDiscovery) reconcileTargets(activeCgroupPaths []string) {
 			"scanned_pids", len(pids),
 		)
 	}
+}
+
+// resolveActiveCgroupPaths maps KernelTracker's active cgroup IDs to their
+// current cgroupfs paths. A full walk is necessary because cgroup IDs do not
+// encode paths. A disappearing child is a normal teardown race; any other walk
+// or stat error makes reclaim incomplete and therefore fail-keep.
+func resolveActiveCgroupPaths(cgroupRootPath string, activeCgroupIDs []uint64) ([]string, bool) {
+	if len(activeCgroupIDs) == 0 {
+		return nil, true
+	}
+	if cgroupRootPath == "" {
+		return nil, false
+	}
+
+	wanted := make(map[uint64]struct{}, len(activeCgroupIDs))
+	for _, cgroupID := range activeCgroupIDs {
+		wanted[cgroupID] = struct{}{}
+	}
+
+	var paths []string
+	err := filepath.WalkDir(cgroupRootPath, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if path != cgroupRootPath && errors.Is(walkErr, os.ErrNotExist) {
+				return nil
+			}
+			return walkErr
+		}
+		if !entry.IsDir() {
+			return nil
+		}
+
+		var stat unix.Stat_t
+		if err := unix.Stat(path, &stat); err != nil {
+			if path != cgroupRootPath && errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if _, ok := wanted[stat.Ino]; ok {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	return paths, err == nil
 }
 
 // collectCgroupPIDs adds the current members of one tracked cgroup. A vanished

@@ -10,19 +10,21 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 // reclaimHarness drives reconcile() against a worker whose registry is seeded
 // with link-less entries (closeLinks on an empty slice is a no-op), so the
 // tests exercise miss counting and fail-keep without real uprobe links. The
-// Reconcile requests contain no cgroup paths, so every target is absent.
+// Reconcile requests contain no active cgroup IDs, so every target is absent.
 type reclaimHarness struct {
 	d *httpUprobeDiscovery
 }
 
 func newReclaimHarness(t *testing.T) *reclaimHarness {
 	t.Helper()
-	return &reclaimHarness{d: newHTTPUprobeDiscovery(nil, nil)}
+	return &reclaimHarness{d: newHTTPUprobeDiscovery(nil, nil, t.TempDir())}
 }
 
 func (h *reclaimHarness) attached(id nonTargetFileCacheKey) *attachedUprobeTarget {
@@ -31,7 +33,7 @@ func (h *reclaimHarness) attached(id nonTargetFileCacheKey) *attachedUprobeTarge
 	return e
 }
 
-// An empty path set makes every target absent.
+// An empty active-ID snapshot makes every target absent.
 func (h *reclaimHarness) sweep() {
 	h.d.reconcileTargets(nil)
 }
@@ -62,11 +64,11 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		h := newReclaimHarness(t)
 		e := h.attached(id)
 		h.sweep() // miss 1
-		notDirectory := filepath.Join(t.TempDir(), "not-a-directory")
-		if err := os.WriteFile(notDirectory, nil, 0o644); err != nil {
-			t.Fatalf("write non-directory cgroup path: %v", err)
+		cgroupPath := filepath.Join(h.d.cgroupRootPath, "unreadable")
+		if err := os.MkdirAll(filepath.Join(cgroupPath, "cgroup.procs"), 0o755); err != nil {
+			t.Fatalf("create invalid cgroup.procs: %v", err)
 		}
-		h.d.reconcileTargets([]string{notDirectory})
+		h.d.reconcileTargets([]uint64{testPathInode(t, cgroupPath)})
 		if e.missingScanCount != 1 {
 			t.Fatalf("empty incomplete scan changed missingScanCount to %d, want 1", e.missingScanCount)
 		}
@@ -79,33 +81,67 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 			t.Fatal("second complete miss across an incomplete scan must close")
 		}
 	})
-	t.Run("queueTargetReconciliation never blocks and keeps only the latest", func(t *testing.T) {
+	t.Run("queueTargetReconciliation never blocks and keeps one pending sweep", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil)
-		d.queueTargetReconciliation([]string{"one"})
-		d.queueTargetReconciliation([]string{"two"}) // must not block on a full buffer
+		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
+		d.queueTargetReconciliation([]uint64{1})
+		d.queueTargetReconciliation([]uint64{2}) // must not block on a full buffer
 		select {
-		case got := <-d.targetReconcileRequests:
-			if !slices.Equal(got, []string{"two"}) {
-				t.Fatalf("queued cgroup paths = %v, want [two]", got)
+		case got := <-d.reconcileRequests:
+			if !slices.Equal(got, []uint64{1}) {
+				t.Fatalf("queued cgroup IDs = %v, want first pending snapshot [1]", got)
 			}
 		default:
 			t.Fatal("no reconciliation queued")
 		}
 	})
+}
 
-	t.Run("reconcile handoff copies the cgroup path slice", func(t *testing.T) {
-		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil)
-		kernelIO := &LinuxKernelIO{httpUprobeDiscovery: d}
-		paths := []string{"one"}
-		kernelIO.QueueHTTPUprobeTargetReconciliation(paths)
-		paths[0] = "two"
-		got := <-d.targetReconcileRequests
-		if !slices.Equal(got, []string{"one"}) {
-			t.Fatalf("queued paths = %v, want immutable copy [one]", got)
+func TestResolveActiveCgroupPaths(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	tracked := filepath.Join(root, "tracked")
+	untracked := filepath.Join(root, "untracked")
+	if err := os.MkdirAll(tracked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(untracked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("resolves only active IDs", func(t *testing.T) {
+		paths, complete := resolveActiveCgroupPaths(root, []uint64{testPathInode(t, tracked)})
+		if !complete {
+			t.Fatal("complete = false, want true")
+		}
+		if !slices.Equal(paths, []string{tracked}) {
+			t.Fatalf("paths = %v, want [%s]", paths, tracked)
 		}
 	})
+
+	t.Run("empty IDs avoid filesystem dependency", func(t *testing.T) {
+		paths, complete := resolveActiveCgroupPaths("", nil)
+		if !complete || len(paths) != 0 {
+			t.Fatalf("paths = %v complete = %v, want empty true", paths, complete)
+		}
+	})
+
+	t.Run("missing root is incomplete", func(t *testing.T) {
+		paths, complete := resolveActiveCgroupPaths(filepath.Join(root, "missing"), []uint64{1})
+		if complete || len(paths) != 0 {
+			t.Fatalf("paths = %v complete = %v, want empty false", paths, complete)
+		}
+	})
+}
+
+func testPathInode(t *testing.T, path string) uint64 {
+	t.Helper()
+	var stat unix.Stat_t
+	if err := unix.Stat(path, &stat); err != nil {
+		t.Fatalf("stat %q: %v", path, err)
+	}
+	return stat.Ino
 }
 
 func TestCollectCgroupPIDs(t *testing.T) {
@@ -136,7 +172,7 @@ func TestCollectCgroupPIDs(t *testing.T) {
 				}
 			}
 
-			d := newHTTPUprobeDiscovery(nil, nil)
+			d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
 			got := make(map[int32]struct{})
 			if complete := d.collectCgroupPIDs(path, got); complete != test.complete {
 				t.Fatalf("complete = %v, want %v", complete, test.complete)
@@ -154,7 +190,7 @@ func TestScanProcessIntoCompleteness(t *testing.T) {
 
 	t.Run("gone pid (ENOENT) is the benign race: complete", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil)
+		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
 		// PID 2^31-1 does not exist on any sane box.
 		if !d.scanProcessInto(2147483647, nil) {
 			t.Fatal("ENOENT on /proc/<pid>/maps must be reported complete (benign race)")
@@ -163,7 +199,7 @@ func TestScanProcessIntoCompleteness(t *testing.T) {
 
 	t.Run("observed targets reset their missing count", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil)
+		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
 		data, err := os.ReadFile("/proc/self/maps")
 		if err != nil {
 			t.Fatalf("read own maps: %v", err)
@@ -189,7 +225,7 @@ func TestScanProcessIntoCompleteness(t *testing.T) {
 
 	t.Run("target cap reached: presence still probed, scan still complete, no new attach", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil)
+		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
 		for i := 0; i < maxAttachedUprobeTargets; i++ { // fill the registry to the cap
 			mapped := mappedFileIdentity(strconv.Itoa(i + 1))
 			d.attachedTargets[mapped] = &attachedUprobeTarget{}

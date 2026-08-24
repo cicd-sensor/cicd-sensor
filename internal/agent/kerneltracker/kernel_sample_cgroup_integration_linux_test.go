@@ -324,50 +324,39 @@ func TestLinuxKernelSampleCgroupLivenessReconciliation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cgroupIDForPath(%q): %v", childPath, err)
 	}
+	liveSnapshot, err := scanLiveCgroupIDs(cgroupRoot)
+	if err != nil {
+		t.Fatalf("scanLiveCgroupIDs live child: %v", err)
+	}
+	if _, ok := liveSnapshot.LiveCgroupIDs[childCgroupID]; !ok {
+		t.Fatalf("live child cgroup %d was not found by cgroup liveness scan", childCgroupID)
+	}
+
 	scanStartedAt := time.Now().UTC()
 	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
 	state := newJobTrackingState()
 	state.registerJob(jobID, defaultEventRecordBufferSize)
 	state.bindAt(jobID, childCgroupID, scanStartedAt.Add(-time.Second))
 
-	liveSnapshot, err := scanCgroupFilesystem(cgroupRoot)
-	if err != nil {
-		t.Fatalf("scanCgroupFilesystem live child: %v", err)
-	}
-	if _, ok := liveSnapshot.CgroupPathsByID[childCgroupID]; !ok {
-		t.Fatalf("live child cgroup %d was not found by cgroup liveness scan", childCgroupID)
-	}
-	liveEffects := handleEngineInput(state, cgroupFilesystemSnapshot{
-		ScanStartedAt:   scanStartedAt,
-		CheckedAt:       time.Now().UTC(),
-		CgroupPathsByID: liveSnapshot.CgroupPathsByID,
-	})
-	assertEffectOrder(t, liveEffects, queueHTTPUprobeTargetReconciliation{})
-	gotPaths := liveEffects[0].(queueHTTPUprobeTargetReconciliation).ActiveCgroupPaths
-	if len(gotPaths) != 1 || gotPaths[0] != childFullPath {
-		t.Fatalf("HTTP uprobe cgroup paths = %#v, want path %q", gotPaths, childFullPath)
-	}
-
 	if err := os.Remove(childFullPath); err != nil {
 		t.Fatalf("Remove(%q): %v", childFullPath, err)
 	}
 	cleanupChild = false
 
-	missingScanStartedAt := time.Now().UTC()
-	missingSnapshot, err := scanCgroupFilesystem(cgroupRoot)
+	missingSnapshot, err := scanLiveCgroupIDs(cgroupRoot)
 	if err != nil {
-		t.Fatalf("scanCgroupFilesystem missing child: %v", err)
+		t.Fatalf("scanLiveCgroupIDs missing child: %v", err)
 	}
-	if _, ok := missingSnapshot.CgroupPathsByID[childCgroupID]; ok {
+	if _, ok := missingSnapshot.LiveCgroupIDs[childCgroupID]; ok {
 		t.Fatalf("removed child cgroup %d was still found by cgroup liveness scan", childCgroupID)
 	}
 
-	effects := handleEngineInput(state, cgroupFilesystemSnapshot{
-		ScanStartedAt:   missingScanStartedAt,
-		CheckedAt:       time.Now().UTC(),
-		CgroupPathsByID: missingSnapshot.CgroupPathsByID,
+	effects := handleEngineInput(state, commandReconcileCgroupLiveness{
+		ScanStartedAt: scanStartedAt,
+		CheckedAt:     time.Now().UTC(),
+		LiveCgroupIDs: missingSnapshot.LiveCgroupIDs,
 	})
-	assertEffectOrder(t, effects, queueHTTPUprobeTargetReconciliation{}, notifyJobEnded{})
+	assertEffectOrder(t, effects, notifyJobEnded{})
 }
 
 func TestLinuxKernelSampleCgroupAttachExternal(t *testing.T) {

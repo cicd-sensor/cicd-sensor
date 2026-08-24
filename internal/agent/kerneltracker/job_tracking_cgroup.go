@@ -48,7 +48,7 @@ type cgroupPurgeCandidate struct {
 // bind mirrors a cgroup -> Job attribution already accepted by KernelIO/eBPF.
 // It is non-overwriting so one cgroup cannot silently move between Jobs.
 func (s *jobTrackingState) bind(jobID jobcontext.JobIdentity, cgroupID uint64) bool {
-	return s.bindAt(jobID, cgroupID, time.Now())
+	return s.bindAt(jobID, cgroupID, time.Now().UTC())
 }
 
 // bindAt records when this userspace mirror first accepted the cgroup. Tests
@@ -131,40 +131,46 @@ func (s *jobTrackingState) markTrackedCgroupRemoved(cgroupID uint64, now time.Ti
 	}
 }
 
-type cgroupReconciliationResult struct {
-	Removed           []cgroupDetachResult
-	ActiveCgroupPaths []string
-}
-
-// reconcileCgroupFilesystem applies a filesystem scan result to loop-owned state.
+// reconcileCgroupLiveness applies a filesystem scan result to loop-owned state.
 // The scan is a safety net for missed cgroup_rmdir samples: it detects active
 // tracked cgroups that no longer exist, then moves them into the same
 // removed-pending queue used by the rmdir handler. The scan itself runs outside
 // the engine loop; this method is the only place that interprets the live-ID
-// snapshot and mutates tracked cgroup ownership. It also returns the paths of
-// cgroups that were active when the scan started, so KernelIO can inspect their
-// cgroup.procs files without walking the cgroup filesystem again.
-func (s *jobTrackingState) reconcileCgroupFilesystem(snapshot cgroupFilesystemSnapshot) cgroupReconciliationResult {
-	var result cgroupReconciliationResult
+// snapshot and mutates tracked cgroup ownership.
+func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroupIDs map[uint64]struct{}, scanStartedAt time.Time, checkedAt time.Time) []cgroupDetachResult {
+	var removed []cgroupDetachResult
 	for _, cgroups := range s.cgroupsByJob {
 		for cgroupID, cgroup := range cgroups {
 			if cgroup == nil || cgroup.State != trackedCgroupActive {
 				continue
 			}
-			if cgroup.TrackedAt.After(snapshot.ScanStartedAt) {
+			if cgroup.TrackedAt.After(scanStartedAt) {
 				continue
 			}
-			if path, ok := snapshot.CgroupPathsByID[cgroupID]; ok {
-				result.ActiveCgroupPaths = append(result.ActiveCgroupPaths, path)
+			if _, ok := liveCgroupIDs[cgroupID]; ok {
 				continue
 			}
-			detached := s.markTrackedCgroupRemoved(cgroupID, snapshot.CheckedAt)
-			if detached.Found {
-				result.Removed = append(result.Removed, detached)
+			result := s.markTrackedCgroupRemoved(cgroupID, checkedAt)
+			if result.Found {
+				removed = append(removed, result)
 			}
 		}
 	}
-	return result
+	return removed
+}
+
+// activeCgroupIDs returns an immutable snapshot for asynchronous consumers.
+// The engine loop is the only caller because it owns cgroupsByJob.
+func (s *jobTrackingState) activeCgroupIDs() []uint64 {
+	var cgroupIDs []uint64
+	for _, cgroups := range s.cgroupsByJob {
+		for cgroupID, cgroup := range cgroups {
+			if cgroup != nil && cgroup.State == trackedCgroupActive {
+				cgroupIDs = append(cgroupIDs, cgroupID)
+			}
+		}
+	}
+	return cgroupIDs
 }
 
 func (s *jobTrackingState) activeCgroupCount(jobID jobcontext.JobIdentity) int {

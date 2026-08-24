@@ -28,8 +28,8 @@ func handleEngineInput(state *jobTrackingState, input engineInput) []engineEffec
 		return handleExitSample(state, value)
 	case commandPurgeExpiredTrackingState:
 		return handlePurgeTick(state)
-	case cgroupFilesystemSnapshot:
-		return handleCgroupFilesystemSnapshot(state, value)
+	case commandReconcileCgroupLiveness:
+		return handleCgroupLivenessReconciliation(state, value)
 	case cgroupMkdirSample:
 		return handleCgroupMkdirSample(state, value)
 	case cgroupAttachSample:

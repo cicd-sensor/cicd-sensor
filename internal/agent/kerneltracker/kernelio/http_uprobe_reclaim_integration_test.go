@@ -62,6 +62,7 @@ func newReclaimTestDiscovery(t *testing.T) *httpUprobeDiscovery {
 		t.Fatalf("NewLinux: %v", err)
 	}
 	discovery := kernelIO.httpUprobeDiscovery
+	discovery.cgroupRootPath = t.TempDir()
 	t.Cleanup(func() {
 		discovery.closeAll()
 		_ = kernelIO.Close()
@@ -69,17 +70,20 @@ func newReclaimTestDiscovery(t *testing.T) *httpUprobeDiscovery {
 	return discovery
 }
 
-func reconcileAndCount(discovery *httpUprobeDiscovery, activeCgroupPaths []string) int {
-	discovery.reconcileTargets(activeCgroupPaths)
+func reconcileAndCount(discovery *httpUprobeDiscovery, activeCgroupIDs []uint64) int {
+	discovery.reconcileTargets(activeCgroupIDs)
 	return len(discovery.attachedTargets)
 }
 
-func cgroupPathsForPIDs(t *testing.T, pids ...int32) []string {
+func cgroupIDsForPIDs(t *testing.T, discovery *httpUprobeDiscovery, pids ...int32) []uint64 {
 	t.Helper()
 	if len(pids) == 0 {
 		return nil
 	}
-	cgroupPath := t.TempDir()
+	cgroupPath, err := os.MkdirTemp(discovery.cgroupRootPath, "tracked-")
+	if err != nil {
+		t.Fatalf("create tracked cgroup: %v", err)
+	}
 	lines := make([]string, 0, len(pids))
 	for _, pid := range pids {
 		lines = append(lines, strconv.FormatInt(int64(pid), 10))
@@ -87,16 +91,19 @@ func cgroupPathsForPIDs(t *testing.T, pids ...int32) []string {
 	if err := os.WriteFile(filepath.Join(cgroupPath, "cgroup.procs"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatalf("write cgroup.procs: %v", err)
 	}
-	return []string{cgroupPath}
+	return []uint64{testPathInode(t, cgroupPath)}
 }
 
-func unreadableCgroupPaths(t *testing.T) []string {
+func unreadableCgroupIDs(t *testing.T, discovery *httpUprobeDiscovery) []uint64 {
 	t.Helper()
-	notDirectory := filepath.Join(t.TempDir(), "not-a-directory")
-	if err := os.WriteFile(notDirectory, nil, 0o644); err != nil {
-		t.Fatalf("write non-directory cgroup path: %v", err)
+	cgroupPath, err := os.MkdirTemp(discovery.cgroupRootPath, "unreadable-")
+	if err != nil {
+		t.Fatalf("create unreadable cgroup: %v", err)
 	}
-	return []string{notDirectory}
+	if err := os.Mkdir(filepath.Join(cgroupPath, "cgroup.procs"), 0o755); err != nil {
+		t.Fatalf("create invalid cgroup.procs: %v", err)
+	}
+	return []uint64{testPathInode(t, cgroupPath)}
 }
 
 // TestLinuxHTTPUprobeReclaimSharedInode verifies that an inode mapped by two
@@ -106,13 +113,13 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 	a := startLibsslMapper(t)
 	b := startLibsslMapper(t)
 
-	if got := reconcileAndCount(discovery, cgroupPathsForPIDs(t, a, b)); got != 1 {
+	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a, b)); got != 1 {
 		t.Fatalf("shared libssl inode target count = %d, want 1", got)
 	}
 	if got := reconcileAndCount(discovery, nil); got != 1 {
 		t.Fatalf("closed after a single miss: count = %d, want 1", got)
 	}
-	if got := reconcileAndCount(discovery, cgroupPathsForPIDs(t, b)); got != 1 {
+	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, b)); got != 1 {
 		t.Fatalf("target closed while still mapped by b: count = %d, want 1", got)
 	}
 	if got := reconcileAndCount(discovery, nil); got != 1 {
@@ -128,12 +135,12 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 func TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep(t *testing.T) {
 	discovery := newReclaimTestDiscovery(t)
 	a := startLibsslMapper(t)
-	if got := reconcileAndCount(discovery, cgroupPathsForPIDs(t, a)); got != 1 {
+	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a)); got != 1 {
 		t.Fatalf("target count after attach = %d, want 1", got)
 	}
 
 	reconcileAndCount(discovery, nil)
-	if got := reconcileAndCount(discovery, unreadableCgroupPaths(t)); got != 1 {
+	if got := reconcileAndCount(discovery, unreadableCgroupIDs(t, discovery)); got != 1 {
 		t.Fatalf("incomplete scan closed a target: count = %d, want 1", got)
 	}
 	if got := reconcileAndCount(discovery, nil); got != 0 {
@@ -170,14 +177,14 @@ func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if got := reconcileAndCount(discovery, cgroupPathsForPIDs(t, pid)); got != 1 {
+	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid)); got != 1 {
 		t.Fatalf("target count after copied libssl attach = %d, want 1", got)
 	}
 	if err := os.Remove(dst); err != nil {
 		t.Fatal(err)
 	}
-	reconcileAndCount(discovery, cgroupPathsForPIDs(t, pid))
-	if got := reconcileAndCount(discovery, cgroupPathsForPIDs(t, pid)); got != 1 {
+	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid))
+	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid)); got != 1 {
 		t.Fatalf("unlinked-but-mapped inode was detached: count = %d, want 1", got)
 	}
 }

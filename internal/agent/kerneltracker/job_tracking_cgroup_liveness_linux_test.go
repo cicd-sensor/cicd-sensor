@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func TestScanCgroupFilesystemWithWalkDir(t *testing.T) {
+func TestScanLiveCgroupIDsWithWalkDir(t *testing.T) {
 	t.Parallel()
 
 	t.Run("collects directory inodes", func(t *testing.T) {
@@ -28,9 +28,9 @@ func TestScanCgroupFilesystemWithWalkDir(t *testing.T) {
 			t.Fatalf("write file: %v", err)
 		}
 
-		snapshot, err := scanCgroupFilesystem(root)
+		snapshot, err := scanLiveCgroupIDs(root)
 		if err != nil {
-			t.Fatalf("scanCgroupFilesystem: %v", err)
+			t.Fatalf("scanLiveCgroupIDs: %v", err)
 		}
 		if snapshot.DirectoryCount != 3 {
 			t.Fatalf("directory count = %d, want 3", snapshot.DirectoryCount)
@@ -43,11 +43,8 @@ func TestScanCgroupFilesystemWithWalkDir(t *testing.T) {
 			if err := unix.Stat(path, &stat); err != nil {
 				t.Fatalf("stat %q: %v", path, err)
 			}
-			if _, ok := snapshot.CgroupPathsByID[stat.Ino]; !ok {
+			if _, ok := snapshot.LiveCgroupIDs[stat.Ino]; !ok {
 				t.Fatalf("inode for %q not found in live cgroup IDs", path)
-			}
-			if got := snapshot.CgroupPathsByID[stat.Ino]; got != path {
-				t.Fatalf("path for inode %d = %q, want %q", stat.Ino, got, path)
 			}
 		}
 	})
@@ -55,8 +52,8 @@ func TestScanCgroupFilesystemWithWalkDir(t *testing.T) {
 	t.Run("empty root returns error", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := scanCgroupFilesystem(""); err == nil {
-			t.Fatal("scanCgroupFilesystem empty root error = nil, want error")
+		if _, err := scanLiveCgroupIDs(""); err == nil {
+			t.Fatal("scanLiveCgroupIDs empty root error = nil, want error")
 		}
 	})
 
@@ -65,7 +62,7 @@ func TestScanCgroupFilesystemWithWalkDir(t *testing.T) {
 
 		root := t.TempDir()
 		wantErr := errors.New("walk root failed")
-		_, err := scanCgroupFilesystemWithWalkDir(root, func(path string, fn fs.WalkDirFunc) error {
+		_, err := scanLiveCgroupIDsWithWalkDir(root, func(path string, fn fs.WalkDirFunc) error {
 			return fn(path, testDirEntry{name: filepath.Base(path), dir: true}, wantErr)
 		})
 		if !errors.Is(err, wantErr) {
@@ -78,14 +75,14 @@ func TestScanCgroupFilesystemWithWalkDir(t *testing.T) {
 
 		root := t.TempDir()
 		missing := filepath.Join(root, "gone")
-		snapshot, err := scanCgroupFilesystemWithWalkDir(root, func(path string, fn fs.WalkDirFunc) error {
+		snapshot, err := scanLiveCgroupIDsWithWalkDir(root, func(path string, fn fs.WalkDirFunc) error {
 			if err := fn(root, testDirEntry{name: filepath.Base(root), dir: true}, nil); err != nil {
 				return err
 			}
 			return fn(missing, nil, os.ErrNotExist)
 		})
 		if err != nil {
-			t.Fatalf("scanCgroupFilesystemWithWalkDir: %v", err)
+			t.Fatalf("scanLiveCgroupIDsWithWalkDir: %v", err)
 		}
 		if snapshot.DirectoryCount != 1 {
 			t.Fatalf("directory count = %d, want 1", snapshot.DirectoryCount)
@@ -101,7 +98,7 @@ func TestScanCgroupFilesystemWithWalkDir(t *testing.T) {
 		root := t.TempDir()
 		child := filepath.Join(root, "child")
 		wantErr := os.ErrPermission
-		_, err := scanCgroupFilesystemWithWalkDir(root, func(path string, fn fs.WalkDirFunc) error {
+		_, err := scanLiveCgroupIDsWithWalkDir(root, func(path string, fn fs.WalkDirFunc) error {
 			if err := fn(root, testDirEntry{name: filepath.Base(root), dir: true}, nil); err != nil {
 				return err
 			}

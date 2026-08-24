@@ -100,12 +100,6 @@ type deleteExpiredCgroupsFromKernel struct {
 
 func (deleteExpiredCgroupsFromKernel) sealedEngineEffect() {}
 
-type queueHTTPUprobeTargetReconciliation struct {
-	ActiveCgroupPaths []string
-}
-
-func (queueHTTPUprobeTargetReconciliation) sealedEngineEffect() {}
-
 func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []engineEffect) {
 	for _, effect := range effects {
 		switch value := effect.(type) {
@@ -185,8 +179,6 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 				// succeeds; otherwise the next purge tick can retry.
 				engine.jobTracking.purgeRemovedCgroups(value.Cgroups)
 			}
-		case queueHTTPUprobeTargetReconciliation:
-			engine.kernelIO.QueueHTTPUprobeTargetReconciliation(value.ActiveCgroupPaths)
 		case replyRegisterJob:
 			value.Reply <- registerJobReply{EventCh: value.EventCh, Err: value.Err}
 		case replyBindCgroup:

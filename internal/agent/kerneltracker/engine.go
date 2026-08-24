@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
@@ -13,6 +14,7 @@ import (
 const (
 	defaultEngineInputBufferSize = 16384
 	defaultEventRecordBufferSize = 65536
+	httpUprobeReconcileInterval  = time.Minute
 )
 
 type KernelTracker struct {
@@ -76,9 +78,11 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 
 	// Start periodic maintenance such as process context GC and lazy cgroup purge.
 	stopTrackingStatePurgeTicker := engine.startTrackingStatePurgeTicker(ctx)
-	stopCgroupFilesystemScanner := engine.startCgroupFilesystemScanner(ctx)
+	stopCgroupLivenessScanner := engine.startCgroupLivenessScanner(ctx)
+	httpUprobeReconcileTicker := time.NewTicker(httpUprobeReconcileInterval)
 	defer engine.closeRemainingChannels()
-	defer stopCgroupFilesystemScanner()
+	defer httpUprobeReconcileTicker.Stop()
+	defer stopCgroupLivenessScanner()
 	defer stopTrackingStatePurgeTicker()
 
 	for {
@@ -88,6 +92,10 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 		case in := <-engine.inputCh:
 			effects := handleEngineInput(engine.jobTracking, in)
 			engine.runEngineEffects(ctx, effects)
+		case <-httpUprobeReconcileTicker.C:
+			// Copy only loop-owned tracking identities. KernelIO resolves paths and
+			// performs the full reclaim asynchronously in its single worker.
+			engine.kernelIO.QueueHTTPUprobeReconciliation(engine.jobTracking.activeCgroupIDs())
 		}
 	}
 }
