@@ -159,6 +159,20 @@ func (s *jobTrackingState) reconcileCgroupLiveness(liveCgroupIDs map[uint64]stru
 	return removed
 }
 
+// activeCgroupIDs returns an immutable snapshot for asynchronous consumers.
+// The engine loop is the only caller because it owns cgroupsByJob.
+func (s *jobTrackingState) activeCgroupIDs() []uint64 {
+	var cgroupIDs []uint64
+	for _, cgroups := range s.cgroupsByJob {
+		for cgroupID, cgroup := range cgroups {
+			if cgroup != nil && cgroup.State == trackedCgroupActive {
+				cgroupIDs = append(cgroupIDs, cgroupID)
+			}
+		}
+	}
+	return cgroupIDs
+}
+
 func (s *jobTrackingState) activeCgroupCount(jobID jobcontext.JobIdentity) int {
 	count := 0
 	for _, cgroup := range s.cgroupsByJob[jobID] {

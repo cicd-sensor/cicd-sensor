@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
@@ -13,6 +14,7 @@ import (
 const (
 	defaultEngineInputBufferSize = 16384
 	defaultEventRecordBufferSize = 65536
+	httpUprobeReconcileInterval  = time.Minute
 )
 
 type KernelTracker struct {
@@ -77,7 +79,9 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 	// Start periodic maintenance such as process context GC and lazy cgroup purge.
 	stopTrackingStatePurgeTicker := engine.startTrackingStatePurgeTicker(ctx)
 	stopCgroupLivenessScanner := engine.startCgroupLivenessScanner(ctx)
+	httpUprobeReconcileTicker := time.NewTicker(httpUprobeReconcileInterval)
 	defer engine.closeRemainingChannels()
+	defer httpUprobeReconcileTicker.Stop()
 	defer stopCgroupLivenessScanner()
 	defer stopTrackingStatePurgeTicker()
 
@@ -88,11 +92,15 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 		case in := <-engine.inputCh:
 			effects := handleEngineInput(engine.jobTracking, in)
 			engine.runEngineEffects(ctx, effects)
+		case <-httpUprobeReconcileTicker.C:
+			// Copy only loop-owned tracking identities. KernelIO resolves paths and
+			// performs the full reclaim asynchronously in its single worker.
+			engine.kernelIO.QueueHTTPUprobeReconciliation(engine.jobTracking.activeCgroupIDs())
 		}
 	}
 }
 
-// enqueueKernelSample decodes one raw ringbuf sample, forwards any attach hint,
+// enqueueKernelSample decodes one raw ringbuf sample, queues any process-scan request,
 // and queues the decoded input.
 func (engine *KernelTracker) enqueueKernelSample(ctx context.Context, sample kernelio.KernelSample) error {
 	input, err := decodeKernelSample(sample)

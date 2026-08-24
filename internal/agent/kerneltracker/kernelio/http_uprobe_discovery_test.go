@@ -4,35 +4,35 @@ package kernelio
 
 import "testing"
 
-func TestHTTPUprobeDiscoveryEnqueuePID(t *testing.T) {
+func TestHTTPUprobeDiscoveryQueueProcessScan(t *testing.T) {
 	t.Parallel()
 
 	t.Run("available queue records the process pid", func(t *testing.T) {
 		t.Parallel()
 
-		d := &httpUprobeDiscovery{hints: make(chan int32, 1)}
-		d.enqueuePID(4321)
+		d := &httpUprobeDiscovery{processScanRequests: make(chan int32, 1)}
+		d.queueProcessScan(4321)
 		select {
-		case got := <-d.hints:
+		case got := <-d.processScanRequests:
 			if got != 4321 {
-				t.Fatalf("hinted pid = %d, want 4321", got)
+				t.Fatalf("queued pid = %d, want 4321", got)
 			}
 		default:
-			t.Fatal("expected a hint, queue was empty")
+			t.Fatal("expected a process scan request, queue was empty")
 		}
 	})
 
-	t.Run("full queue drops the hint without blocking", func(t *testing.T) {
+	t.Run("full queue drops the request without blocking", func(t *testing.T) {
 		t.Parallel()
 
-		d := &httpUprobeDiscovery{hints: make(chan int32, 1)}
-		d.enqueuePID(1) // fills the queue
-		d.enqueuePID(2) // must not block
-		if len(d.hints) != 1 {
-			t.Fatalf("queue len = %d, want 1 (second hint must be dropped)", len(d.hints))
+		d := &httpUprobeDiscovery{processScanRequests: make(chan int32, 1)}
+		d.queueProcessScan(1) // fills the queue
+		d.queueProcessScan(2) // must not block
+		if len(d.processScanRequests) != 1 {
+			t.Fatalf("queue len = %d, want 1 (second request must be dropped)", len(d.processScanRequests))
 		}
-		if d.queueDropped != 1 {
-			t.Fatalf("queueDropped = %d, want 1", d.queueDropped)
+		if d.processScanQueueDropped != 1 {
+			t.Fatalf("processScanQueueDropped = %d, want 1", d.processScanQueueDropped)
 		}
 	})
 }
@@ -41,18 +41,18 @@ func TestParseExecMapping(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		line       string
-		wantOK     bool
-		wantRange  string
-		wantDevIno string
+		name        string
+		line        string
+		wantOK      bool
+		wantRange   string
+		wantMapping mappedFileIdentity
 	}{
 		{
-			name:       "executable file-backed mapping",
-			line:       "55a1b2c00000-55a1b2c21000 r-xp 00000000 fd:01 1443212 /usr/lib/x86_64-linux-gnu/libssl.so.3",
-			wantOK:     true,
-			wantRange:  "55a1b2c00000-55a1b2c21000",
-			wantDevIno: "fd:01:1443212",
+			name:        "executable file-backed mapping",
+			line:        "55a1b2c00000-55a1b2c21000 r-xp 00000000 fd:01 1443212 /usr/lib/x86_64-linux-gnu/libssl.so.3",
+			wantOK:      true,
+			wantRange:   "55a1b2c00000-55a1b2c21000",
+			wantMapping: "fd:01:1443212",
 		},
 		{
 			name:   "non-executable mapping is skipped",
@@ -79,7 +79,7 @@ func TestParseExecMapping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			rng, devIno, ok := parseExecMapping(tt.line)
+			rng, mapped, ok := parseExecMapping(tt.line)
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
 			}
@@ -89,8 +89,8 @@ func TestParseExecMapping(t *testing.T) {
 			if rng != tt.wantRange {
 				t.Fatalf("range = %q, want %q", rng, tt.wantRange)
 			}
-			if devIno != tt.wantDevIno {
-				t.Fatalf("devIno = %q, want %q", devIno, tt.wantDevIno)
+			if mapped != tt.wantMapping {
+				t.Fatalf("mapping = %+v, want %+v", mapped, tt.wantMapping)
 			}
 		})
 	}
@@ -99,7 +99,7 @@ func TestParseExecMapping(t *testing.T) {
 func TestFIFOSet(t *testing.T) {
 	t.Parallel()
 
-	id := func(n uint64) fileIdentity { return fileIdentity{dev: 1, ino: n} }
+	id := func(n uint64) nonTargetFileCacheKey { return nonTargetFileCacheKey{ctimeNano: int64(n)} }
 
 	t.Run("non-positive limit disables the set", func(t *testing.T) {
 		t.Parallel()

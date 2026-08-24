@@ -1,11 +1,37 @@
 package kerneltracker
 
 import (
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
+
+func TestJobTrackingState_ActiveCgroupIDs(t *testing.T) {
+	t.Parallel()
+
+	s := newJobTrackingState()
+	jobID := newJob("100")
+	s.bind(jobID, 84)
+	s.bind(jobID, 126)
+	s.bind(jobID, 42)
+	s.markTrackedCgroupRemoved(126, time.Unix(100, 0))
+
+	got := s.activeCgroupIDs()
+	slices.Sort(got)
+	want := []uint64{42, 84}
+	if !slices.Equal(got, want) {
+		t.Fatalf("active cgroup IDs = %v, want %v", got, want)
+	}
+
+	got[0] = 999
+	next := s.activeCgroupIDs()
+	slices.Sort(next)
+	if !slices.Equal(next, want) {
+		t.Fatalf("mutating snapshot changed state: got %v, want %v", next, want)
+	}
+}
 
 func TestJobTrackingState_BindAndJobForCgroup(t *testing.T) {
 	t.Parallel()

@@ -498,7 +498,7 @@ Only the request line and the `Host` header are captured — no other headers an
 | `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |
 | `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Lowercase. |
 | `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
-| `source` | string | `cleartext_http`, `openssl` | Capture channel: `cleartext_http` (plain `http://`) or `openssl` (HTTPS via OpenSSL; opt-in, ships enabled in a later release — see below). |
+| `source` | string | `cleartext_http`, `openssl` | Capture channel: `cleartext_http` (plain `http://`) or `openssl` (HTTPS via OpenSSL; not yet enabled in shipped builds — see below). |
 | `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
 
 `source` reports where the request line was read:
@@ -507,7 +507,9 @@ Only the request line and the `Host` header are captured — no other headers an
   endpoints and plain-HTTP package mirrors.
 - `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's `SSL_write`
   (covers curl / wget / Python `pip`/`requests` / most Node). This tap is
-  **opt-in** and enabled together with attach reclaim in a later release.
+  **not yet enabled** in shipped builds; default enablement waits for the
+  privileged reclaim E2E and the remaining rollout gates (there is no separate
+  opt-in).
 
 Known gaps (absence of an `http_request` event does **not** mean absence of
 egress — combine with `domain` and `network_connect` rules):

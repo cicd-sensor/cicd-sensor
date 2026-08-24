@@ -10,15 +10,11 @@ var ErrNotSupported = errors.New("not supported")
 // Config contains the cgroup v2 root detected by KernelTracker.
 type Config struct {
 	CgroupV2RootPath string
-	// EnableOpenSSLHTTP starts the OpenSSL uprobe attach-discovery worker (connect
-	// hint + process scan + attach) — the runtime that makes the tap capture. It does
-	// NOT gate BPF load: the uprobe programs are loaded and verified at startup
-	// either way (LoadAndAssign loads every program), so this is a kill-switch
-	// for a new attach subsystem, not a load-safety gate. Off in Stage 1b-1
-	// because attach reclaim is missing (Stage 1b-2): without it, distinct
-	// overlay/container libssl inodes accumulate attaches up to the target cap on
-	// long-lived agents and silently lose coverage. Removal plan: default-on or
-	// drop this flag once 1b-2 reclaim lands.
+	// EnableOpenSSLHTTP starts the OpenSSL uprobe attach-discovery worker
+	// (connect-triggered process scan, attach, and maps-liveness reclaim). It does
+	// not gate BPF load: LoadAndAssign loads and verifies the programs at startup.
+	// Keep this rollout switch off until the Stage 1b-2 environment gates pass;
+	// it is not intended as a long-lived user-facing setting.
 	EnableOpenSSLHTTP bool
 }
 
@@ -32,6 +28,10 @@ type KernelIO interface {
 	// QueueHTTPUprobeDiscovery schedules a non-blocking process mapping scan
 	// after a TCP connect. It is a no-op when HTTP uprobe capture is disabled.
 	QueueHTTPUprobeDiscovery(pid int32)
+	// QueueHTTPUprobeReconciliation takes ownership of an active userspace
+	// cgroup-ID snapshot and schedules a non-blocking maps-liveness sweep.
+	// It is a no-op when HTTP uprobe capture is disabled.
+	QueueHTTPUprobeReconciliation(activeCgroupIDs []uint64)
 	StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error
 	Close() error
 }
