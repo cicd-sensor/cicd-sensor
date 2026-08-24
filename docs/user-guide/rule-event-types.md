@@ -505,8 +505,11 @@ Only the request line and the `Host` header are captured — no other headers an
 
 - `cleartext_http` — plain HTTP (`http://`) traffic, including cloud metadata
   endpoints and plain-HTTP package mirrors.
-- `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's `SSL_write`
-  (covers curl / wget / Python `pip`/`requests` / most Node). This tap is
+- `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's
+  `SSL_write` / `SSL_write_ex`. Integration currently verifies curl and Python
+  `urllib.request`. Other clients are covered only when their build and protocol
+  call one of those functions; a tool name alone is not a coverage guarantee.
+  This tap is
   **not yet enabled** in shipped builds; default enablement waits for the
   privileged reclaim E2E and the remaining rollout gates (there is no separate
   opt-in).

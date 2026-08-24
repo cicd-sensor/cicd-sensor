@@ -64,7 +64,7 @@ The eBPF Runtime handles both rule-facing events and internal tracking samples.
 | file | `security_file_open`, `security_inode_unlink`, `security_inode_rename`, `security_inode_link` | `file_open`, `file_remove`, `file_move`, `file_link` |
 | mount | `security_sb_mount`, `security_move_mount` | `mount` for path exposure attempts |
 | domain | `udp_sendmsg`, `udpv6_sendmsg`, `tcp_sendmsg` | `domain` |
-| http | `tcp_sendmsg` (dedicated fentry program) | `http_request` for cleartext HTTP |
+| http | `tcp_sendmsg`; rollout-disabled OpenSSL `SSL_write` / `SSL_write_ex` uprobes | `http_request` |
 | unix socket | `unix_stream_connect`, `unix_dgram_connect` | `unix_socket_connect` |
 
 `cgroup/connect4/6` is not attached per tracked cgroup. The agent attaches once to the cgroup v2 root detected at startup, and the program uses `tracked_cgroups` lookup to handle only target jobs.
@@ -78,8 +78,10 @@ send whose first bytes match a request-method token is parsed **in eBPF**
 stays in a per-CPU scratch map and never enters the ring buffer. TLS writes
 start with a record byte and never match a method token; KTLS plaintext sends
 are intercepted by the TLS ULP before `tcp_sendmsg` and do not reach the
-hook. HTTPS capture (OpenSSL / nghttp2 uprobes) is a separate follow-up
-stage.
+hook. The rollout-disabled OpenSSL uprobe path reads HTTP/1.x before encryption.
+HTTP/2 via nghttp2 is planned, not current coverage. See
+[HTTP Uprobe Coverage](http-uprobes.md) for the selected functions, verified
+clients, and known gaps.
 
 The `mount` event records classic bind/move and new-API `move_mount` attempts;
 ordinary classic filesystem mounts are filtered before ring-buffer
