@@ -42,21 +42,19 @@ struct user_pt_regs {
 //      |  scan at most 32 leading pseudo-headers; retain only pointers to
 //      |  :method, :path, and :authority in the per-CPU scratch entry
 //      v
-//   [1] method ─→ [2] path ─→ [3] authority ─→ [4] emit
+//   [1] validate required method/path ─→ [2] validate optional host and emit
 //
-// Each nghttp2 tail-call stage validates and bounds one attacker-controlled
-// userspace value. Splitting the scans is verifier-required: the equivalent
-// single program exceeds the Linux 6.17 one-million-instruction state budget.
+// The tail call resets verifier state after the bounded pseudo-header scan; a
+// no-tail-call version exceeded Linux 6.17's one-million-instruction budget.
+// Linux 6.17 also needs the three value scans split across two targets. The
+// split follows event semantics instead of forming a per-field pipeline.
 // Raw header values remain in userspace and only the three selected, validated
-// fields are copied to the ring buffer by the final stage.
+// fields are copied to the ring buffer by the tail target.
 
-// Stage indices in the http_uprobe_stages jump table. Keeping each nghttp2
-// value scan in its own program avoids verifier state explosion on Linux 6.17.
-#define HTTP_UPROBE_STAGE_OPENSSL_PARSE      0
-#define HTTP_UPROBE_STAGE_NGHTTP2_METHOD     1
-#define HTTP_UPROBE_STAGE_NGHTTP2_PATH       2
-#define HTTP_UPROBE_STAGE_NGHTTP2_AUTHORITY  3
-#define HTTP_UPROBE_STAGE_NGHTTP2_EMIT       4
+// Stage indices in the http_uprobe_stages jump table.
+#define HTTP_UPROBE_STAGE_OPENSSL_PARSE     0
+#define HTTP_UPROBE_STAGE_NGHTTP2_REQUIRED  1
+#define HTTP_UPROBE_STAGE_NGHTTP2_EMIT      2
 
 // Entry: PARM2 is the plaintext buffer, PARM3 its length, for both
 // SSL_write(SSL*, const void*, int) and
@@ -296,7 +294,7 @@ int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
             break;
     }
 
-    // Carry only userspace pointers and lengths into the verifier-split stages;
+    // Carry only userspace pointers and lengths into the verifier-split target;
     // no raw header byte is copied into scratch.
     struct http_scratch *s = http_scratch_get();
     if (!s)
@@ -308,40 +306,23 @@ int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
     s->nghttp2_method_len = method_len;
     s->nghttp2_path_len = path_len;
     s->nghttp2_authority_len = authority_len;
-    s->nghttp2_method_n = 0;
-    s->nghttp2_path_n = 0;
-    s->nghttp2_authority_n = 0;
-    s->nghttp2_have_authority = 0;
-
-    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_METHOD);
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_REQUIRED);
     return 0;
 }
 
-// Stage 1: require a complete, bounded :method with no control bytes.
+// Validate the required fields together: a request needs both method and path.
 SEC("uprobe/nghttp2_submit_request")
-int BPF_UPROBE(handle_nghttp2_method)
+int BPF_UPROBE(handle_nghttp2_required)
 {
     struct http_scratch *s = http_scratch_get();
     if (!s)
         return 0;
     const __u8 *method = (const __u8 *)s->nghttp2_method;
+    const __u8 *path = (const __u8 *)s->nghttp2_path;
     __u32 method_n = 0;
     if (nghttp2_field_length(method, s->nghttp2_method_len,
                              HTTP_METHOD_LEN, 0, &method_n) < 0)
         return 0;
-    s->nghttp2_method_n = method_n;
-    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_PATH);
-    return 0;
-}
-
-// Stage 2: require an origin-form :path and bound it before the query marker.
-SEC("uprobe/nghttp2_submit_request")
-int BPF_UPROBE(handle_nghttp2_path)
-{
-    struct http_scratch *s = http_scratch_get();
-    if (!s)
-        return 0;
-    const __u8 *path = (const __u8 *)s->nghttp2_path;
     __u32 path_n = 0;
     if (nghttp2_field_length(path, s->nghttp2_path_len,
                              HTTP_PATH_LEN, 1, &path_n) < 0)
@@ -353,47 +334,34 @@ int BPF_UPROBE(handle_nghttp2_path)
     __u8 first_path;
     if (bpf_probe_read_user(&first_path, sizeof(first_path), path) < 0 || first_path != '/')
         return 0;
+
+    s->nghttp2_method_n = method_n;
     s->nghttp2_path_n = path_n;
-    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_AUTHORITY);
-    return 0;
-}
-
-// Stage 3: validate optional :authority; invalid authority becomes empty host.
-SEC("uprobe/nghttp2_submit_request")
-int BPF_UPROBE(handle_nghttp2_authority)
-{
-    struct http_scratch *s = http_scratch_get();
-    if (!s)
-        return 0;
-    const __u8 *authority = (const __u8 *)s->nghttp2_authority;
-
-    // Authority is optional for event emission. An absent or invalid value
-    // becomes an empty host; method and path remain useful rule evidence.
-    __u32 authority_n = 0;
-    if (authority && nghttp2_field_length(authority, s->nghttp2_authority_len,
-                                          HTTP_HOST_LEN, 0, &authority_n) == 0) {
-        s->nghttp2_authority_n = authority_n;
-        s->nghttp2_have_authority = 1;
-    }
     bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_EMIT);
     return 0;
 }
 
-// Stage 4: copy only the validated fields into the shared http_request sample.
+// Validate the optional authority, then emit only method, path, and host.
 SEC("uprobe/nghttp2_submit_request")
 int BPF_UPROBE(handle_nghttp2_emit)
 {
     struct http_scratch *s = http_scratch_get();
     if (!s)
         return 0;
-    __u64 cgroup_id = current_cgroup_id();
     const __u8 *method = (const __u8 *)s->nghttp2_method;
     const __u8 *path = (const __u8 *)s->nghttp2_path;
     const __u8 *authority = (const __u8 *)s->nghttp2_authority;
 
-    // Reserve only in the last stage: ringbuf references cannot cross a tail
-    // call. Zero all fixed fields before bounded partial copies to prevent
-    // stale ringbuf bytes from violating the redaction boundary.
+    // Authority is optional for event emission. An absent or invalid value
+    // becomes an empty host; method and path remain useful rule evidence.
+    __u32 authority_n = 0;
+    int have_authority = 0;
+    if (authority && nghttp2_field_length(authority, s->nghttp2_authority_len,
+                                          HTTP_HOST_LEN, 0, &authority_n) == 0) {
+        have_authority = 1;
+    }
+
+    __u64 cgroup_id = current_cgroup_id();
     struct http_request_sample *sample =
         bpf_ringbuf_reserve(&events, sizeof(*sample), 0);
     if (!sample) {
@@ -414,8 +382,8 @@ int BPF_UPROBE(handle_nghttp2_emit)
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }
-    if (s->nghttp2_have_authority &&
-        nghttp2_copy_value(sample->host, authority, s->nghttp2_authority_n) < 0) {
+    if (have_authority &&
+        nghttp2_copy_value(sample->host, authority, authority_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }

@@ -44,8 +44,8 @@ struct http_scratch {
     __u32 host_n;                    // host byte count
     __u32 have_host;                 // 1 = a host value was captured
 
-    // nghttp2 user pointers and bounded field lengths carried between uprobe
-    // tail-call stages. Raw bytes remain in userspace until the emit stage.
+    // nghttp2 pointers and lengths carried across the two semantic tail targets:
+    // required fields, then optional authority plus emit. Raw bytes stay in userspace.
     __u64 nghttp2_method;
     __u64 nghttp2_path;
     __u64 nghttp2_authority;
@@ -54,8 +54,6 @@ struct http_scratch {
     __u64 nghttp2_authority_len;
     __u32 nghttp2_method_n;
     __u32 nghttp2_path_n;
-    __u32 nghttp2_authority_n;
-    __u32 nghttp2_have_authority;
 };
 
 // Tail-call jump table for the HTTP parser. Userspace installs the parse target
@@ -73,7 +71,7 @@ struct {
 // is not reusable.
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-    __uint(max_entries, 5);
+    __uint(max_entries, 3);
     __type(key, __u32);
     __type(value, __u32);
 } http_uprobe_stages SEC(".maps");
