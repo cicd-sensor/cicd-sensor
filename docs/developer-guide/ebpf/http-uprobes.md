@@ -335,6 +335,9 @@ of an OpenSSL `http_request` event for that runner image.
   both `:method` and an origin-form `:path`. Standard HTTP/2 CONNECT creates a
   tunnel on one stream and omits `:path`, so it is not emitted. Extended CONNECT
   includes `:path` and can be emitted, but the event does not expose `:protocol`.
+- The nghttp2 tap does not emit a request whose method exceeds 15 bytes or whose
+  path exceeds 255 bytes. A missing, invalid, or oversized `:authority` produces
+  an event with an empty `host`.
 - Retries can produce duplicate events. Capture is not exactly once.
 - Absence of `http_request` is not proof that no egress occurred. Rules should
   retain `network_connect` coverage; `domain` can also be absent when name

@@ -524,9 +524,11 @@ egress — combine with `domain` and `network_connect` rules):
 - Capture is best-effort against uncooperative code: a process can evade a
   uprobe, and the very first request of a brand-new process can beat the attach.
 
-The capture is best-effort at the request start: a request split across
-multiple writes, or a `host` / `path` longer than the captured prefix, surfaces
-with that field empty rather than partially guessed.
+HTTP/1.x capture is best-effort at one write boundary. A path that crosses the
+256-byte captured prefix is emitted only up to that boundary; a `Host` outside
+the prefix or too long for the field is empty. The nghttp2 tap does not emit a
+request whose method exceeds 15 bytes or whose path exceeds 255 bytes. A
+missing, invalid, or oversized HTTP/2 authority is emitted as an empty `host`.
 
 Unexpected POST to the GitHub API:
 

@@ -285,10 +285,9 @@ func (d *httpUprobeDiscovery) attachTarget(id nonTargetFileCacheKey, ex *link.Ex
 		switch {
 		case err == nil:
 			got = append(got, l)
-		case errors.Is(err, link.ErrNoSymbol), errors.Is(err, link.ErrNotSupported):
-			// ErrNotSupported is Cilium's result for an address-zero imported
-			// symbol. It is not attachable in this mapped file; discovery will
-			// attach the defining library when that mapping is scanned.
+		case errors.Is(err, link.ErrNoSymbol):
+			// Only a missing symbol is a definitive non-target. ErrNotSupported
+			// can also report an attach-backend failure and must remain retryable.
 		default:
 			// Inconclusive: do not cache. Undo partial attaches and retry later.
 			// Unlike a plain "symbol absent", an unexpected attach failure is a

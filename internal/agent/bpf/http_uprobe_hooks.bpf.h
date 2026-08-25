@@ -145,6 +145,7 @@ enum nghttp2_pseudo_header {
 
 static __always_inline __u8 http_ascii_lower(__u8 c)
 {
+    // Convert ASCII A-Z to a-z; leave every other byte unchanged.
     if (c >= 'A' && c <= 'Z')
         return c + ('a' - 'A');
     return c;
