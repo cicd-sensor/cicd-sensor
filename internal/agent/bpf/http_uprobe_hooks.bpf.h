@@ -42,18 +42,19 @@ struct user_pt_regs {
 //      |  scan at most 32 leading pseudo-headers; retain only pointers to
 //      |  :method, :path, and :authority in the per-CPU scratch entry
 //      v
-//   [1] validate selected fields and emit
+//   [1] validate required method/path ─→ [2] validate optional host and emit
 //
 // The tail call resets verifier state after the bounded pseudo-header scan; a
 // no-tail-call version exceeded Linux 6.17's one-million-instruction budget.
-// One reset is sufficient on the tested Linux 6.8 runtime, so validation and
-// emission stay together instead of forming a per-field pipeline.
+// Linux 6.17 also needs the three value scans split across two targets. The
+// split follows event semantics instead of forming a per-field pipeline.
 // Raw header values remain in userspace and only the three selected, validated
 // fields are copied to the ring buffer by the tail target.
 
 // Stage indices in the http_uprobe_stages jump table.
-#define HTTP_UPROBE_STAGE_OPENSSL_PARSE  0
-#define HTTP_UPROBE_STAGE_NGHTTP2_PARSE  1
+#define HTTP_UPROBE_STAGE_OPENSSL_PARSE     0
+#define HTTP_UPROBE_STAGE_NGHTTP2_REQUIRED  1
+#define HTTP_UPROBE_STAGE_NGHTTP2_EMIT      2
 
 // Entry: PARM2 is the plaintext buffer, PARM3 its length, for both
 // SSL_write(SSL*, const void*, int) and
@@ -305,21 +306,19 @@ int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
     s->nghttp2_method_len = method_len;
     s->nghttp2_path_len = path_len;
     s->nghttp2_authority_len = authority_len;
-    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_PARSE);
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_REQUIRED);
     return 0;
 }
 
-// Validate the selected pseudo-headers and emit only method, path, and host.
+// Validate the required fields together: a request needs both method and path.
 SEC("uprobe/nghttp2_submit_request")
-int BPF_UPROBE(handle_nghttp2_parse)
+int BPF_UPROBE(handle_nghttp2_required)
 {
     struct http_scratch *s = http_scratch_get();
     if (!s)
         return 0;
     const __u8 *method = (const __u8 *)s->nghttp2_method;
     const __u8 *path = (const __u8 *)s->nghttp2_path;
-    const __u8 *authority = (const __u8 *)s->nghttp2_authority;
-
     __u32 method_n = 0;
     if (nghttp2_field_length(method, s->nghttp2_method_len,
                              HTTP_METHOD_LEN, 0, &method_n) < 0)
@@ -335,6 +334,23 @@ int BPF_UPROBE(handle_nghttp2_parse)
     __u8 first_path;
     if (bpf_probe_read_user(&first_path, sizeof(first_path), path) < 0 || first_path != '/')
         return 0;
+
+    s->nghttp2_method_n = method_n;
+    s->nghttp2_path_n = path_n;
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_EMIT);
+    return 0;
+}
+
+// Validate the optional authority, then emit only method, path, and host.
+SEC("uprobe/nghttp2_submit_request")
+int BPF_UPROBE(handle_nghttp2_emit)
+{
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
+        return 0;
+    const __u8 *method = (const __u8 *)s->nghttp2_method;
+    const __u8 *path = (const __u8 *)s->nghttp2_path;
+    const __u8 *authority = (const __u8 *)s->nghttp2_authority;
 
     // Authority is optional for event emission. An absent or invalid value
     // becomes an empty host; method and path remain useful rule evidence.
@@ -361,8 +377,8 @@ int BPF_UPROBE(handle_nghttp2_parse)
     sample->_pad1 = 0;
     zero_http_request_fields(sample);
 
-    if (nghttp2_copy_method(sample->method, method, method_n) < 0 ||
-        nghttp2_copy_value(sample->path, path, path_n) < 0) {
+    if (nghttp2_copy_method(sample->method, method, s->nghttp2_method_n) < 0 ||
+        nghttp2_copy_value(sample->path, path, s->nghttp2_path_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }

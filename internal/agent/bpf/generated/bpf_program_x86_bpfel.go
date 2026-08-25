@@ -192,6 +192,8 @@ type BPFProgramHttpScratch struct {
 	Nghttp2MethodLen    uint64
 	Nghttp2PathLen      uint64
 	Nghttp2AuthorityLen uint64
+	Nghttp2MethodN      uint32
+	Nghttp2PathN        uint32
 }
 
 type BPFProgramMountSample struct {
@@ -292,7 +294,8 @@ const (
 	BPFProgramProgHandleCgroupConnect6         = "handle_cgroup_connect6"
 	BPFProgramProgHandleCgroupMkdir            = "handle_cgroup_mkdir"
 	BPFProgramProgHandleCgroupRmdir            = "handle_cgroup_rmdir"
-	BPFProgramProgHandleNghttp2Parse           = "handle_nghttp2_parse"
+	BPFProgramProgHandleNghttp2Emit            = "handle_nghttp2_emit"
+	BPFProgramProgHandleNghttp2Required        = "handle_nghttp2_required"
 	BPFProgramProgHandleNghttp2SubmitRequest   = "handle_nghttp2_submit_request"
 	BPFProgramProgHandleSchedProcessExec       = "handle_sched_process_exec"
 	BPFProgramProgHandleSchedProcessFork       = "handle_sched_process_fork"
@@ -379,7 +382,8 @@ type BPFProgramProgramSpecs struct {
 	HandleCgroupConnect6       *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_rmdir"`
-	HandleNghttp2Parse         *ebpf.ProgramSpec `ebpf:"handle_nghttp2_parse"`
+	HandleNghttp2Emit          *ebpf.ProgramSpec `ebpf:"handle_nghttp2_emit"`
+	HandleNghttp2Required      *ebpf.ProgramSpec `ebpf:"handle_nghttp2_required"`
 	HandleNghttp2SubmitRequest *ebpf.ProgramSpec `ebpf:"handle_nghttp2_submit_request"`
 	HandleSchedProcessExec     *ebpf.ProgramSpec `ebpf:"handle_sched_process_exec"`
 	HandleSchedProcessFork     *ebpf.ProgramSpec `ebpf:"handle_sched_process_fork"`
@@ -513,7 +517,8 @@ type BPFProgramPrograms struct {
 	HandleCgroupConnect6       *ebpf.Program `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.Program `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.Program `ebpf:"handle_cgroup_rmdir"`
-	HandleNghttp2Parse         *ebpf.Program `ebpf:"handle_nghttp2_parse"`
+	HandleNghttp2Emit          *ebpf.Program `ebpf:"handle_nghttp2_emit"`
+	HandleNghttp2Required      *ebpf.Program `ebpf:"handle_nghttp2_required"`
 	HandleNghttp2SubmitRequest *ebpf.Program `ebpf:"handle_nghttp2_submit_request"`
 	HandleSchedProcessExec     *ebpf.Program `ebpf:"handle_sched_process_exec"`
 	HandleSchedProcessFork     *ebpf.Program `ebpf:"handle_sched_process_fork"`
@@ -544,7 +549,8 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleCgroupConnect6,
 		p.HandleCgroupMkdir,
 		p.HandleCgroupRmdir,
-		p.HandleNghttp2Parse,
+		p.HandleNghttp2Emit,
+		p.HandleNghttp2Required,
 		p.HandleNghttp2SubmitRequest,
 		p.HandleSchedProcessExec,
 		p.HandleSchedProcessFork,
