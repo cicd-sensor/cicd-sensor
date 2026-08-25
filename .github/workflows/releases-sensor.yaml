@@ -116,17 +116,17 @@ jobs:
       actions: read
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Self-monitor the release build. The post step uploads the
       # cicd-sensor-attestation artifact (containing predicate.json)
       # at job end, which the downstream sign-tarballs and image
       # jobs sign with actions/attest as a runtime-trace attestation.
       - name: Start cicd-sensor (self-monitoring)
-        uses: cicd-sensor/cicd-sensor-action@31366296cb918b7f1413829aafc16dcf18fe8518 # v0.0.35
+        uses: cicd-sensor/cicd-sensor-action@6511eb44c91d71b2b93d71193b1bf2cb18352f66 # v0.0.38
 
       - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
@@ -247,18 +247,18 @@ jobs:
           ls -la
 
       - name: Attest SBOM (CycloneDX)
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: dist/checksums.txt
           sbom-path: dist/cicd-sensor_${{ needs.validate.outputs.version }}_sbom.cdx.json
 
       - name: Attest SLSA build provenance
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: dist/checksums.txt
 
       - name: Attest runtime-trace (cicd-sensor)
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: dist/checksums.txt
           predicate-type: https://in-toto.io/attestation/runtime-trace/v0.1
@@ -299,7 +299,7 @@ jobs:
             dockerfile: Dockerfile.manager.lambda
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download SBOM
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -317,7 +317,7 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Login to GHCR
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -362,7 +362,7 @@ jobs:
             "ghcr.io/cicd-sensor/${{ matrix.image }}@${{ steps.build_and_push.outputs.digest }}"
 
       - name: Attest SBOM (image)
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
           subject-digest: ${{ steps.build_and_push.outputs.digest }}
@@ -371,7 +371,7 @@ jobs:
           create-storage-record: false
 
       - name: Attest SLSA build provenance (image)
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
           subject-digest: ${{ steps.build_and_push.outputs.digest }}
@@ -379,7 +379,7 @@ jobs:
           create-storage-record: true
 
       - name: Attest runtime-trace (image)
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/cicd-sensor/${{ matrix.image }}
           subject-digest: ${{ steps.build_and_push.outputs.digest }}
@@ -396,7 +396,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # We will push a new annotated tag back to the remote.
           persist-credentials: true
