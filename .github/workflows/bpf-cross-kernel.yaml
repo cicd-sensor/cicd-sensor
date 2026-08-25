@@ -37,10 +37,22 @@ jobs:
         include:
           - runner: ubuntu-22.04
             experimental: false
+            expected: curl,python_urllib,python_requests,pip,wget
           - runner: ubuntu-24.04
             experimental: false
+            expected: curl,python_urllib,python_requests,pip,wget
           - runner: ubuntu-26.04
             experimental: true
+            expected: curl,python_urllib,python_requests,pip
+          - runner: ubuntu-22.04-arm
+            experimental: true
+            expected: curl,python_urllib,python_requests,pip,node,npm,wget,git
+          - runner: ubuntu-24.04-arm
+            experimental: true
+            expected: curl,python_urllib,python_requests,pip,node,npm,wget,git
+          - runner: ubuntu-26.04-arm
+            experimental: true
+            expected: curl,python_urllib,python_requests,pip,node,npm,wget,git
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -81,8 +93,11 @@ jobs:
             -o /tmp/http-client-coverage.test ./internal/agent/kerneltracker
 
       - name: Run HTTP client coverage test
+        env:
+          HTTP_UPROBE_EXPECTED_CLIENTS: ${{ matrix.expected }}
         run: |
-          sudo /tmp/http-client-coverage.test \
+          sudo HTTP_UPROBE_EXPECTED_CLIENTS="$HTTP_UPROBE_EXPECTED_CLIENTS" \
+            /tmp/http-client-coverage.test \
             -test.v \
             -test.count=1 \
             -test.timeout=10m \

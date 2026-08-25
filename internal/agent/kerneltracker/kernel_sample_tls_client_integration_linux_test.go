@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -18,10 +19,12 @@ import (
 )
 
 // TestLinuxOpenSSLUprobeCoversCommonClients verifies actual client binaries on
-// GitHub-hosted Ubuntu. A unique path identifies which client produced the
-// OpenSSL http_request event.
+// CI runner images. A unique path identifies which client produced the OpenSSL
+// http_request event.
 func TestLinuxOpenSSLUprobeCoversCommonClients(t *testing.T) {
+	expected := expectedHTTPClientCoverage(t)
 	tests := []struct {
+		id        string
 		name      string
 		binary    string
 		urlPath   string
@@ -29,6 +32,7 @@ func TestLinuxOpenSSLUprobeCoversCommonClients(t *testing.T) {
 		command   func(string) *exec.Cmd
 	}{
 		{
+			id:        "curl",
 			name:      "curl",
 			binary:    "curl",
 			urlPath:   "/curl",
@@ -38,6 +42,7 @@ func TestLinuxOpenSSLUprobeCoversCommonClients(t *testing.T) {
 			},
 		},
 		{
+			id:        "python_urllib",
 			name:      "python urllib",
 			binary:    "python3",
 			urlPath:   "/python-urllib",
@@ -50,6 +55,7 @@ for _ in range(4): urllib.request.urlopen(sys.argv[1], context=context, timeout=
 			},
 		},
 		{
+			id:        "python_requests",
 			name:      "python requests",
 			binary:    "python3",
 			urlPath:   "/python-requests",
@@ -61,6 +67,7 @@ for _ in range(4): requests.get(sys.argv[1], timeout=10, verify=False)`
 			},
 		},
 		{
+			id:        "pip",
 			name:      "pip",
 			binary:    "python3",
 			urlPath:   "/pip",
@@ -74,6 +81,7 @@ for _ in range(4): requests.get(sys.argv[1], timeout=10, verify=False)`
 			},
 		},
 		{
+			id:        "node",
 			name:      "node https",
 			binary:    "node",
 			urlPath:   "/node",
@@ -86,6 +94,7 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 			},
 		},
 		{
+			id:        "npm",
 			name:      "npm ping",
 			binary:    "npm",
 			urlPath:   "/npm",
@@ -96,6 +105,7 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 			},
 		},
 		{
+			id:        "wget",
 			name:      "wget",
 			binary:    "wget",
 			urlPath:   "/wget",
@@ -105,6 +115,7 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 			},
 		},
 		{
+			id:        "git",
 			name:      "git ls-remote",
 			binary:    "git",
 			urlPath:   "/git",
@@ -119,9 +130,25 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireBinary(t, test.binary)
-			testOpenSSLClientCoverage(t, test.urlPath, test.eventPath, test.command)
+			captured := testOpenSSLClientCoverage(t, test.urlPath, test.eventPath, test.command)
+			if captured != expected[test.id] {
+				t.Fatalf("captured = %t, want %t for %s", captured, expected[test.id], test.id)
+			}
 		})
 	}
+}
+
+func expectedHTTPClientCoverage(t *testing.T) map[string]bool {
+	t.Helper()
+	raw, ok := os.LookupEnv("HTTP_UPROBE_EXPECTED_CLIENTS")
+	if !ok {
+		t.Fatal("HTTP_UPROBE_EXPECTED_CLIENTS is required")
+	}
+	expected := make(map[string]bool)
+	for client := range strings.SplitSeq(raw, ",") {
+		expected[strings.TrimSpace(client)] = true
+	}
+	return expected
 }
 
 func testOpenSSLClientCoverage(
@@ -129,7 +156,7 @@ func testOpenSSLClientCoverage(
 	urlPath string,
 	eventPath string,
 	command func(string) *exec.Cmd,
-) {
+) bool {
 	t.Helper()
 
 	cgroupRoot, err := getCgroupV2Root()
@@ -174,10 +201,18 @@ func testOpenSSLClientCoverage(
 		t.Fatalf("HTTPS client: %v: %s", err, output)
 	}
 
-	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "openssl http_request for "+eventPath,
-		func(in engineInput) bool {
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for {
+		select {
+		case in := <-kernelTracker.inputCh:
 			sample, ok := in.(httpRequestSample)
-			return ok && sample.CgroupID == cgroupID && sample.Source == HTTPSourceOpenSSL &&
-				strings.HasPrefix(sample.Path, eventPath)
-		})
+			if ok && sample.CgroupID == cgroupID && sample.Source == HTTPSourceOpenSSL &&
+				strings.HasPrefix(sample.Path, eventPath) {
+				return true
+			}
+		case <-deadline.C:
+			return false
+		}
+	}
 }
