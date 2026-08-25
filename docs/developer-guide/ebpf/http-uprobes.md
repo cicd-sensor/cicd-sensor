@@ -287,8 +287,8 @@ call path.
 
 | Function | Status | Reason | Verification |
 | --- | --- | --- | --- |
-| [`SSL_write`](https://docs.openssl.org/master/man3/SSL_write/) | Implemented; rollout disabled | OpenSSL HTTP/1.x plaintext buffer is argument 2 and length is argument 3. | curl HTTP/1.1 E2E |
-| [`SSL_write_ex`](https://docs.openssl.org/master/man3/SSL_write/) | Implemented; rollout disabled | Same relevant argument positions; required by the observed Python path. | Python `urllib.request` E2E |
+| [`SSL_write`](https://docs.openssl.org/master/man3/SSL_write/) | Implemented; rollout disabled | OpenSSL HTTP/1.x plaintext buffer is argument 2 and length is argument 3. | curl and wget HTTP/1.1 E2E |
+| [`SSL_write_ex`](https://docs.openssl.org/master/man3/SSL_write/) | Implemented; rollout disabled | Same relevant argument positions; required by the observed Python path. | Python `urllib.request`, requests, and pip E2E |
 | [`nghttp2_submit_request`](https://nghttp2.org/documentation/nghttp2_submit_request.html) | Planned | Exposes `nghttp2_nv` before HPACK; `nva` is argument 3 and `nvlen` is argument 4. | Implementation and real-client E2E required |
 | [`nghttp2_submit_request2`](https://nghttp2.org/documentation/nghttp2_submit_request2.html) | Planned | Same relevant argument positions; complements `submit_request` across versions. | Implementation and real-client E2E required |
 
@@ -297,18 +297,20 @@ contract.
 
 ### Workload status
 
-Verified clients have a reproducible real-client E2E in GitHub Actions.
+Each verified status has a reproducible real-client E2E on GitHub-hosted
+Ubuntu. `Not covered (verified)` means that the same E2E confirmed the absence
+of an OpenSSL `http_request` event for that runner image.
 
 | Workload | Status | Verification |
 | --- | --- | --- |
-| curl over HTTPS HTTP/1.1 | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview; observes `SSL_write`. |
-| Python `urllib.request` over HTTPS HTTP/1.1 | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview; observes `SSL_write_ex`. |
-| Python requests over HTTPS HTTP/1.x | Not verified | - |
-| pip over HTTPS | Not verified | - |
-| Node over HTTPS HTTP/1.x | Not verified | - |
-| npm over HTTPS | Not verified | - |
-| wget over HTTPS HTTP/1.x | Not verified | - |
-| Git over HTTPS | Not verified | - |
+| curl over HTTPS HTTP/1.1 | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write`. |
+| Python `urllib.request` over HTTPS HTTP/1.1 | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write_ex`. |
+| Python requests over HTTPS HTTP/1.x | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write_ex`. |
+| pip over HTTPS | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write_ex`. |
+| Node over HTTPS HTTP/1.x | Not covered (verified) | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 do not expose a selected attachable function path. |
+| npm over HTTPS | Not covered (verified) | Uses the same uncovered Node TLS path on the verified runner images. |
+| wget over HTTPS HTTP/1.x | Verified on 22.04 and 24.04 | GitHub-hosted x64 and arm64 observe `SSL_write`; Ubuntu 26.04 preview uses GnuTLS and is not covered. |
+| Git over HTTPS | Not covered (verified) | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 use a GnuTLS-backed Git HTTP helper. |
 | curl or Node over HTTP/2 | Planned | Requires nghttp2 support. |
 | Go, Java, or rustls-based HTTPS | Not covered | Does not call a selected function. |
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
@@ -329,4 +331,5 @@ Verified clients have a reproducible real-client E2E in GitHub Actions.
   encoded at `SSL_write`, h2c, and HTTP/3/QUIC are not parsed.
 - Retries can produce duplicate events. Capture is not exactly once.
 - Absence of `http_request` is not proof that no egress occurred. Rules should
-  retain `domain` and `network_connect` coverage where appropriate.
+  retain `network_connect` coverage; `domain` can also be absent when name
+  resolution uses an encrypted path such as DNS over HTTPS.
