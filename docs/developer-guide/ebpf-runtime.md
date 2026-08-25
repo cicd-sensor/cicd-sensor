@@ -1,6 +1,11 @@
 # eBPF Runtime
 
-The eBPF Runtime is the layer that observes CI/CD job process, network, file access, and domain access at the kernel level. Kernel baseline is Linux `5.15+`.
+**eBPF Runtime** is the architectural term for the end-to-end layer that
+observes CI/CD job process, network, file, domain, and HTTP activity. There is
+no `eBPFRuntime` or `KernelRuntime` type or package. The implementation is split
+across kernel-loaded programs in `internal/agent/bpf`, kernel-facing I/O in
+`internal/agent/kerneltracker/kernelio`, and userspace tracking and attribution
+in `internal/agent/kerneltracker`. The kernel baseline is Linux `5.15+`.
 
 ## Why cgroup v2 tracking
 

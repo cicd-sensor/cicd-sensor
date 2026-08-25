@@ -25,14 +25,17 @@ flowchart TB
             end
         end
 
-        subgraph KR["Kernel Runtime"]
+        subgraph KR["eBPF Runtime · Agent userspace"]
             direction TB
             KT["KernelTracker<br/>Job state management<br/>(cgroup / process tracking)"]
-            EBPF["eBPF Runtime"]
-            KIO["KernelIO"]
-            KT --> EBPF
-            EBPF -->|"map operations"| KIO
-            KIO -->|"decoded samples"| KT
+            subgraph KIO["KernelIO"]
+                direction TB
+                BIO["BPF load / map / ringbuf I/O"]
+                UPROBE["HTTP uprobe worker<br/>one owner goroutine<br/>(when enabled)"]
+            end
+            KT -->|"map operations"| BIO
+            BIO -->|"raw ringbuf samples"| KT
+            KT -->|"discovery / reconcile inputs"| UPROBE
         end
 
         subgraph OUT["Outputs"]
@@ -42,7 +45,7 @@ flowchart TB
         end
     end
 
-    K["Kernel"]
+    K["eBPF Runtime · Linux kernel<br/>programs / maps / ringbuf<br/>uprobe attachments"]
 
     START --> L
     PROXY --> L
@@ -50,7 +53,8 @@ flowchart TB
     KT -->|"EventRecord"| EVAL
     EVAL --> SCOPE
     JR -->|"tracking commands"| KT
-    KIO <-->|"eBPF maps / ringbuf"| K
+    BIO <-->|"load / attach / read"| K
+    UPROBE -->|"attach / close"| K
     SCOPE --> LOGS
     SCOPE --> RESULT
 
@@ -63,13 +67,17 @@ flowchart TB
     class JR,JOBS registry
     class KR kernel
     class OUT outputs
-    class L,EVAL,SCOPE,KT,EBPF,KIO,LOGS,RESULT leaf
+    class L,EVAL,SCOPE,KT,BIO,UPROBE,LOGS,RESULT leaf
 ```
 
 This diagram is the reference point for reading the Agent implementation.
 `host start`, `project start`, and dockerd proxy staging requests enter the Agent through the Listener over a Unix socket.
-JobRegistry issues tracking commands to the Kernel Runtime.
-Scope owns rule, summary, and output state, but it does not operate the Kernel Runtime directly.
+JobRegistry issues tracking commands to KernelTracker.
+Scope owns rule, summary, and output state, but it does not operate
+KernelTracker or KernelIO directly. Together with the programs and resources
+loaded into the Linux kernel, KernelTracker and KernelIO form the
+**eBPF Runtime** described in the dedicated developer-guide chapter. eBPF
+Runtime is an architectural layer, not a separate process or Go component.
 
 ## Concepts
 
@@ -109,7 +117,8 @@ For implementation ownership boundaries, see [Agent Ownership Boundaries](agent-
 | Listener | Receives start / staging requests over the Unix socket and handles provider routes and peer credentials |
 | JobRegistry | Handles job registration, host / project scope attachment, KernelTracker primitive composition, and finalize |
 | Jobs / Scope | Handles per-job event workers, rule evaluation, and scope-local summaries / outputs |
-| KernelTracker / eBPF Runtime | Handles cgroup / process tracking, kernel sample decoding, and EventRecord attribution |
+| KernelTracker | Owns cgroup / process tracking, kernel sample decoding, and EventRecord attribution |
+| KernelIO | Owns BPF load and attach, map operations, ringbuf I/O, and specialized kernel-facing workers |
 | Outputs | Holds runtime summaries used as inputs for job logs, project results, reports, and attestations |
 
 ## Provider Flow
