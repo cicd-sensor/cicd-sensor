@@ -510,8 +510,9 @@ func parseExecMapping(line string) (rng string, mapped mappedFileIdentity, ok bo
 	if err != nil || end <= start {
 		return "", "", false
 	}
-	// map_files names ranges without leading zeroes, while maps can pad low
-	// addresses (for example, a non-PIE executable mapped at 00400000).
+	// /proc/<pid>/map_files exposes each mapped ELF under its unpadded VMA range.
+	// Therefore maps "00400000-066a1000" becomes map_files "400000-66a1000".
+	// Parse numerically so the lookup opens the mapped ELF entry.
 	rng = fmt.Sprintf("%x-%x", start, end)
 	return rng, mappedFileIdentity(fields[3] + ":" + fields[4]), true
 }
