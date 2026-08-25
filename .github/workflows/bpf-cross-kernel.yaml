@@ -26,6 +26,68 @@ permissions:
   contents: read
 
 jobs:
+  http-client-coverage:
+    name: "HTTP client coverage on ${{ matrix.runner }}"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            experimental: false
+          - runner: ubuntu-24.04
+            experimental: false
+          - runner: ubuntu-26.04
+            experimental: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install HTTP clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq nodejs npm python3-pip python3-requests wget
+
+      - name: Client environment
+        run: |
+          uname -a
+          cat /etc/os-release
+          for binary in curl python3 node npm wget git; do
+            echo "$ $binary --version"
+            "$binary" --version 2>&1 | head -n 3 || true
+            path="$(command -v "$binary" || true)"
+            [ -z "$path" ] || ldd "$(readlink -f "$path")" || true
+          done
+          python3 -c 'import _ssl, requests, ssl; print("python ssl:", ssl.OPENSSL_VERSION); print("python _ssl:", _ssl.__file__); print("requests:", requests.__version__)'
+          python_ssl_module="$(python3 -c 'import _ssl; print(_ssl.__file__)')"
+          ldd "$python_ssl_module"
+          git_http_backend="$(git --exec-path)/git-remote-http"
+          echo "git HTTP backend: $git_http_backend"
+          ldd "$git_http_backend"
+
+      - name: Build HTTP client coverage test
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go test -mod=vendor -c -tags 'bpf_integration http_client_integration' \
+            -o /tmp/http-client-coverage.test ./internal/agent/kerneltracker
+
+      - name: Run HTTP client coverage test
+        run: |
+          sudo /tmp/http-client-coverage.test \
+            -test.v \
+            -test.count=1 \
+            -test.timeout=10m \
+            -test.run '^TestLinuxOpenSSLUprobeCoversCommonClients$'
+
   kernel:
     name: "x64 kernel ${{ matrix.kernel.label }}"
     runs-on: ubuntu-24.04
