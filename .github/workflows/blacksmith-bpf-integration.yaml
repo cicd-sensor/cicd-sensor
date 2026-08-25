@@ -78,7 +78,7 @@ jobs:
 
       - name: Run HTTP client coverage test
         env:
-          HTTP_UPROBE_EXPECTED_CLIENTS: curl,python_urllib,python_requests,pip,wget
+          HTTP_UPROBE_EXPECTED_CLIENTS: curl,python_urllib,python_requests,pip,node,npm,wget
         run: |
           sudo HTTP_UPROBE_EXPECTED_CLIENTS="$HTTP_UPROBE_EXPECTED_CLIENTS" \
             /tmp/http-client-coverage.test \
