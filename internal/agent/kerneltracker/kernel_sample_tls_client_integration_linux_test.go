@@ -169,9 +169,18 @@ const request=()=>new Promise((resolve,reject)=>{const r=client.request({':path'
 			},
 		},
 		{
-			name:   "Git HTTP/2",
+			name:   "Git default HTTP version",
 			binary: "git",
-			path:   "/h2-git",
+			path:   "/h2-git-default",
+			command: func(target string) *exec.Cmd {
+				command := fmt.Sprintf("for i in 1 2 3 4; do git -c http.sslVerify=false ls-remote %q || true; done", target)
+				return exec.Command("sh", "-c", command)
+			},
+		},
+		{
+			name:   "Git forced HTTP/2",
+			binary: "git",
+			path:   "/h2-git-forced",
 			command: func(target string) *exec.Cmd {
 				command := fmt.Sprintf("for i in 1 2 3 4; do git -c http.version=HTTP/2 -c http.sslVerify=false ls-remote %q || true; done", target)
 				return exec.Command("sh", "-c", command)

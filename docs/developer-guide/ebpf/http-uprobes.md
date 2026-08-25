@@ -313,7 +313,7 @@ of an OpenSSL `http_request` event for that runner image.
 | Git over HTTPS HTTP/1.x | Not covered (verified) | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 use a GnuTLS-backed Git HTTP helper. |
 | curl over HTTPS HTTP/2 | Verified | GitHub-hosted Ubuntu real-client E2E; observes a selected nghttp2 request API. |
 | Node over HTTPS HTTP/2 | Verified | GitHub-hosted Ubuntu real-client E2E; observes a selected nghttp2 request API. |
-| Git over HTTPS HTTP/2 | Verified | GitHub-hosted Ubuntu real-client E2E; observes a selected nghttp2 request API independently of its TLS backend. |
+| Git over HTTPS HTTP/2 | Verified | GitHub-hosted Ubuntu real-client E2E covers both libcurl's default negotiation and an explicit `http.version=HTTP/2`; both observe a selected nghttp2 request API independently of the TLS backend. |
 | Go, Java, or rustls-based HTTPS | Not covered | Does not call a selected function. |
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
 
@@ -332,7 +332,9 @@ of an OpenSSL `http_request` event for that runner image.
 - HTTP/2 is visible only before HPACK in a selected nghttp2 API. Other HTTP/2
   implementations and HTTP/3/QUIC are not parsed.
 - The nghttp2 parser examines at most the first 32 pseudo-headers and requires
-  both `:method` and an origin-form `:path`; HTTP/2 CONNECT is not emitted.
+  both `:method` and an origin-form `:path`. Standard HTTP/2 CONNECT creates a
+  tunnel on one stream and omits `:path`, so it is not emitted. Extended CONNECT
+  includes `:path` and can be emitted, but the event does not expose `:protocol`.
 - Retries can produce duplicate events. Capture is not exactly once.
 - Absence of `http_request` is not proof that no egress occurred. Rules should
   retain `network_connect` coverage; `domain` can also be absent when name

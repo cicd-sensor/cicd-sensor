@@ -37,6 +37,18 @@ struct user_pt_regs {
 //      |  bpf_tail_call(http_uprobe_stages[0])
 //      v
 //   [0] parse   path scan → Host scan → reserve/copy/submit (source=openssl)
+//
+//   nghttp2_submit_request(2)(..., nva, nvlen, ...)
+//      |  scan at most 32 leading pseudo-headers; retain only pointers to
+//      |  :method, :path, and :authority in the per-CPU scratch entry
+//      v
+//   [1] method ─→ [2] path ─→ [3] authority ─→ [4] emit
+//
+// Each nghttp2 tail-call stage validates and bounds one attacker-controlled
+// userspace value. Splitting the scans is verifier-required: the equivalent
+// single program exceeds the Linux 6.17 one-million-instruction state budget.
+// Raw header values remain in userspace and only the three selected, validated
+// fields are copied to the ring buffer by the final stage.
 
 // Stage indices in the http_uprobe_stages jump table. Keeping each nghttp2
 // value scan in its own program avoids verifier state explosion on Linux 6.17.
@@ -95,6 +107,9 @@ int BPF_UPROBE(handle_ssl_write_parse)
 // headers, and a normal request needs only a small fixed set.
 #define NGHTTP2_MAX_HEADERS 32
 
+// Public nghttp2_nv ABI copied from userspace. The flags byte is not used by
+// the parser, but it must remain here so array indexing matches libnghttp2's
+// 64-bit layout exactly.
 struct nghttp2_nv_abi {
     const __u8 *name;
     const __u8 *value;
@@ -124,6 +139,9 @@ static __always_inline __u8 http_ascii_lower(__u8 c)
     return c;
 }
 
+// Classify only the three pseudo-headers exposed in http_request. Checking the
+// exact public name length before reading bounds the userspace read and avoids
+// treating an ordinary or similarly prefixed header as a selected field.
 static __always_inline int nghttp2_pseudo_header_kind(const struct nghttp2_nv_abi *nv)
 {
     char name[10] = {};
@@ -163,8 +181,10 @@ static __always_inline int nghttp2_pseudo_header_kind(const struct nghttp2_nv_ab
     return NGHTTP2_PSEUDO_OTHER;
 }
 
-// nghttp2_field_length validates one selected value and returns the bytes safe
-// to emit. Path stops at '?', so query data never crosses the kernel boundary.
+// Validate one selected value without copying it. The returned length excludes
+// controls, DEL, and field overflow; path stops at '?', so query data never
+// crosses the kernel boundary. A value that does not fit completely within the
+// field cap is rejected rather than exposed as a silently truncated value.
 static __always_inline int nghttp2_field_length(const __u8 *value, __u64 value_len,
                                                  __u32 field_len, int strip_query,
                                                  __u32 *result)
@@ -192,6 +212,8 @@ static __always_inline int nghttp2_field_length(const __u8 *value, __u64 value_l
     return -1;
 }
 
+// The comparison enforces the field contract; the opaque mask separately gives
+// older verifiers a durable variable-length userspace-read bound.
 static __always_inline int nghttp2_copy_method(char *dst, const __u8 *src, __u32 n)
 {
     if (!src || n == 0 || n >= HTTP_METHOD_LEN)
@@ -201,6 +223,7 @@ static __always_inline int nghttp2_copy_method(char *dst, const __u8 *src, __u32
     return bpf_probe_read_user(dst, n, src);
 }
 
+// Path and authority share the same fixed field size and verifier proof.
 static __always_inline int nghttp2_copy_value(char *dst, const __u8 *src, __u32 n)
 {
     if (!src || n == 0 || n >= HTTP_PATH_LEN)
@@ -225,6 +248,9 @@ int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
     __u64 path_len = 0;
     __u64 authority_len = 0;
 
+    // HTTP/2 requires pseudo-headers before regular headers. Stop at the first
+    // regular header so credentials and other ordinary headers are never
+    // examined. First occurrence wins if a malformed array repeats a field.
     for (int i = 0; i < NGHTTP2_MAX_HEADERS; i++) {
         if ((__u64)i >= nvlen)
             break;
@@ -257,6 +283,8 @@ int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
             break;
     }
 
+    // Carry only userspace pointers and lengths into the verifier-split stages;
+    // no raw header byte is copied into scratch.
     struct http_scratch *s = http_scratch_get();
     if (!s)
         return 0;
@@ -304,6 +332,9 @@ int BPF_UPROBE(handle_nghttp2_path)
                              HTTP_PATH_LEN, 1, &path_n) < 0)
         return 0;
 
+    // Standard HTTP/2 CONNECT intentionally has no :path and is dropped by the
+    // previous validation. Other requests, including extended CONNECT, need an
+    // origin-form path so rule-facing path semantics stay consistent.
     __u8 first_path;
     if (bpf_probe_read_user(&first_path, sizeof(first_path), path) < 0 || first_path != '/')
         return 0;
@@ -320,6 +351,8 @@ int BPF_UPROBE(handle_nghttp2_authority)
         return 0;
     const __u8 *authority = (const __u8 *)s->nghttp2_authority;
 
+    // Authority is optional for event emission. An absent or invalid value
+    // becomes an empty host; method and path remain useful rule evidence.
     __u32 authority_n = 0;
     if (authority && nghttp2_field_length(authority, s->nghttp2_authority_len,
                                           HTTP_HOST_LEN, 0, &authority_n) == 0) {
@@ -341,6 +374,9 @@ int BPF_UPROBE(handle_nghttp2_emit)
     const __u8 *path = (const __u8 *)s->nghttp2_path;
     const __u8 *authority = (const __u8 *)s->nghttp2_authority;
 
+    // Reserve only in the last stage: ringbuf references cannot cross a tail
+    // call. Zero all fixed fields before bounded partial copies to prevent
+    // stale ringbuf bytes from violating the redaction boundary.
     struct http_request_sample *sample =
         bpf_ringbuf_reserve(&events, sizeof(*sample), 0);
     if (!sample) {
