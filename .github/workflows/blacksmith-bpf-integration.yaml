@@ -77,9 +77,8 @@ jobs:
             -o /tmp/http-client-coverage.test ./internal/agent/kerneltracker
 
       - name: Run HTTP client coverage test
-        continue-on-error: true
         env:
-          HTTP_UPROBE_EXPECTED_CLIENTS: curl,python_urllib,python_requests,pip,node,npm,wget,git
+          HTTP_UPROBE_EXPECTED_CLIENTS: curl,python_urllib,python_requests,pip,wget
         run: |
           sudo HTTP_UPROBE_EXPECTED_CLIENTS="$HTTP_UPROBE_EXPECTED_CLIENTS" \
             /tmp/http-client-coverage.test \

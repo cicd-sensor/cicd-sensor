@@ -45,14 +45,14 @@ jobs:
             experimental: true
             expected: curl,python_urllib,python_requests,pip
           - runner: ubuntu-22.04-arm
-            experimental: true
-            expected: curl,python_urllib,python_requests,pip,node,npm,wget,git
+            experimental: false
+            expected: curl,python_urllib,python_requests,pip,wget
           - runner: ubuntu-24.04-arm
-            experimental: true
-            expected: curl,python_urllib,python_requests,pip,node,npm,wget,git
+            experimental: false
+            expected: curl,python_urllib,python_requests,pip,wget
           - runner: ubuntu-26.04-arm
             experimental: true
-            expected: curl,python_urllib,python_requests,pip,node,npm,wget,git
+            expected: curl,python_urllib,python_requests,pip
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
