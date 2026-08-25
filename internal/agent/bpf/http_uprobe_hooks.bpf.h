@@ -100,11 +100,24 @@ int BPF_UPROBE(handle_ssl_write_parse)
     return 0;
 }
 
-// Both selected nghttp2 APIs expose nva as argument 3 and nvlen as argument 4.
-// Reading pseudo-headers at this public boundary observes HTTP/2 before HPACK
-// while keeping ordinary headers and values out of the ring buffer.
-// The fixed limit bounds verifier work; valid pseudo-headers precede regular
-// headers, and a normal request needs only a small fixed set.
+// nghttp2_submit_request(2) submits one HTTP/2 request as HEADERS plus optional
+// DATA. Both APIs have the same first four arguments; request2 only changes the
+// later data-provider type:
+//
+//   (session, pri_spec, nva, nvlen, data_prd, stream_user_data)
+//
+// nva means "name/value array": it points to nvlen nghttp2_nv entries. A normal
+// request starts with pseudo-headers similar to the array below, followed by
+// ordinary headers:
+//
+//   {":method", "GET"}, {":scheme", "https"},
+//   {":authority", "example.com"}, {":path", "/build?id=secret"},
+//   {"authorization", "..."}, ...
+//
+// The entry reads argument 3 (nva) and argument 4 (nvlen) before HPACK. It scans
+// only the leading pseudo-headers, retains pointers to method/path/authority,
+// and stops at the first ordinary header. The fixed entry limit bounds verifier
+// work; ordinary header names and values are never copied to the ring buffer.
 #define NGHTTP2_MAX_HEADERS 32
 
 // Public nghttp2_nv ABI copied from userspace. The flags byte is not used by
@@ -304,6 +317,7 @@ int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
     return 0;
 }
 
+// Stage 1: require a complete, bounded :method with no control bytes.
 SEC("uprobe/nghttp2_submit_request")
 int BPF_UPROBE(handle_nghttp2_method)
 {
@@ -320,6 +334,7 @@ int BPF_UPROBE(handle_nghttp2_method)
     return 0;
 }
 
+// Stage 2: require an origin-form :path and bound it before the query marker.
 SEC("uprobe/nghttp2_submit_request")
 int BPF_UPROBE(handle_nghttp2_path)
 {
@@ -343,6 +358,7 @@ int BPF_UPROBE(handle_nghttp2_path)
     return 0;
 }
 
+// Stage 3: validate optional :authority; invalid authority becomes empty host.
 SEC("uprobe/nghttp2_submit_request")
 int BPF_UPROBE(handle_nghttp2_authority)
 {
@@ -363,6 +379,7 @@ int BPF_UPROBE(handle_nghttp2_authority)
     return 0;
 }
 
+// Stage 4: copy only the validated fields into the shared http_request sample.
 SEC("uprobe/nghttp2_submit_request")
 int BPF_UPROBE(handle_nghttp2_emit)
 {
