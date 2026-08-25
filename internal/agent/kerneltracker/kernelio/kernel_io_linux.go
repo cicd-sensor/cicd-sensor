@@ -75,18 +75,24 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	if err := kernelIO.objs.HttpStages.Put(uint32(0), kernelIO.objs.HandleTcpSendmsgHttpParse); err != nil {
 		return nil, fmt.Errorf("install http parse target: %w", err)
 	}
-	// The OpenSSL uprobe HTTP parser has its own kprobe-type tail target and
-	// jump table. It is installed unconditionally: the slot must be populated
-	// before any entry program is attached — whether by OpenSSL uprobe discovery
-	// or by a manual attach in tests — or the entry's tail call would hit an empty
-	// slot. Only the OpenSSL uprobe discovery worker (which drives the runtime
-	// attaches) is gated on the tap being enabled. The entry programs themselves
-	// always load with the object and are verified regardless of this flag.
-	if err := kernelIO.objs.HttpTlsStages.Put(uint32(0), kernelIO.objs.HandleSslWriteParse); err != nil {
-		return nil, fmt.Errorf("install http tls parse target: %w", err)
+	// Uprobe tail targets use a separate kprobe-type jump table. Install every
+	// target before discovery or tests can attach an entry program.
+	for index, program := range []*ebpf.Program{
+		kernelIO.objs.HandleSslWriteParse,
+		kernelIO.objs.HandleNghttp2Required,
+		kernelIO.objs.HandleNghttp2Emit,
+	} {
+		if err := kernelIO.objs.HttpUprobeStages.Put(uint32(index), program); err != nil {
+			return nil, fmt.Errorf("install HTTP uprobe stage %d: %w", index, err)
+		}
 	}
-	if config.EnableOpenSSLHTTP {
-		kernelIO.httpUprobeDiscovery = newHTTPUprobeDiscovery(kernelIO.objs.HandleSslWrite, kernelIO.logger, config.CgroupV2RootPath)
+	if config.EnableHTTPUprobes {
+		kernelIO.httpUprobeDiscovery = newHTTPUprobeDiscovery([]httpUprobeSymbol{
+			{name: "SSL_write", program: kernelIO.objs.HandleSslWrite},
+			{name: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
+			{name: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
+			{name: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
+		}, kernelIO.logger, config.CgroupV2RootPath)
 	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do

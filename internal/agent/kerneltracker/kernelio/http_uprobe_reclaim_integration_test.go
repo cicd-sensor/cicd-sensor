@@ -56,7 +56,7 @@ func processMapsLibssl(pid int32) bool {
 func newReclaimTestDiscovery(t *testing.T) *httpUprobeDiscovery {
 	t.Helper()
 	config := testLinuxConfig(t)
-	config.EnableOpenSSLHTTP = true
+	config.EnableHTTPUprobes = true
 	kernelIO, err := NewLinux(nil, config)
 	if err != nil {
 		t.Fatalf("NewLinux: %v", err)

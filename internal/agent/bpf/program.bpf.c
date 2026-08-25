@@ -22,6 +22,6 @@
 #include "network_hooks.bpf.h"
 #include "dns_hooks.bpf.h"
 #include "http_hooks.bpf.h"
-#include "tls_hooks.bpf.h"
+#include "http_uprobe_hooks.bpf.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";

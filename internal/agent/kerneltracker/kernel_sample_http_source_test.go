@@ -16,6 +16,7 @@ func TestHTTPSourceValue(t *testing.T) {
 	}{
 		{"cleartext tag maps to its rule string", HTTPSourceCleartext, "cleartext_http", true},
 		{"openssl tag maps to its rule string", HTTPSourceOpenSSL, "openssl", true},
+		{"nghttp2 tag maps to its rule string", HTTPSourceNghttp2, "nghttp2", true},
 		{"unknown tag is rejected as kernel/userspace skew", HTTPSource(200), "", false},
 	}
 

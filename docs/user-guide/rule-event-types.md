@@ -498,7 +498,7 @@ Only the request line and the `Host` header are captured — no other headers an
 | `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |
 | `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Lowercase. |
 | `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
-| `source` | string | `cleartext_http`, `openssl` | Capture channel: `cleartext_http` (plain `http://`) or `openssl` (HTTPS via OpenSSL; not yet enabled in shipped builds — see below). |
+| `source` | string | `cleartext_http`, `openssl`, `nghttp2` | Capture channel; userspace-library taps are not yet enabled in shipped builds. |
 | `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
 
 `source` reports where the request line was read:
@@ -506,27 +506,29 @@ Only the request line and the `Host` header are captured — no other headers an
 - `cleartext_http` — plain HTTP (`http://`) traffic, including cloud metadata
   endpoints and plain-HTTP package mirrors.
 - `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's
-  `SSL_write` / `SSL_write_ex`. Integration currently verifies curl and Python
-  `urllib.request`. Other clients are covered only when their build and protocol
-  call one of those functions; a tool name alone is not a coverage guarantee.
-  This tap is
-  **not yet enabled** in shipped builds; default enablement waits for the
-  privileged reclaim E2E and the remaining rollout gates (there is no separate
-  opt-in).
+  `SSL_write` / `SSL_write_ex`. Client coverage depends on which function the
+  installed binary calls; see the developer guide's verified workload matrix.
+  This tap is **not yet enabled** in shipped builds; default enablement waits
+  for the remaining rollout gates (there is no separate opt-in).
+- `nghttp2` — HTTP/2 pseudo-headers read at `nghttp2_submit_request` or
+  `nghttp2_submit_request2`, before HPACK encoding. This tap shares the same
+  rollout state as `openssl`.
 
 Known gaps (absence of an `http_request` event does **not** mean absence of
 egress — combine with `domain` and `network_connect` rules):
 
-- **HTTPS HTTP/2** (including `git clone`/`fetch` over HTTPS, which negotiates
-  h2) is not yet captured — it is HPACK-encoded at `SSL_write`.
+- HTTP/2 clients that do not call a selected nghttp2 request function are not
+  captured. HTTP/3/QUIC is also outside this event.
 - Go `crypto/tls`, Java JSSE, rustls, and other non-OpenSSL stacks are not
   captured. A fully symbol-stripped static binary is not captured either.
 - Capture is best-effort against uncooperative code: a process can evade a
   uprobe, and the very first request of a brand-new process can beat the attach.
 
-The capture is best-effort at the request start: a request split across
-multiple writes, or a `host` / `path` longer than the captured prefix, surfaces
-with that field empty rather than partially guessed.
+HTTP/1.x capture is best-effort at one write boundary. A path that crosses the
+256-byte captured prefix is emitted only up to that boundary; a `Host` outside
+the prefix or too long for the field is empty. The nghttp2 tap does not emit a
+request whose method exceeds 15 bytes or whose path exceeds 255 bytes. A
+missing, invalid, or oversized HTTP/2 authority is emitted as an empty `host`.
 
 Unexpected POST to the GitHub API:
 

@@ -10,12 +10,12 @@ var ErrNotSupported = errors.New("not supported")
 // Config contains the cgroup v2 root detected by KernelTracker.
 type Config struct {
 	CgroupV2RootPath string
-	// EnableOpenSSLHTTP starts the OpenSSL uprobe attach-discovery worker
+	// EnableHTTPUprobes starts the HTTP uprobe attach-discovery worker
 	// (connect-triggered process scan, attach, and maps-liveness reclaim). It does
 	// not gate BPF load: LoadAndAssign loads and verifies the programs at startup.
-	// Keep this rollout switch off until the Stage 1b-2 environment gates pass;
+	// Keep this rollout switch off until the HTTP uprobe environment gates pass;
 	// it is not intended as a long-lived user-facing setting.
-	EnableOpenSSLHTTP bool
+	EnableHTTPUprobes bool
 }
 
 // KernelIO is the BPF program/map/ringbuf I/O boundary. It stays as an

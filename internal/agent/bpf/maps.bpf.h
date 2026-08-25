@@ -43,6 +43,17 @@ struct http_scratch {
     __u32 host_val;                  // host value start
     __u32 host_n;                    // host byte count
     __u32 have_host;                 // 1 = a host value was captured
+
+    // nghttp2 pointers and lengths carried across the two semantic tail targets:
+    // required fields, then optional authority plus emit. Raw bytes stay in userspace.
+    __u64 nghttp2_method;
+    __u64 nghttp2_path;
+    __u64 nghttp2_authority;
+    __u64 nghttp2_method_len;
+    __u64 nghttp2_path_len;
+    __u64 nghttp2_authority_len;
+    __u32 nghttp2_method_n;
+    __u32 nghttp2_path_n;
 };
 
 // Tail-call jump table for the HTTP parser. Userspace installs the parse target
@@ -54,17 +65,16 @@ struct {
     __type(value, __u32);
 } http_stages SEC(".maps");
 
-// Separate jump table for the OpenSSL uprobe HTTP parser (tls_hooks.bpf.h). It
+// Separate jump table for HTTP uprobe parsers (http_uprobe_hooks.bpf.h). It
 // needs its own PROG_ARRAY because a uprobe program is kprobe-type and a tail
 // call cannot cross program types, so the fentry-type http_stages target above
-// is not reusable. The parse target shares the same http_scratch and the same
-// http_step_* helpers; only the entry program type and the source tag differ.
+// is not reusable.
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-    __uint(max_entries, 1);
+    __uint(max_entries, 3);
     __type(key, __u32);
     __type(value, __u32);
-} http_tls_stages SEC(".maps");
+} http_uprobe_stages SEC(".maps");
 
 // The hook only checks staging_map lookup hits; this value is reserved for a
 // future kernel path that may surface JobIdentity without userspace lookup.

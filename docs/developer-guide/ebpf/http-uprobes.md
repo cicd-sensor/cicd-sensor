@@ -57,18 +57,18 @@ lifecycle owner; it does not own Jobs or evaluate rules.
 
 ## Coverage status
 
-Current and planned coverage are deliberately separated:
+Current library capture paths are:
 
 | Protocol path | Status |
 | --- | --- |
 | OpenSSL HTTP/1.x through `SSL_write` / `SSL_write_ex` | Implemented; rollout disabled |
-| HTTP/2 through `nghttp2_submit_request` / `nghttp2_submit_request2` | Planned |
+| HTTP/2 through `nghttp2_submit_request` / `nghttp2_submit_request2` | Implemented; rollout disabled |
 
-The OpenSSL path uses the existing `http_request` event, and the planned
-nghttp2 path will reuse it. Raw request bytes, ordinary headers, and bodies must
-not leave the kernel. OpenSSL rollout remains disabled until environment
-compatibility and first-request timing are verified. A failed timing gate
-requires an earlier discovery trigger; it does not become an accepted limit.
+Both paths use the existing `http_request` event. Raw request bytes, ordinary
+headers, and bodies must not leave the kernel. HTTP uprobe rollout remains
+disabled until environment compatibility and first-request timing are verified.
+A failed timing gate requires an earlier discovery trigger; it does not become
+an accepted limit.
 
 ## Runtime model
 
@@ -164,7 +164,7 @@ flowchart LR
 
     subgraph BPF["internal/agent/bpf"]
         direction TB
-        U["uprobe entry<br/>handle_ssl_write (current)"]
+        U["uprobe entry<br/>OpenSSL or nghttp2"]
         G["tracked_cgroups gate"]
         H["http_helpers.bpf.h<br/>bounded parse and query removal"]
         R["events ring buffer<br/>http_request_sample"]
@@ -202,8 +202,8 @@ host, which cannot be determined from `domain` or `network_connect` alone.
 | --- | --- |
 | `method` | Request method, normalized to lowercase for rule evaluation. |
 | `path` | Request path with the query removed in eBPF, then normalized to lowercase. |
-| `host` | HTTP/1.x `Host` or planned HTTP/2 `:authority`, normalized to lowercase; a port can remain. |
-| `source` | Capture path: `openssl` today and `nghttp2` when the planned HTTP/2 tap is implemented. |
+| `host` | HTTP/1.x `Host` or HTTP/2 `:authority`, normalized to lowercase; a port can remain. |
+| `source` | Capture path: `openssl` or `nghttp2`. |
 | `process` | KernelTracker's process snapshot for the caller: executable, arguments, and ancestors. |
 
 No query, other request header, or body is emitted. This is both the event
@@ -289,8 +289,8 @@ call path.
 | --- | --- | --- | --- |
 | [`SSL_write`](https://docs.openssl.org/master/man3/SSL_write/) | Implemented; rollout disabled | OpenSSL HTTP/1.x plaintext buffer is argument 2 and length is argument 3. | curl and wget HTTP/1.1 E2E |
 | [`SSL_write_ex`](https://docs.openssl.org/master/man3/SSL_write/) | Implemented; rollout disabled | Same relevant argument positions; required by the observed Python path. | Python `urllib.request`, requests, and pip E2E |
-| [`nghttp2_submit_request`](https://nghttp2.org/documentation/nghttp2_submit_request.html) | Planned | Exposes `nghttp2_nv` before HPACK; `nva` is argument 3 and `nvlen` is argument 4. | Implementation and real-client E2E required |
-| [`nghttp2_submit_request2`](https://nghttp2.org/documentation/nghttp2_submit_request2.html) | Planned | Same relevant argument positions; complements `submit_request` across versions. | Implementation and real-client E2E required |
+| [`nghttp2_submit_request`](https://nghttp2.org/documentation/nghttp2_submit_request.html) | Implemented; rollout disabled | Exposes `nghttp2_nv` before HPACK; `nva` is argument 3 and `nvlen` is argument 4. | curl, Node, and Git HTTP/2 E2E |
+| [`nghttp2_submit_request2`](https://nghttp2.org/documentation/nghttp2_submit_request2.html) | Implemented; rollout disabled | Same relevant argument positions; complements `submit_request` across versions. | Attach integration; real clients may use either selected symbol |
 
 One BPF entry is shared when selected symbols have the same argument and parse
 contract.
@@ -310,8 +310,10 @@ of an OpenSSL `http_request` event for that runner image.
 | Node over HTTPS HTTP/1.x | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write`. |
 | npm over HTTPS | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 through Node's `SSL_write` path. |
 | wget over HTTPS HTTP/1.x | Verified on 22.04 and 24.04 | GitHub-hosted x64 and arm64 observe `SSL_write`; Ubuntu 26.04 preview uses GnuTLS and is not covered. |
-| Git over HTTPS | Not covered (verified) | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 use a GnuTLS-backed Git HTTP helper. |
-| curl or Node over HTTP/2 | Planned | Requires nghttp2 support. |
+| Git over HTTPS HTTP/1.x | Not covered (verified) | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 use a GnuTLS-backed Git HTTP helper. |
+| curl over HTTPS HTTP/2 | Verified | GitHub-hosted Ubuntu real-client E2E; observes a selected nghttp2 request API. |
+| Node over HTTPS HTTP/2 | Verified | GitHub-hosted Ubuntu real-client E2E; observes a selected nghttp2 request API. |
+| Git over HTTPS HTTP/2 | Verified | GitHub-hosted Ubuntu real-client E2E covers both libcurl's default negotiation and an explicit `http.version=HTTP/2`; both observe a selected nghttp2 request API independently of the TLS backend. |
 | Go, Java, or rustls-based HTTPS | Not covered | Does not call a selected function. |
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
 
@@ -327,8 +329,15 @@ of an OpenSSL `http_request` event for that runner image.
   captured.
 - HTTP/1.x parsing starts at one write boundary. Split request lines or a `Host`
   outside the bounded prefix can be missed.
-- HTTP/2 is visible only before HPACK in a selected nghttp2 API. HTTP/2 already
-  encoded at `SSL_write`, h2c, and HTTP/3/QUIC are not parsed.
+- HTTP/2 is visible only before HPACK in a selected nghttp2 API. Other HTTP/2
+  implementations and HTTP/3/QUIC are not parsed.
+- The nghttp2 parser examines at most the first 32 pseudo-headers and requires
+  both `:method` and an origin-form `:path`. Standard HTTP/2 CONNECT creates a
+  tunnel on one stream and omits `:path`, so it is not emitted. Extended CONNECT
+  includes `:path` and can be emitted, but the event does not expose `:protocol`.
+- The nghttp2 tap does not emit a request whose method exceeds 15 bytes or whose
+  path exceeds 255 bytes. A missing, invalid, or oversized `:authority` produces
+  an event with an empty `host`.
 - Retries can produce duplicate events. Capture is not exactly once.
 - Absence of `http_request` is not proof that no egress occurred. Rules should
   retain `network_connect` coverage; `domain` can also be absent when name

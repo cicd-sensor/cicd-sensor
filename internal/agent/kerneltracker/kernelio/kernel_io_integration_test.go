@@ -72,6 +72,38 @@ func TestLinuxKernelIOOpenSSLUprobeAttaches(t *testing.T) {
 	}
 }
 
+func TestLinuxKernelIONghttp2UprobeAttaches(t *testing.T) {
+	libnghttp2 := findLibnghttp2(t)
+
+	kernelIO, err := NewLinux(nil, testLinuxConfig(t))
+	if err != nil {
+		t.Fatalf("NewLinux: %v", err)
+	}
+	defer kernelIO.Close()
+
+	ex, err := link.OpenExecutable(libnghttp2)
+	if err != nil {
+		t.Fatalf("OpenExecutable(%s): %v", libnghttp2, err)
+	}
+	attached := 0
+	for _, symbol := range []string{"nghttp2_submit_request", "nghttp2_submit_request2"} {
+		uprobe, err := ex.Uprobe(symbol, kernelIO.objs.HandleNghttp2SubmitRequest, nil)
+		if errors.Is(err, link.ErrNoSymbol) {
+			continue
+		}
+		if err != nil {
+			t.Fatalf("Uprobe(%s) on %s: %v", symbol, libnghttp2, err)
+		}
+		attached++
+		if err := uprobe.Close(); err != nil {
+			t.Fatalf("close uprobe(%s): %v", symbol, err)
+		}
+	}
+	if attached == 0 {
+		t.Fatalf("no selected nghttp2 request symbol found in %s", libnghttp2)
+	}
+}
+
 // findLibssl returns a libssl shared object path on the host, or skips.
 func findLibssl(t *testing.T) string {
 	t.Helper()
@@ -87,6 +119,22 @@ func findLibssl(t *testing.T) string {
 		}
 	}
 	t.Skip("no libssl found on host; skipping OpenSSL uprobe attach test")
+	return ""
+}
+
+func findLibnghttp2(t *testing.T) string {
+	t.Helper()
+	for _, pattern := range []string{
+		"/usr/lib/*/libnghttp2.so.*",
+		"/lib/*/libnghttp2.so.*",
+		"/usr/lib64/libnghttp2.so.*",
+		"/usr/lib/libnghttp2.so.*",
+	} {
+		if matches, _ := filepath.Glob(pattern); len(matches) > 0 {
+			return matches[0]
+		}
+	}
+	t.Skip("no libnghttp2 found on host")
 	return ""
 }
 

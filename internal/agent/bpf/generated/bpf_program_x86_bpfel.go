@@ -176,16 +176,24 @@ type BPFProgramHttpRequestSample struct {
 }
 
 type BPFProgramHttpScratch struct {
-	_        structs.HostLayout
-	Prefix   [256]int8
-	DataLen  uint32
-	Pos      uint32
-	Mlen     uint32
-	LineEnd  uint32
-	PathN    uint32
-	HostVal  uint32
-	HostN    uint32
-	HaveHost uint32
+	_                   structs.HostLayout
+	Prefix              [256]int8
+	DataLen             uint32
+	Pos                 uint32
+	Mlen                uint32
+	LineEnd             uint32
+	PathN               uint32
+	HostVal             uint32
+	HostN               uint32
+	HaveHost            uint32
+	Nghttp2Method       uint64
+	Nghttp2Path         uint64
+	Nghttp2Authority    uint64
+	Nghttp2MethodLen    uint64
+	Nghttp2PathLen      uint64
+	Nghttp2AuthorityLen uint64
+	Nghttp2MethodN      uint32
+	Nghttp2PathN        uint32
 }
 
 type BPFProgramMountSample struct {
@@ -276,7 +284,7 @@ const (
 	BPFProgramMapEvents                        = "events"
 	BPFProgramMapHttpScratch                   = "http_scratch"
 	BPFProgramMapHttpStages                    = "http_stages"
-	BPFProgramMapHttpTlsStages                 = "http_tls_stages"
+	BPFProgramMapHttpUprobeStages              = "http_uprobe_stages"
 	BPFProgramMapPathScratch                   = "path_scratch"
 	BPFProgramMapRingbufDropCount              = "ringbuf_drop_count"
 	BPFProgramMapStagingMap                    = "staging_map"
@@ -286,6 +294,9 @@ const (
 	BPFProgramProgHandleCgroupConnect6         = "handle_cgroup_connect6"
 	BPFProgramProgHandleCgroupMkdir            = "handle_cgroup_mkdir"
 	BPFProgramProgHandleCgroupRmdir            = "handle_cgroup_rmdir"
+	BPFProgramProgHandleNghttp2Emit            = "handle_nghttp2_emit"
+	BPFProgramProgHandleNghttp2Required        = "handle_nghttp2_required"
+	BPFProgramProgHandleNghttp2SubmitRequest   = "handle_nghttp2_submit_request"
 	BPFProgramProgHandleSchedProcessExec       = "handle_sched_process_exec"
 	BPFProgramProgHandleSchedProcessFork       = "handle_sched_process_fork"
 	BPFProgramProgHandleSecurityFileOpen       = "handle_security_file_open"
@@ -371,6 +382,9 @@ type BPFProgramProgramSpecs struct {
 	HandleCgroupConnect6       *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_rmdir"`
+	HandleNghttp2Emit          *ebpf.ProgramSpec `ebpf:"handle_nghttp2_emit"`
+	HandleNghttp2Required      *ebpf.ProgramSpec `ebpf:"handle_nghttp2_required"`
+	HandleNghttp2SubmitRequest *ebpf.ProgramSpec `ebpf:"handle_nghttp2_submit_request"`
 	HandleSchedProcessExec     *ebpf.ProgramSpec `ebpf:"handle_sched_process_exec"`
 	HandleSchedProcessFork     *ebpf.ProgramSpec `ebpf:"handle_sched_process_fork"`
 	HandleSecurityFileOpen     *ebpf.ProgramSpec `ebpf:"handle_security_file_open"`
@@ -400,7 +414,7 @@ type BPFProgramMapSpecs struct {
 	Events           *ebpf.MapSpec `ebpf:"events"`
 	HttpScratch      *ebpf.MapSpec `ebpf:"http_scratch"`
 	HttpStages       *ebpf.MapSpec `ebpf:"http_stages"`
-	HttpTlsStages    *ebpf.MapSpec `ebpf:"http_tls_stages"`
+	HttpUprobeStages *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
 	PathScratch      *ebpf.MapSpec `ebpf:"path_scratch"`
 	RingbufDropCount *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
 	StagingMap       *ebpf.MapSpec `ebpf:"staging_map"`
@@ -452,7 +466,7 @@ type BPFProgramMaps struct {
 	Events           *ebpf.Map `ebpf:"events"`
 	HttpScratch      *ebpf.Map `ebpf:"http_scratch"`
 	HttpStages       *ebpf.Map `ebpf:"http_stages"`
-	HttpTlsStages    *ebpf.Map `ebpf:"http_tls_stages"`
+	HttpUprobeStages *ebpf.Map `ebpf:"http_uprobe_stages"`
 	PathScratch      *ebpf.Map `ebpf:"path_scratch"`
 	RingbufDropCount *ebpf.Map `ebpf:"ringbuf_drop_count"`
 	StagingMap       *ebpf.Map `ebpf:"staging_map"`
@@ -464,7 +478,7 @@ func (m *BPFProgramMaps) Close() error {
 		m.Events,
 		m.HttpScratch,
 		m.HttpStages,
-		m.HttpTlsStages,
+		m.HttpUprobeStages,
 		m.PathScratch,
 		m.RingbufDropCount,
 		m.StagingMap,
@@ -503,6 +517,9 @@ type BPFProgramPrograms struct {
 	HandleCgroupConnect6       *ebpf.Program `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.Program `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.Program `ebpf:"handle_cgroup_rmdir"`
+	HandleNghttp2Emit          *ebpf.Program `ebpf:"handle_nghttp2_emit"`
+	HandleNghttp2Required      *ebpf.Program `ebpf:"handle_nghttp2_required"`
+	HandleNghttp2SubmitRequest *ebpf.Program `ebpf:"handle_nghttp2_submit_request"`
 	HandleSchedProcessExec     *ebpf.Program `ebpf:"handle_sched_process_exec"`
 	HandleSchedProcessFork     *ebpf.Program `ebpf:"handle_sched_process_fork"`
 	HandleSecurityFileOpen     *ebpf.Program `ebpf:"handle_security_file_open"`
@@ -532,6 +549,9 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleCgroupConnect6,
 		p.HandleCgroupMkdir,
 		p.HandleCgroupRmdir,
+		p.HandleNghttp2Emit,
+		p.HandleNghttp2Required,
+		p.HandleNghttp2SubmitRequest,
 		p.HandleSchedProcessExec,
 		p.HandleSchedProcessFork,
 		p.HandleSecurityFileOpen,

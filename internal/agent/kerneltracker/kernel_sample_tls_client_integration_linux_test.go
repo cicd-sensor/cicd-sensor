@@ -138,6 +138,121 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 	}
 }
 
+// TestLinuxNghttp2UprobeCoversHTTP2Clients verifies real HTTP/2 request paths
+// through the selected nghttp2 submission APIs. Each client performs repeated
+// requests so connect-triggered discovery can attach after the first connect.
+func TestLinuxNghttp2UprobeCoversHTTP2Clients(t *testing.T) {
+	tests := []struct {
+		name    string
+		binary  string
+		path    string
+		command func(string) *exec.Cmd
+	}{
+		{
+			name:   "curl HTTP/2",
+			binary: "curl",
+			path:   "/h2-curl",
+			command: func(target string) *exec.Cmd {
+				return exec.Command("curl", "-sk", "--http2", "--max-time", "10", target, target, target, target)
+			},
+		},
+		{
+			name:   "Node HTTP/2",
+			binary: "node",
+			path:   "/h2-node",
+			command: func(target string) *exec.Cmd {
+				const script = `const http2=require('http2'),u=new URL(process.argv[1]);
+const client=http2.connect(u.origin,{rejectUnauthorized:false});
+const request=()=>new Promise((resolve,reject)=>{const r=client.request({':path':u.pathname+u.search});r.on('response',()=>{});r.on('data',()=>{});r.on('end',resolve);r.on('error',reject);r.end()});
+(async()=>{for(let i=0;i<4;i++)await request();client.close()})().catch(e=>{console.error(e);process.exit(1)});`
+				return exec.Command("node", "-e", script, target)
+			},
+		},
+		{
+			name:   "Git default HTTP version",
+			binary: "git",
+			path:   "/h2-git-default",
+			command: func(target string) *exec.Cmd {
+				command := fmt.Sprintf("for i in 1 2 3 4; do git -c http.sslVerify=false ls-remote %q || true; done", target)
+				return exec.Command("sh", "-c", command)
+			},
+		},
+		{
+			name:   "Git forced HTTP/2",
+			binary: "git",
+			path:   "/h2-git-forced",
+			command: func(target string) *exec.Cmd {
+				command := fmt.Sprintf("for i in 1 2 3 4; do git -c http.version=HTTP/2 -c http.sslVerify=false ls-remote %q || true; done", target)
+				return exec.Command("sh", "-c", command)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requireBinary(t, test.binary)
+			testNghttp2ClientCoverage(t, test.path, test.command)
+		})
+	}
+}
+
+func testNghttp2ClientCoverage(
+	t *testing.T,
+	urlPath string,
+	command func(string) *exec.Cmd,
+) {
+	t.Helper()
+
+	cgroupRoot, err := getCgroupV2Root()
+	if err != nil {
+		t.Fatalf("getCgroupV2Root: %v", err)
+	}
+	kernelIO, err := kernelio.NewLinux(nil, kernelio.Config{
+		CgroupV2RootPath:  cgroupRoot,
+		EnableHTTPUprobes: true,
+	})
+	if err != nil {
+		t.Fatalf("kernelio.NewLinux: %v", err)
+	}
+	t.Cleanup(func() { _ = kernelIO.Close() })
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	kernelTracker := newTestKernelTracker(nil, nil, kernelIO, cgroupRoot)
+	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
+	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
+
+	var firstRequest sync.Once
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		firstRequest.Do(func() { time.Sleep(2 * time.Second) })
+		if r.ProtoMajor != 2 {
+			t.Errorf("protocol = %s, want HTTP/2", r.Proto)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	target := server.URL + urlPath + "?token=secret"
+	if output, err := command(target).CombinedOutput(); err != nil {
+		t.Fatalf("HTTP/2 client: %v: %s", err, output)
+	}
+
+	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "nghttp2 http_request for "+urlPath,
+		func(in engineInput) bool {
+			sample, ok := in.(httpRequestSample)
+			if !ok || sample.CgroupID != cgroupID || sample.Source != HTTPSourceNghttp2 {
+				return false
+			}
+			if sample.Method != "GET" || sample.Path != urlPath || sample.Host != server.Listener.Addr().String() {
+				t.Fatalf("sample = method %q path %q host %q, want GET %q %q",
+					sample.Method, sample.Path, sample.Host, urlPath, server.Listener.Addr().String())
+			}
+			return true
+		})
+}
+
 func expectedHTTPClientCoverage(t *testing.T) map[string]bool {
 	t.Helper()
 	raw, ok := os.LookupEnv("HTTP_UPROBE_EXPECTED_CLIENTS")
@@ -165,7 +280,7 @@ func testOpenSSLClientCoverage(
 	}
 	kernelIO, err := kernelio.NewLinux(nil, kernelio.Config{
 		CgroupV2RootPath:  cgroupRoot,
-		EnableOpenSSLHTTP: true,
+		EnableHTTPUprobes: true,
 	})
 	if err != nil {
 		t.Fatalf("kernelio.NewLinux: %v", err)
