@@ -79,10 +79,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	// target before discovery or tests can attach an entry program.
 	for index, program := range []*ebpf.Program{
 		kernelIO.objs.HandleSslWriteParse,
-		kernelIO.objs.HandleNghttp2Method,
-		kernelIO.objs.HandleNghttp2Path,
-		kernelIO.objs.HandleNghttp2Authority,
-		kernelIO.objs.HandleNghttp2Emit,
+		kernelIO.objs.HandleNghttp2Parse,
 	} {
 		if err := kernelIO.objs.HttpUprobeStages.Put(uint32(index), program); err != nil {
 			return nil, fmt.Errorf("install HTTP uprobe stage %d: %w", index, err)
