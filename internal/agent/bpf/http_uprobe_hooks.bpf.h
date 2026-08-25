@@ -27,19 +27,24 @@ struct user_pt_regs {
 // steps, the same per-CPU http_scratch, and the same http_request_sample; only
 // the buffer source (a user pointer instead of a msghdr segment) and the
 // emitted `source` tag differ. Because a uprobe program is kprobe-type, its
-// tail-call target cannot be the fentry-type http_stages target — it uses its
-// own http_tls_stages jump table with a kprobe-type parse program.
+// tail-call targets cannot be the fentry-type http_stages target — they use a
+// separate http_uprobe_stages jump table with kprobe-type programs.
 //
 //   SSL_write(ssl, buf, num)  /  SSL_write_ex(ssl, buf, num, *written)
 //      |  (one entry program attached to both symbols)
 //      v
 //   entry ─── cgroup gate → capture ≤256B of buf → parse request line
-//      |  bpf_tail_call(http_tls_stages[0])
+//      |  bpf_tail_call(http_uprobe_stages[0])
 //      v
 //   [0] parse   path scan → Host scan → reserve/copy/submit (source=openssl)
 
-// Stage index in the http_tls_stages jump table.
-#define HTTP_TLS_STAGE_PARSE 0
+// Stage indices in the http_uprobe_stages jump table. Keeping each nghttp2
+// value scan in its own program avoids verifier state explosion on Linux 6.17.
+#define HTTP_UPROBE_STAGE_OPENSSL_PARSE      0
+#define HTTP_UPROBE_STAGE_NGHTTP2_METHOD     1
+#define HTTP_UPROBE_STAGE_NGHTTP2_PATH       2
+#define HTTP_UPROBE_STAGE_NGHTTP2_AUTHORITY  3
+#define HTTP_UPROBE_STAGE_NGHTTP2_EMIT       4
 
 // Entry: PARM2 is the plaintext buffer, PARM3 its length, for both
 // SSL_write(SSL*, const void*, int) and
@@ -60,7 +65,7 @@ int BPF_UPROBE(handle_ssl_write, void *ssl, const void *buf, long num)
         return 0;
     if (http_step_reqline(s) < 0)
         return 0;
-    bpf_tail_call(ctx, &http_tls_stages, HTTP_TLS_STAGE_PARSE);
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_OPENSSL_PARSE);
     return 0;
 }
 
@@ -252,20 +257,89 @@ int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
             break;
     }
 
-    __u32 method_n = 0;
-    __u32 path_n = 0;
-    if (nghttp2_field_length(method, method_len, HTTP_METHOD_LEN, 0, &method_n) < 0)
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
         return 0;
-    if (nghttp2_field_length(path, path_len, HTTP_PATH_LEN, 1, &path_n) < 0)
+
+    s->nghttp2_method = (__u64)method;
+    s->nghttp2_path = (__u64)path;
+    s->nghttp2_authority = (__u64)authority;
+    s->nghttp2_method_len = method_len;
+    s->nghttp2_path_len = path_len;
+    s->nghttp2_authority_len = authority_len;
+    s->nghttp2_method_n = 0;
+    s->nghttp2_path_n = 0;
+    s->nghttp2_authority_n = 0;
+    s->nghttp2_have_authority = 0;
+
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_METHOD);
+    return 0;
+}
+
+SEC("uprobe/nghttp2_submit_request")
+int BPF_UPROBE(handle_nghttp2_method)
+{
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
+        return 0;
+    const __u8 *method = (const __u8 *)s->nghttp2_method;
+    __u32 method_n = 0;
+    if (nghttp2_field_length(method, s->nghttp2_method_len,
+                             HTTP_METHOD_LEN, 0, &method_n) < 0)
+        return 0;
+    s->nghttp2_method_n = method_n;
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_PATH);
+    return 0;
+}
+
+SEC("uprobe/nghttp2_submit_request")
+int BPF_UPROBE(handle_nghttp2_path)
+{
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
+        return 0;
+    const __u8 *path = (const __u8 *)s->nghttp2_path;
+    __u32 path_n = 0;
+    if (nghttp2_field_length(path, s->nghttp2_path_len,
+                             HTTP_PATH_LEN, 1, &path_n) < 0)
         return 0;
 
     __u8 first_path;
     if (bpf_probe_read_user(&first_path, sizeof(first_path), path) < 0 || first_path != '/')
         return 0;
+    s->nghttp2_path_n = path_n;
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_AUTHORITY);
+    return 0;
+}
+
+SEC("uprobe/nghttp2_submit_request")
+int BPF_UPROBE(handle_nghttp2_authority)
+{
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
+        return 0;
+    const __u8 *authority = (const __u8 *)s->nghttp2_authority;
 
     __u32 authority_n = 0;
-    int have_authority = authority &&
-        nghttp2_field_length(authority, authority_len, HTTP_HOST_LEN, 0, &authority_n) == 0;
+    if (authority && nghttp2_field_length(authority, s->nghttp2_authority_len,
+                                          HTTP_HOST_LEN, 0, &authority_n) == 0) {
+        s->nghttp2_authority_n = authority_n;
+        s->nghttp2_have_authority = 1;
+    }
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_NGHTTP2_EMIT);
+    return 0;
+}
+
+SEC("uprobe/nghttp2_submit_request")
+int BPF_UPROBE(handle_nghttp2_emit)
+{
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
+        return 0;
+    __u64 cgroup_id = current_cgroup_id();
+    const __u8 *method = (const __u8 *)s->nghttp2_method;
+    const __u8 *path = (const __u8 *)s->nghttp2_path;
+    const __u8 *authority = (const __u8 *)s->nghttp2_authority;
 
     struct http_request_sample *sample =
         bpf_ringbuf_reserve(&events, sizeof(*sample), 0);
@@ -282,13 +356,13 @@ int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
     sample->_pad1 = 0;
     zero_http_request_fields(sample);
 
-    if (nghttp2_copy_method(sample->method, method, method_n) < 0 ||
-        nghttp2_copy_value(sample->path, path, path_n) < 0) {
+    if (nghttp2_copy_method(sample->method, method, s->nghttp2_method_n) < 0 ||
+        nghttp2_copy_value(sample->path, path, s->nghttp2_path_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }
-    if (have_authority &&
-        nghttp2_copy_value(sample->host, authority, authority_n) < 0) {
+    if (s->nghttp2_have_authority &&
+        nghttp2_copy_value(sample->host, authority, s->nghttp2_authority_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }
