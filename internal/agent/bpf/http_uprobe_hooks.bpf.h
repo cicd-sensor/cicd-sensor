@@ -158,6 +158,7 @@ static __always_inline int nghttp2_pseudo_header_kind(const struct nghttp2_nv_ab
     char name[10] = {};
     __u32 n;
 
+    // Skip lengths that cannot be :path, :method, or :authority.
     switch (nv->namelen) {
     case 5:
         n = 5;
@@ -215,6 +216,7 @@ static __always_inline int nghttp2_field_length(const __u8 *value, __u64 value_l
             *result = i;
             return i > 0 ? 0 : -1;
         }
+        // Reject ASCII control bytes and DEL from the rule-facing field.
         if (c < 0x20 || c == 0x7f)
             return -1;
         if ((__u32)i + 1 >= field_len)
