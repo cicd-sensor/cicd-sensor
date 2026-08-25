@@ -45,7 +45,7 @@ func TestEnqueueKernelSample(t *testing.T) {
 		}
 	})
 
-	t.Run("only decoded TCP connects queue OpenSSL uprobe discovery", func(t *testing.T) {
+	t.Run("only decoded TCP connects queue HTTP uprobe discovery", func(t *testing.T) {
 		t.Parallel()
 
 		tests := []struct {
@@ -75,7 +75,7 @@ func TestEnqueueKernelSample(t *testing.T) {
 				wantHit: true,
 			},
 			{
-				name: "UDP connect does not trigger an OpenSSL scan",
+				name: "UDP connect does not trigger an HTTP uprobe scan",
 				sample: encodeNetV4Sample(t, bpfprog.BPFProgramNetV4Sample{
 					Kind:     kernelio.SampleKindNetworkConnectV4,
 					Protocol: 17,
@@ -83,7 +83,7 @@ func TestEnqueueKernelSample(t *testing.T) {
 				}),
 			},
 			{
-				name: "non-network sample does not trigger an OpenSSL scan",
+				name: "non-network sample does not trigger an HTTP uprobe scan",
 				sample: encodeForkSample(t, bpfprog.BPFProgramForkSample{
 					Kind: kernelio.SampleKindFork,
 				}),

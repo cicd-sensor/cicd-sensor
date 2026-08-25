@@ -101,7 +101,7 @@ jobs:
             -test.v \
             -test.count=1 \
             -test.timeout=10m \
-            -test.run '^TestLinuxOpenSSLUprobeCoversCommonClients$'
+            -test.run '^TestLinux(OpenSSLUprobeCoversCommonClients|Nghttp2UprobeCoversHTTP2Clients)$'
 
   kernel:
     name: "x64 kernel ${{ matrix.kernel.label }}"

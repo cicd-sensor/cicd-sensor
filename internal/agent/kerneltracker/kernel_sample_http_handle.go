@@ -14,6 +14,7 @@ type HTTPSource uint8
 const (
 	HTTPSourceCleartext HTTPSource = 0
 	HTTPSourceOpenSSL   HTTPSource = 1
+	HTTPSourceNghttp2   HTTPSource = 2
 )
 
 // httpRequestSample is the userspace mirror of struct http_request_sample.
@@ -93,6 +94,8 @@ func httpSourceValue(source HTTPSource) (string, bool) {
 		return "cleartext_http", true
 	case HTTPSourceOpenSSL:
 		return "openssl", true
+	case HTTPSourceNghttp2:
+		return "nghttp2", true
 	default:
 		return "", false
 	}

@@ -26,10 +26,10 @@ import (
 // caller reads this state. cgroup gates emission and scopes the scan, but does
 // not own link lifetime.
 
-// opensslSymbols are the write entry points attached with the same program.
-// SSL_write covers curl/wget/node; SSL_write_ex is what Python (pip/requests)
-// calls. Both are mandatory.
-var opensslSymbols = []string{"SSL_write", "SSL_write_ex"}
+type httpUprobeSymbol struct {
+	name    string
+	program *ebpf.Program
+}
 
 // maxAttachedUprobeTargets bounds attached targets. On cap the worker refuses new
 // targets and never evicts a live one; reclaim keeps the steady state bounded,
@@ -76,7 +76,7 @@ type attachedUprobeTarget struct {
 }
 
 type httpUprobeDiscovery struct {
-	openSSLProgram *ebpf.Program
+	symbols        []httpUprobeSymbol
 	logger         *slog.Logger
 	cgroupRootPath string
 
@@ -96,9 +96,9 @@ type httpUprobeDiscovery struct {
 	capReached              uint64
 }
 
-func newHTTPUprobeDiscovery(openSSLProgram *ebpf.Program, logger *slog.Logger, cgroupRootPath string) *httpUprobeDiscovery {
+func newHTTPUprobeDiscovery(symbols []httpUprobeSymbol, logger *slog.Logger, cgroupRootPath string) *httpUprobeDiscovery {
 	return &httpUprobeDiscovery{
-		openSSLProgram:      openSSLProgram,
+		symbols:             symbols,
 		logger:              logger,
 		cgroupRootPath:      cgroupRootPath,
 		processScanRequests: make(chan int32, 256),
@@ -221,8 +221,8 @@ func (d *httpUprobeDiscovery) scanProcessMappings(pid int32) ([]processMapping, 
 	return mappings, true
 }
 
-// discoverAndAttachTargets attaches to process mappings that define an OpenSSL
-// target symbol. Reclaim is intentionally handled by reconcileTargets.
+// discoverAndAttachTargets attaches to process mappings that define an HTTP
+// uprobe target symbol. Reclaim is intentionally handled by reconcileTargets.
 func (d *httpUprobeDiscovery) discoverAndAttachTargets(pid int32) {
 	mappings, _ := d.scanProcessMappings(pid)
 	for _, mapping := range mappings {
@@ -276,23 +276,24 @@ func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped ma
 }
 
 // attachTarget attaches the program to the file's target symbols and records the
-// outcome. Classification is conservative: only a definitive "no symbol" caches
-// a negative; anything else (ErrNotSupported, I/O, permission) is inconclusive
-// and retried on a later connect.
+// outcome. Classification is conservative: only a definitive absence of all
+// selected symbols is cached; attach failures remain retryable.
 func (d *httpUprobeDiscovery) attachTarget(id nonTargetFileCacheKey, ex *link.Executable) {
 	var got []link.Link
-	for _, symbol := range opensslSymbols {
-		l, err := ex.Uprobe(symbol, d.openSSLProgram, nil)
+	for _, target := range d.symbols {
+		l, err := ex.Uprobe(target.name, target.program, nil)
 		switch {
 		case err == nil:
 			got = append(got, l)
-		case errors.Is(err, link.ErrNoSymbol):
-			// Symbol not defined in this file (a UND reference or absent).
+		case errors.Is(err, link.ErrNoSymbol), errors.Is(err, link.ErrNotSupported):
+			// ErrNotSupported is Cilium's result for an address-zero imported
+			// symbol. It is not attachable in this mapped file; discovery will
+			// attach the defining library when that mapping is scanned.
 		default:
 			// Inconclusive: do not cache. Undo partial attaches and retry later.
 			// Unlike a plain "symbol absent", an unexpected attach failure is a
 			// real signal, so surface it (throttled).
-			d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", symbol, "error", err)
+			d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", target.name, "error", err)
 			closeLinks(got)
 			return
 		}

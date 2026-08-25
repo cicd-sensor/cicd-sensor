@@ -54,7 +54,8 @@ struct {
     __type(value, __u32);
 } http_stages SEC(".maps");
 
-// Separate jump table for the OpenSSL uprobe HTTP parser (tls_hooks.bpf.h). It
+// Separate jump table for the OpenSSL uprobe HTTP parser
+// (http_uprobe_hooks.bpf.h). It
 // needs its own PROG_ARRAY because a uprobe program is kprobe-type and a tail
 // call cannot cross program types, so the fentry-type http_stages target above
 // is not reusable. The parse target shares the same http_scratch and the same

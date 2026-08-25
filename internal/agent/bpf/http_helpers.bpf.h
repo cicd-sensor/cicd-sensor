@@ -16,6 +16,7 @@
 // HTTP_SOURCE_* values are ringbuf ABI and mirror kerneltracker.HTTPSource*.
 #define HTTP_SOURCE_CLEARTEXT 0
 #define HTTP_SOURCE_OPENSSL   1
+#define HTTP_SOURCE_NGHTTP2   2
 
 // Shortest acceptable request line: "GET / HTTP/1.0" (14 bytes).
 #define HTTP_MIN_REQUEST_LINE 14

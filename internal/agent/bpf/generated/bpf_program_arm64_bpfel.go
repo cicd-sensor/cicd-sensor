@@ -286,6 +286,7 @@ const (
 	BPFProgramProgHandleCgroupConnect6         = "handle_cgroup_connect6"
 	BPFProgramProgHandleCgroupMkdir            = "handle_cgroup_mkdir"
 	BPFProgramProgHandleCgroupRmdir            = "handle_cgroup_rmdir"
+	BPFProgramProgHandleNghttp2SubmitRequest   = "handle_nghttp2_submit_request"
 	BPFProgramProgHandleSchedProcessExec       = "handle_sched_process_exec"
 	BPFProgramProgHandleSchedProcessFork       = "handle_sched_process_fork"
 	BPFProgramProgHandleSecurityFileOpen       = "handle_security_file_open"
@@ -371,6 +372,7 @@ type BPFProgramProgramSpecs struct {
 	HandleCgroupConnect6       *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_rmdir"`
+	HandleNghttp2SubmitRequest *ebpf.ProgramSpec `ebpf:"handle_nghttp2_submit_request"`
 	HandleSchedProcessExec     *ebpf.ProgramSpec `ebpf:"handle_sched_process_exec"`
 	HandleSchedProcessFork     *ebpf.ProgramSpec `ebpf:"handle_sched_process_fork"`
 	HandleSecurityFileOpen     *ebpf.ProgramSpec `ebpf:"handle_security_file_open"`
@@ -503,6 +505,7 @@ type BPFProgramPrograms struct {
 	HandleCgroupConnect6       *ebpf.Program `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.Program `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.Program `ebpf:"handle_cgroup_rmdir"`
+	HandleNghttp2SubmitRequest *ebpf.Program `ebpf:"handle_nghttp2_submit_request"`
 	HandleSchedProcessExec     *ebpf.Program `ebpf:"handle_sched_process_exec"`
 	HandleSchedProcessFork     *ebpf.Program `ebpf:"handle_sched_process_fork"`
 	HandleSecurityFileOpen     *ebpf.Program `ebpf:"handle_security_file_open"`
@@ -532,6 +535,7 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleCgroupConnect6,
 		p.HandleCgroupMkdir,
 		p.HandleCgroupRmdir,
+		p.HandleNghttp2SubmitRequest,
 		p.HandleSchedProcessExec,
 		p.HandleSchedProcessFork,
 		p.HandleSecurityFileOpen,

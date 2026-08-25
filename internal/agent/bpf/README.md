@@ -19,6 +19,7 @@ binary.
 - `mount_hooks.bpf.h` — mount path exposure attempt hooks.
 - `network_hooks.bpf.h` — network connect and AF_UNIX connect hooks.
 - `dns_hooks.bpf.h` — DNS sendmsg hooks.
+- `http_uprobe_hooks.bpf.h` — OpenSSL and nghttp2 HTTP uprobe entries.
 - `generate.go` — `go generate` entrypoint invoking bpf2go.
 - `README.md` — this file.
 
@@ -28,8 +29,8 @@ binary.
 - `generated/bpf_program_arm64_bpfel.go` / `generated/bpf_program_arm64_bpfel.o`
 
 Supported Linux targets are little-endian, so only `bpfel` objects ship. The
-build is split per architecture (`amd64` / `arm64`) because the OpenSSL uprobe
-reads its arguments through `PT_REGS_PARM*`, which is arch-specific and cannot
+build is split per architecture (`amd64` / `arm64`) because HTTP uprobes read
+arguments through `PT_REGS_PARM*`, which is arch-specific and cannot
 be compiled with a single arch-neutral target.
 
 Regenerate with:
