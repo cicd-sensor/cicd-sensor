@@ -33,7 +33,7 @@ jobs:
       - name: Install BPF integration deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq dnsutils libnss-resolve python3
+          sudo apt-get install -y -qq dnsutils libnss-resolve nodejs npm python3 python3-pip python3-requests wget
 
       - name: Environment info
         run: |
@@ -43,11 +43,12 @@ jobs:
             uname -a
             cat /etc/os-release
             go version
-            echo '$ curl --version'
-            curl --version
-            curl_path="$(command -v curl)"
-            printf '$ curl binary: %s -> %s\n' "$curl_path" "$(readlink -f "$curl_path")"
-            ldd "$curl_path"
+            for binary in curl python3 node npm wget git; do
+              echo "$ $binary --version"
+              "$binary" --version 2>&1 | head -n 3 || true
+              path="$(command -v "$binary" || true)"
+              [ -z "$path" ] || ldd "$(readlink -f "$path")" || true
+            done
             echo '$ openssl version -a'
             if command -v openssl >/dev/null 2>&1; then
               openssl version -a
@@ -55,12 +56,33 @@ jobs:
               echo 'openssl CLI not installed'
             fi
             echo '$ python3 OpenSSL linkage'
-            python3 -c 'import _ssl, ssl, sys; print(sys.version); print(ssl.OPENSSL_VERSION); print(_ssl.__file__)'
+            python3 -c 'import _ssl, requests, ssl, sys; print(sys.version); print(ssl.OPENSSL_VERSION); print(_ssl.__file__); print(requests.__version__)'
             python_ssl_module="$(python3 -c 'import _ssl; print(_ssl.__file__)')"
             ldd "$python_ssl_module"
+            git_http_backend="$(git --exec-path)/git-remote-http"
+            echo "git HTTP backend: $git_http_backend"
+            ldd "$git_http_backend"
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run BPF integration tests
         run: |
           make bpf-integration SUDO=sudo
+
+      - name: Build HTTP client coverage test
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go test -mod=vendor -c -tags 'bpf_integration http_client_integration' \
+            -o /tmp/http-client-coverage.test ./internal/agent/kerneltracker
+
+      - name: Run HTTP client coverage test
+        env:
+          HTTP_UPROBE_EXPECTED_CLIENTS: curl,python_urllib,python_requests,pip,wget
+        run: |
+          sudo HTTP_UPROBE_EXPECTED_CLIENTS="$HTTP_UPROBE_EXPECTED_CLIENTS" \
+            /tmp/http-client-coverage.test \
+            -test.v \
+            -test.count=1 \
+            -test.timeout=10m \
+            -test.run '^TestLinuxOpenSSLUprobeCoversCommonClients$'
