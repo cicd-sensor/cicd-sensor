@@ -498,7 +498,23 @@ func parseExecMapping(line string) (rng string, mapped mappedFileIdentity, ok bo
 	if strings.HasPrefix(fields[5], "[") { // [vdso] etc.
 		return "", "", false
 	}
-	return fields[0], mappedFileIdentity(fields[3] + ":" + fields[4]), true
+	startText, endText, found := strings.Cut(fields[0], "-")
+	if !found {
+		return "", "", false
+	}
+	start, err := strconv.ParseUint(startText, 16, 64)
+	if err != nil {
+		return "", "", false
+	}
+	end, err := strconv.ParseUint(endText, 16, 64)
+	if err != nil || end <= start {
+		return "", "", false
+	}
+	// /proc/<pid>/map_files exposes each mapped ELF under its unpadded VMA range.
+	// Therefore maps "00400000-066a1000" becomes map_files "400000-66a1000".
+	// Parse numerically so the lookup opens the mapped ELF entry.
+	rng = fmt.Sprintf("%x-%x", start, end)
+	return rng, mappedFileIdentity(fields[3] + ":" + fields[4]), true
 }
 
 // fifoSet is a fixed-size set with FIFO eviction. It is a cache: eviction only

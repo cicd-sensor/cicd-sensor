@@ -307,8 +307,8 @@ of an OpenSSL `http_request` event for that runner image.
 | Python `urllib.request` over HTTPS HTTP/1.1 | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write_ex`. |
 | Python requests over HTTPS HTTP/1.x | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write_ex`. |
 | pip over HTTPS | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write_ex`. |
-| Node over HTTPS HTTP/1.x | Not covered (verified) | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 do not expose a selected attachable function path. |
-| npm over HTTPS | Not covered (verified) | Uses the same uncovered Node TLS path on the verified runner images. |
+| Node over HTTPS HTTP/1.x | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64; observes `SSL_write`. |
+| npm over HTTPS | Verified | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 through Node's `SSL_write` path. |
 | wget over HTTPS HTTP/1.x | Verified on 22.04 and 24.04 | GitHub-hosted x64 and arm64 observe `SSL_write`; Ubuntu 26.04 preview uses GnuTLS and is not covered. |
 | Git over HTTPS | Not covered (verified) | GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on x64 and arm64 use a GnuTLS-backed Git HTTP helper. |
 | curl or Node over HTTP/2 | Planned | Requires nghttp2 support. |

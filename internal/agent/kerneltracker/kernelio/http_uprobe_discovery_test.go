@@ -55,6 +55,13 @@ func TestParseExecMapping(t *testing.T) {
 			wantMapping: "fd:01:1443212",
 		},
 		{
+			name:        "low executable address is normalized for map_files",
+			line:        "00400000-066a1000 r-xp 00000000 08:01 1443212 /usr/bin/node",
+			wantOK:      true,
+			wantRange:   "400000-66a1000",
+			wantMapping: "08:01:1443212",
+		},
+		{
 			name:   "non-executable mapping is skipped",
 			line:   "55a1b2c21000-55a1b2c25000 r--p 00021000 fd:01 1443212 /usr/lib/x86_64-linux-gnu/libssl.so.3",
 			wantOK: false,
@@ -72,6 +79,11 @@ func TestParseExecMapping(t *testing.T) {
 		{
 			name:   "no pathname field is skipped",
 			line:   "7ffff7fce000-7ffff7fd0000 r-xp 00000000 00:00 12345",
+			wantOK: false,
+		},
+		{
+			name:   "invalid address range is skipped",
+			line:   "not-hex r-xp 00000000 08:01 1443212 /usr/bin/node",
 			wantOK: false,
 		},
 	}
