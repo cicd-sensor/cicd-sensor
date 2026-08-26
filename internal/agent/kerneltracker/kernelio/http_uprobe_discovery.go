@@ -21,10 +21,10 @@ import (
 
 // http_uprobe_discovery.go — attach discovery and reclaim for HTTP uprobe taps.
 //
-// A single worker owns all attached targets and the non-target file cache, so
-// no locking. Process-scan and reconcile requests only enter this worker; no
-// caller reads this state. cgroup gates emission and scopes the scan, but does
-// not own link lifetime.
+// A single worker owns all attached targets and userspace updates to the
+// non-target file map, so no locking. Mapping and reconcile requests only enter
+// this worker; no caller reads this state. cgroup gates emission and scopes the
+// scan, but does not own link lifetime.
 
 type httpUprobeSymbol struct {
 	name    string
@@ -36,32 +36,34 @@ type httpUprobeSymbol struct {
 // so the cap is reached only under adversarial fan-out.
 const maxAttachedUprobeTargets = 4096
 
+// mappingRequestQueueSize absorbs first-seen executable mapping bursts while
+// symbol classification and uprobe attach run on the single owner worker.
+const mappingRequestQueueSize = 4096
+
 // missingScanLimit is the number of complete scans that must miss an attached
 // target before its links are closed. Incomplete scans do not count; finding
 // the target again resets its count.
 const missingScanLimit = 2
 
-// nonTargetFileCacheSize bounds the fixed FIFO of file identities definitively
-// classified as having none of the target symbols. This avoids re-parsing libc
-// or the loader on every connect.
-const nonTargetFileCacheSize = 8192
-
-// nonTargetFileCacheKey identifies one non-target cache entry, not a pathname.
-// ctime invalidates the cached classification after an inode metadata change
-// or ordinary inode reuse. This is a cache discriminator, not a generation ID.
-// mnt_id is deliberately excluded:
-// it is mount identity, and including it would over-split (the same file via two
-// mounts) into a double attach, which the kernel runs as two consumers = two
-// events.
-type nonTargetFileCacheKey struct {
-	mappedFile mappedFileIdentity
-	ctimeNano  int64
+type mappedFileIdentity struct {
+	deviceMajor uint32
+	deviceMinor uint32
+	inode       uint64
 }
 
-// mappedFileIdentity is the device/inode identity available directly from /proc/pid/maps.
-// Reclaim uses it so a map_files open race or metadata change cannot hide a live
-// mapping. nonTargetFileCacheKey remains the stricter cache key.
-type mappedFileIdentity string
+type fileClassificationKey struct {
+	mappedFile mappedFileIdentity
+	ctimeSec   int64
+	ctimeNsec  uint32
+	_          uint32 // explicit padding required by the BPF map-key ABI
+}
+
+type httpUprobeMapping struct {
+	tgid    int32
+	vmStart uint64
+	vmEnd   uint64
+	file    fileClassificationKey
+}
 
 type processMapping struct {
 	addressRange string
@@ -81,30 +83,36 @@ type httpUprobeDiscovery struct {
 	cgroupRootPath string
 
 	// Worker inputs. run consumes both serially.
-	processScanRequests chan int32    // pid of a tracked process that just did a TCP connect
-	reconcileRequests   chan []uint64 // immutable active cgroup IDs from KernelTracker
+	mappingRequests   chan httpUprobeMapping // executable mappings decoded by the KernelIO reader
+	reconcileRequests chan []uint64          // immutable active cgroup IDs from KernelTracker
 
 	// Worker-owned state (single goroutine, no locking).
-	attachedTargets    map[mappedFileIdentity]*attachedUprobeTarget
-	nonTargetFileCache *fifoSet
+	attachedTargets map[mappedFileIdentity]*attachedUprobeTarget
+	nonTargetFiles  *ebpf.Map
 
-	// Throttled-warning counters. processScanQueueDropped is sample-reader-owned;
+	// Throttled-warning counters. mappingQueueDropped is sample-reader-owned;
 	// the others are worker-owned. Each counter is touched by one goroutine.
-	processScanQueueDropped uint64
-	permDenied              uint64
-	opErrors                uint64
-	capReached              uint64
+	mappingQueueDropped uint64
+	permDenied          uint64
+	opErrors            uint64
+	identityMismatch    uint64
+	capReached          uint64
 }
 
-func newHTTPUprobeDiscovery(symbols []httpUprobeSymbol, logger *slog.Logger, cgroupRootPath string) *httpUprobeDiscovery {
+func newHTTPUprobeDiscovery(
+	symbols []httpUprobeSymbol,
+	logger *slog.Logger,
+	cgroupRootPath string,
+	nonTargetFiles *ebpf.Map,
+) *httpUprobeDiscovery {
 	return &httpUprobeDiscovery{
-		symbols:             symbols,
-		logger:              logger,
-		cgroupRootPath:      cgroupRootPath,
-		processScanRequests: make(chan int32, 256),
-		reconcileRequests:   make(chan []uint64, 1),
-		attachedTargets:     make(map[mappedFileIdentity]*attachedUprobeTarget),
-		nonTargetFileCache:  newFIFOSet(nonTargetFileCacheSize),
+		symbols:           symbols,
+		logger:            logger,
+		cgroupRootPath:    cgroupRootPath,
+		mappingRequests:   make(chan httpUprobeMapping, mappingRequestQueueSize),
+		reconcileRequests: make(chan []uint64, 1),
+		attachedTargets:   make(map[mappedFileIdentity]*attachedUprobeTarget),
+		nonTargetFiles:    nonTargetFiles,
 	}
 }
 
@@ -127,27 +135,19 @@ func (kernelIO *LinuxKernelIO) QueueHTTPUprobeReconciliation(activeCgroupIDs []u
 	kernelIO.httpUprobeDiscovery.queueTargetReconciliation(activeCgroupIDs)
 }
 
-// queueProcessScan schedules one process mapping scan without blocking sample
-// intake. A later TCP connect is a natural retry when the bounded queue is full.
-func (d *httpUprobeDiscovery) queueProcessScan(tgid int32) {
+// queueMapping schedules one mapping classification without blocking sample
+// intake. A later process mapping the same file is a natural retry on overflow.
+func (d *httpUprobeDiscovery) queueMapping(mapping httpUprobeMapping) {
 	select {
-	case d.processScanRequests <- tgid:
+	case d.mappingRequests <- mapping:
 	default:
-		d.warnThrottled(&d.processScanQueueDropped, "http_uprobe_process_scan_request_dropped")
+		d.warnThrottled(&d.mappingQueueDropped, "http_uprobe_mapping_request_dropped")
 	}
-}
-
-// QueueHTTPUprobeDiscovery schedules discovery for a decoded TCP connect.
-func (kernelIO *LinuxKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
-	if kernelIO.httpUprobeDiscovery == nil {
-		return
-	}
-	kernelIO.httpUprobeDiscovery.queueProcessScan(pid)
 }
 
 // run processes scan and reconcile requests on one goroutine until ctx
 // is cancelled, then closes every attached link. It is the sole owner of
-// attachedTargets/nonTargetFileCache; there is no separate closer goroutine.
+// attachedTargets/nonTargetFiles; there is no separate closer goroutine.
 func (d *httpUprobeDiscovery) run(ctx context.Context) {
 	defer d.closeAll()
 	for {
@@ -156,24 +156,8 @@ func (d *httpUprobeDiscovery) run(ctx context.Context) {
 			return
 		case activeCgroupIDs := <-d.reconcileRequests:
 			d.reconcileTargets(activeCgroupIDs)
-		case first := <-d.processScanRequests:
-			// Coalesce whatever is already queued and dedupe by pid so a burst
-			// scans each process once.
-			pids := map[int32]struct{}{first: {}}
-			for draining := true; draining; {
-				select {
-				case h := <-d.processScanRequests:
-					pids[h] = struct{}{}
-				default:
-					draining = false
-				}
-			}
-			for pid := range pids {
-				if ctx.Err() != nil {
-					return
-				}
-				d.discoverAndAttachTargets(pid)
-			}
+		case mapping := <-d.mappingRequests:
+			d.classifyAndAttachMapping(mapping)
 		}
 	}
 }
@@ -186,7 +170,7 @@ func (d *httpUprobeDiscovery) scanProcessMappings(pid int32) ([]processMapping, 
 	if err != nil {
 		// Only a gone pid (ENOENT) is the benign race; anything else could hide
 		// a live mapping. Permission errors are surfaced (discovery is blind).
-		if errors.Is(err, os.ErrNotExist) {
+		if processIsGone(err) {
 			return nil, true
 		}
 		if errors.Is(err, os.ErrPermission) {
@@ -212,41 +196,32 @@ func (d *httpUprobeDiscovery) scanProcessMappings(pid int32) ([]processMapping, 
 		seen[mapped] = struct{}{}
 		mappings = append(mappings, processMapping{addressRange: rng, mappedFile: mapped})
 	}
-	// A read error means a partial scan (e.g. the process exited mid-read). For
-	// attach that is fine (the next connect retries); for reclaim it could hide a
-	// live mapping, so report incomplete.
+	// A read error means a partial scan (e.g. the process exited mid-read). It
+	// makes reclaim fail-keep and prevents a stale-range fallback from guessing.
 	if err := scanner.Err(); err != nil {
 		return mappings, false
 	}
 	return mappings, true
 }
 
-// discoverAndAttachTargets attaches to process mappings that define an HTTP
-// uprobe target symbol. Reclaim is intentionally handled by reconcileTargets.
-func (d *httpUprobeDiscovery) discoverAndAttachTargets(pid int32) {
-	mappings, _ := d.scanProcessMappings(pid)
-	for _, mapping := range mappings {
-		if _, have := d.attachedTargets[mapping.mappedFile]; have {
-			continue
-		}
-		if len(d.attachedTargets) >= maxAttachedUprobeTargets {
-			d.warnThrottled(&d.capReached, "http_uprobe_target_cap_reached", "targets", len(d.attachedTargets))
-			continue
-		}
-		d.classifyAndAttach(pid, mapping.addressRange, mapping.mappedFile)
+// classifyAndAttachMapping verifies the kernel-provided file identity before
+// using the mapped file. An identity mismatch is an ordinary mapping race and
+// must not create either an attach or a negative-cache entry.
+func (d *httpUprobeDiscovery) classifyAndAttachMapping(mapping httpUprobeMapping) {
+	if _, attached := d.attachedTargets[mapping.file.mappedFile]; attached {
+		return
 	}
-}
+	if d.isKnownNonTarget(mapping.file) {
+		return
+	}
+	if len(d.attachedTargets) >= maxAttachedUprobeTargets {
+		d.warnThrottled(&d.capReached, "http_uprobe_target_cap_reached", "targets", len(d.attachedTargets))
+		return
+	}
 
-// classifyAndAttach opens the mapped file by FD (surviving unlink / mount-ns /
-// path replacement), computes its identity, and attaches the uprobe program to
-// each target symbol it defines. The FD is held until every attach completes.
-// Classification failures are inconclusive and retried on a later connect.
-func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped mappedFileIdentity) {
-	f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, rng))
+	f, err := d.openMappedFile(mapping)
 	if err != nil {
-		// ENOENT is a raced-away or non-openable range. Presence was already
-		// recorded; other errors are attach failures and are surfaced for retry.
-		if errors.Is(err, os.ErrNotExist) {
+		if processIsGone(err) {
 			return
 		}
 		if errors.Is(err, os.ErrPermission) {
@@ -258,29 +233,116 @@ func (d *httpUprobeDiscovery) classifyAndAttach(pid int32, rng string, mapped ma
 	}
 	defer f.Close()
 
-	var st unix.Stat_t
-	if err := unix.Fstat(int(f.Fd()), &st); err != nil {
+	actual, err := classificationKeyFromFile(f)
+	if err != nil {
 		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "fstat", "error", err)
 		return
 	}
-	id := nonTargetFileCacheKey{mappedFile: mapped, ctimeNano: st.Ctim.Nano()}
-	if d.nonTargetFileCache.has(id) {
+	if actual != mapping.file {
+		d.warnThrottled(&d.identityMismatch, "http_uprobe_discovery_identity_mismatch")
 		return
 	}
+	selected, definitive, err := definedHTTPUprobeSymbols(f, d.symbols)
+	if err != nil {
+		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "classify_elf_symbols", "error", err)
+		return
+	}
+	if len(selected) == 0 {
+		if definitive {
+			d.cacheNonTarget(mapping.file)
+		}
+		return
+	}
+
 	ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
 	if err != nil {
 		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
 		return
 	}
-	d.attachTarget(id, ex)
+	d.attachTarget(mapping.file, ex, selected)
+}
+
+func processIsGone(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, unix.ESRCH)
+}
+
+// openMappedFile first uses the completed VMA range from uprobe_mmap. A VMA
+// can merge before userspace opens map_files, so ENOENT gets one current-maps
+// lookup by device/inode. Other failures are returned unchanged.
+func (d *httpUprobeDiscovery) openMappedFile(mapping httpUprobeMapping) (*os.File, error) {
+	f, err := os.Open(mappedFilePath(mapping.tgid, mapping.vmStart, mapping.vmEnd))
+	if err == nil || !errors.Is(err, os.ErrNotExist) {
+		return f, err
+	}
+
+	mappings, complete := d.scanProcessMappings(mapping.tgid)
+	if !complete {
+		return nil, err
+	}
+	for _, current := range mappings {
+		if current.mappedFile == mapping.file.mappedFile {
+			return os.Open(fmt.Sprintf("/proc/%d/map_files/%s", mapping.tgid, current.addressRange))
+		}
+	}
+	return nil, err
+}
+
+func mappedFilePath(pid int32, start, end uint64) string {
+	return fmt.Sprintf("/proc/%d/map_files/%x-%x", pid, start, end)
+}
+
+func classificationKeyFromFile(f *os.File) (fileClassificationKey, error) {
+	var st unix.Stat_t
+	if err := unix.Fstat(int(f.Fd()), &st); err != nil {
+		return fileClassificationKey{}, err
+	}
+	return fileClassificationKey{
+		mappedFile: mappedFileIdentity{
+			deviceMajor: uint32(unix.Major(uint64(st.Dev))),
+			deviceMinor: uint32(unix.Minor(uint64(st.Dev))),
+			inode:       st.Ino,
+		},
+		ctimeSec:  st.Ctim.Sec,
+		ctimeNsec: uint32(st.Ctim.Nsec),
+	}, nil
+}
+
+func (d *httpUprobeDiscovery) isKnownNonTarget(key fileClassificationKey) bool {
+	if d.nonTargetFiles == nil {
+		return false
+	}
+	var value uint8
+	err := d.nonTargetFiles.Lookup(key, &value)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, ebpf.ErrKeyNotExist):
+		return false
+	default:
+		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "negative_cache_lookup", "error", err)
+		return false
+	}
+}
+
+func (d *httpUprobeDiscovery) cacheNonTarget(key fileClassificationKey) {
+	if d.nonTargetFiles == nil {
+		return
+	}
+	if err := d.nonTargetFiles.Put(key, uint8(1)); err != nil {
+		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "negative_cache_update", "error", err)
+	}
 }
 
 // attachTarget attaches the program to the file's target symbols and records the
 // outcome. Classification is conservative: only a definitive absence of all
 // selected symbols is cached; attach failures remain retryable.
-func (d *httpUprobeDiscovery) attachTarget(id nonTargetFileCacheKey, ex *link.Executable) {
+func (d *httpUprobeDiscovery) attachTarget(
+	id fileClassificationKey,
+	ex *link.Executable,
+	targets []httpUprobeSymbol,
+) {
 	var got []link.Link
-	for _, target := range d.symbols {
+	for _, target := range targets {
 		l, err := ex.Uprobe(target.name, target.program, nil)
 		switch {
 		case err == nil:
@@ -302,7 +364,7 @@ func (d *httpUprobeDiscovery) attachTarget(id nonTargetFileCacheKey, ex *link.Ex
 		return
 	}
 	// Every target symbol was definitively absent: safe to cache negative.
-	d.nonTargetFileCache.add(id)
+	d.cacheNonTarget(id)
 }
 
 func (d *httpUprobeDiscovery) closeAll() {
@@ -313,7 +375,7 @@ func (d *httpUprobeDiscovery) closeAll() {
 
 // reconcileTargets is the reclaim sweep. It resolves the immutable active-ID
 // snapshot to current filesystem paths, then expands cgroup.procs and scans
-// process maps. It only observes liveness; connect-triggered discovery owns
+// process maps. It only observes liveness; mapping-triggered discovery owns
 // target classification and attach.
 // Only detach is fail-keep: an incomplete scan never advances a missing
 // count or closes links, though a target positively observed before an error is
@@ -462,7 +524,7 @@ func (d *httpUprobeDiscovery) warn(msg string, args ...any) {
 
 // warnThrottled logs at a power-of-two cadence (1st, 2nd, 4th, 8th, ... event)
 // so a systematic failure — a permission error that leaves discovery blind, a
-// saturated process-scan queue — is visible without emitting one line per connect. The
+// saturated mapping queue — is visible without emitting one line per mapping. The
 // counter must be owned by the calling goroutine.
 func (d *httpUprobeDiscovery) warnThrottled(counter *uint64, msg string, args ...any) {
 	*counter++
@@ -486,76 +548,53 @@ func closeLinks(links []link.Link) {
 func parseExecMapping(line string) (rng string, mapped mappedFileIdentity, ok bool) {
 	fields := strings.Fields(line)
 	if len(fields) < 6 { // needs a pathname field
-		return "", "", false
+		return "", mappedFileIdentity{}, false
 	}
 	perms := fields[1]
 	if len(perms) < 3 || perms[2] != 'x' {
-		return "", "", false
+		return "", mappedFileIdentity{}, false
 	}
 	if fields[4] == "0" { // inode 0 = anonymous
-		return "", "", false
+		return "", mappedFileIdentity{}, false
 	}
 	if strings.HasPrefix(fields[5], "[") { // [vdso] etc.
-		return "", "", false
+		return "", mappedFileIdentity{}, false
+	}
+	deviceMajorText, deviceMinorText, found := strings.Cut(fields[3], ":")
+	if !found {
+		return "", mappedFileIdentity{}, false
+	}
+	deviceMajor, err := strconv.ParseUint(deviceMajorText, 16, 32)
+	if err != nil {
+		return "", mappedFileIdentity{}, false
+	}
+	deviceMinor, err := strconv.ParseUint(deviceMinorText, 16, 32)
+	if err != nil {
+		return "", mappedFileIdentity{}, false
+	}
+	inode, err := strconv.ParseUint(fields[4], 10, 64)
+	if err != nil {
+		return "", mappedFileIdentity{}, false
 	}
 	startText, endText, found := strings.Cut(fields[0], "-")
 	if !found {
-		return "", "", false
+		return "", mappedFileIdentity{}, false
 	}
 	start, err := strconv.ParseUint(startText, 16, 64)
 	if err != nil {
-		return "", "", false
+		return "", mappedFileIdentity{}, false
 	}
 	end, err := strconv.ParseUint(endText, 16, 64)
 	if err != nil || end <= start {
-		return "", "", false
+		return "", mappedFileIdentity{}, false
 	}
 	// /proc/<pid>/map_files exposes each mapped ELF under its unpadded VMA range.
 	// Therefore maps "00400000-066a1000" becomes map_files "400000-66a1000".
 	// Parse numerically so the lookup opens the mapped ELF entry.
 	rng = fmt.Sprintf("%x-%x", start, end)
-	return rng, mappedFileIdentity(fields[3] + ":" + fields[4]), true
-}
-
-// fifoSet is a fixed-size set with FIFO eviction. It is a cache: eviction only
-// costs a re-classify, never correctness. This intentionally mirrors
-// fileOpenDedupState; if a third use appears, move the shared algorithm to a
-// dependency-neutral generic package.
-type fifoSet struct {
-	limit int
-	seen  map[nonTargetFileCacheKey]struct{}
-	order []nonTargetFileCacheKey
-	next  int
-}
-
-func newFIFOSet(limit int) *fifoSet {
-	return &fifoSet{
-		limit: limit,
-		seen:  make(map[nonTargetFileCacheKey]struct{}),
-	}
-}
-
-func (s *fifoSet) has(id nonTargetFileCacheKey) bool {
-	if s == nil {
-		return false
-	}
-	_, ok := s.seen[id]
-	return ok
-}
-
-func (s *fifoSet) add(id nonTargetFileCacheKey) {
-	if s == nil || s.limit <= 0 {
-		return
-	}
-	if _, ok := s.seen[id]; ok {
-		return
-	}
-	if len(s.order) < s.limit {
-		s.order = append(s.order, id)
-	} else {
-		delete(s.seen, s.order[s.next])
-		s.order[s.next] = id
-		s.next = (s.next + 1) % s.limit
-	}
-	s.seen[id] = struct{}{}
+	return rng, mappedFileIdentity{
+		deviceMajor: uint32(deviceMajor),
+		deviceMinor: uint32(deviceMinor),
+		inode:       inode,
+	}, true
 }

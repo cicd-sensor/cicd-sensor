@@ -58,6 +58,14 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 					return
 				}
 			}
+			handled, err := kernelIO.handleHTTPUprobeMappingSample(record.RawSample)
+			if err != nil {
+				kernelIO.logger.WarnContext(loopCtx, "bpf_control_sample_decode_failed", "error", err, "bytes", len(record.RawSample))
+				continue
+			}
+			if handled {
+				continue
+			}
 
 			if err := handle(loopCtx, KernelSample(record.RawSample)); err != nil {
 				if loopCtx.Err() != nil {

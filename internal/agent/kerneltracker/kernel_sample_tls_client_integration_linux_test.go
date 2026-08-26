@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -38,7 +37,7 @@ func TestLinuxOpenSSLUprobeCoversCommonClients(t *testing.T) {
 			urlPath:   "/curl",
 			eventPath: "/curl",
 			command: func(url string) *exec.Cmd {
-				return exec.Command("curl", "-sk", "--http1.1", "--max-time", "10", url, url, url, url)
+				return exec.Command("curl", "-sk", "--http1.1", "--max-time", "10", url)
 			},
 		},
 		{
@@ -50,7 +49,7 @@ func TestLinuxOpenSSLUprobeCoversCommonClients(t *testing.T) {
 			command: func(url string) *exec.Cmd {
 				const script = `import ssl,sys,urllib.request
 context=ssl._create_unverified_context()
-for _ in range(4): urllib.request.urlopen(sys.argv[1], context=context, timeout=10).read()`
+urllib.request.urlopen(sys.argv[1], context=context, timeout=10).read()`
 				return exec.Command("python3", "-c", script, url)
 			},
 		},
@@ -62,7 +61,7 @@ for _ in range(4): urllib.request.urlopen(sys.argv[1], context=context, timeout=
 			eventPath: "/python-requests",
 			command: func(url string) *exec.Cmd {
 				const script = `import requests,sys
-for _ in range(4): requests.get(sys.argv[1], timeout=10, verify=False)`
+requests.get(sys.argv[1], timeout=10, verify=False)`
 				return exec.Command("python3", "-c", script, url)
 			},
 		},
@@ -74,7 +73,7 @@ for _ in range(4): requests.get(sys.argv[1], timeout=10, verify=False)`
 			eventPath: "/pip/simple/cicd-sensor-http-uprobe-missing/",
 			command: func(url string) *exec.Cmd {
 				command := fmt.Sprintf(
-					"for i in 1 2 3 4; do python3 -m pip --disable-pip-version-check index versions --trusted-host 127.0.0.1 --index-url %q/simple cicd-sensor-http-uprobe-missing || true; done",
+					"python3 -m pip --disable-pip-version-check index versions --trusted-host 127.0.0.1 --index-url %q/simple cicd-sensor-http-uprobe-missing || true",
 					url,
 				)
 				return exec.Command("sh", "-c", command)
@@ -88,8 +87,7 @@ for _ in range(4): requests.get(sys.argv[1], timeout=10, verify=False)`
 			eventPath: "/node",
 			command: func(url string) *exec.Cmd {
 				const script = `const https=require('https'),url=process.argv[1];
-const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorized:false,agent:false},r=>{r.resume();r.on('end',resolve)}).on('error',reject));
-(async()=>{for(let i=0;i<4;i++)await request()})().catch(e=>{console.error(e);process.exit(1)});`
+https.get(url,{rejectUnauthorized:false,agent:false},r=>{r.resume()}).on('error',e=>{console.error(e);process.exit(1)});`
 				return exec.Command("node", "-e", script, url)
 			},
 		},
@@ -100,7 +98,7 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 			urlPath:   "/npm",
 			eventPath: "/npm/-/ping",
 			command: func(url string) *exec.Cmd {
-				command := fmt.Sprintf("for i in 1 2 3 4; do npm ping --registry=%q/ --strict-ssl=false; done", url)
+				command := fmt.Sprintf("npm ping --registry=%q/ --strict-ssl=false", url)
 				return exec.Command("sh", "-c", command)
 			},
 		},
@@ -111,7 +109,7 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 			urlPath:   "/wget",
 			eventPath: "/wget",
 			command: func(url string) *exec.Cmd {
-				return exec.Command("wget", "--no-check-certificate", "--quiet", "--output-document=/dev/null", url, url, url, url)
+				return exec.Command("wget", "--no-check-certificate", "--quiet", "--output-document=/dev/null", url)
 			},
 		},
 		{
@@ -121,7 +119,7 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 			urlPath:   "/git",
 			eventPath: "/git/info/refs",
 			command: func(url string) *exec.Cmd {
-				command := fmt.Sprintf("for i in 1 2 3 4; do git -c http.sslVerify=false ls-remote %q || true; done", url)
+				command := fmt.Sprintf("git -c http.sslVerify=false ls-remote %q || true", url)
 				return exec.Command("sh", "-c", command)
 			},
 		},
@@ -139,8 +137,7 @@ const request=()=>new Promise((resolve,reject)=>https.get(url,{rejectUnauthorize
 }
 
 // TestLinuxNghttp2UprobeCoversHTTP2Clients verifies real HTTP/2 request paths
-// through the selected nghttp2 submission APIs. Each client performs repeated
-// requests so connect-triggered discovery can attach after the first connect.
+// through the selected nghttp2 submission APIs.
 func TestLinuxNghttp2UprobeCoversHTTP2Clients(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -153,7 +150,7 @@ func TestLinuxNghttp2UprobeCoversHTTP2Clients(t *testing.T) {
 			binary: "curl",
 			path:   "/h2-curl",
 			command: func(target string) *exec.Cmd {
-				return exec.Command("curl", "-sk", "--http2", "--max-time", "10", target, target, target, target)
+				return exec.Command("curl", "-sk", "--http2", "--max-time", "10", target)
 			},
 		},
 		{
@@ -163,8 +160,8 @@ func TestLinuxNghttp2UprobeCoversHTTP2Clients(t *testing.T) {
 			command: func(target string) *exec.Cmd {
 				const script = `const http2=require('http2'),u=new URL(process.argv[1]);
 const client=http2.connect(u.origin,{rejectUnauthorized:false});
-const request=()=>new Promise((resolve,reject)=>{const r=client.request({':path':u.pathname+u.search});r.on('response',()=>{});r.on('data',()=>{});r.on('end',resolve);r.on('error',reject);r.end()});
-(async()=>{for(let i=0;i<4;i++)await request();client.close()})().catch(e=>{console.error(e);process.exit(1)});`
+const r=client.request({':path':u.pathname+u.search});
+r.on('response',()=>{});r.on('data',()=>{});r.on('end',()=>client.close());r.on('error',e=>{console.error(e);process.exit(1)});r.end();`
 				return exec.Command("node", "-e", script, target)
 			},
 		},
@@ -173,7 +170,7 @@ const request=()=>new Promise((resolve,reject)=>{const r=client.request({':path'
 			binary: "git",
 			path:   "/h2-git-default",
 			command: func(target string) *exec.Cmd {
-				command := fmt.Sprintf("for i in 1 2 3 4; do git -c http.sslVerify=false ls-remote %q || true; done", target)
+				command := fmt.Sprintf("git -c http.sslVerify=false ls-remote %q || true", target)
 				return exec.Command("sh", "-c", command)
 			},
 		},
@@ -182,7 +179,7 @@ const request=()=>new Promise((resolve,reject)=>{const r=client.request({':path'
 			binary: "git",
 			path:   "/h2-git-forced",
 			command: func(target string) *exec.Cmd {
-				command := fmt.Sprintf("for i in 1 2 3 4; do git -c http.version=HTTP/2 -c http.sslVerify=false ls-remote %q || true; done", target)
+				command := fmt.Sprintf("git -c http.version=HTTP/2 -c http.sslVerify=false ls-remote %q || true", target)
 				return exec.Command("sh", "-c", command)
 			},
 		},
@@ -222,9 +219,7 @@ func testNghttp2ClientCoverage(
 	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
 	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
 
-	var firstRequest sync.Once
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		firstRequest.Do(func() { time.Sleep(2 * time.Second) })
 		if r.ProtoMajor != 2 {
 			t.Errorf("protocol = %s, want HTTP/2", r.Proto)
 		}
@@ -235,8 +230,12 @@ func testNghttp2ClientCoverage(
 	t.Cleanup(server.Close)
 
 	target := server.URL + urlPath + "?token=secret"
-	if output, err := command(target).CombinedOutput(); err != nil {
-		t.Fatalf("HTTP/2 client: %v: %s", err, output)
+	// Use separate processes so a mapping missed during asynchronous attach is
+	// retried naturally and the resulting file-scoped link covers a later client.
+	for range 4 {
+		if output, err := command(target).CombinedOutput(); err != nil {
+			t.Fatalf("HTTP/2 client: %v: %s", err, output)
+		}
 	}
 
 	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "nghttp2 http_request for "+urlPath,
@@ -293,9 +292,7 @@ func testOpenSSLClientCoverage(
 	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
 	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
 
-	var firstRequest sync.Once
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		firstRequest.Do(func() { time.Sleep(2 * time.Second) })
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/-/ping"):
 			w.Header().Set("Content-Type", "application/json")
@@ -312,22 +309,29 @@ func testOpenSSLClientCoverage(
 	server.StartTLS()
 	t.Cleanup(server.Close)
 
-	if output, err := command(server.URL + urlPath).CombinedOutput(); err != nil {
-		t.Fatalf("HTTPS client: %v: %s", err, output)
-	}
-
-	deadline := time.NewTimer(5 * time.Second)
-	defer deadline.Stop()
-	for {
-		select {
-		case in := <-kernelTracker.inputCh:
-			sample, ok := in.(httpRequestSample)
-			if ok && sample.CgroupID == cgroupID && sample.Source == HTTPSourceOpenSSL &&
-				strings.HasPrefix(sample.Path, eventPath) {
-				return true
+	waitForPath := func(path string) bool {
+		deadline := time.NewTimer(5 * time.Second)
+		defer deadline.Stop()
+		for {
+			select {
+			case in := <-kernelTracker.inputCh:
+				sample, ok := in.(httpRequestSample)
+				if ok && sample.CgroupID == cgroupID && sample.Source == HTTPSourceOpenSSL &&
+					strings.HasPrefix(sample.Path, path) {
+					return true
+				}
+			case <-deadline.C:
+				return false
 			}
-		case <-deadline.C:
-			return false
 		}
 	}
+
+	// Use separate processes for the same mapping/attach contract as the HTTP/2
+	// test above; do not hide first-request timing behind an artificial delay.
+	for range 4 {
+		if output, err := command(server.URL + urlPath).CombinedOutput(); err != nil {
+			t.Fatalf("HTTPS client: %v: %s", err, output)
+		}
+	}
+	return waitForPath(eventPath)
 }

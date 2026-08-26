@@ -21,4 +21,5 @@ const (
 	SampleKindUnixSocketConnect uint32 = 13
 	SampleKindMount             uint32 = 14
 	SampleKindHTTPRequest       uint32 = 15
+	SampleKindHTTPUprobeMapping uint32 = 16
 )

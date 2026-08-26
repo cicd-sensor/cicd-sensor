@@ -11,8 +11,9 @@ var ErrNotSupported = errors.New("not supported")
 type Config struct {
 	CgroupV2RootPath string
 	// EnableHTTPUprobes starts the HTTP uprobe attach-discovery worker
-	// (connect-triggered process scan, attach, and maps-liveness reclaim). It does
+	// (mapping-triggered classification, attach, and maps-liveness reclaim). It does
 	// not gate BPF load: LoadAndAssign loads and verifies the programs at startup.
+	// Disabled instances shrink the HTTP-only BPF caches to placeholder entries.
 	// Keep this rollout switch off until the HTTP uprobe environment gates pass;
 	// it is not intended as a long-lived user-facing setting.
 	EnableHTTPUprobes bool
@@ -25,9 +26,6 @@ type KernelIO interface {
 	DeleteCgroupIDsFromTrackedCgroupsMap(ctx context.Context, cgroupIDs []uint64) error
 	PutCgroupBasenameInStagingMap(ctx context.Context, basename string) error
 	DeleteCgroupBasenamesFromStagingMap(ctx context.Context, basenames []string) error
-	// QueueHTTPUprobeDiscovery schedules a non-blocking process mapping scan
-	// after a TCP connect. It is a no-op when HTTP uprobe capture is disabled.
-	QueueHTTPUprobeDiscovery(pid int32)
 	// QueueHTTPUprobeReconciliation takes ownership of an active userspace
 	// cgroup-ID snapshot and schedules a non-blocking maps-liveness sweep.
 	// It is a no-op when HTTP uprobe capture is disabled.

@@ -3,6 +3,7 @@
 package kernelio
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -77,7 +78,30 @@ func reconcileAndCount(discovery *httpUprobeDiscovery, activeCgroupIDs []uint64)
 
 func discoverAndCount(discovery *httpUprobeDiscovery, pids ...int32) int {
 	for _, pid := range pids {
-		discovery.discoverAndAttachTargets(pid)
+		mappings, _ := discovery.scanProcessMappings(pid)
+		for _, candidate := range mappings {
+			startText, endText, ok := strings.Cut(candidate.addressRange, "-")
+			if !ok {
+				continue
+			}
+			start, startErr := strconv.ParseUint(startText, 16, 64)
+			end, endErr := strconv.ParseUint(endText, 16, 64)
+			if startErr != nil || endErr != nil {
+				continue
+			}
+			f, err := os.Open(mappedFilePath(pid, start, end))
+			if err != nil {
+				continue
+			}
+			key, err := classificationKeyFromFile(f)
+			_ = f.Close()
+			if err != nil {
+				continue
+			}
+			discovery.classifyAndAttachMapping(httpUprobeMapping{
+				tgid: pid, vmStart: start, vmEnd: end, file: key,
+			})
+		}
 	}
 	return len(discovery.attachedTargets)
 }
@@ -196,5 +220,96 @@ func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
 	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid))
 	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid)); got != 1 {
 		t.Fatalf("unlinked-but-mapped inode was detached: count = %d, want 1", got)
+	}
+}
+
+func TestLinuxHTTPUprobeOpenMappedFileFallsBackToCurrentRange(t *testing.T) {
+	discovery := newReclaimTestDiscovery(t)
+	mappings, complete := discovery.scanProcessMappings(int32(os.Getpid()))
+	if !complete || len(mappings) == 0 {
+		t.Fatalf("own executable mappings = %d complete = %v", len(mappings), complete)
+	}
+
+	candidate := mappings[0]
+	f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", os.Getpid(), candidate.addressRange))
+	if err != nil {
+		t.Fatalf("open current map_files entry: %v", err)
+	}
+	key, err := classificationKeyFromFile(f)
+	_ = f.Close()
+	if err != nil {
+		t.Fatalf("classify current map_files entry: %v", err)
+	}
+
+	opened, err := discovery.openMappedFile(httpUprobeMapping{
+		tgid: int32(os.Getpid()), vmStart: 1, vmEnd: 2, file: key,
+	})
+	if err != nil {
+		t.Fatalf("openMappedFile stale-range fallback: %v", err)
+	}
+	defer opened.Close()
+	got, err := classificationKeyFromFile(opened)
+	if err != nil {
+		t.Fatalf("classify fallback result: %v", err)
+	}
+	if got != key {
+		t.Fatalf("fallback identity = %+v, want %+v", got, key)
+	}
+}
+
+func TestLinuxHTTPUprobeNegativeCacheUsesBPFMap(t *testing.T) {
+	discovery := newReclaimTestDiscovery(t)
+	key := fileClassificationKey{
+		mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42},
+		ctimeSec:   123, ctimeNsec: 456,
+	}
+	if discovery.isKnownNonTarget(key) {
+		t.Fatal("fresh key is already in non-target map")
+	}
+	discovery.cacheNonTarget(key)
+	if !discovery.isKnownNonTarget(key) {
+		t.Fatal("cached key was not found in non-target map")
+	}
+}
+
+func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
+	discovery := newReclaimTestDiscovery(t)
+	mappings, complete := discovery.scanProcessMappings(int32(os.Getpid()))
+	if !complete || len(mappings) == 0 {
+		t.Fatalf("own executable mappings = %d complete = %v", len(mappings), complete)
+	}
+
+	candidate := mappings[0]
+	startText, endText, ok := strings.Cut(candidate.addressRange, "-")
+	if !ok {
+		t.Fatalf("invalid mapping range %q", candidate.addressRange)
+	}
+	start, startErr := strconv.ParseUint(startText, 16, 64)
+	end, endErr := strconv.ParseUint(endText, 16, 64)
+	if startErr != nil || endErr != nil {
+		t.Fatalf("parse mapping range %q: %v, %v", candidate.addressRange, startErr, endErr)
+	}
+	f, err := os.Open(mappedFilePath(int32(os.Getpid()), start, end))
+	if err != nil {
+		t.Fatalf("open current map_files entry: %v", err)
+	}
+	key, err := classificationKeyFromFile(f)
+	_ = f.Close()
+	if err != nil {
+		t.Fatalf("classify current map_files entry: %v", err)
+	}
+	key.ctimeNsec++
+
+	discovery.classifyAndAttachMapping(httpUprobeMapping{
+		tgid: int32(os.Getpid()), vmStart: start, vmEnd: end, file: key,
+	})
+	if discovery.identityMismatch != 1 {
+		t.Fatalf("identity mismatch count = %d, want 1", discovery.identityMismatch)
+	}
+	if len(discovery.attachedTargets) != 0 {
+		t.Fatalf("identity mismatch attached %d targets, want 0", len(discovery.attachedTargets))
+	}
+	if discovery.isKnownNonTarget(key) {
+		t.Fatal("identity mismatch was cached as a non-target")
 	}
 }

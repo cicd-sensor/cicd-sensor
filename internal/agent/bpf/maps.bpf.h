@@ -122,6 +122,31 @@ struct {
     __type(value, __u64);
 } ringbuf_drop_count SEC(".maps");
 
+// Definitive userspace classifications only. LRU eviction causes another
+// classification, never a false negative.
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 65536);
+    __type(key, struct file_classification_key);
+    __type(value, __u8);
+} non_target_files SEC(".maps");
+
+struct process_file_mapping_key {
+    __u64 start_boottime;
+    __u32 tgid;
+    __u32 _pad;
+    struct file_classification_key file;
+};
+
+// One executable file can produce several VMA callbacks in one process. This
+// cache keeps first-seen bursts below the userspace queue capacity.
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 16384);
+    __type(key, struct process_file_mapping_key);
+    __type(value, __u8);
+} http_uprobe_seen_mappings SEC(".maps");
+
 // staging_map: basename -> staging_value. Userspace stages sibling-container
 // basenames; cgroup_mkdir promotes and deletes matching entries in-kernel.
 struct {

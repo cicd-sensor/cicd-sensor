@@ -27,6 +27,7 @@ enum agent_sample_kind {
     SAMPLE_KIND_UNIX_SOCKET_CONNECT = 13,
     SAMPLE_KIND_MOUNT = 14,
     SAMPLE_KIND_HTTP_REQUEST = 15,
+    SAMPLE_KIND_HTTP_UPROBE_MAPPING = 16,
 };
 
 // Field-size constants below define generated Go struct layout.
@@ -294,6 +295,31 @@ struct http_request_sample {
     char host[HTTP_HOST_LEN];
 };
 
+// One mapped file has a stable device/inode identity for link ownership and
+// maps-liveness reclaim. Classification adds ctime so inode reuse or an
+// in-place metadata change cannot inherit an old non-target decision.
+struct mapped_file_identity {
+    __u32 device_major;
+    __u32 device_minor;
+    __u64 inode;
+};
+
+struct file_classification_key {
+    struct mapped_file_identity mapped_file;
+    __s64 ctime_sec;
+    __u32 ctime_nsec;
+    __u32 _pad;
+};
+
+// Discovery metadata only. No HTTP bytes or file content cross this boundary.
+struct http_uprobe_mapping_sample {
+    __u32 kind;
+    __s32 tgid;
+    __u64 vm_start;
+    __u64 vm_end;
+    struct file_classification_key file;
+};
+
 /* Force BTF emission for bpf2go. */
 const volatile struct fork_sample *unused_fork_sample;
 const volatile struct cgroup_mkdir_sample *unused_cgroup_mkdir_sample;
@@ -310,3 +336,4 @@ const volatile struct net_v6_sample *unused_net_v6_sample;
 const volatile struct dns_sample *unused_dns_sample;
 const volatile struct unix_socket_connect_sample *unused_unix_socket_connect_sample;
 const volatile struct http_request_sample *unused_http_request_sample;
+const volatile struct http_uprobe_mapping_sample *unused_http_uprobe_mapping_sample;

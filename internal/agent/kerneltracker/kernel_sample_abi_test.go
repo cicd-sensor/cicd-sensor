@@ -22,6 +22,7 @@ var kernelSampleABISize = map[string]uintptr{
 	"FileRemoveSample":        1064,
 	"ForkSample":              48,
 	"HttpRequestSample":       568,
+	"HttpUprobeMappingSample": 56,
 	"MountSample":             2096,
 	"NetV4Sample":             48,
 	"NetV6Sample":             64,
@@ -41,6 +42,7 @@ func TestKernelSampleABISizes(t *testing.T) {
 		"FileRemoveSample":        reflect.TypeOf(bpfprog.BPFProgramFileRemoveSample{}),
 		"ForkSample":              reflect.TypeOf(bpfprog.BPFProgramForkSample{}),
 		"HttpRequestSample":       reflect.TypeOf(bpfprog.BPFProgramHttpRequestSample{}),
+		"HttpUprobeMappingSample": reflect.TypeOf(bpfprog.BPFProgramHttpUprobeMappingSample{}),
 		"MountSample":             reflect.TypeOf(bpfprog.BPFProgramMountSample{}),
 		"NetV4Sample":             reflect.TypeOf(bpfprog.BPFProgramNetV4Sample{}),
 		"NetV6Sample":             reflect.TypeOf(bpfprog.BPFProgramNetV6Sample{}),
@@ -71,6 +73,7 @@ func TestKernelSampleABIKindField(t *testing.T) {
 		reflect.TypeOf(bpfprog.BPFProgramFileRemoveSample{}),
 		reflect.TypeOf(bpfprog.BPFProgramForkSample{}),
 		reflect.TypeOf(bpfprog.BPFProgramHttpRequestSample{}),
+		reflect.TypeOf(bpfprog.BPFProgramHttpUprobeMappingSample{}),
 		reflect.TypeOf(bpfprog.BPFProgramMountSample{}),
 		reflect.TypeOf(bpfprog.BPFProgramNetV4Sample{}),
 		reflect.TypeOf(bpfprog.BPFProgramNetV6Sample{}),
@@ -109,6 +112,7 @@ func TestKernelSampleKindValues(t *testing.T) {
 		kernelio.SampleKindUnixSocketConnect: 13,
 		kernelio.SampleKindMount:             14,
 		kernelio.SampleKindHTTPRequest:       15,
+		kernelio.SampleKindHTTPUprobeMapping: 16,
 	}
 	for got, want := range cases {
 		if got != want {

@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -23,12 +22,12 @@ type reclaimHarness struct {
 
 func newReclaimHarness(t *testing.T) *reclaimHarness {
 	t.Helper()
-	return &reclaimHarness{d: newHTTPUprobeDiscovery(nil, nil, t.TempDir())}
+	return &reclaimHarness{d: newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)}
 }
 
-func (h *reclaimHarness) attached(id nonTargetFileCacheKey) *attachedUprobeTarget {
+func (h *reclaimHarness) attached(id mappedFileIdentity) *attachedUprobeTarget {
 	e := &attachedUprobeTarget{}
-	h.d.attachedTargets[id.mappedFile] = e
+	h.d.attachedTargets[id] = e
 	return e
 }
 
@@ -39,7 +38,7 @@ func (h *reclaimHarness) sweep() {
 
 func TestHTTPUprobeReclaim(t *testing.T) {
 	t.Parallel()
-	id := nonTargetFileCacheKey{mappedFile: "1:42"}
+	id := mappedFileIdentity{deviceMajor: 1, inode: 42}
 
 	t.Run("two complete missing observations close the target", func(t *testing.T) {
 		t.Parallel()
@@ -49,11 +48,11 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		if e.missingScanCount != 1 {
 			t.Fatalf("after 1st miss: missingScanCount = %d, want 1", e.missingScanCount)
 		}
-		if _, still := h.d.attachedTargets[id.mappedFile]; !still {
+		if _, still := h.d.attachedTargets[id]; !still {
 			t.Fatal("closed after a single miss; must survive the first")
 		}
 		h.sweep()
-		if _, still := h.d.attachedTargets[id.mappedFile]; still {
+		if _, still := h.d.attachedTargets[id]; still {
 			t.Fatal("still attached after two complete misses; must be closed")
 		}
 	})
@@ -71,18 +70,18 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		if e.missingScanCount != 1 {
 			t.Fatalf("empty incomplete scan changed missingScanCount to %d, want 1", e.missingScanCount)
 		}
-		if _, still := h.d.attachedTargets[id.mappedFile]; !still {
+		if _, still := h.d.attachedTargets[id]; !still {
 			t.Fatal("incomplete scan must never close")
 		}
 		// complete-missing, incomplete, complete-missing => closes
 		h.sweep()
-		if _, still := h.d.attachedTargets[id.mappedFile]; still {
+		if _, still := h.d.attachedTargets[id]; still {
 			t.Fatal("second complete miss across an incomplete scan must close")
 		}
 	})
 	t.Run("queueTargetReconciliation never blocks and keeps one pending sweep", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
+		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
 		d.queueTargetReconciliation([]uint64{1})
 		d.queueTargetReconciliation([]uint64{2}) // must not block on a full buffer
 		select {
@@ -171,7 +170,7 @@ func TestCollectCgroupPIDs(t *testing.T) {
 				}
 			}
 
-			d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
+			d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
 			got := make(map[int32]struct{})
 			if complete := d.collectCgroupPIDs(path, got); complete != test.complete {
 				t.Fatalf("complete = %v, want %v", complete, test.complete)
@@ -189,7 +188,7 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("gone pid (ENOENT) is the benign race: complete", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
+		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
 		// PID 2^31-1 does not exist on any sane box.
 		mappings, complete := d.scanProcessMappings(2147483647)
 		if !complete {
@@ -202,7 +201,7 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("own executable file mappings are returned", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
+		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
 		mappings, complete := d.scanProcessMappings(int32(os.Getpid()))
 		if !complete {
 			t.Fatal("scan of own maps reported incomplete")
@@ -214,9 +213,9 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("target cap does not affect mapping scan", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir())
+		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
 		for i := 0; i < maxAttachedUprobeTargets; i++ { // fill the registry to the cap
-			mapped := mappedFileIdentity(strconv.Itoa(i + 1))
+			mapped := mappedFileIdentity{inode: uint64(i + 1)}
 			d.attachedTargets[mapped] = &attachedUprobeTarget{}
 		}
 		mappings, complete := d.scanProcessMappings(int32(os.Getpid()))

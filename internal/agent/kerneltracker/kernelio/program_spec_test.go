@@ -12,7 +12,7 @@ func TestConfigureBPFProgramSpecSetsStagingCap(t *testing.T) {
 
 	spec := fakeProgramSpec()
 
-	if err := configureBPFProgramSpec(spec); err != nil {
+	if err := configureBPFProgramSpec(spec, false); err != nil {
 		t.Fatalf("configureBPFProgramSpec returned error: %v", err)
 	}
 
@@ -26,7 +26,7 @@ func TestConfigureBPFProgramSpecSetsEventsRingbufCap(t *testing.T) {
 
 	spec := fakeProgramSpec()
 
-	if err := configureBPFProgramSpec(spec); err != nil {
+	if err := configureBPFProgramSpec(spec, false); err != nil {
 		t.Fatalf("configureBPFProgramSpec returned error: %v", err)
 	}
 
@@ -45,7 +45,7 @@ func TestConfigureBPFProgramSpecErrorsOnMissingEventsMap(t *testing.T) {
 	spec := fakeProgramSpec()
 	delete(spec.Maps, eventsMapName)
 
-	if err := configureBPFProgramSpec(spec); err == nil {
+	if err := configureBPFProgramSpec(spec, false); err == nil {
 		t.Fatalf("expected missing events map error")
 	}
 }
@@ -56,8 +56,47 @@ func TestConfigureBPFProgramSpecErrorsOnMissingStagingMap(t *testing.T) {
 	spec := fakeProgramSpec()
 	delete(spec.Maps, StagingMapName)
 
-	if err := configureBPFProgramSpec(spec); err == nil {
+	if err := configureBPFProgramSpec(spec, false); err == nil {
 		t.Fatalf("expected missing staging map error")
+	}
+}
+
+func TestConfigureBPFProgramSpecErrorsOnMissingHTTPUprobeMap(t *testing.T) {
+	t.Parallel()
+
+	spec := fakeProgramSpec()
+	delete(spec.Maps, httpUprobeNonTargetMapName)
+
+	if err := configureBPFProgramSpec(spec, false); err == nil {
+		t.Fatal("expected missing HTTP uprobe map error")
+	}
+}
+
+func TestConfigureBPFProgramSpecSizesHTTPUprobeMapsForRollout(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		enabled bool
+		want    uint32
+	}{
+		{name: "disabled feature keeps placeholder maps", want: disabledHTTPUprobeMapSize},
+		{name: "enabled feature keeps production map sizes", enabled: true, want: 99},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			spec := fakeProgramSpec()
+			if err := configureBPFProgramSpec(spec, test.enabled); err != nil {
+				t.Fatalf("configureBPFProgramSpec returned error: %v", err)
+			}
+			for _, name := range []string{httpUprobeNonTargetMapName, httpUprobeSeenMapName} {
+				if got := spec.Maps[name].MaxEntries; got != test.want {
+					t.Fatalf("%s max entries = %d, want %d", name, got, test.want)
+				}
+			}
+		})
 	}
 }
 
@@ -101,8 +140,10 @@ func TestEventsRingbufMaxEntries(t *testing.T) {
 func fakeProgramSpec() *ebpf.CollectionSpec {
 	return &ebpf.CollectionSpec{
 		Maps: map[string]*ebpf.MapSpec{
-			eventsMapName:  {},
-			StagingMapName: {},
+			eventsMapName:              {},
+			StagingMapName:             {},
+			httpUprobeNonTargetMapName: {MaxEntries: 99},
+			httpUprobeSeenMapName:      {MaxEntries: 99},
 		},
 	}
 }

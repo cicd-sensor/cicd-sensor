@@ -82,6 +82,19 @@ type BPFProgramExecSample struct {
 	ArgvBlob      [2048]int8
 }
 
+type BPFProgramFileClassificationKey struct {
+	_          structs.HostLayout
+	MappedFile struct {
+		_           structs.HostLayout
+		DeviceMajor uint32
+		DeviceMinor uint32
+		Inode       uint64
+	}
+	CtimeSec  int64
+	CtimeNsec uint32
+	Pad       uint32
+}
+
 type BPFProgramFileLinkSample struct {
 	_                 structs.HostLayout
 	Kind              uint32
@@ -196,6 +209,15 @@ type BPFProgramHttpScratch struct {
 	Nghttp2PathN        uint32
 }
 
+type BPFProgramHttpUprobeMappingSample struct {
+	_       structs.HostLayout
+	Kind    uint32
+	Tgid    int32
+	VmStart uint64
+	VmEnd   uint64
+	File    BPFProgramFileClassificationKey
+}
+
 type BPFProgramMountSample struct {
 	_               structs.HostLayout
 	Kind            uint32
@@ -252,6 +274,14 @@ type BPFProgramPathScratch struct {
 	Buf [1280]int8
 }
 
+type BPFProgramProcessFileMappingKey struct {
+	_             structs.HostLayout
+	StartBoottime uint64
+	Tgid          uint32
+	Pad           uint32
+	File          BPFProgramFileClassificationKey
+}
+
 type BPFProgramStagingValue struct {
 	_       structs.HostLayout
 	JobIdLo uint64
@@ -284,7 +314,9 @@ const (
 	BPFProgramMapEvents                        = "events"
 	BPFProgramMapHttpScratch                   = "http_scratch"
 	BPFProgramMapHttpStages                    = "http_stages"
+	BPFProgramMapHttpUprobeSeenMappings        = "http_uprobe_seen_mappings"
 	BPFProgramMapHttpUprobeStages              = "http_uprobe_stages"
+	BPFProgramMapNonTargetFiles                = "non_target_files"
 	BPFProgramMapPathScratch                   = "path_scratch"
 	BPFProgramMapRingbufDropCount              = "ringbuf_drop_count"
 	BPFProgramMapStagingMap                    = "staging_map"
@@ -317,6 +349,7 @@ const (
 	BPFProgramProgHandleUnixDgramConnect       = "handle_unix_dgram_connect"
 	BPFProgramProgHandleUnixStreamConnect      = "handle_unix_stream_connect"
 	BPFProgramProgHandleUnixStreamSendmsg      = "handle_unix_stream_sendmsg"
+	BPFProgramProgHandleUprobeMmap             = "handle_uprobe_mmap"
 	BPFProgramVarUnusedCgroupAttachSample      = "unused_cgroup_attach_sample"
 	BPFProgramVarUnusedCgroupMkdirSample       = "unused_cgroup_mkdir_sample"
 	BPFProgramVarUnusedCgroupRmdirSample       = "unused_cgroup_rmdir_sample"
@@ -328,6 +361,7 @@ const (
 	BPFProgramVarUnusedFileRemoveSample        = "unused_file_remove_sample"
 	BPFProgramVarUnusedForkSample              = "unused_fork_sample"
 	BPFProgramVarUnusedHttpRequestSample       = "unused_http_request_sample"
+	BPFProgramVarUnusedHttpUprobeMappingSample = "unused_http_uprobe_mapping_sample"
 	BPFProgramVarUnusedMountSample             = "unused_mount_sample"
 	BPFProgramVarUnusedNetV4Sample             = "unused_net_v4_sample"
 	BPFProgramVarUnusedNetV6Sample             = "unused_net_v6_sample"
@@ -405,20 +439,23 @@ type BPFProgramProgramSpecs struct {
 	HandleUnixDgramConnect     *ebpf.ProgramSpec `ebpf:"handle_unix_dgram_connect"`
 	HandleUnixStreamConnect    *ebpf.ProgramSpec `ebpf:"handle_unix_stream_connect"`
 	HandleUnixStreamSendmsg    *ebpf.ProgramSpec `ebpf:"handle_unix_stream_sendmsg"`
+	HandleUprobeMmap           *ebpf.ProgramSpec `ebpf:"handle_uprobe_mmap"`
 }
 
 // BPFProgramMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BPFProgramMapSpecs struct {
-	Events           *ebpf.MapSpec `ebpf:"events"`
-	HttpScratch      *ebpf.MapSpec `ebpf:"http_scratch"`
-	HttpStages       *ebpf.MapSpec `ebpf:"http_stages"`
-	HttpUprobeStages *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
-	PathScratch      *ebpf.MapSpec `ebpf:"path_scratch"`
-	RingbufDropCount *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
-	StagingMap       *ebpf.MapSpec `ebpf:"staging_map"`
-	TrackedCgroups   *ebpf.MapSpec `ebpf:"tracked_cgroups"`
+	Events                 *ebpf.MapSpec `ebpf:"events"`
+	HttpScratch            *ebpf.MapSpec `ebpf:"http_scratch"`
+	HttpStages             *ebpf.MapSpec `ebpf:"http_stages"`
+	HttpUprobeSeenMappings *ebpf.MapSpec `ebpf:"http_uprobe_seen_mappings"`
+	HttpUprobeStages       *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
+	NonTargetFiles         *ebpf.MapSpec `ebpf:"non_target_files"`
+	PathScratch            *ebpf.MapSpec `ebpf:"path_scratch"`
+	RingbufDropCount       *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
+	StagingMap             *ebpf.MapSpec `ebpf:"staging_map"`
+	TrackedCgroups         *ebpf.MapSpec `ebpf:"tracked_cgroups"`
 }
 
 // BPFProgramVariableSpecs contains global variables before they are loaded into the kernel.
@@ -436,6 +473,7 @@ type BPFProgramVariableSpecs struct {
 	UnusedFileRemoveSample        *ebpf.VariableSpec `ebpf:"unused_file_remove_sample"`
 	UnusedForkSample              *ebpf.VariableSpec `ebpf:"unused_fork_sample"`
 	UnusedHttpRequestSample       *ebpf.VariableSpec `ebpf:"unused_http_request_sample"`
+	UnusedHttpUprobeMappingSample *ebpf.VariableSpec `ebpf:"unused_http_uprobe_mapping_sample"`
 	UnusedMountSample             *ebpf.VariableSpec `ebpf:"unused_mount_sample"`
 	UnusedNetV4Sample             *ebpf.VariableSpec `ebpf:"unused_net_v4_sample"`
 	UnusedNetV6Sample             *ebpf.VariableSpec `ebpf:"unused_net_v6_sample"`
@@ -463,14 +501,16 @@ func (o *BPFProgramObjects) Close() error {
 //
 // It can be passed to LoadBPFProgramObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BPFProgramMaps struct {
-	Events           *ebpf.Map `ebpf:"events"`
-	HttpScratch      *ebpf.Map `ebpf:"http_scratch"`
-	HttpStages       *ebpf.Map `ebpf:"http_stages"`
-	HttpUprobeStages *ebpf.Map `ebpf:"http_uprobe_stages"`
-	PathScratch      *ebpf.Map `ebpf:"path_scratch"`
-	RingbufDropCount *ebpf.Map `ebpf:"ringbuf_drop_count"`
-	StagingMap       *ebpf.Map `ebpf:"staging_map"`
-	TrackedCgroups   *ebpf.Map `ebpf:"tracked_cgroups"`
+	Events                 *ebpf.Map `ebpf:"events"`
+	HttpScratch            *ebpf.Map `ebpf:"http_scratch"`
+	HttpStages             *ebpf.Map `ebpf:"http_stages"`
+	HttpUprobeSeenMappings *ebpf.Map `ebpf:"http_uprobe_seen_mappings"`
+	HttpUprobeStages       *ebpf.Map `ebpf:"http_uprobe_stages"`
+	NonTargetFiles         *ebpf.Map `ebpf:"non_target_files"`
+	PathScratch            *ebpf.Map `ebpf:"path_scratch"`
+	RingbufDropCount       *ebpf.Map `ebpf:"ringbuf_drop_count"`
+	StagingMap             *ebpf.Map `ebpf:"staging_map"`
+	TrackedCgroups         *ebpf.Map `ebpf:"tracked_cgroups"`
 }
 
 func (m *BPFProgramMaps) Close() error {
@@ -478,7 +518,9 @@ func (m *BPFProgramMaps) Close() error {
 		m.Events,
 		m.HttpScratch,
 		m.HttpStages,
+		m.HttpUprobeSeenMappings,
 		m.HttpUprobeStages,
+		m.NonTargetFiles,
 		m.PathScratch,
 		m.RingbufDropCount,
 		m.StagingMap,
@@ -501,6 +543,7 @@ type BPFProgramVariables struct {
 	UnusedFileRemoveSample        *ebpf.Variable `ebpf:"unused_file_remove_sample"`
 	UnusedForkSample              *ebpf.Variable `ebpf:"unused_fork_sample"`
 	UnusedHttpRequestSample       *ebpf.Variable `ebpf:"unused_http_request_sample"`
+	UnusedHttpUprobeMappingSample *ebpf.Variable `ebpf:"unused_http_uprobe_mapping_sample"`
 	UnusedMountSample             *ebpf.Variable `ebpf:"unused_mount_sample"`
 	UnusedNetV4Sample             *ebpf.Variable `ebpf:"unused_net_v4_sample"`
 	UnusedNetV6Sample             *ebpf.Variable `ebpf:"unused_net_v6_sample"`
@@ -540,6 +583,7 @@ type BPFProgramPrograms struct {
 	HandleUnixDgramConnect     *ebpf.Program `ebpf:"handle_unix_dgram_connect"`
 	HandleUnixStreamConnect    *ebpf.Program `ebpf:"handle_unix_stream_connect"`
 	HandleUnixStreamSendmsg    *ebpf.Program `ebpf:"handle_unix_stream_sendmsg"`
+	HandleUprobeMmap           *ebpf.Program `ebpf:"handle_uprobe_mmap"`
 }
 
 func (p *BPFProgramPrograms) Close() error {
@@ -572,6 +616,7 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleUnixDgramConnect,
 		p.HandleUnixStreamConnect,
 		p.HandleUnixStreamSendmsg,
+		p.HandleUprobeMmap,
 	)
 }
 

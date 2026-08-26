@@ -69,7 +69,7 @@ The eBPF Runtime handles both rule-facing events and internal tracking samples.
 | file | `security_file_open`, `security_inode_unlink`, `security_inode_rename`, `security_inode_link` | `file_open`, `file_remove`, `file_move`, `file_link` |
 | mount | `security_sb_mount`, `security_move_mount` | `mount` for path exposure attempts |
 | domain | `udp_sendmsg`, `udpv6_sendmsg`, `tcp_sendmsg` | `domain` |
-| http | `tcp_sendmsg`; rollout-disabled OpenSSL and nghttp2 uprobes | `http_request` |
+| http | `tcp_sendmsg`; rollout-disabled `uprobe_mmap` discovery plus OpenSSL and nghttp2 uprobes | `http_request` |
 | unix socket | `unix_stream_connect`, `unix_dgram_connect` | `unix_socket_connect` |
 
 `cgroup/connect4/6` is not attached per tracked cgroup. The agent attaches once to the cgroup v2 root detected at startup, and the program uses `tracked_cgroups` lookup to handle only target jobs.
@@ -101,7 +101,9 @@ that existed before the Job started.
 
 ## Kernel / userspace boundary
 
-BPF map state is intentionally small. The kernel side only needs to answer two questions: whether the current cgroup should be observed, and whether a Docker cgroup basename has already been staged. Richer state such as JobIdentity and process context lives in the KernelTracker userspace mirror.
+BPF map state is limited to fast-path scope and bounded suppression decisions.
+It does not contain JobIdentity, process context, symbol data, or uprobe links;
+those remain in the KernelTracker/KernelIO userspace owners.
 
 ### BPF maps
 
@@ -109,6 +111,8 @@ BPF map state is intentionally small. The kernel side only needs to answer two q
 | --- | --- | --- |
 | `tracked_cgroups` | cgroup ID | Lets BPF hooks decide on the fast path whether the current cgroup is in scope |
 | `staging_map` | Docker cgroup basename | Lets the `cgroup_mkdir` hook detect cgroup creation staged by the Docker proxy |
+| `non_target_files` | device, inode, ctime | Stops executable files already classified as irrelevant from reaching userspace HTTP uprobe discovery |
+| `http_uprobe_seen_mappings` | process lifetime and file classification key | Collapses one executable file's multiple VMA callbacks within a process |
 
 `staging_map` does not contain JobIdentity. The kernel side only matches the basename; userspace mirror state knows which job it belongs to.
 

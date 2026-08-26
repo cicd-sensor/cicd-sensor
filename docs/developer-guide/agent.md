@@ -35,7 +35,8 @@ flowchart TB
             end
             KT -->|"map operations"| BIO
             BIO -->|"raw ringbuf samples"| KT
-            KT -->|"discovery / reconcile inputs"| UPROBE
+            BIO -->|"mapping control samples"| UPROBE
+            KT -->|"reconcile input"| UPROBE
         end
 
         subgraph OUT["Outputs"]

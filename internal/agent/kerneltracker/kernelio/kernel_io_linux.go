@@ -50,7 +50,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	if err != nil {
 		return nil, fmt.Errorf("load bpf spec: %w", err)
 	}
-	if err := configureBPFProgramSpec(spec); err != nil {
+	if err := configureBPFProgramSpec(spec, config.EnableHTTPUprobes); err != nil {
 		return nil, fmt.Errorf("configure bpf program spec: %w", err)
 	}
 	if err := spec.LoadAndAssign(&kernelIO.objs, nil); err != nil {
@@ -92,7 +92,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			{name: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
 			{name: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
 			{name: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
-		}, kernelIO.logger, config.CgroupV2RootPath)
+		}, kernelIO.logger, config.CgroupV2RootPath, kernelIO.objs.NonTargetFiles)
 	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
@@ -126,6 +126,13 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})
 		if err != nil {
 			return nil, fmt.Errorf("attach %s tracing program: %w", attach.name, err)
+		}
+		kernelIO.links = append(kernelIO.links, attached)
+	}
+	if config.EnableHTTPUprobes {
+		attached, err := link.AttachTracing(link.TracingOptions{Program: kernelIO.objs.HandleUprobeMmap})
+		if err != nil {
+			return nil, fmt.Errorf("attach uprobe_mmap tracing program: %w", err)
 		}
 		kernelIO.links = append(kernelIO.links, attached)
 	}

@@ -32,22 +32,26 @@ flowchart LR
                 direction TB
                 BIO["BPF load, map I/O,<br/>ringbuf reader"]
                 WORKER["HTTP uprobe worker<br/>one owner goroutine"]
-                STATE[("Worker-owned in-memory state<br/>attachedTargets map and links<br/>nonTargetFileCache")]
+                STATE[("Worker-owned state<br/>attached targets and links")]
                 WORKER -.->|"sole owner"| STATE
             end
         end
 
         subgraph KERNEL["Linux kernel"]
             direction TB
-            ATTACH["uprobe attachments"]
-            BPF["eBPF programs,<br/>maps and ring buffer"]
+            ATTACH["HTTP uprobe attachments"]
+            BPF["eBPF programs and ring buffer"]
+            CACHE[("tracked cgroups,<br/>mapping dedup and non-target cache")]
             ATTACH -->|"invoke BPF entry"| BPF
+            BPF <--> CACHE
         end
     end
 
     KT -->|"tracked cgroup map operations"| BIO
     BIO <-->|"load, attach, read"| BPF
-    KT -->|"TCP-connect PID<br/>active cgroup IDs"| WORKER
+    BIO -->|"mapping control sample"| WORKER
+    BIO -->|"raw security samples"| KT
+    KT -->|"active cgroup IDs"| WORKER
     WORKER -->|"attach or close"| ATTACH
 ```
 
@@ -67,8 +71,15 @@ Current library capture paths are:
 Both paths use the existing `http_request` event. Raw request bytes, ordinary
 headers, and bodies must not leave the kernel. HTTP uprobe rollout remains
 disabled until environment compatibility and first-request timing are verified.
-A failed timing gate requires an earlier discovery trigger; it does not become
-an accepted limit.
+
+Implementation is split into two phases. **Phase 2a** provides executable-mapping
+discovery for the OpenSSL and nghttp2 taps while keeping their event and reclaim
+contracts. It is implemented and verified on arm64
+Ubuntu 24.04 with Linux 6.8, but its asynchronous attach does not guarantee the
+first request: isolated fresh-process runs captured curl 4/10 times and Python
+`urllib.request` 10/10 times. Steady-state capture passes. **Phase 2b** adds
+stripped Go binary resolution and Go `net/http` capture only after the Phase 2a
+timing and supported-kernel gates are resolved.
 
 ## Runtime model
 
@@ -82,7 +93,7 @@ file can share one attachment.
 | target | One mapped executable file identified by device and inode. |
 | uprobe link | The userspace handle for one target symbol. Closing it detaches that symbol. |
 | attached target | One target and all of its links, owned by the HTTP uprobe worker. |
-| non-target cache | A bounded cache of files that define none of the selected symbols. It owns no links. |
+| non-target cache | A bounded BPF LRU map of files that define none of the selected symbols. It owns no links. |
 
 The attachment can be reached by processes outside a CI Job because it belongs
 to the mapped file. Every uprobe BPF program therefore checks
@@ -93,65 +104,70 @@ to the mapped file. Every uprobe BPF program therefore checks
 One worker in `internal/agent/kerneltracker/kernelio` owns all HTTP uprobe links
 and classification state. It serially handles two inputs:
 
-- a PID after a tracked process makes a TCP connection;
+- an executable file mapping observed in a tracked cgroup;
 - an active-cgroup snapshot from the periodic reconciliation timer.
 
-### 1. Connect-triggered attach
+### 1. Mapping-triggered attach
 
-A TCP connection is a discovery signal. It tells cicd-sensor which process
-mappings to inspect; the connection itself is not the attachment.
+`fentry/uprobe_mmap` observes a completed file-backed executable mapping. The
+BPF program rejects untracked cgroups, non-executable or anonymous mappings,
+known non-target files, and duplicate process/file observations before emitting
+a small control sample. It does not read the mapped file or resolve symbols.
 
 ```mermaid
 flowchart LR
-    subgraph TRIGGER["Connection trigger"]
-        direction TB
-        P["Tracked process<br/>TCP connect"]
-        N["internal/agent/bpf<br/>connect4 / connect6 sample"]
-        P --> N
-    end
+    P["Tracked process maps<br/>an executable file"]
 
-    subgraph KT["internal/agent/kerneltracker"]
-        D["enqueueKernelSample<br/>decode and extract PID"]
+    subgraph BPF["internal/agent/bpf"]
+        direction TB
+        M["fentry/uprobe_mmap"]
+        F["VM_EXEC + file + tracked cgroup"]
+        C["BPF negative cache<br/>and process/file dedup"]
+        R["events ring buffer<br/>mapping control sample"]
+        M --> F --> C --> R
     end
 
     subgraph KIO["internal/agent/kerneltracker/kernelio"]
-        direction LR
-        subgraph DISPATCH["Worker dispatch"]
-            direction TB
-            Q["QueueHTTPUprobeDiscovery<br/>bounded non-blocking queue"]
-            W["httpUprobeDiscovery.run<br/>single worker"]
-            Q --> W
-        end
-        subgraph ATTACH_FLOW["Mapping discovery and attach"]
-            direction TB
-            M["discoverAndAttachTargets<br/>scan /proc/PID/maps"]
-            A["classifyAndAttach<br/>open map_files and resolve symbols"]
-            L["attachTarget<br/>store uprobe links"]
-            M --> A --> L
-        end
-        W --> M
+        direction TB
+        D["KernelIO ringbuf reader<br/>decode mapping control sample"]
+        Q["bounded non-blocking queue"]
+        W["httpUprobeDiscovery.run<br/>single worker"]
+        O["open /proc/PID/map_files/range<br/>verify dev, inode and ctime"]
+        A["resolve selected symbols<br/>attach links or cache non-target"]
+        D --> Q --> W --> O --> A
     end
 
-    N --> D --> Q
+    P --> M
+    R --> D
 ```
 
-The worker coalesces queued PIDs. For each executable mapping:
+The worker handles each queued executable mapping serially:
 
 | Classification result | Worker action |
 | --- | --- |
 | already attached | Keep the existing links. |
-| present in the non-target cache | Skip symbol resolution. |
+| present in the BPF non-target cache | Stop in the kernel before ringbuf emission. |
 | at least one selected symbol attaches | Store the links as one attached target. |
-| every selected symbol is absent | Add the file to the non-target cache. |
-| permission, I/O, or another transient failure | Store nothing; retry after a later connect. |
+| every selected symbol is absent | Add the classification key to the BPF non-target cache. |
+| permission, I/O, identity mismatch, or another transient failure | Store nothing; a future process mapping the file can retry. |
 
 The queue is non-blocking so discovery cannot stop kernel-sample intake. The
-process scan and attach run asynchronously after the connect sample, so their
-timing relative to the first TLS write must be verified before rollout. If the
-first-request capture rate is not acceptable, discovery must move to an earlier
-process or executable-mapping signal rather than treating the miss as a
-permanent coverage limit. A later connection remains the retry trigger for a
-transient discovery failure.
+mapping sample is KernelIO control-plane input: the KernelIO ringbuf reader
+decodes it and queues the worker without sending it to KernelTracker, Job
+attribution, or CEL evaluation. The worker
+opens the exact `map_files` range from the sample. If VMA merging removed that
+range, it scans the same process once for the same device/inode and retries with
+the current range. The final file descriptor must still match device, inode,
+and ctime before classification. The worker reads the ELF symbol tables once
+and passes only selected symbols defined by that file to cilium/ebpf. Undefined
+imports, such as an executable referring to `SSL_write` in libssl, are not
+attach targets; a file with no selected definitions is a definitive non-target.
+
+The non-target cache is a 65,536-entry BPF LRU map keyed by device, inode, and
+ctime. Process/file dedup is a separate BPF LRU map keyed by process start time,
+TGID, and the same file classification key. The first avoids repeated userspace
+classification; the second collapses multiple executable segments of one file
+into one request.
 
 ### 2. Event delivery after attach
 
@@ -256,9 +272,9 @@ flowchart LR
 
 Reconciliation observes liveness and closes stale targets. It does not classify
 or attach files. The active-cgroup snapshot and process mappings are not read
-atomically. For example, the worker can attach a target for a new connection
-after the snapshot was taken; that older snapshot cannot include the new
-cgroup and can miss the fresh target once. Closing only after a second complete
+atomically. For example, the worker can attach a newly mapped target after the
+snapshot was taken; that older snapshot can miss the fresh target once. Closing
+only after a second complete
 missing observation prevents this one-scan race from detaching the new links.
 An incomplete scan neither advances nor resets the missing count.
 
@@ -266,12 +282,11 @@ An incomplete scan neither advances nor resets the missing count.
 
 - The KernelTracker loop owns Job and cgroup tracking. It sends an immutable
   active-cgroup ID snapshot to KernelIO.
-- The KernelIO ringbuf reader only forwards raw samples. KernelTracker decodes
-  TCP-connect samples and queues their PIDs to the worker. Neither path scans
-  files or changes links.
-- The HTTP uprobe worker exclusively owns attached targets, links, and the
-  non-target cache. Attach and close run serially on this goroutine, so they do
-  not require a mutex.
+- The KernelIO ringbuf reader consumes mapping control samples itself and sends
+  only security-event samples to KernelTracker. Neither component changes links.
+- The HTTP uprobe worker exclusively owns attached targets, links, and all
+  userspace updates to the non-target cache. Attach, cache updates, and close run
+  serially on this goroutine, so they do not require a mutex.
 - On shutdown, the worker closes every remaining link.
 
 ## Coverage contract
@@ -318,6 +333,24 @@ of an OpenSSL `http_request` event for that runner image.
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
 
 ## Known limits
+
+- Discovery only observes executable file mappings made while the process is in
+  a tracked cgroup. Phase 2a does not scan mappings that predate tracking, add a
+  catch-up path for a process moved into a tracked cgroup, or treat periodic
+  reclaim as an attach backstop.
+- A mapping made executable only through a later `mprotect(PROT_EXEC)` is not a
+  Phase 2a discovery contract.
+- BPF and `fstat` file identities must match exactly. A mismatch is treated as
+  a mapping race: the worker neither attaches nor negative-caches the file.
+- A full 4,096-entry userspace mapping queue drops that mapping request rather
+  than blocking ringbuf intake. A different process generation mapping the same
+  file can retry; the dropped request has no same-process recovery guarantee.
+- The worker refuses a new target when 4,096 mapped files are already attached.
+  It never evicts a live target; reclaim must free capacity before a later
+  mapping can retry.
+- Mapping notification precedes the selected library call, but userspace must
+  still open, classify, and attach the target asynchronously. The first call can
+  therefore race ahead of attachment; this currently blocks rollout by default.
 
 - Only calls through the selected library functions are visible. HTTPS through
   Go `crypto/tls`, Java JSSE, Rust rustls, Python `h2`, a non-nghttp2 HTTP/2
