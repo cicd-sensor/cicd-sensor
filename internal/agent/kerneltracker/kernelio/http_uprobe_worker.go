@@ -225,10 +225,17 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 	}()
 
 	if attached, ok := w.attachedTargets[candidate.file.mappedFile]; ok {
-		if attached.classificationKey == candidate.file {
-			retainCacheEntry = true
-			w.cacheDiscoveryFile(attached.classificationKey)
+		if attached.classificationKey != candidate.file {
+			// ctime is current inode metadata, not a VMA generation. A process
+			// may still execute a mapping covered by the existing inode links, so
+			// rotate only the discovery-cache key and leave link removal to reclaim.
+			if err := w.deleteDiscoveryCacheEntry(attached.classificationKey); err != nil {
+				w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+			}
+			attached.classificationKey = candidate.file
 		}
+		retainCacheEntry = true
+		w.cacheDiscoveryFile(candidate.file)
 		return
 	}
 	if len(w.attachedTargets) >= maxAttachedUprobeTargets {

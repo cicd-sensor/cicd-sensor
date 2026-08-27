@@ -42,6 +42,25 @@ func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 	})
 }
 
+func TestHTTPUprobeWorkerKeepsInodeTargetAcrossCTimeChange(t *testing.T) {
+	mapped := mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42}
+	oldKey := fileClassificationKey{mappedFile: mapped, ctimeSec: 1}
+	newKey := fileClassificationKey{mappedFile: mapped, ctimeSec: 2}
+	target := &attachedUprobeTarget{classificationKey: oldKey}
+	worker := &httpUprobeWorker{
+		attachedTargets: map[mappedFileIdentity]*attachedUprobeTarget{mapped: target},
+	}
+
+	worker.classifyAndAttach(httpUprobeAttachCandidate{file: newKey})
+
+	if got := worker.attachedTargets[mapped]; got != target {
+		t.Fatal("ctime change replaced the inode-owned target")
+	}
+	if target.classificationKey != newKey {
+		t.Fatalf("classification key = %+v, want %+v", target.classificationKey, newKey)
+	}
+}
+
 func TestParseExecMapping(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
