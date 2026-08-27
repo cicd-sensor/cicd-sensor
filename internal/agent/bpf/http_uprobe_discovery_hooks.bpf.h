@@ -2,7 +2,7 @@
 #pragma once
 
 // uprobe_mmap receives a completed file-backed VMA. Filtering here keeps
-// ordinary data mappings and known non-target files out of userspace.
+// ordinary data mappings and already-known files out of userspace.
 #define HTTP_UPROBE_VM_EXEC 0x4
 
 // CO-RE flavor structs expose inode ctime layouts used before Linux 6.12.
@@ -73,32 +73,24 @@ static __always_inline int observe_http_uprobe_mapping(struct vm_area_struct *vm
     };
     http_uprobe_inode_ctime(inode, &classification);
 
-    if (bpf_map_lookup_elem(&non_target_files, &classification))
-        return 0;
-
-    struct process_file_mapping_key seen = {
-        .start_boottime = current_start_boottime(),
-        .tgid = current_tgid(),
-        .file = classification,
-    };
-    if (bpf_map_lookup_elem(&http_uprobe_seen_mappings, &seen))
+    if (bpf_map_lookup_elem(&http_uprobe_discovery_cache, &classification))
         return 0;
 
     __u8 one = 1;
-    if (bpf_map_update_elem(&http_uprobe_seen_mappings, &seen, &one, BPF_NOEXIST) != 0)
+    if (bpf_map_update_elem(&http_uprobe_discovery_cache, &classification, &one, BPF_NOEXIST) != 0)
         return 0;
 
     struct http_uprobe_mapping_sample *sample =
         bpf_ringbuf_reserve(&events, sizeof(*sample), 0);
     if (!sample) {
-        // A failed notification must not become a permanent process/file skip.
-        bpf_map_delete_elem(&http_uprobe_seen_mappings, &seen);
+        // A failed notification must not become a permanent file skip.
+        bpf_map_delete_elem(&http_uprobe_discovery_cache, &classification);
         note_ringbuf_drop();
         return 0;
     }
 
     sample->kind = SAMPLE_KIND_HTTP_UPROBE_MAPPING;
-    sample->tgid = seen.tgid;
+    sample->tgid = current_tgid();
     sample->vm_start = BPF_CORE_READ(vma, vm_start);
     sample->vm_end = BPF_CORE_READ(vma, vm_end);
     sample->file = classification;

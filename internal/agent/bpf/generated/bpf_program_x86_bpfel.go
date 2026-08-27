@@ -274,14 +274,6 @@ type BPFProgramPathScratch struct {
 	Buf [1280]int8
 }
 
-type BPFProgramProcessFileMappingKey struct {
-	_             structs.HostLayout
-	StartBoottime uint64
-	Tgid          uint32
-	Pad           uint32
-	File          BPFProgramFileClassificationKey
-}
-
 type BPFProgramStagingValue struct {
 	_       structs.HostLayout
 	JobIdLo uint64
@@ -314,9 +306,8 @@ const (
 	BPFProgramMapEvents                        = "events"
 	BPFProgramMapHttpScratch                   = "http_scratch"
 	BPFProgramMapHttpStages                    = "http_stages"
-	BPFProgramMapHttpUprobeSeenMappings        = "http_uprobe_seen_mappings"
+	BPFProgramMapHttpUprobeDiscoveryCache      = "http_uprobe_discovery_cache"
 	BPFProgramMapHttpUprobeStages              = "http_uprobe_stages"
-	BPFProgramMapNonTargetFiles                = "non_target_files"
 	BPFProgramMapPathScratch                   = "path_scratch"
 	BPFProgramMapRingbufDropCount              = "ringbuf_drop_count"
 	BPFProgramMapStagingMap                    = "staging_map"
@@ -446,16 +437,15 @@ type BPFProgramProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BPFProgramMapSpecs struct {
-	Events                 *ebpf.MapSpec `ebpf:"events"`
-	HttpScratch            *ebpf.MapSpec `ebpf:"http_scratch"`
-	HttpStages             *ebpf.MapSpec `ebpf:"http_stages"`
-	HttpUprobeSeenMappings *ebpf.MapSpec `ebpf:"http_uprobe_seen_mappings"`
-	HttpUprobeStages       *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
-	NonTargetFiles         *ebpf.MapSpec `ebpf:"non_target_files"`
-	PathScratch            *ebpf.MapSpec `ebpf:"path_scratch"`
-	RingbufDropCount       *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
-	StagingMap             *ebpf.MapSpec `ebpf:"staging_map"`
-	TrackedCgroups         *ebpf.MapSpec `ebpf:"tracked_cgroups"`
+	Events                   *ebpf.MapSpec `ebpf:"events"`
+	HttpScratch              *ebpf.MapSpec `ebpf:"http_scratch"`
+	HttpStages               *ebpf.MapSpec `ebpf:"http_stages"`
+	HttpUprobeDiscoveryCache *ebpf.MapSpec `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeStages         *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
+	PathScratch              *ebpf.MapSpec `ebpf:"path_scratch"`
+	RingbufDropCount         *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
+	StagingMap               *ebpf.MapSpec `ebpf:"staging_map"`
+	TrackedCgroups           *ebpf.MapSpec `ebpf:"tracked_cgroups"`
 }
 
 // BPFProgramVariableSpecs contains global variables before they are loaded into the kernel.
@@ -501,16 +491,15 @@ func (o *BPFProgramObjects) Close() error {
 //
 // It can be passed to LoadBPFProgramObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BPFProgramMaps struct {
-	Events                 *ebpf.Map `ebpf:"events"`
-	HttpScratch            *ebpf.Map `ebpf:"http_scratch"`
-	HttpStages             *ebpf.Map `ebpf:"http_stages"`
-	HttpUprobeSeenMappings *ebpf.Map `ebpf:"http_uprobe_seen_mappings"`
-	HttpUprobeStages       *ebpf.Map `ebpf:"http_uprobe_stages"`
-	NonTargetFiles         *ebpf.Map `ebpf:"non_target_files"`
-	PathScratch            *ebpf.Map `ebpf:"path_scratch"`
-	RingbufDropCount       *ebpf.Map `ebpf:"ringbuf_drop_count"`
-	StagingMap             *ebpf.Map `ebpf:"staging_map"`
-	TrackedCgroups         *ebpf.Map `ebpf:"tracked_cgroups"`
+	Events                   *ebpf.Map `ebpf:"events"`
+	HttpScratch              *ebpf.Map `ebpf:"http_scratch"`
+	HttpStages               *ebpf.Map `ebpf:"http_stages"`
+	HttpUprobeDiscoveryCache *ebpf.Map `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeStages         *ebpf.Map `ebpf:"http_uprobe_stages"`
+	PathScratch              *ebpf.Map `ebpf:"path_scratch"`
+	RingbufDropCount         *ebpf.Map `ebpf:"ringbuf_drop_count"`
+	StagingMap               *ebpf.Map `ebpf:"staging_map"`
+	TrackedCgroups           *ebpf.Map `ebpf:"tracked_cgroups"`
 }
 
 func (m *BPFProgramMaps) Close() error {
@@ -518,9 +507,8 @@ func (m *BPFProgramMaps) Close() error {
 		m.Events,
 		m.HttpScratch,
 		m.HttpStages,
-		m.HttpUprobeSeenMappings,
+		m.HttpUprobeDiscoveryCache,
 		m.HttpUprobeStages,
-		m.NonTargetFiles,
 		m.PathScratch,
 		m.RingbufDropCount,
 		m.StagingMap,

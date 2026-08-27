@@ -65,14 +65,14 @@ func TestConfigureBPFProgramSpecErrorsOnMissingHTTPUprobeMap(t *testing.T) {
 	t.Parallel()
 
 	spec := fakeProgramSpec()
-	delete(spec.Maps, httpUprobeNonTargetMapName)
+	delete(spec.Maps, httpUprobeDiscoveryCacheMapName)
 
 	if err := configureBPFProgramSpec(spec, false); err == nil {
 		t.Fatal("expected missing HTTP uprobe map error")
 	}
 }
 
-func TestConfigureBPFProgramSpecSizesHTTPUprobeMapsForRollout(t *testing.T) {
+func TestConfigureBPFProgramSpecSizesHTTPUprobeCacheForRollout(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -91,10 +91,8 @@ func TestConfigureBPFProgramSpecSizesHTTPUprobeMapsForRollout(t *testing.T) {
 			if err := configureBPFProgramSpec(spec, test.enabled); err != nil {
 				t.Fatalf("configureBPFProgramSpec returned error: %v", err)
 			}
-			for _, name := range []string{httpUprobeNonTargetMapName, httpUprobeSeenMapName} {
-				if got := spec.Maps[name].MaxEntries; got != test.want {
-					t.Fatalf("%s max entries = %d, want %d", name, got, test.want)
-				}
+			if got := spec.Maps[httpUprobeDiscoveryCacheMapName].MaxEntries; got != test.want {
+				t.Fatalf("%s max entries = %d, want %d", httpUprobeDiscoveryCacheMapName, got, test.want)
 			}
 		})
 	}
@@ -140,10 +138,9 @@ func TestEventsRingbufMaxEntries(t *testing.T) {
 func fakeProgramSpec() *ebpf.CollectionSpec {
 	return &ebpf.CollectionSpec{
 		Maps: map[string]*ebpf.MapSpec{
-			eventsMapName:              {},
-			StagingMapName:             {},
-			httpUprobeNonTargetMapName: {MaxEntries: 99},
-			httpUprobeSeenMapName:      {MaxEntries: 99},
+			eventsMapName:                   {},
+			StagingMapName:                  {},
+			httpUprobeDiscoveryCacheMapName: {MaxEntries: 99},
 		},
 	}
 }

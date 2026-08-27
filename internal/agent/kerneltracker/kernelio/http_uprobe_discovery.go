@@ -22,7 +22,7 @@ import (
 // http_uprobe_discovery.go — attach discovery and reclaim for HTTP uprobe taps.
 //
 // A single worker owns all attached targets and userspace updates to the
-// non-target file map, so no locking. Mapping and reconcile requests only enter
+// discovery cache, so no locking. Mapping and reconcile requests only enter
 // this worker; no caller reads this state. cgroup gates emission and scopes the
 // scan, but does not own link lifetime.
 
@@ -70,11 +70,12 @@ type processMapping struct {
 	mappedFile   mappedFileIdentity
 }
 
-// attachedUprobeTarget is one attached inode. It keeps only the links and the
-// number of complete scans that have missed the inode since it was last seen.
+// attachedUprobeTarget is one attached inode. Its classification key identifies
+// the discovery-cache entry removed before the links are reclaimed.
 type attachedUprobeTarget struct {
-	links            []link.Link
-	missingScanCount uint8
+	classificationKey fileClassificationKey
+	links             []link.Link
+	missingScanCount  uint8
 }
 
 type httpUprobeDiscovery struct {
@@ -86,9 +87,10 @@ type httpUprobeDiscovery struct {
 	mappingRequests   chan httpUprobeMapping // executable mappings decoded by the KernelIO reader
 	reconcileRequests chan []uint64          // immutable active cgroup IDs from KernelTracker
 
-	// Worker-owned state (single goroutine, no locking).
+	// Worker-owned userspace state (single goroutine, no locking). BPF maps are
+	// concurrency-safe kernel objects shared with the hook and sample reader.
 	attachedTargets map[mappedFileIdentity]*attachedUprobeTarget
-	nonTargetFiles  *ebpf.Map
+	discoveryCache  *ebpf.Map
 
 	// Throttled-warning counters. mappingQueueDropped is sample-reader-owned;
 	// the others are worker-owned. Each counter is touched by one goroutine.
@@ -103,7 +105,7 @@ func newHTTPUprobeDiscovery(
 	symbols []httpUprobeSymbol,
 	logger *slog.Logger,
 	cgroupRootPath string,
-	nonTargetFiles *ebpf.Map,
+	discoveryCache *ebpf.Map,
 ) *httpUprobeDiscovery {
 	return &httpUprobeDiscovery{
 		symbols:           symbols,
@@ -112,7 +114,7 @@ func newHTTPUprobeDiscovery(
 		mappingRequests:   make(chan httpUprobeMapping, mappingRequestQueueSize),
 		reconcileRequests: make(chan []uint64, 1),
 		attachedTargets:   make(map[mappedFileIdentity]*attachedUprobeTarget),
-		nonTargetFiles:    nonTargetFiles,
+		discoveryCache:    discoveryCache,
 	}
 }
 
@@ -136,18 +138,22 @@ func (kernelIO *LinuxKernelIO) QueueHTTPUprobeReconciliation(activeCgroupIDs []u
 }
 
 // queueMapping schedules one mapping classification without blocking sample
-// intake. A later process mapping the same file is a natural retry on overflow.
+// intake. The discovery-cache entry stays present while the request is queued;
+// a dropped request releases it so a later mapping can retry.
 func (d *httpUprobeDiscovery) queueMapping(mapping httpUprobeMapping) {
 	select {
 	case d.mappingRequests <- mapping:
 	default:
+		if err := d.deleteDiscoveryCacheEntry(mapping.file); err != nil {
+			d.warn("http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+		}
 		d.warnThrottled(&d.mappingQueueDropped, "http_uprobe_mapping_request_dropped")
 	}
 }
 
 // run processes scan and reconcile requests on one goroutine until ctx
 // is cancelled, then closes every attached link. It is the sole owner of
-// attachedTargets/nonTargetFiles; there is no separate closer goroutine.
+// attachedTargets and link lifecycle; there is no separate closer goroutine.
 func (d *httpUprobeDiscovery) run(ctx context.Context) {
 	defer d.closeAll()
 	for {
@@ -206,12 +212,23 @@ func (d *httpUprobeDiscovery) scanProcessMappings(pid int32) ([]processMapping, 
 
 // classifyAndAttachMapping verifies the kernel-provided file identity before
 // using the mapped file. An identity mismatch is an ordinary mapping race and
-// must not create either an attach or a negative-cache entry.
+// must not create either an attach or a discovery-cache entry.
 func (d *httpUprobeDiscovery) classifyAndAttachMapping(mapping httpUprobeMapping) {
-	if _, attached := d.attachedTargets[mapping.file.mappedFile]; attached {
-		return
-	}
-	if d.isKnownNonTarget(mapping.file) {
+	retainCacheEntry := false
+	defer func() {
+		if retainCacheEntry {
+			return
+		}
+		if err := d.deleteDiscoveryCacheEntry(mapping.file); err != nil {
+			d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+		}
+	}()
+
+	if attached, ok := d.attachedTargets[mapping.file.mappedFile]; ok {
+		if attached.classificationKey == mapping.file {
+			retainCacheEntry = true
+			d.cacheDiscoveryFile(attached.classificationKey)
+		}
 		return
 	}
 	if len(d.attachedTargets) >= maxAttachedUprobeTargets {
@@ -249,7 +266,8 @@ func (d *httpUprobeDiscovery) classifyAndAttachMapping(mapping httpUprobeMapping
 	}
 	if len(selected) == 0 {
 		if definitive {
-			d.cacheNonTarget(mapping.file)
+			retainCacheEntry = true
+			d.cacheDiscoveryFile(mapping.file)
 		}
 		return
 	}
@@ -259,7 +277,7 @@ func (d *httpUprobeDiscovery) classifyAndAttachMapping(mapping httpUprobeMapping
 		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
 		return
 	}
-	d.attachTarget(mapping.file, ex, selected)
+	retainCacheEntry = d.attachTarget(mapping.file, ex, selected)
 }
 
 func processIsGone(err error) bool {
@@ -307,29 +325,23 @@ func classificationKeyFromFile(f *os.File) (fileClassificationKey, error) {
 	}, nil
 }
 
-func (d *httpUprobeDiscovery) isKnownNonTarget(key fileClassificationKey) bool {
-	if d.nonTargetFiles == nil {
-		return false
+func (d *httpUprobeDiscovery) deleteDiscoveryCacheEntry(key fileClassificationKey) error {
+	if d.discoveryCache == nil {
+		return nil
 	}
-	var value uint8
-	err := d.nonTargetFiles.Lookup(key, &value)
-	switch {
-	case err == nil:
-		return true
-	case errors.Is(err, ebpf.ErrKeyNotExist):
-		return false
-	default:
-		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "negative_cache_lookup", "error", err)
-		return false
+	err := d.discoveryCache.Delete(key)
+	if errors.Is(err, ebpf.ErrKeyNotExist) {
+		return nil
 	}
+	return err
 }
 
-func (d *httpUprobeDiscovery) cacheNonTarget(key fileClassificationKey) {
-	if d.nonTargetFiles == nil {
+func (d *httpUprobeDiscovery) cacheDiscoveryFile(key fileClassificationKey) {
+	if d.discoveryCache == nil {
 		return
 	}
-	if err := d.nonTargetFiles.Put(key, uint8(1)); err != nil {
-		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "negative_cache_update", "error", err)
+	if err := d.discoveryCache.Put(key, uint8(1)); err != nil {
+		d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_update", "error", err)
 	}
 }
 
@@ -340,7 +352,7 @@ func (d *httpUprobeDiscovery) attachTarget(
 	id fileClassificationKey,
 	ex *link.Executable,
 	targets []httpUprobeSymbol,
-) {
+) (retainCacheEntry bool) {
 	var got []link.Link
 	for _, target := range targets {
 		l, err := ex.Uprobe(target.name, target.program, nil)
@@ -356,15 +368,17 @@ func (d *httpUprobeDiscovery) attachTarget(
 			// real signal, so surface it (throttled).
 			d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", target.name, "error", err)
 			closeLinks(got)
-			return
+			return false
 		}
 	}
 	if len(got) > 0 {
-		d.attachedTargets[id.mappedFile] = &attachedUprobeTarget{links: got}
-		return
+		d.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: got}
+		d.cacheDiscoveryFile(id)
+		return true
 	}
-	// Every target symbol was definitively absent: safe to cache negative.
-	d.cacheNonTarget(id)
+	// Every target symbol was definitively absent: keep it in the cache.
+	d.cacheDiscoveryFile(id)
+	return true
 }
 
 func (d *httpUprobeDiscovery) closeAll() {
@@ -411,6 +425,12 @@ func (d *httpUprobeDiscovery) reconcileTargets(activeCgroupIDs []uint64) {
 		}
 		entry.missingScanCount++
 		if entry.missingScanCount >= missingScanLimit {
+			// Delete the discovery-cache entry first. If that fails, keep the link;
+			// closing it would prevent a later mapping from requesting re-attach.
+			if err := d.deleteDiscoveryCacheEntry(entry.classificationKey); err != nil {
+				d.warnThrottled(&d.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+				continue
+			}
 			closeLinks(entry.links)
 			delete(d.attachedTargets, mappedID)
 			closed++

@@ -3,6 +3,7 @@
 package kernelio
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cilium/ebpf"
 )
 
 // Stage 1b-2 reclaim E2E. These tests call the worker-owned reconciliation
@@ -76,7 +79,8 @@ func reconcileAndCount(discovery *httpUprobeDiscovery, activeCgroupIDs []uint64)
 	return len(discovery.attachedTargets)
 }
 
-func discoverAndCount(discovery *httpUprobeDiscovery, pids ...int32) int {
+func discoverAndCount(t *testing.T, discovery *httpUprobeDiscovery, pids ...int32) int {
+	t.Helper()
 	for _, pid := range pids {
 		mappings, _ := discovery.scanProcessMappings(pid)
 		for _, candidate := range mappings {
@@ -97,6 +101,9 @@ func discoverAndCount(discovery *httpUprobeDiscovery, pids ...int32) int {
 			_ = f.Close()
 			if err != nil {
 				continue
+			}
+			if err := discovery.discoveryCache.Put(key, uint8(1)); err != nil {
+				t.Fatalf("record discovery file: %v", err)
 			}
 			discovery.classifyAndAttachMapping(httpUprobeMapping{
 				tgid: pid, vmStart: start, vmEnd: end, file: key,
@@ -144,8 +151,15 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 	a := startLibsslMapper(t)
 	b := startLibsslMapper(t)
 
-	if got := discoverAndCount(discovery, a, b); got != 1 {
+	if got := discoverAndCount(t, discovery, a, b); got != 1 {
 		t.Fatalf("shared libssl inode target count = %d, want 1", got)
+	}
+	var target *attachedUprobeTarget
+	for _, target = range discovery.attachedTargets {
+		break
+	}
+	if target == nil || !discoveryCacheContains(t, discovery, target.classificationKey) {
+		t.Fatal("attached target has no BPF discovery-cache key")
 	}
 	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a, b))
 	if got := reconcileAndCount(discovery, nil); got != 1 {
@@ -160,6 +174,9 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 	if got := reconcileAndCount(discovery, nil); got != 0 {
 		t.Fatalf("target count after second complete miss = %d, want 0", got)
 	}
+	if discoveryCacheContains(t, discovery, target.classificationKey) {
+		t.Fatal("reclaimed target remained in the BPF discovery cache")
+	}
 }
 
 // TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep verifies that an incomplete
@@ -167,7 +184,7 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 func TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep(t *testing.T) {
 	discovery := newReclaimTestDiscovery(t)
 	a := startLibsslMapper(t)
-	if got := discoverAndCount(discovery, a); got != 1 {
+	if got := discoverAndCount(t, discovery, a); got != 1 {
 		t.Fatalf("target count after attach = %d, want 1", got)
 	}
 	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a))
@@ -210,7 +227,7 @@ func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if got := discoverAndCount(discovery, pid); got != 1 {
+	if got := discoverAndCount(t, discovery, pid); got != 1 {
 		t.Fatalf("target count after copied libssl attach = %d, want 1", got)
 	}
 	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid))
@@ -257,19 +274,64 @@ func TestLinuxHTTPUprobeOpenMappedFileFallsBackToCurrentRange(t *testing.T) {
 	}
 }
 
-func TestLinuxHTTPUprobeNegativeCacheUsesBPFMap(t *testing.T) {
+func TestLinuxHTTPUprobeDiscoveryCacheUsesBPFMap(t *testing.T) {
 	discovery := newReclaimTestDiscovery(t)
 	key := fileClassificationKey{
 		mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42},
 		ctimeSec:   123, ctimeNsec: 456,
 	}
-	if discovery.isKnownNonTarget(key) {
-		t.Fatal("fresh key is already in non-target map")
+	if discoveryCacheContains(t, discovery, key) {
+		t.Fatal("fresh key is already in discovery cache")
 	}
-	discovery.cacheNonTarget(key)
-	if !discovery.isKnownNonTarget(key) {
-		t.Fatal("cached key was not found in non-target map")
+	discovery.cacheDiscoveryFile(key)
+	if !discoveryCacheContains(t, discovery, key) {
+		t.Fatal("cached key was not found in discovery cache")
 	}
+}
+
+func TestLinuxHTTPUprobeQueueManagesDiscoveryCache(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		fillQueue bool
+		wantKey   bool
+	}{
+		{name: "queued classification remains deduplicated", wantKey: true},
+		{name: "dropped classification allows another process retry", fillQueue: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			discovery := newReclaimTestDiscovery(t)
+			discovery.mappingRequests = make(chan httpUprobeMapping, 1)
+			if test.fillQueue {
+				discovery.mappingRequests <- httpUprobeMapping{}
+			}
+			mapping := httpUprobeMapping{file: fileClassificationKey{
+				mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42},
+				ctimeSec:   123,
+				ctimeNsec:  456,
+			}}
+			if err := discovery.discoveryCache.Put(mapping.file, uint8(1)); err != nil {
+				t.Fatalf("record discovery file: %v", err)
+			}
+			discovery.queueMapping(mapping)
+			if got := discoveryCacheContains(t, discovery, mapping.file); got != test.wantKey {
+				t.Fatalf("discovery-cache key exists = %v, want %v", got, test.wantKey)
+			}
+		})
+	}
+}
+
+func discoveryCacheContains(t *testing.T, discovery *httpUprobeDiscovery, key fileClassificationKey) bool {
+	t.Helper()
+	var value uint8
+	err := discovery.discoveryCache.Lookup(key, &value)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, ebpf.ErrKeyNotExist) {
+		return false
+	}
+	t.Fatalf("lookup discovery cache: %v", err)
+	return false
 }
 
 func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
@@ -299,17 +361,22 @@ func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
 		t.Fatalf("classify current map_files entry: %v", err)
 	}
 	key.ctimeNsec++
+	if err := discovery.discoveryCache.Put(key, uint8(1)); err != nil {
+		t.Fatalf("record discovery file: %v", err)
+	}
 
-	discovery.classifyAndAttachMapping(httpUprobeMapping{
+	mapping := httpUprobeMapping{
 		tgid: int32(os.Getpid()), vmStart: start, vmEnd: end, file: key,
-	})
+	}
+	discovery.queueMapping(mapping)
+	discovery.classifyAndAttachMapping(<-discovery.mappingRequests)
 	if discovery.identityMismatch != 1 {
 		t.Fatalf("identity mismatch count = %d, want 1", discovery.identityMismatch)
 	}
 	if len(discovery.attachedTargets) != 0 {
 		t.Fatalf("identity mismatch attached %d targets, want 0", len(discovery.attachedTargets))
 	}
-	if discovery.isKnownNonTarget(key) {
-		t.Fatal("identity mismatch was cached as a non-target")
+	if discoveryCacheContains(t, discovery, key) {
+		t.Fatal("identity mismatch remained in the BPF discovery cache")
 	}
 }

@@ -111,8 +111,7 @@ those remain in the KernelTracker/KernelIO userspace owners.
 | --- | --- | --- |
 | `tracked_cgroups` | cgroup ID | Lets BPF hooks decide on the fast path whether the current cgroup is in scope |
 | `staging_map` | Docker cgroup basename | Lets the `cgroup_mkdir` hook detect cgroup creation staged by the Docker proxy |
-| `non_target_files` | device, inode, ctime | Stops executable files already classified as irrelevant from reaching userspace HTTP uprobe discovery |
-| `http_uprobe_seen_mappings` | process lifetime and file classification key | Collapses one executable file's multiple VMA callbacks within a process |
+| `http_uprobe_discovery_cache` | device, inode, ctime | Suppresses mapping notifications for files already queued, classified, or attached; eviction only causes reclassification |
 
 `staging_map` does not contain JobIdentity. The kernel side only matches the basename; userspace mirror state knows which job it belongs to.
 

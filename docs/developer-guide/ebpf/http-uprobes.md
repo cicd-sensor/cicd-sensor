@@ -1,64 +1,42 @@
 # HTTP Uprobe Runtime
 
-cicd-sensor uses uprobes to observe an HTTP request while it is still plaintext
-inside a userspace library. The runtime currently supports OpenSSL HTTP/1.x and
-nghttp2 HTTP/2. Both taps are implemented but remain disabled by default while
-first-request timing and environment compatibility are evaluated.
+This chapter defines the userspace-library HTTP capture runtime: why it exists,
+how it discovers and attaches uprobes, how requests become events, and how
+attachments are reclaimed. Cleartext HTTP capture at `tcp_sendmsg` uses the same
+`http_request` event but does not use this discovery lifecycle.
 
-Coverage follows the library function that a workload calls. It does not follow
-the executable name or programming language. This page describes the
-HTTP-specific part of the [eBPF Runtime](../ebpf-runtime.md).
+OpenSSL HTTP/1.x and nghttp2 HTTP/2 capture are implemented. They remain disabled
+by default while first-request timing and environment compatibility are evaluated.
 
-## Design goals
+## Purpose and scope
 
-HTTP uprobe discovery follows five priorities, in order:
+Network destination alone is not always enough to identify a malicious action.
+An upload to `github.com`, for example, can use a legitimate domain while sending
+credentials or artifacts to an attacker-controlled repository. A `domain` event
+can also be absent when a process resolves names through DNS over HTTPS, leaving
+`network_connect` with only an IP address.
 
-1. **Discover early.** Start attachment at the earliest stable point where the
-   kernel has created an executable file mapping. Do not wait for a network
-   connection or periodic scan.
-2. **Filter in eBPF.** Use kernel-known facts to reject out-of-scope cgroups,
-   non-executable mappings, known non-target files, and duplicate observations
-   before they reach userspace.
-3. **Keep complex work in userspace.** ELF parsing and uprobe attachment require
-   userspace libraries and file access. eBPF identifies a candidate; it does not
-   parse ELF files or own links.
-4. **Preserve ownership boundaries.** One KernelIO worker owns classification,
-   links, and reclaim. KernelTracker continues to own Jobs and cgroups.
-5. **Bound failure.** Discovery must not block security-event intake, and reclaim
-   must not detach a target when liveness is uncertain.
+`http_request` adds method, query-stripped path, host, capture source, and process
+identity. These fields create more detection and investigation points for
+operations that otherwise share the same destination.
 
-These goals explain the trigger, filtering, worker, and reclaim design below.
+There is no universal capture point for every HTTP request. TLS and HTTP
+implementations expose plaintext at different functions, some binaries do not
+retain attachable symbols, and HTTP/2 or HTTP/3 can encode a request before a
+generic write function sees it. Complete coverage is therefore not a design
+claim. The design does not treat avoidable capture gaps as acceptable: each
+supported function path should attach as early as practical, and measured misses
+should drive additional catch-up mechanisms when their benefit justifies the
+cost.
 
-## Why executable mappings are the trigger
+`http_request` is a supplemental signal, not a complete egress record. Its
+absence does not prove that no HTTP or network communication occurred.
 
-An uprobe attaches a BPF program to a function offset in a specific ELF file.
-The Agent cannot attach one generic probe to every future copy of `SSL_write` or
-`nghttp2_submit_request`; it must first find the mapped file, inspect its
-symbols, and attach to the matching offsets.
+## Architecture
 
-Discovery must happen after a Job is tracked and before the selected function is
-called. The trigger must also cover libraries loaded after process startup.
-
-| Candidate trigger | Decision | Reason |
-| --- | --- | --- |
-| TCP connect | Rejected | The first TLS write can immediately follow connect, leaving too little time to scan every process mapping and attach. |
-| process exec | Rejected as the primary trigger | It requires a full-process scan and does not detect a library loaded later with `dlopen`. |
-| periodic process scan | Rejected for attach | It delays attachment by the scan interval and repeats work. Periodic scanning is retained only for reclaim. |
-| `mmap` syscall tracepoint | Rejected | Discovery needs the completed VMA and its backing file, not only syscall arguments. |
-| `fentry/uprobe_mmap` | Selected | It runs after an executable file-backed VMA exists and exposes enough kernel state to filter by cgroup, mapping type, and file identity before userspace work. |
-
-The selected hook is an early notification, not a blocking attachment point.
-ELF parsing and uprobe attachment still happen asynchronously in userspace, so
-the first call can race ahead of attachment. Isolated fresh-process tests
-captured curl 4/10 times and Python `urllib.request` 10/10 times on arm64 Ubuntu
-24.04 with Linux 6.8; steady-state capture passes. This is a rollout gate, not a
-guarantee hidden by the design.
-
-## Runtime design
-
-The HTTP uprobe worker is part of KernelIO. One goroutine owns classification,
-attachments, and reclaim. KernelTracker owns Jobs and tracked cgroups; the
-worker receives only immutable active-cgroup IDs for reclaim.
+HTTP uprobe discovery is part of the [eBPF Runtime](../ebpf-runtime.md). KernelIO
+owns kernel-facing resources and one HTTP uprobe worker. KernelTracker owns Jobs,
+tracked cgroups, process context, and event attribution.
 
 ```mermaid
 flowchart LR
@@ -75,7 +53,7 @@ flowchart LR
         READER["sample reader"]
         WORKER["HTTP uprobe worker<br/>single owner goroutine"]
         TARGETS[("attached targets")]
-        READER --> WORKER
+        READER -->|"mapping control samples"| WORKER
         WORKER -.->|"owns"| TARGETS
     end
 
@@ -86,24 +64,66 @@ flowchart LR
 
     EVENTS --> READER
     WORKER -->|"attach / close"| LINKS
-    CGROUPS -->|"active cgroup IDs"| WORKER
-    READER -->|"security samples"| DECODE
+    CGROUPS -->|"active cgroup IDs<br/>every minute for reclaim"| WORKER
+    READER -->|"http_request event samples"| DECODE
 ```
 
-The runtime has four important objects:
+The Job and cgroup state edge is reclaim input only: KernelTracker sends active
+cgroup IDs once per minute. Attach discovery starts from mapping samples read by
+KernelIO, not from Job state.
 
-| Object | Identity and contents | Owner |
+The worker serializes mapping requests and reconciliation requests on one
+goroutine. No other goroutine reads or mutates its attached-target state, so
+classification, attach, and close do not require a mutex.
+
+### Retained runtime state
+
+| Type | State | Purpose and identity | Access | Bound and removal |
+| --- | --- | --- | --- | --- |
+| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Maps one device/inode to its classification key, uprobe links, and consecutive complete-miss count | HTTP uprobe worker only | 4,096 files; reclaim removes an entry after two complete misses |
+| Shared BPF cache | `http_uprobe_discovery_cache` | Suppresses callbacks for files already queued, classified, or attached | BPF hook, KernelIO reader, and worker | 65,536-entry LRU; failed work and reclaim remove entries |
+
+The cache is notification suppression, not the link registry. Eviction can cause
+another classification, but it cannot detach or lose a link. `attachedTargets`
+remains the source of truth for attached links.
+
+An uprobe link belongs to a mapped file, not to one PID or Job. Processes can
+share the same file and attachment. Every HTTP uprobe BPF entry therefore checks
+`tracked_cgroups` before parsing or emitting an event.
+
+## Discovery and attachment
+
+### Discovery model
+
+Mapping notification is the primary discovery path. It reacts when a process in
+a tracked cgroup receives a new executable file mapping, before the selected
+library function is called.
+
+Each candidate carries a `fileClassificationKey` made from device, inode, and
+ctime. This identifies one file version across BPF filtering and userspace
+identity verification.
+
+| Mechanism | Role | Tradeoff |
 | --- | --- | --- |
-| mapping request | process, VMA range, device, inode, and ctime | BPF creates it; the worker consumes it |
-| attached target | one device/inode and all links attached to its selected symbols | HTTP uprobe worker |
-| uprobe link | one target symbol attachment; `Close` detaches it | HTTP uprobe worker |
-| non-target cache | files definitively shown to define none of the selected symbols | bounded BPF LRU map; worker writes results |
+| executable mapping notification | Primary | Reacts to each new executable file mapping without scanning every process. Userspace attachment is still asynchronous. |
+| initial process scan | Optional catch-up | Can recover mappings that existed before tracking began. It is useful only for processes already running at that point. |
+| periodic process scan | Optional backstop | Can recover a missed notification later, but cannot guarantee the first request and adds recurring process-scan cost. |
 
-An attachment belongs to a mapped file, not to one PID or Job. A process outside
-a tracked Job can therefore reach the same attached function. Every HTTP uprobe
-BPF entry checks `tracked_cgroups` before parsing or emitting an event.
+An initial scan can help in any deployment when a relevant process already has a
+mapping before tracking begins, including an already-running hosted runner. It
+cannot be the primary mechanism for self-hosted or Kubernetes deployments, where
+later Jobs, processes, containers, and Pods create new mappings after that
+snapshot. Neither initial nor periodic attach scanning is implemented today;
+either can be added if production measurements justify the additional coverage
+and cost.
 
-### Attach path
+Mapping notification is also not limited to dynamically linked libraries. A
+statically linked executable, including a Go binary, creates executable file
+mappings when it starts. The same discovery trigger can therefore feed a future
+Go-specific symbol resolver. The current classifier reads only ELF `.symtab` and
+`.dynsym`, so this does not imply current coverage of stripped Go binaries.
+
+The implemented attach path is:
 
 ```mermaid
 flowchart LR
@@ -120,37 +140,46 @@ flowchart LR
     ELF -->|"none defined"| CACHE
 ```
 
-The BPF hook discards non-executable and anonymous mappings, mappings outside a
-tracked cgroup, known non-target files, and duplicate observations of the same
-file in one process. One ELF can have several executable VMAs, so dedup uses the
-process lifetime plus file identity instead of the VMA range.
+### Kernel-side candidate filtering
 
-The mapping request is KernelIO control input. The sample reader queues it
-directly to the worker; it does not enter KernelTracker, Job attribution, or CEL
-evaluation. The queue is non-blocking so ELF work cannot stop ring-buffer
-intake.
+`fentry/uprobe_mmap` receives a completed VMA and its backing file. The BPF
+program emits a mapping request only when all of these conditions hold:
 
-The worker opens `/proc/<pid>/map_files/<range>` and verifies that `fstat`
-returns the device, inode, and ctime from the kernel sample. A VMA can merge
-before the open, so an `ENOENT` gets one current `/proc/<pid>/maps` lookup for
-the same device/inode. Any identity mismatch is treated as a race: the worker
-neither attaches nor caches the file.
+- the VMA is executable and file-backed;
+- the current cgroup is present in `tracked_cgroups`;
+- the file is not already queued, classified, or attached according to
+  `http_uprobe_discovery_cache`.
 
-The worker then reads `.symtab` and `.dynsym` and considers only selected symbols
-defined by that ELF. An undefined import is not an attachment target. Outcomes
-are intentionally conservative:
+One ELF can create several executable VMAs. Dedup therefore uses the file key
+above rather than the VMA range or process identity. Filtering and dedup stay in
+BPF because the kernel already has these values and rejecting a candidate there
+avoids a ring-buffer sample and userspace work.
 
-| Classification result | Action |
-| --- | --- |
-| target is already attached | Keep the existing links. |
-| at least one selected symbol is defined | Attach those symbols and store their links as one target. |
-| all selected symbols are definitively absent | Add the file classification key to the non-target cache. |
-| permission, I/O, identity, or attach failure | Store nothing so a later mapping can retry. |
+The mapping request contains discovery metadata only. It carries no HTTP bytes
+or file content.
 
-### Event path
+### Userspace classification and attach
 
-Attaching a link does not emit an event. A later call to the attached function
-starts the data path:
+The KernelIO sample reader recognizes a mapping request and puts it on a bounded,
+non-blocking worker queue. Mapping requests do not enter KernelTracker, Job
+attribution, or CEL evaluation.
+
+The worker handles each request serially:
+
+1. Open the mapped file through `/proc/<pid>/map_files` and verify its device,
+   inode, and ctime. A changed mapping is ignored and not cached.
+2. Read `.symtab` and `.dynsym`, keeping only selected functions defined by that
+   ELF. Undefined imports are not attach targets.
+3. Attach the selected functions, store their links as one attached target, and
+   keep the discovery-cache entry.
+4. If no selected function is definitively present, keep the cache entry.
+5. On a transient failure or queue drop, remove the cache entry so a later
+   mapping can retry.
+
+## Event capture and delivery
+
+Attachment prepares a capture point; it does not emit an event. A later call to
+an attached function enters the existing security-event path.
 
 ```mermaid
 flowchart LR
@@ -166,27 +195,45 @@ flowchart LR
     CALL --> UPROBE --> GATE --> PARSE --> SAMPLE --> READER --> TRACKER --> JOB
 ```
 
-The kernel emits only the fields required by `http_request`:
+### Capture points
+
+| Function | Protocol path | Input contract | Source |
+| --- | --- | --- | --- |
+| [`SSL_write`](https://docs.openssl.org/master/man3/SSL_write/) | OpenSSL HTTP/1.x | plaintext buffer is argument 2; length is argument 3 | `openssl` |
+| [`SSL_write_ex`](https://docs.openssl.org/master/man3/SSL_write/) | OpenSSL HTTP/1.x | same input-buffer argument positions | `openssl` |
+| [`nghttp2_submit_request`](https://nghttp2.org/documentation/nghttp2_submit_request.html) | nghttp2 HTTP/2 | `nghttp2_nv` array is argument 3; count is argument 4 | `nghttp2` |
+| [`nghttp2_submit_request2`](https://nghttp2.org/documentation/nghttp2_submit_request2.html) | nghttp2 HTTP/2 | same relevant argument positions | `nghttp2` |
+
+Selected functions with the same argument and parsing contract share one BPF
+entry.
+
+The OpenSSL path reads an HTTP/1.x request line and `Host` before encryption.
+The nghttp2 path reads `:method`, `:path`, and `:authority` before HPACK encoding.
+Both produce the same event shape.
+
+### Event and redaction contract
 
 | Field | Value |
 | --- | --- |
-| `method` | Request method, normalized to lowercase for rule evaluation. |
-| `path` | Request path with the query removed in BPF, then normalized to lowercase. |
-| `host` | HTTP/1.x `Host` or HTTP/2 `:authority`, normalized to lowercase; a port can remain. |
-| `source` | Capture path: `openssl` or `nghttp2`. |
-| `process` | KernelTracker's process snapshot for the caller. |
+| `method` | request method, normalized to lowercase for rule evaluation |
+| `path` | origin-form request path, query removed in BPF, then normalized to lowercase |
+| `host` | HTTP/1.x `Host` or HTTP/2 `:authority`, normalized to lowercase; a port can remain |
+| `source` | `openssl` or `nghttp2` |
+| `process` | KernelTracker process snapshot for the caller |
 
 Raw request bytes, query parameters, other headers, and bodies do not cross the
-kernel boundary. This is the redaction invariant. The path is still useful
-because it distinguishes APIs on the same host, which `network_connect` alone
-cannot do.
+kernel boundary. This is the redaction invariant.
 
-### Reclaim path
+## Link lifetime and reclaim
 
-The kernel does not remove an uprobe link when one process exits or one
-container is deleted. The same mapped file can also be shared by several Jobs.
-Link lifetime therefore follows observed mappings across all tracked cgroups,
-not one PID or Job.
+An uprobe link remains active until userspace closes it. Process exit, container
+deletion, and pathname unlink do not establish that no tracked process can still
+execute the mapped file. A file can also be shared by several Jobs or containers.
+Link lifetime therefore cannot follow one PID, Job, pathname, or cgroup owner.
+
+KernelTracker starts reconciliation once per minute and sends an immutable
+snapshot of active cgroup IDs to the worker. The worker expands that snapshot to
+current process mappings and compares them with attached targets.
 
 ```mermaid
 flowchart LR
@@ -196,66 +243,40 @@ flowchart LR
     PIDS["read cgroup.procs"]
     MAPS["read process maps"]
     COMPARE["compare with<br/>attached targets"]
-    CLOSE["close after two<br/>complete misses"]
+    CACHE["remove discovery<br/>cache entry"]
+    CLOSE["close links and remove<br/>attached target"]
 
-    TICK --> IDS --> PATHS --> PIDS --> MAPS --> COMPARE --> CLOSE
+    TICK --> IDS --> PATHS --> PIDS --> MAPS --> COMPARE
+    COMPARE -->|"two complete misses"| CACHE --> CLOSE
 ```
 
-For each attached target, the worker stores only a consecutive complete-miss
-count:
+Reconciliation observes liveness only. It does not classify or attach files.
 
-| Reconcile observation | Action |
+| Observation | Action |
 | --- | --- |
-| mapped by any tracked process | Reset the miss count to zero. |
-| absent from a complete scan | Increment the miss count; close at two. |
-| possibly hidden by any read or walk failure | Keep the links and leave the count unchanged. |
+| target mapped by any tracked process | Reset its complete-miss count to zero. |
+| target absent from a complete scan | Increment the count; after two consecutive complete misses, remove its `http_uprobe_discovery_cache` entry, then close its links and remove it from `attachedTargets`. |
+| discovery-cache deletion fails | Keep the links and registry entry so a later reconciliation can retry safely. |
+| any walk or read failure could hide a mapping | Keep the links and leave the count unchanged. |
 
-The active-cgroup snapshot, process mappings, and mapping notifications are not
-atomic. A target attached after the snapshot can be absent from that scan even
-though it is live. Requiring a second complete miss prevents this one-scan race
-from closing a fresh link. Incomplete scans are fail-keep because they cannot
-prove absence. Reclaim observes liveness and closes links; it never classifies
-or attaches files.
+The cgroup snapshot, process-map reads, and mapping notifications are not atomic.
+A target attached after the snapshot can appear absent from that scan even while
+it is live. Requiring a second complete miss prevents this one-scan race from
+closing a fresh attachment. Incomplete scans are fail-keep because they cannot
+prove absence.
 
-### Bounds and failure direction
-
-| Resource or failure | Contract |
-| --- | --- |
-| non-target cache | 65,536-entry BPF LRU, keyed by device, inode, and ctime. Eviction causes reclassification, not lost coverage. |
-| process/file dedup | 16,384-entry BPF LRU, keyed by process start time, TGID, and file classification key. Eviction can repeat a mapping notification. |
-| userspace mapping queue | 4,096 entries, non-blocking. Overflow drops that request; a later process mapping the file can retry. |
-| attached targets | 4,096 maximum. The worker refuses a new target and never evicts a live one; reclaim must free capacity. |
-| shutdown | The worker closes every remaining link. |
-
-One goroutine serializes attach, cache update, reconcile, and close. No other
-goroutine reads or mutates attached-target state, so this lifecycle needs no
-mutex.
+The HTTP uprobe worker is the only component that attaches or closes links. It
+closes every remaining link during shutdown.
 
 ## Coverage
 
-A function is selected only when it exposes method, path, and host before
-encryption or protocol encoding, has an argument ABI that the BPF program can
-parse, and can be resolved from the mapped ELF. Real-client E2E tests establish
-client coverage; an executable name alone does not.
+Coverage is defined by an observed function path, not by a tool name. A client is
+verified only when a reproducible real-client E2E produces the expected source
+and request fields. `Not covered (verified)` means the same environment was
+tested and did not call a selected function.
 
-### Selected functions
-
-| Function | Status | Capture point | Verification |
-| --- | --- | --- | --- |
-| [`SSL_write`](https://docs.openssl.org/master/man3/SSL_write/) | Implemented; rollout disabled | OpenSSL HTTP/1.x plaintext buffer in arguments 2 and 3. | curl, Node, npm, and wget HTTP/1.x E2E |
-| [`SSL_write_ex`](https://docs.openssl.org/master/man3/SSL_write/) | Implemented; rollout disabled | Same input buffer contract used by the observed Python path. | `urllib.request`, requests, and pip E2E |
-| [`nghttp2_submit_request`](https://nghttp2.org/documentation/nghttp2_submit_request.html) | Implemented; rollout disabled | HTTP/2 pseudo-headers before HPACK; `nva` is argument 3 and `nvlen` is argument 4. | curl, Node, and Git HTTP/2 E2E |
-| [`nghttp2_submit_request2`](https://nghttp2.org/documentation/nghttp2_submit_request2.html) | Implemented; rollout disabled | Same relevant argument positions. | Attach integration; a client can select either nghttp2 API |
-
-Selected symbols with the same argument and parsing contract share one BPF
-entry.
-
-### Workload status
-
-Verified rows have a reproducible real-client E2E on GitHub-hosted Ubuntu
-22.04, 24.04, and 26.04 preview on x64 and arm64 unless noted otherwise.
-`Not covered (verified)` means the E2E confirmed that the runner image does not
-call a selected function.
+Verified rows below use GitHub-hosted Ubuntu 22.04, 24.04, and 26.04 preview on
+x64 and arm64 unless noted otherwise.
 
 | Workload | Status | Observed path |
 | --- | --- | --- |
@@ -266,32 +287,31 @@ call a selected function.
 | Git over HTTPS HTTP/1.x | Not covered (verified) | GitHub-hosted Ubuntu uses a GnuTLS-backed Git HTTP helper. |
 | curl and Node over HTTPS HTTP/2 | Verified | selected nghttp2 request API |
 | Git over HTTPS HTTP/2 | Verified | selected nghttp2 request API for default negotiation and explicit `http.version=HTTP/2` |
-| Go, Java, or rustls-based HTTPS | Not covered | Does not call a selected function. |
+| Go, Java, or rustls-based HTTPS | Not covered | Does not call a currently selected function. |
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
 
-## Known limits
+## Operational status and known limits
 
-- Discovery sees executable file mappings created while the process is already
-  in a tracked cgroup. It does not catch up pre-existing mappings, processes
-  moved into a tracked cgroup, or mappings made executable only by a later
-  `mprotect(PROT_EXEC)`.
-- Userspace classification and attach are asynchronous. The first selected
-  function call can race ahead of attachment; rollout remains disabled by
-  default until this gate is resolved.
-- A full mapping queue has no same-process retry guarantee. The next process
-  generation mapping the same file can retry.
-- Only functions resolvable from `.symtab` or `.dynsym` are selected. A stripped
-  static binary without the selected symbol is not captured.
-- HTTP/1.x parsing starts at one write boundary. Split request lines or a `Host`
+- HTTP uprobes are rollout-disabled in shipped builds. The internal switch is a
+  temporary rollout control, not a permanent user-facing opt-in.
+- Mapping notification precedes the selected function call, but ELF
+  classification and attachment are asynchronous. Isolated fresh-process tests
+  on arm64 Ubuntu 24.04 with Linux 6.8 captured curl 4/10 times and Python
+  `urllib.request` 10/10 times; steady-state capture passes. This first-request
+  gap remains a rollout gate.
+- Discovery observes executable mappings created while the process is already in
+  a tracked cgroup. Initial catch-up scanning, periodic attach backstop, moving an
+  existing process into a tracked cgroup, and later `mprotect(PROT_EXEC)` are not
+  current discovery paths.
+- The current classifier requires a selected function in `.symtab` or `.dynsym`.
+  A fully stripped static binary is not captured.
+- HTTP/1.x parsing starts at one write boundary. A split request line or `Host`
   outside the bounded prefix can be missed.
 - HTTP/2 is visible only before HPACK in a selected nghttp2 API. Other HTTP/2
   implementations and HTTP/3/QUIC are not parsed.
 - The nghttp2 parser examines at most 32 pseudo-headers and requires `:method`
-  and an origin-form `:path`. Standard CONNECT has no `:path` and is not
-  emitted; extended CONNECT can be emitted but `:protocol` is not exposed.
+  and an origin-form `:path`. Standard CONNECT has no `:path` and is not emitted;
+  extended CONNECT can be emitted but `:protocol` is not exposed.
 - The nghttp2 tap drops methods longer than 15 bytes and paths longer than 255
   bytes. A missing, invalid, or oversized `:authority` produces an empty host.
 - Retries can produce duplicate events. Capture is not exactly once.
-- Absence of `http_request` is not proof that no egress occurred. Rules should
-  retain `network_connect` coverage; `domain` can also be absent when name
-  resolution uses an encrypted path such as DNS over HTTPS.
