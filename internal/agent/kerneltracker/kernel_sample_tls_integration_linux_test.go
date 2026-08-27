@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -116,10 +115,10 @@ func TestLinuxOpenSSLUprobeDoubleAttachDuplicatesEvents(t *testing.T) {
 	}
 }
 
-// TestLinuxOpenSSLUprobeCapturesHTTPS drives Stage 1b-1 end to end for clients
-// that use SSL_write and SSL_write_ex. Each tracked client maps libssl, triggers
-// discovery with its first connect, and emits a decoded openssl http_request
-// through the production KernelIO and KernelTracker path.
+// TestLinuxOpenSSLUprobeCapturesHTTPS drives mapping-triggered discovery and
+// steady-state capture end to end for clients that use SSL_write and
+// SSL_write_ex. First-request timing is measured separately because attach is
+// asynchronous and is not part of this deterministic integration contract.
 func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -132,7 +131,7 @@ func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
 			binary: "curl",
 			path:   "/curl-ssl-write",
 			clientArgs: func(url string) []string {
-				return []string{"-sk", "--http1.1", "--max-time", "10", url, url, url, url}
+				return []string{"-sk", "--http1.1", "--max-time", "10", url}
 			},
 		},
 		{
@@ -146,9 +145,8 @@ import sys
 import urllib.request
 
 context = ssl._create_unverified_context()
-for _ in range(4):
-    with urllib.request.urlopen(sys.argv[1], context=context, timeout=10) as response:
-        response.read()
+with urllib.request.urlopen(sys.argv[1], context=context, timeout=10) as response:
+    response.read()
 `
 				return []string{"-c", script, url}
 			},
@@ -163,9 +161,8 @@ for _ in range(4):
 	}
 }
 
-// testOpenSSLUprobeCapturesHTTPS verifies steady-state discovery without
-// depending on it winning a race against a one-request process. First-call
-// capture remains a separate M1 gate.
+// testOpenSSLUprobeCapturesHTTPS verifies mapping-triggered attach and capture
+// for real OpenSSL clients.
 func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArgs func(string) []string) {
 	t.Helper()
 
@@ -185,19 +182,15 @@ func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArg
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	// Use the real KernelIO here: decoded connect samples must reach
-	// QueueHTTPUprobeDiscovery for this test to exercise runtime discovery.
+	// Use the real KernelIO so uprobe_mmap notifications exercise runtime
+	// discovery before the client enters SSL_write.
 	kernelTracker := newTestKernelTracker(nil, nil, kernelIO, cgroupRoot)
 	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
 	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
 
 	// HTTP/1.1-only TLS server so the request line is plaintext to SSL_write
 	// (an h2 client would hand SSL_write HPACK, which the tap rejects by design).
-	var firstRequest sync.Once
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// Keep the first client process alive long enough for connect-triggered
-		// discovery to inspect its maps and attach before its later requests.
-		firstRequest.Do(func() { time.Sleep(2 * time.Second) })
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
@@ -205,10 +198,13 @@ func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArg
 	t.Cleanup(server.Close)
 	url := server.URL + path + "?token=secret"
 
-	// Multiple requests in one process keep its mapped libssl target alive
-	// across discovery and the requests that follow the first connect.
-	if output, err := exec.Command(client, clientArgs(url)...).CombinedOutput(); err != nil {
-		t.Fatalf("HTTPS client %s: %v: %s", client, err, output)
+	// The first short-lived process can finish before asynchronous attach. Each
+	// later process maps the same file again and retries discovery; once attached,
+	// the file-scoped link covers subsequent processes without an artificial wait.
+	for range 4 {
+		if output, err := exec.Command(client, clientArgs(url)...).CombinedOutput(); err != nil {
+			t.Fatalf("HTTPS client %s: %v: %s", client, err, output)
+		}
 	}
 
 	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "openssl http_request for "+path,

@@ -29,9 +29,9 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 	kernelIO.cancelLoop = cancelLoop
 
 	kernelIO.loopWG.Add(3)
-	if kernelIO.httpUprobeDiscovery != nil {
+	if kernelIO.httpUprobeWorker != nil {
 		kernelIO.loopWG.Go(func() {
-			kernelIO.httpUprobeDiscovery.run(loopCtx)
+			kernelIO.httpUprobeWorker.run(loopCtx)
 		})
 	}
 	go func() {
@@ -57,6 +57,14 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 					kernelIO.logger.WarnContext(ctx, "bpf_reader_failed", "error", err)
 					return
 				}
+			}
+			handled, err := kernelIO.handleHTTPUprobeAttachCandidate(record.RawSample)
+			if err != nil {
+				kernelIO.logger.WarnContext(loopCtx, "bpf_control_sample_decode_failed", "error", err, "bytes", len(record.RawSample))
+				continue
+			}
+			if handled {
+				continue
 			}
 
 			if err := handle(loopCtx, KernelSample(record.RawSample)); err != nil {

@@ -41,10 +41,6 @@ func (kernelIO *StubKernelIO) DeleteCgroupBasenamesFromStagingMap(ctx context.Co
 	return ErrNotSupported
 }
 
-func (kernelIO *StubKernelIO) QueueHTTPUprobeDiscovery(pid int32) {
-	_ = pid
-}
-
 func (kernelIO *StubKernelIO) QueueHTTPUprobeReconciliation(activeCgroupIDs []uint64) {
 	_ = activeCgroupIDs
 }

@@ -65,7 +65,7 @@ struct {
     __type(value, __u32);
 } http_stages SEC(".maps");
 
-// Separate jump table for HTTP uprobe parsers (http_uprobe_hooks.bpf.h). It
+// Separate jump table for HTTP uprobe parsers (http_uprobe_capture_hooks.bpf.h). It
 // needs its own PROG_ARRAY because a uprobe program is kprobe-type and a tail
 // call cannot cross program types, so the fentry-type http_stages target above
 // is not reusable.
@@ -121,6 +121,16 @@ struct {
     __type(key, __u32);
     __type(value, __u64);
 } ringbuf_drop_count SEC(".maps");
+
+// Files whose discovery is pending or already resolved. Presence means that
+// another mapping notification is unnecessary. LRU eviction only causes a
+// later reclassification; attached links remain owned by userspace.
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 65536);
+    __type(key, struct file_classification_key);
+    __type(value, __u8);
+} http_uprobe_discovery_cache SEC(".maps");
 
 // staging_map: basename -> staging_value. Userspace stages sibling-container
 // basenames; cgroup_mkdir promotes and deletes matching entries in-kernel.

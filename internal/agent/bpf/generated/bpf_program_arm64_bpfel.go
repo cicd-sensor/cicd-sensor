@@ -82,6 +82,19 @@ type BPFProgramExecSample struct {
 	ArgvBlob      [2048]int8
 }
 
+type BPFProgramFileClassificationKey struct {
+	_          structs.HostLayout
+	MappedFile struct {
+		_           structs.HostLayout
+		DeviceMajor uint32
+		DeviceMinor uint32
+		Inode       uint64
+	}
+	CtimeSec  int64
+	CtimeNsec uint32
+	Pad       uint32
+}
+
 type BPFProgramFileLinkSample struct {
 	_                 structs.HostLayout
 	Kind              uint32
@@ -196,6 +209,15 @@ type BPFProgramHttpScratch struct {
 	Nghttp2PathN        uint32
 }
 
+type BPFProgramHttpUprobeAttachCandidateSample struct {
+	_       structs.HostLayout
+	Kind    uint32
+	Tgid    int32
+	VmStart uint64
+	VmEnd   uint64
+	File    BPFProgramFileClassificationKey
+}
+
 type BPFProgramMountSample struct {
 	_               structs.HostLayout
 	Kind            uint32
@@ -281,58 +303,61 @@ type BPFProgramUnixSocketConnectSample struct {
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	BPFProgramMapEvents                        = "events"
-	BPFProgramMapHttpScratch                   = "http_scratch"
-	BPFProgramMapHttpStages                    = "http_stages"
-	BPFProgramMapHttpUprobeStages              = "http_uprobe_stages"
-	BPFProgramMapPathScratch                   = "path_scratch"
-	BPFProgramMapRingbufDropCount              = "ringbuf_drop_count"
-	BPFProgramMapStagingMap                    = "staging_map"
-	BPFProgramMapTrackedCgroups                = "tracked_cgroups"
-	BPFProgramProgHandleCgroupAttachTask       = "handle_cgroup_attach_task"
-	BPFProgramProgHandleCgroupConnect4         = "handle_cgroup_connect4"
-	BPFProgramProgHandleCgroupConnect6         = "handle_cgroup_connect6"
-	BPFProgramProgHandleCgroupMkdir            = "handle_cgroup_mkdir"
-	BPFProgramProgHandleCgroupRmdir            = "handle_cgroup_rmdir"
-	BPFProgramProgHandleNghttp2Emit            = "handle_nghttp2_emit"
-	BPFProgramProgHandleNghttp2Required        = "handle_nghttp2_required"
-	BPFProgramProgHandleNghttp2SubmitRequest   = "handle_nghttp2_submit_request"
-	BPFProgramProgHandleSchedProcessExec       = "handle_sched_process_exec"
-	BPFProgramProgHandleSchedProcessFork       = "handle_sched_process_fork"
-	BPFProgramProgHandleSecurityFileOpen       = "handle_security_file_open"
-	BPFProgramProgHandleSecurityInodeLink      = "handle_security_inode_link"
-	BPFProgramProgHandleSecurityInodeRename    = "handle_security_inode_rename"
-	BPFProgramProgHandleSecurityInodeRmdir     = "handle_security_inode_rmdir"
-	BPFProgramProgHandleSecurityInodeSymlink   = "handle_security_inode_symlink"
-	BPFProgramProgHandleSecurityInodeUnlink    = "handle_security_inode_unlink"
-	BPFProgramProgHandleSecurityMoveMount      = "handle_security_move_mount"
-	BPFProgramProgHandleSecuritySbMount        = "handle_security_sb_mount"
-	BPFProgramProgHandleSslWrite               = "handle_ssl_write"
-	BPFProgramProgHandleSslWriteParse          = "handle_ssl_write_parse"
-	BPFProgramProgHandleTcpSendmsg             = "handle_tcp_sendmsg"
-	BPFProgramProgHandleTcpSendmsgHttp         = "handle_tcp_sendmsg_http"
-	BPFProgramProgHandleTcpSendmsgHttpParse    = "handle_tcp_sendmsg_http_parse"
-	BPFProgramProgHandleUdpSendmsg             = "handle_udp_sendmsg"
-	BPFProgramProgHandleUdpv6Sendmsg           = "handle_udpv6_sendmsg"
-	BPFProgramProgHandleUnixDgramConnect       = "handle_unix_dgram_connect"
-	BPFProgramProgHandleUnixStreamConnect      = "handle_unix_stream_connect"
-	BPFProgramProgHandleUnixStreamSendmsg      = "handle_unix_stream_sendmsg"
-	BPFProgramVarUnusedCgroupAttachSample      = "unused_cgroup_attach_sample"
-	BPFProgramVarUnusedCgroupMkdirSample       = "unused_cgroup_mkdir_sample"
-	BPFProgramVarUnusedCgroupRmdirSample       = "unused_cgroup_rmdir_sample"
-	BPFProgramVarUnusedDnsSample               = "unused_dns_sample"
-	BPFProgramVarUnusedExecSample              = "unused_exec_sample"
-	BPFProgramVarUnusedFileLinkSample          = "unused_file_link_sample"
-	BPFProgramVarUnusedFileMoveSample          = "unused_file_move_sample"
-	BPFProgramVarUnusedFileOpenSample          = "unused_file_open_sample"
-	BPFProgramVarUnusedFileRemoveSample        = "unused_file_remove_sample"
-	BPFProgramVarUnusedForkSample              = "unused_fork_sample"
-	BPFProgramVarUnusedHttpRequestSample       = "unused_http_request_sample"
-	BPFProgramVarUnusedMountSample             = "unused_mount_sample"
-	BPFProgramVarUnusedNetV4Sample             = "unused_net_v4_sample"
-	BPFProgramVarUnusedNetV6Sample             = "unused_net_v6_sample"
-	BPFProgramVarUnusedStagingValue            = "unused_staging_value"
-	BPFProgramVarUnusedUnixSocketConnectSample = "unused_unix_socket_connect_sample"
+	BPFProgramMapEvents                                = "events"
+	BPFProgramMapHttpScratch                           = "http_scratch"
+	BPFProgramMapHttpStages                            = "http_stages"
+	BPFProgramMapHttpUprobeDiscoveryCache              = "http_uprobe_discovery_cache"
+	BPFProgramMapHttpUprobeStages                      = "http_uprobe_stages"
+	BPFProgramMapPathScratch                           = "path_scratch"
+	BPFProgramMapRingbufDropCount                      = "ringbuf_drop_count"
+	BPFProgramMapStagingMap                            = "staging_map"
+	BPFProgramMapTrackedCgroups                        = "tracked_cgroups"
+	BPFProgramProgHandleCgroupAttachTask               = "handle_cgroup_attach_task"
+	BPFProgramProgHandleCgroupConnect4                 = "handle_cgroup_connect4"
+	BPFProgramProgHandleCgroupConnect6                 = "handle_cgroup_connect6"
+	BPFProgramProgHandleCgroupMkdir                    = "handle_cgroup_mkdir"
+	BPFProgramProgHandleCgroupRmdir                    = "handle_cgroup_rmdir"
+	BPFProgramProgHandleNghttp2Emit                    = "handle_nghttp2_emit"
+	BPFProgramProgHandleNghttp2Required                = "handle_nghttp2_required"
+	BPFProgramProgHandleNghttp2SubmitRequest           = "handle_nghttp2_submit_request"
+	BPFProgramProgHandleSchedProcessExec               = "handle_sched_process_exec"
+	BPFProgramProgHandleSchedProcessFork               = "handle_sched_process_fork"
+	BPFProgramProgHandleSecurityFileOpen               = "handle_security_file_open"
+	BPFProgramProgHandleSecurityInodeLink              = "handle_security_inode_link"
+	BPFProgramProgHandleSecurityInodeRename            = "handle_security_inode_rename"
+	BPFProgramProgHandleSecurityInodeRmdir             = "handle_security_inode_rmdir"
+	BPFProgramProgHandleSecurityInodeSymlink           = "handle_security_inode_symlink"
+	BPFProgramProgHandleSecurityInodeUnlink            = "handle_security_inode_unlink"
+	BPFProgramProgHandleSecurityMoveMount              = "handle_security_move_mount"
+	BPFProgramProgHandleSecuritySbMount                = "handle_security_sb_mount"
+	BPFProgramProgHandleSslWrite                       = "handle_ssl_write"
+	BPFProgramProgHandleSslWriteParse                  = "handle_ssl_write_parse"
+	BPFProgramProgHandleTcpSendmsg                     = "handle_tcp_sendmsg"
+	BPFProgramProgHandleTcpSendmsgHttp                 = "handle_tcp_sendmsg_http"
+	BPFProgramProgHandleTcpSendmsgHttpParse            = "handle_tcp_sendmsg_http_parse"
+	BPFProgramProgHandleUdpSendmsg                     = "handle_udp_sendmsg"
+	BPFProgramProgHandleUdpv6Sendmsg                   = "handle_udpv6_sendmsg"
+	BPFProgramProgHandleUnixDgramConnect               = "handle_unix_dgram_connect"
+	BPFProgramProgHandleUnixStreamConnect              = "handle_unix_stream_connect"
+	BPFProgramProgHandleUnixStreamSendmsg              = "handle_unix_stream_sendmsg"
+	BPFProgramProgHandleUprobeMmap                     = "handle_uprobe_mmap"
+	BPFProgramVarUnusedCgroupAttachSample              = "unused_cgroup_attach_sample"
+	BPFProgramVarUnusedCgroupMkdirSample               = "unused_cgroup_mkdir_sample"
+	BPFProgramVarUnusedCgroupRmdirSample               = "unused_cgroup_rmdir_sample"
+	BPFProgramVarUnusedDnsSample                       = "unused_dns_sample"
+	BPFProgramVarUnusedExecSample                      = "unused_exec_sample"
+	BPFProgramVarUnusedFileLinkSample                  = "unused_file_link_sample"
+	BPFProgramVarUnusedFileMoveSample                  = "unused_file_move_sample"
+	BPFProgramVarUnusedFileOpenSample                  = "unused_file_open_sample"
+	BPFProgramVarUnusedFileRemoveSample                = "unused_file_remove_sample"
+	BPFProgramVarUnusedForkSample                      = "unused_fork_sample"
+	BPFProgramVarUnusedHttpRequestSample               = "unused_http_request_sample"
+	BPFProgramVarUnusedHttpUprobeAttachCandidateSample = "unused_http_uprobe_attach_candidate_sample"
+	BPFProgramVarUnusedMountSample                     = "unused_mount_sample"
+	BPFProgramVarUnusedNetV4Sample                     = "unused_net_v4_sample"
+	BPFProgramVarUnusedNetV6Sample                     = "unused_net_v6_sample"
+	BPFProgramVarUnusedStagingValue                    = "unused_staging_value"
+	BPFProgramVarUnusedUnixSocketConnectSample         = "unused_unix_socket_connect_sample"
 )
 
 // LoadBPFProgram returns the embedded CollectionSpec for BPFProgram.
@@ -405,42 +430,45 @@ type BPFProgramProgramSpecs struct {
 	HandleUnixDgramConnect     *ebpf.ProgramSpec `ebpf:"handle_unix_dgram_connect"`
 	HandleUnixStreamConnect    *ebpf.ProgramSpec `ebpf:"handle_unix_stream_connect"`
 	HandleUnixStreamSendmsg    *ebpf.ProgramSpec `ebpf:"handle_unix_stream_sendmsg"`
+	HandleUprobeMmap           *ebpf.ProgramSpec `ebpf:"handle_uprobe_mmap"`
 }
 
 // BPFProgramMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BPFProgramMapSpecs struct {
-	Events           *ebpf.MapSpec `ebpf:"events"`
-	HttpScratch      *ebpf.MapSpec `ebpf:"http_scratch"`
-	HttpStages       *ebpf.MapSpec `ebpf:"http_stages"`
-	HttpUprobeStages *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
-	PathScratch      *ebpf.MapSpec `ebpf:"path_scratch"`
-	RingbufDropCount *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
-	StagingMap       *ebpf.MapSpec `ebpf:"staging_map"`
-	TrackedCgroups   *ebpf.MapSpec `ebpf:"tracked_cgroups"`
+	Events                   *ebpf.MapSpec `ebpf:"events"`
+	HttpScratch              *ebpf.MapSpec `ebpf:"http_scratch"`
+	HttpStages               *ebpf.MapSpec `ebpf:"http_stages"`
+	HttpUprobeDiscoveryCache *ebpf.MapSpec `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeStages         *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
+	PathScratch              *ebpf.MapSpec `ebpf:"path_scratch"`
+	RingbufDropCount         *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
+	StagingMap               *ebpf.MapSpec `ebpf:"staging_map"`
+	TrackedCgroups           *ebpf.MapSpec `ebpf:"tracked_cgroups"`
 }
 
 // BPFProgramVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BPFProgramVariableSpecs struct {
-	UnusedCgroupAttachSample      *ebpf.VariableSpec `ebpf:"unused_cgroup_attach_sample"`
-	UnusedCgroupMkdirSample       *ebpf.VariableSpec `ebpf:"unused_cgroup_mkdir_sample"`
-	UnusedCgroupRmdirSample       *ebpf.VariableSpec `ebpf:"unused_cgroup_rmdir_sample"`
-	UnusedDnsSample               *ebpf.VariableSpec `ebpf:"unused_dns_sample"`
-	UnusedExecSample              *ebpf.VariableSpec `ebpf:"unused_exec_sample"`
-	UnusedFileLinkSample          *ebpf.VariableSpec `ebpf:"unused_file_link_sample"`
-	UnusedFileMoveSample          *ebpf.VariableSpec `ebpf:"unused_file_move_sample"`
-	UnusedFileOpenSample          *ebpf.VariableSpec `ebpf:"unused_file_open_sample"`
-	UnusedFileRemoveSample        *ebpf.VariableSpec `ebpf:"unused_file_remove_sample"`
-	UnusedForkSample              *ebpf.VariableSpec `ebpf:"unused_fork_sample"`
-	UnusedHttpRequestSample       *ebpf.VariableSpec `ebpf:"unused_http_request_sample"`
-	UnusedMountSample             *ebpf.VariableSpec `ebpf:"unused_mount_sample"`
-	UnusedNetV4Sample             *ebpf.VariableSpec `ebpf:"unused_net_v4_sample"`
-	UnusedNetV6Sample             *ebpf.VariableSpec `ebpf:"unused_net_v6_sample"`
-	UnusedStagingValue            *ebpf.VariableSpec `ebpf:"unused_staging_value"`
-	UnusedUnixSocketConnectSample *ebpf.VariableSpec `ebpf:"unused_unix_socket_connect_sample"`
+	UnusedCgroupAttachSample              *ebpf.VariableSpec `ebpf:"unused_cgroup_attach_sample"`
+	UnusedCgroupMkdirSample               *ebpf.VariableSpec `ebpf:"unused_cgroup_mkdir_sample"`
+	UnusedCgroupRmdirSample               *ebpf.VariableSpec `ebpf:"unused_cgroup_rmdir_sample"`
+	UnusedDnsSample                       *ebpf.VariableSpec `ebpf:"unused_dns_sample"`
+	UnusedExecSample                      *ebpf.VariableSpec `ebpf:"unused_exec_sample"`
+	UnusedFileLinkSample                  *ebpf.VariableSpec `ebpf:"unused_file_link_sample"`
+	UnusedFileMoveSample                  *ebpf.VariableSpec `ebpf:"unused_file_move_sample"`
+	UnusedFileOpenSample                  *ebpf.VariableSpec `ebpf:"unused_file_open_sample"`
+	UnusedFileRemoveSample                *ebpf.VariableSpec `ebpf:"unused_file_remove_sample"`
+	UnusedForkSample                      *ebpf.VariableSpec `ebpf:"unused_fork_sample"`
+	UnusedHttpRequestSample               *ebpf.VariableSpec `ebpf:"unused_http_request_sample"`
+	UnusedHttpUprobeAttachCandidateSample *ebpf.VariableSpec `ebpf:"unused_http_uprobe_attach_candidate_sample"`
+	UnusedMountSample                     *ebpf.VariableSpec `ebpf:"unused_mount_sample"`
+	UnusedNetV4Sample                     *ebpf.VariableSpec `ebpf:"unused_net_v4_sample"`
+	UnusedNetV6Sample                     *ebpf.VariableSpec `ebpf:"unused_net_v6_sample"`
+	UnusedStagingValue                    *ebpf.VariableSpec `ebpf:"unused_staging_value"`
+	UnusedUnixSocketConnectSample         *ebpf.VariableSpec `ebpf:"unused_unix_socket_connect_sample"`
 }
 
 // BPFProgramObjects contains all objects after they have been loaded into the kernel.
@@ -463,14 +491,15 @@ func (o *BPFProgramObjects) Close() error {
 //
 // It can be passed to LoadBPFProgramObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BPFProgramMaps struct {
-	Events           *ebpf.Map `ebpf:"events"`
-	HttpScratch      *ebpf.Map `ebpf:"http_scratch"`
-	HttpStages       *ebpf.Map `ebpf:"http_stages"`
-	HttpUprobeStages *ebpf.Map `ebpf:"http_uprobe_stages"`
-	PathScratch      *ebpf.Map `ebpf:"path_scratch"`
-	RingbufDropCount *ebpf.Map `ebpf:"ringbuf_drop_count"`
-	StagingMap       *ebpf.Map `ebpf:"staging_map"`
-	TrackedCgroups   *ebpf.Map `ebpf:"tracked_cgroups"`
+	Events                   *ebpf.Map `ebpf:"events"`
+	HttpScratch              *ebpf.Map `ebpf:"http_scratch"`
+	HttpStages               *ebpf.Map `ebpf:"http_stages"`
+	HttpUprobeDiscoveryCache *ebpf.Map `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeStages         *ebpf.Map `ebpf:"http_uprobe_stages"`
+	PathScratch              *ebpf.Map `ebpf:"path_scratch"`
+	RingbufDropCount         *ebpf.Map `ebpf:"ringbuf_drop_count"`
+	StagingMap               *ebpf.Map `ebpf:"staging_map"`
+	TrackedCgroups           *ebpf.Map `ebpf:"tracked_cgroups"`
 }
 
 func (m *BPFProgramMaps) Close() error {
@@ -478,6 +507,7 @@ func (m *BPFProgramMaps) Close() error {
 		m.Events,
 		m.HttpScratch,
 		m.HttpStages,
+		m.HttpUprobeDiscoveryCache,
 		m.HttpUprobeStages,
 		m.PathScratch,
 		m.RingbufDropCount,
@@ -490,22 +520,23 @@ func (m *BPFProgramMaps) Close() error {
 //
 // It can be passed to LoadBPFProgramObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BPFProgramVariables struct {
-	UnusedCgroupAttachSample      *ebpf.Variable `ebpf:"unused_cgroup_attach_sample"`
-	UnusedCgroupMkdirSample       *ebpf.Variable `ebpf:"unused_cgroup_mkdir_sample"`
-	UnusedCgroupRmdirSample       *ebpf.Variable `ebpf:"unused_cgroup_rmdir_sample"`
-	UnusedDnsSample               *ebpf.Variable `ebpf:"unused_dns_sample"`
-	UnusedExecSample              *ebpf.Variable `ebpf:"unused_exec_sample"`
-	UnusedFileLinkSample          *ebpf.Variable `ebpf:"unused_file_link_sample"`
-	UnusedFileMoveSample          *ebpf.Variable `ebpf:"unused_file_move_sample"`
-	UnusedFileOpenSample          *ebpf.Variable `ebpf:"unused_file_open_sample"`
-	UnusedFileRemoveSample        *ebpf.Variable `ebpf:"unused_file_remove_sample"`
-	UnusedForkSample              *ebpf.Variable `ebpf:"unused_fork_sample"`
-	UnusedHttpRequestSample       *ebpf.Variable `ebpf:"unused_http_request_sample"`
-	UnusedMountSample             *ebpf.Variable `ebpf:"unused_mount_sample"`
-	UnusedNetV4Sample             *ebpf.Variable `ebpf:"unused_net_v4_sample"`
-	UnusedNetV6Sample             *ebpf.Variable `ebpf:"unused_net_v6_sample"`
-	UnusedStagingValue            *ebpf.Variable `ebpf:"unused_staging_value"`
-	UnusedUnixSocketConnectSample *ebpf.Variable `ebpf:"unused_unix_socket_connect_sample"`
+	UnusedCgroupAttachSample              *ebpf.Variable `ebpf:"unused_cgroup_attach_sample"`
+	UnusedCgroupMkdirSample               *ebpf.Variable `ebpf:"unused_cgroup_mkdir_sample"`
+	UnusedCgroupRmdirSample               *ebpf.Variable `ebpf:"unused_cgroup_rmdir_sample"`
+	UnusedDnsSample                       *ebpf.Variable `ebpf:"unused_dns_sample"`
+	UnusedExecSample                      *ebpf.Variable `ebpf:"unused_exec_sample"`
+	UnusedFileLinkSample                  *ebpf.Variable `ebpf:"unused_file_link_sample"`
+	UnusedFileMoveSample                  *ebpf.Variable `ebpf:"unused_file_move_sample"`
+	UnusedFileOpenSample                  *ebpf.Variable `ebpf:"unused_file_open_sample"`
+	UnusedFileRemoveSample                *ebpf.Variable `ebpf:"unused_file_remove_sample"`
+	UnusedForkSample                      *ebpf.Variable `ebpf:"unused_fork_sample"`
+	UnusedHttpRequestSample               *ebpf.Variable `ebpf:"unused_http_request_sample"`
+	UnusedHttpUprobeAttachCandidateSample *ebpf.Variable `ebpf:"unused_http_uprobe_attach_candidate_sample"`
+	UnusedMountSample                     *ebpf.Variable `ebpf:"unused_mount_sample"`
+	UnusedNetV4Sample                     *ebpf.Variable `ebpf:"unused_net_v4_sample"`
+	UnusedNetV6Sample                     *ebpf.Variable `ebpf:"unused_net_v6_sample"`
+	UnusedStagingValue                    *ebpf.Variable `ebpf:"unused_staging_value"`
+	UnusedUnixSocketConnectSample         *ebpf.Variable `ebpf:"unused_unix_socket_connect_sample"`
 }
 
 // BPFProgramPrograms contains all programs after they have been loaded into the kernel.
@@ -540,6 +571,7 @@ type BPFProgramPrograms struct {
 	HandleUnixDgramConnect     *ebpf.Program `ebpf:"handle_unix_dgram_connect"`
 	HandleUnixStreamConnect    *ebpf.Program `ebpf:"handle_unix_stream_connect"`
 	HandleUnixStreamSendmsg    *ebpf.Program `ebpf:"handle_unix_stream_sendmsg"`
+	HandleUprobeMmap           *ebpf.Program `ebpf:"handle_uprobe_mmap"`
 }
 
 func (p *BPFProgramPrograms) Close() error {
@@ -572,6 +604,7 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleUnixDgramConnect,
 		p.HandleUnixStreamConnect,
 		p.HandleUnixStreamSendmsg,
+		p.HandleUprobeMmap,
 	)
 }
 

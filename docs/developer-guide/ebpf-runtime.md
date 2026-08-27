@@ -69,7 +69,7 @@ The eBPF Runtime handles both rule-facing events and internal tracking samples.
 | file | `security_file_open`, `security_inode_unlink`, `security_inode_rename`, `security_inode_link` | `file_open`, `file_remove`, `file_move`, `file_link` |
 | mount | `security_sb_mount`, `security_move_mount` | `mount` for path exposure attempts |
 | domain | `udp_sendmsg`, `udpv6_sendmsg`, `tcp_sendmsg` | `domain` |
-| http | `tcp_sendmsg`; rollout-disabled OpenSSL and nghttp2 uprobes | `http_request` |
+| http | `tcp_sendmsg`; rollout-disabled `uprobe_mmap` discovery plus OpenSSL and nghttp2 uprobes | `http_request` |
 | unix socket | `unix_stream_connect`, `unix_dgram_connect` | `unix_socket_connect` |
 
 `cgroup/connect4/6` is not attached per tracked cgroup. The agent attaches once to the cgroup v2 root detected at startup, and the program uses `tracked_cgroups` lookup to handle only target jobs.
@@ -85,8 +85,8 @@ start with a record byte and never match a method token; KTLS plaintext sends
 are intercepted by the TLS ULP before `tcp_sendmsg` and do not reach the
 hook. The rollout-disabled OpenSSL path reads HTTP/1.x before encryption, while
 the nghttp2 path reads HTTP/2 pseudo-headers before HPACK encoding. See
-[HTTP Uprobe Runtime](ebpf/http-uprobes.md) for the attach and event lifecycle,
-selected functions, verified clients, and known gaps.
+[HTTP Uprobe Runtime](ebpf/http-uprobes.md) for the discovery rationale, attach
+and event lifecycle, selected functions, verified clients, and known gaps.
 
 The `mount` event records classic bind/move and new-API `move_mount` attempts;
 ordinary classic filesystem mounts are filtered before ring-buffer
@@ -101,7 +101,9 @@ that existed before the Job started.
 
 ## Kernel / userspace boundary
 
-BPF map state is intentionally small. The kernel side only needs to answer two questions: whether the current cgroup should be observed, and whether a Docker cgroup basename has already been staged. Richer state such as JobIdentity and process context lives in the KernelTracker userspace mirror.
+BPF map state is limited to fast-path scope and bounded suppression decisions.
+It does not contain JobIdentity, process context, symbol data, or uprobe links;
+those remain in the KernelTracker/KernelIO userspace owners.
 
 ### BPF maps
 
@@ -109,6 +111,7 @@ BPF map state is intentionally small. The kernel side only needs to answer two q
 | --- | --- | --- |
 | `tracked_cgroups` | cgroup ID | Lets BPF hooks decide on the fast path whether the current cgroup is in scope |
 | `staging_map` | Docker cgroup basename | Lets the `cgroup_mkdir` hook detect cgroup creation staged by the Docker proxy |
+| `http_uprobe_discovery_cache` | device, inode, ctime | Suppresses mapping notifications for files already queued, classified, or attached; eviction only causes reclassification |
 
 `staging_map` does not contain JobIdentity. The kernel side only matches the basename; userspace mirror state knows which job it belongs to.
 

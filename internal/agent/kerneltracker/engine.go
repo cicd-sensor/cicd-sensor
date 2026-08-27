@@ -100,36 +100,18 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 	}
 }
 
-// enqueueKernelSample decodes one raw ringbuf sample, queues any process-scan request,
-// and queues the decoded input.
+// enqueueKernelSample decodes one raw ringbuf sample and queues the decoded input.
 func (engine *KernelTracker) enqueueKernelSample(ctx context.Context, sample kernelio.KernelSample) error {
 	input, err := decodeKernelSample(sample)
 	if err != nil {
 		engine.logger.WarnContext(ctx, "kernel_sample_decode_failed", "error", err, "bytes", len(sample))
 		return nil
 	}
-	engine.queueHTTPUprobeDiscovery(input)
 	select {
 	case engine.inputCh <- input:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-}
-
-// queueHTTPUprobeDiscovery forwards decoded TCP connect PIDs before the
-// engine queue can apply backpressure. KernelIO owns the asynchronous scan and
-// attach lifecycle; this method only identifies the relevant decoded samples.
-func (engine *KernelTracker) queueHTTPUprobeDiscovery(input decodedKernelSample) {
-	switch sample := input.(type) {
-	case netConnectV4Sample:
-		if sample.Protocol == ipProtocolTCP {
-			engine.kernelIO.QueueHTTPUprobeDiscovery(sample.Identity.PID)
-		}
-	case netConnectV6Sample:
-		if sample.Protocol == ipProtocolTCP {
-			engine.kernelIO.QueueHTTPUprobeDiscovery(sample.Identity.PID)
-		}
 	}
 }
 

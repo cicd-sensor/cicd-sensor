@@ -34,6 +34,7 @@ func configureBPFProgramSpec(spec *ebpf.CollectionSpec) error {
 		return fmt.Errorf("bpf map %q not found", StagingMapName)
 	}
 	stagingMap.MaxEntries = StagingMaxEntries
+
 	return nil
 }
 

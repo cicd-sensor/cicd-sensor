@@ -28,9 +28,9 @@ type LinuxKernelIO struct {
 	// otherwise watchRingbufDrops can race objs.Close on a Map.Lookup
 	// (-race detected this on the Phase 3 integration run).
 	loopWG sync.WaitGroup
-	// httpUprobeDiscovery finds, attaches, and reclaims HTTP uprobes. It runs in
+	// httpUprobeWorker finds, attaches, and reclaims HTTP uprobes. It runs in
 	// loopWG and closes its own attached links, so they are not stored in links.
-	httpUprobeDiscovery *httpUprobeDiscovery
+	httpUprobeWorker *httpUprobeWorker
 }
 
 // NewLinux loads the BPF objects, attaches programs, and opens the sample ring buffer.
@@ -87,12 +87,12 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		}
 	}
 	if config.EnableHTTPUprobes {
-		kernelIO.httpUprobeDiscovery = newHTTPUprobeDiscovery([]httpUprobeSymbol{
+		kernelIO.httpUprobeWorker = newHTTPUprobeWorker([]httpUprobeSymbol{
 			{name: "SSL_write", program: kernelIO.objs.HandleSslWrite},
 			{name: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
 			{name: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
 			{name: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
-		}, kernelIO.logger, config.CgroupV2RootPath)
+		}, kernelIO.logger, config.CgroupV2RootPath, kernelIO.objs.HttpUprobeDiscoveryCache)
 	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
@@ -126,6 +126,13 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})
 		if err != nil {
 			return nil, fmt.Errorf("attach %s tracing program: %w", attach.name, err)
+		}
+		kernelIO.links = append(kernelIO.links, attached)
+	}
+	if config.EnableHTTPUprobes {
+		attached, err := link.AttachTracing(link.TracingOptions{Program: kernelIO.objs.HandleUprobeMmap})
+		if err != nil {
+			return nil, fmt.Errorf("attach uprobe_mmap tracing program: %w", err)
 		}
 		kernelIO.links = append(kernelIO.links, attached)
 	}

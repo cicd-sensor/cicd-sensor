@@ -16,7 +16,7 @@ struct user_pt_regs {
 };
 #endif
 
-// http_uprobe_hooks.bpf.h — HTTP capture at userspace library boundaries.
+// http_uprobe_capture_hooks.bpf.h — HTTP capture at userspace library boundaries.
 //
 // HTTPS is TLS ciphertext by the time it reaches tcp_sendmsg. SSL_write uprobes
 // observe HTTP/1.x before encryption; nghttp2 submission uprobes observe HTTP/2
