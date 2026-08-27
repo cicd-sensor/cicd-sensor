@@ -81,6 +81,8 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		kernelIO.objs.HandleSslWriteParse,
 		kernelIO.objs.HandleNghttp2Required,
 		kernelIO.objs.HandleNghttp2Emit,
+		kernelIO.objs.HandleGoNetHttpRequired,
+		kernelIO.objs.HandleGoNetHttpEmit,
 	} {
 		if err := kernelIO.objs.HttpUprobeStages.Put(uint32(index), program); err != nil {
 			return nil, fmt.Errorf("install HTTP uprobe stage %d: %w", index, err)

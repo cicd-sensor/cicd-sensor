@@ -207,6 +207,14 @@ type BPFProgramHttpScratch struct {
 	Nghttp2AuthorityLen uint64
 	Nghttp2MethodN      uint32
 	Nghttp2PathN        uint32
+	GoHttpMethod        uint64
+	GoHttpPath          uint64
+	GoHttpHost          uint64
+	GoHttpMethodLen     uint64
+	GoHttpPathLen       uint64
+	GoHttpHostLen       uint64
+	GoHttpMethodN       uint32
+	GoHttpPathN         uint32
 }
 
 type BPFProgramHttpUprobeAttachCandidateSample struct {
@@ -317,6 +325,8 @@ const (
 	BPFProgramProgHandleCgroupConnect6                 = "handle_cgroup_connect6"
 	BPFProgramProgHandleCgroupMkdir                    = "handle_cgroup_mkdir"
 	BPFProgramProgHandleCgroupRmdir                    = "handle_cgroup_rmdir"
+	BPFProgramProgHandleGoNetHttpEmit                  = "handle_go_net_http_emit"
+	BPFProgramProgHandleGoNetHttpRequired              = "handle_go_net_http_required"
 	BPFProgramProgHandleGoNetHttpRoundTrip             = "handle_go_net_http_round_trip"
 	BPFProgramProgHandleNghttp2Emit                    = "handle_nghttp2_emit"
 	BPFProgramProgHandleNghttp2Required                = "handle_nghttp2_required"
@@ -408,6 +418,8 @@ type BPFProgramProgramSpecs struct {
 	HandleCgroupConnect6       *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_rmdir"`
+	HandleGoNetHttpEmit        *ebpf.ProgramSpec `ebpf:"handle_go_net_http_emit"`
+	HandleGoNetHttpRequired    *ebpf.ProgramSpec `ebpf:"handle_go_net_http_required"`
 	HandleGoNetHttpRoundTrip   *ebpf.ProgramSpec `ebpf:"handle_go_net_http_round_trip"`
 	HandleNghttp2Emit          *ebpf.ProgramSpec `ebpf:"handle_nghttp2_emit"`
 	HandleNghttp2Required      *ebpf.ProgramSpec `ebpf:"handle_nghttp2_required"`
@@ -550,6 +562,8 @@ type BPFProgramPrograms struct {
 	HandleCgroupConnect6       *ebpf.Program `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.Program `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.Program `ebpf:"handle_cgroup_rmdir"`
+	HandleGoNetHttpEmit        *ebpf.Program `ebpf:"handle_go_net_http_emit"`
+	HandleGoNetHttpRequired    *ebpf.Program `ebpf:"handle_go_net_http_required"`
 	HandleGoNetHttpRoundTrip   *ebpf.Program `ebpf:"handle_go_net_http_round_trip"`
 	HandleNghttp2Emit          *ebpf.Program `ebpf:"handle_nghttp2_emit"`
 	HandleNghttp2Required      *ebpf.Program `ebpf:"handle_nghttp2_required"`
@@ -584,6 +598,8 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleCgroupConnect6,
 		p.HandleCgroupMkdir,
 		p.HandleCgroupRmdir,
+		p.HandleGoNetHttpEmit,
+		p.HandleGoNetHttpRequired,
 		p.HandleGoNetHttpRoundTrip,
 		p.HandleNghttp2Emit,
 		p.HandleNghttp2Required,

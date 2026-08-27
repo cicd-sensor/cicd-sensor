@@ -55,6 +55,8 @@ struct user_pt_regs {
 #define HTTP_UPROBE_STAGE_OPENSSL_PARSE     0
 #define HTTP_UPROBE_STAGE_NGHTTP2_REQUIRED  1
 #define HTTP_UPROBE_STAGE_NGHTTP2_EMIT      2
+#define HTTP_UPROBE_STAGE_GO_HTTP_REQUIRED  3
+#define HTTP_UPROBE_STAGE_GO_HTTP_EMIT      4
 
 // Entry: PARM2 is the plaintext buffer, PARM3 its length, for both
 // SSL_write(SSL*, const void*, int) and

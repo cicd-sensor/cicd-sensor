@@ -54,6 +54,17 @@ struct http_scratch {
     __u64 nghttp2_authority_len;
     __u32 nghttp2_method_n;
     __u32 nghttp2_path_n;
+
+    // Go net/http pointers and lengths carried across verifier-split targets.
+    // Raw Go string bytes stay in userspace until selected fields are emitted.
+    __u64 go_http_method;
+    __u64 go_http_path;
+    __u64 go_http_host;
+    __u64 go_http_method_len;
+    __u64 go_http_path_len;
+    __u64 go_http_host_len;
+    __u32 go_http_method_n;
+    __u32 go_http_path_n;
 };
 
 // Tail-call jump table for the HTTP parser. Userspace installs the parse target
@@ -71,7 +82,7 @@ struct {
 // is not reusable.
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-    __uint(max_entries, 3);
+    __uint(max_entries, 5);
     __type(key, __u32);
     __type(value, __u32);
 } http_uprobe_stages SEC(".maps");

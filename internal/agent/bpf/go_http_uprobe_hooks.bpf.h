@@ -75,32 +75,80 @@ int handle_go_net_http_round_trip(struct pt_regs *ctx)
     struct go_string_abi method = {};
     if (go_http_read_string(request, GO_HTTP_REQUEST_METHOD_OFFSET, &method) < 0)
         return 0;
-    __u32 method_n = 0;
-    if (method.len > 0 &&
-        http_user_field_length(method.data, method.len, HTTP_METHOD_LEN, 0, &method_n) < 0)
-        return 0;
 
     struct go_string_abi path = {};
     if (go_http_read_string(url, GO_HTTP_URL_PATH_OFFSET, &path) < 0)
         return 0;
-    __u32 path_n = 0;
-    if (path.len > 0) {
-        if (http_user_field_length(path.data, path.len, HTTP_PATH_LEN, 0, &path_n) < 0)
-            return 0;
-        __u8 first;
-        if (bpf_probe_read_user(&first, sizeof(first), path.data) < 0 || first != '/')
-            return 0;
-    }
 
     struct go_string_abi host = {};
     if (go_http_read_string(request, GO_HTTP_REQUEST_HOST_OFFSET, &host) < 0)
         return 0;
     if (host.len == 0 && go_http_read_string(url, GO_HTTP_URL_HOST_OFFSET, &host) < 0)
         return 0;
-    __u32 host_n = 0;
-    int have_host = host.len > 0 &&
-                    http_user_field_length(host.data, host.len, HTTP_HOST_LEN, 0, &host_n) == 0;
 
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
+        return 0;
+    s->go_http_method = (__u64)method.data;
+    s->go_http_path = (__u64)path.data;
+    s->go_http_host = (__u64)host.data;
+    s->go_http_method_len = method.len;
+    s->go_http_path_len = path.len;
+    s->go_http_host_len = host.len;
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_GO_HTTP_REQUIRED);
+    return 0;
+}
+
+// Validate the required request fields in a fresh verifier state. Empty method
+// and path values use net/http's GET and "/" defaults in the emit stage.
+SEC("uprobe/go_net_http_round_trip")
+int handle_go_net_http_required(struct pt_regs *ctx)
+{
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
+        return 0;
+
+    const __u8 *method = (const __u8 *)s->go_http_method;
+    __u32 method_n = 0;
+    if (s->go_http_method_len > 0 &&
+        http_user_field_length(method, s->go_http_method_len,
+                               HTTP_METHOD_LEN, 0, &method_n) < 0)
+        return 0;
+
+    const __u8 *path = (const __u8 *)s->go_http_path;
+    __u32 path_n = 0;
+    if (s->go_http_path_len > 0) {
+        if (http_user_field_length(path, s->go_http_path_len,
+                                   HTTP_PATH_LEN, 0, &path_n) < 0)
+            return 0;
+        __u8 first;
+        if (bpf_probe_read_user(&first, sizeof(first), path) < 0 || first != '/')
+            return 0;
+    }
+
+    s->go_http_method_n = method_n;
+    s->go_http_path_n = path_n;
+    bpf_tail_call(ctx, &http_uprobe_stages, HTTP_UPROBE_STAGE_GO_HTTP_EMIT);
+    return 0;
+}
+
+// Validate the optional host and emit only method, path, and host.
+SEC("uprobe/go_net_http_round_trip")
+int handle_go_net_http_emit(struct pt_regs *ctx)
+{
+    struct http_scratch *s = http_scratch_get();
+    if (!s)
+        return 0;
+
+    const __u8 *method = (const __u8 *)s->go_http_method;
+    const __u8 *path = (const __u8 *)s->go_http_path;
+    const __u8 *host = (const __u8 *)s->go_http_host;
+    __u32 host_n = 0;
+    int have_host = s->go_http_host_len > 0 &&
+                    http_user_field_length(host, s->go_http_host_len,
+                                           HTTP_HOST_LEN, 0, &host_n) == 0;
+
+    __u64 cgroup_id = current_cgroup_id();
     struct http_request_sample *sample =
         bpf_ringbuf_reserve(&events, sizeof(*sample), 0);
     if (!sample) {
@@ -116,21 +164,21 @@ int handle_go_net_http_round_trip(struct pt_regs *ctx)
     sample->_pad1 = 0;
     zero_http_request_fields(sample);
 
-    if (method.len == 0) {
+    if (s->go_http_method_len == 0) {
         sample->method[0] = 'G';
         sample->method[1] = 'E';
         sample->method[2] = 'T';
-    } else if (http_copy_user_method(sample->method, method.data, method_n) < 0) {
+    } else if (http_copy_user_method(sample->method, method, s->go_http_method_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }
-    if (path.len == 0) {
+    if (s->go_http_path_len == 0) {
         sample->path[0] = '/';
-    } else if (http_copy_user_value(sample->path, path.data, path_n) < 0) {
+    } else if (http_copy_user_value(sample->path, path, s->go_http_path_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }
-    if (have_host && http_copy_user_value(sample->host, host.data, host_n) < 0) {
+    if (have_host && http_copy_user_value(sample->host, host, host_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }
