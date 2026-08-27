@@ -341,15 +341,15 @@ func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
 		t.Fatalf("own executable mappings = %d complete = %v", len(mappings), complete)
 	}
 
-	candidate := mappings[0]
-	startText, endText, ok := strings.Cut(candidate.addressRange, "-")
+	mapping := mappings[0]
+	startText, endText, ok := strings.Cut(mapping.addressRange, "-")
 	if !ok {
-		t.Fatalf("invalid mapping range %q", candidate.addressRange)
+		t.Fatalf("invalid mapping range %q", mapping.addressRange)
 	}
 	start, startErr := strconv.ParseUint(startText, 16, 64)
 	end, endErr := strconv.ParseUint(endText, 16, 64)
 	if startErr != nil || endErr != nil {
-		t.Fatalf("parse mapping range %q: %v, %v", candidate.addressRange, startErr, endErr)
+		t.Fatalf("parse mapping range %q: %v, %v", mapping.addressRange, startErr, endErr)
 	}
 	f, err := os.Open(mappedFilePath(int32(os.Getpid()), start, end))
 	if err != nil {
@@ -365,10 +365,10 @@ func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
 		t.Fatalf("record discovery file: %v", err)
 	}
 
-	candidate := httpUprobeAttachCandidate{
+	attachCandidate := httpUprobeAttachCandidate{
 		tgid: int32(os.Getpid()), vmStart: start, vmEnd: end, file: key,
 	}
-	worker.queueAttachCandidate(candidate)
+	worker.queueAttachCandidate(attachCandidate)
 	worker.classifyAndAttach(<-worker.attachCandidates)
 	if worker.identityMismatch != 1 {
 		t.Fatalf("identity mismatch count = %d, want 1", worker.identityMismatch)
