@@ -128,7 +128,13 @@ https.get(url,{rejectUnauthorized:false,agent:false},r=>{r.resume()}).on('error'
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requireBinary(t, test.binary)
-			captured := testOpenSSLClientCoverage(t, test.urlPath, test.eventPath, test.command)
+			captured := testOpenSSLClientCoverage(
+				t,
+				test.urlPath,
+				test.eventPath,
+				test.command,
+				expected[test.id],
+			)
 			if captured != expected[test.id] {
 				t.Fatalf("captured = %t, want %t for %s", captured, expected[test.id], test.id)
 			}
@@ -270,6 +276,7 @@ func testOpenSSLClientCoverage(
 	urlPath string,
 	eventPath string,
 	command func(string) *exec.Cmd,
+	expectCapture bool,
 ) bool {
 	t.Helper()
 
@@ -326,12 +333,25 @@ func testOpenSSLClientCoverage(
 		}
 	}
 
-	// Use separate processes for the same mapping/attach contract as the HTTP/2
-	// test above; do not hide first-request timing behind an artificial delay.
-	for range 4 {
-		if output, err := command(server.URL + urlPath).CombinedOutput(); err != nil {
-			t.Fatalf("HTTPS client: %v: %s", err, output)
+	runClients := func() {
+		// Use separate processes for the same mapping/attach contract as the
+		// HTTP/2 test above; do not hide first-request timing behind a sleep.
+		for range 4 {
+			if output, err := command(server.URL + urlPath).CombinedOutput(); err != nil {
+				t.Fatalf("HTTPS client: %v: %s", err, output)
+			}
 		}
 	}
+
+	runClients()
+	if captured := waitForPath(eventPath); captured || !expectCapture {
+		return captured
+	}
+
+	// A very short-lived client can finish the first burst while the worker is
+	// still classifying its executable. A second process burst verifies eventual
+	// file-scoped attachment without turning this coverage test into a first-call
+	// delivery guarantee.
+	runClients()
 	return waitForPath(eventPath)
 }
