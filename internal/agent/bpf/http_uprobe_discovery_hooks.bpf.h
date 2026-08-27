@@ -63,6 +63,7 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     if (!super)
         return 0;
 
+    // Kernel dev_t stores the major above its 20-bit minor field.
     __u32 device = BPF_CORE_READ(super, s_dev);
     struct file_classification_key classification = {
         .mapped_file = {
