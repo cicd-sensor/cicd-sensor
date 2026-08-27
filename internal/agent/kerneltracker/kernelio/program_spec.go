@@ -10,9 +10,7 @@ import (
 )
 
 const (
-	eventsMapName                   = "events"
-	httpUprobeDiscoveryCacheMapName = "http_uprobe_discovery_cache"
-	disabledHTTPUprobeMapSize       = 1
+	eventsMapName = "events"
 	// Keep at least 8 MiB for small CI/CD runner nodes.
 	minEventsRingbufMaxEntries = 8 << 20
 	// Add 4 MiB per CPU so larger runner nodes get more ingress capacity.
@@ -20,7 +18,7 @@ const (
 )
 
 // configureBPFProgramSpec applies userspace-owned map settings before load.
-func configureBPFProgramSpec(spec *ebpf.CollectionSpec, enableHTTPUprobes bool) error {
+func configureBPFProgramSpec(spec *ebpf.CollectionSpec) error {
 	eventsMap := spec.Maps[eventsMapName]
 	if eventsMap == nil {
 		return fmt.Errorf("bpf map %q not found", eventsMapName)
@@ -37,15 +35,6 @@ func configureBPFProgramSpec(spec *ebpf.CollectionSpec, enableHTTPUprobes bool) 
 	}
 	stagingMap.MaxEntries = StagingMaxEntries
 
-	discoveryCache := spec.Maps[httpUprobeDiscoveryCacheMapName]
-	if discoveryCache == nil {
-		return fmt.Errorf("bpf map %q not found", httpUprobeDiscoveryCacheMapName)
-	}
-	if !enableHTTPUprobes {
-		// Programs still load for verifier compatibility, but disabled HTTP
-		// uprobes must not reserve their production cache capacity.
-		discoveryCache.MaxEntries = disabledHTTPUprobeMapSize
-	}
 	return nil
 }
 

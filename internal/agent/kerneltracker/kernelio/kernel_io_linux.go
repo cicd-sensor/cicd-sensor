@@ -50,7 +50,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	if err != nil {
 		return nil, fmt.Errorf("load bpf spec: %w", err)
 	}
-	if err := configureBPFProgramSpec(spec, config.EnableHTTPUprobes); err != nil {
+	if err := configureBPFProgramSpec(spec); err != nil {
 		return nil, fmt.Errorf("configure bpf program spec: %w", err)
 	}
 	if err := spec.LoadAndAssign(&kernelIO.objs, nil); err != nil {
