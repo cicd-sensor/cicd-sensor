@@ -15,6 +15,7 @@ const (
 	HTTPSourceCleartext HTTPSource = 0
 	HTTPSourceOpenSSL   HTTPSource = 1
 	HTTPSourceNghttp2   HTTPSource = 2
+	HTTPSourceGoNetHTTP HTTPSource = 3
 )
 
 // httpRequestSample is the userspace mirror of struct http_request_sample.
@@ -45,8 +46,8 @@ func handleHTTPRequestSample(state *jobTrackingState, sample httpRequestSample) 
 	if !ok {
 		return nil
 	}
-	// The kernel parse only submits samples with a matched method token and
-	// an origin-form path; treat anything else as ABI skew and drop it.
+	// Every capture path submits a non-empty method and an origin-form path;
+	// treat anything else as ABI skew and drop it.
 	if sample.Method == "" || !strings.HasPrefix(sample.Path, "/") {
 		return nil
 	}
@@ -96,6 +97,8 @@ func httpSourceValue(source HTTPSource) (string, bool) {
 		return "openssl", true
 	case HTTPSourceNghttp2:
 		return "nghttp2", true
+	case HTTPSourceGoNetHTTP:
+		return "go_net_http", true
 	default:
 		return "", false
 	}

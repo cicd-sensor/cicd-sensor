@@ -317,6 +317,7 @@ const (
 	BPFProgramProgHandleCgroupConnect6                 = "handle_cgroup_connect6"
 	BPFProgramProgHandleCgroupMkdir                    = "handle_cgroup_mkdir"
 	BPFProgramProgHandleCgroupRmdir                    = "handle_cgroup_rmdir"
+	BPFProgramProgHandleGoNetHttpRoundTrip             = "handle_go_net_http_round_trip"
 	BPFProgramProgHandleNghttp2Emit                    = "handle_nghttp2_emit"
 	BPFProgramProgHandleNghttp2Required                = "handle_nghttp2_required"
 	BPFProgramProgHandleNghttp2SubmitRequest           = "handle_nghttp2_submit_request"
@@ -407,6 +408,7 @@ type BPFProgramProgramSpecs struct {
 	HandleCgroupConnect6       *ebpf.ProgramSpec `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.ProgramSpec `ebpf:"handle_cgroup_rmdir"`
+	HandleGoNetHttpRoundTrip   *ebpf.ProgramSpec `ebpf:"handle_go_net_http_round_trip"`
 	HandleNghttp2Emit          *ebpf.ProgramSpec `ebpf:"handle_nghttp2_emit"`
 	HandleNghttp2Required      *ebpf.ProgramSpec `ebpf:"handle_nghttp2_required"`
 	HandleNghttp2SubmitRequest *ebpf.ProgramSpec `ebpf:"handle_nghttp2_submit_request"`
@@ -548,6 +550,7 @@ type BPFProgramPrograms struct {
 	HandleCgroupConnect6       *ebpf.Program `ebpf:"handle_cgroup_connect6"`
 	HandleCgroupMkdir          *ebpf.Program `ebpf:"handle_cgroup_mkdir"`
 	HandleCgroupRmdir          *ebpf.Program `ebpf:"handle_cgroup_rmdir"`
+	HandleGoNetHttpRoundTrip   *ebpf.Program `ebpf:"handle_go_net_http_round_trip"`
 	HandleNghttp2Emit          *ebpf.Program `ebpf:"handle_nghttp2_emit"`
 	HandleNghttp2Required      *ebpf.Program `ebpf:"handle_nghttp2_required"`
 	HandleNghttp2SubmitRequest *ebpf.Program `ebpf:"handle_nghttp2_submit_request"`
@@ -581,6 +584,7 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleCgroupConnect6,
 		p.HandleCgroupMkdir,
 		p.HandleCgroupRmdir,
+		p.HandleGoNetHttpRoundTrip,
 		p.HandleNghttp2Emit,
 		p.HandleNghttp2Required,
 		p.HandleNghttp2SubmitRequest,

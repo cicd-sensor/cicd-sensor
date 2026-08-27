@@ -80,6 +80,7 @@ type attachedUprobeTarget struct {
 
 type httpUprobeWorker struct {
 	symbols        []httpUprobeSymbol
+	goHTTPProgram  *ebpf.Program
 	logger         *slog.Logger
 	cgroupRootPath string
 
@@ -106,9 +107,11 @@ func newHTTPUprobeWorker(
 	logger *slog.Logger,
 	cgroupRootPath string,
 	discoveryCache *ebpf.Map,
+	goHTTPProgram *ebpf.Program,
 ) *httpUprobeWorker {
 	return &httpUprobeWorker{
 		symbols:           symbols,
+		goHTTPProgram:     goHTTPProgram,
 		logger:            logger,
 		cgroupRootPath:    cgroupRootPath,
 		attachCandidates:  make(chan httpUprobeAttachCandidate, attachCandidateQueueSize),
@@ -271,11 +274,36 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "classify_elf_symbols", "error", err)
 		return
 	}
-	if len(selected) == 0 {
-		if definitive {
+	if len(selected) > 0 {
+		ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
+		if err != nil {
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
+			return
+		}
+		retainCacheEntry = w.attachTarget(candidate.file, ex, selected)
+		return
+	}
+	if !definitive {
+		return
+	}
+
+	if w.goHTTPProgram == nil {
+		retainCacheEntry = true
+		w.cacheDiscoveryFile(candidate.file)
+		return
+	}
+	goTarget, found, err := resolveGoHTTPFunction(f, goHTTPRoundTripFunction)
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "resolve_go_http_function", "error", err)
+		if errors.Is(err, errUnsupportedGoPCLN) {
 			retainCacheEntry = true
 			w.cacheDiscoveryFile(candidate.file)
 		}
+		return
+	}
+	if !found {
+		retainCacheEntry = true
+		w.cacheDiscoveryFile(candidate.file)
 		return
 	}
 
@@ -284,7 +312,7 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
 		return
 	}
-	retainCacheEntry = w.attachTarget(candidate.file, ex, selected)
+	retainCacheEntry = w.attachGoTarget(candidate.file, ex, goTarget)
 }
 
 func processIsGone(err error) bool {
@@ -384,6 +412,21 @@ func (w *httpUprobeWorker) attachTarget(
 		return true
 	}
 	// Every target symbol was definitively absent: keep it in the cache.
+	w.cacheDiscoveryFile(id)
+	return true
+}
+
+func (w *httpUprobeWorker) attachGoTarget(
+	id fileClassificationKey,
+	ex *link.Executable,
+	target resolvedGoHTTPFunction,
+) bool {
+	attached, err := ex.Uprobe("", w.goHTTPProgram, &link.UprobeOptions{Address: target.fileOffset})
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", target.name, "error", err)
+		return false
+	}
+	w.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: []link.Link{attached}}
 	w.cacheDiscoveryFile(id)
 	return true
 }

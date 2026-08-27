@@ -5,8 +5,9 @@ how it discovers and attaches uprobes, how requests become events, and how
 attachments are reclaimed. Cleartext HTTP capture at `tcp_sendmsg` uses the same
 `http_request` event but does not use this discovery lifecycle.
 
-OpenSSL HTTP/1.x and nghttp2 HTTP/2 capture are implemented. They remain disabled
-by default while first-request timing and environment compatibility are evaluated.
+OpenSSL HTTP/1.x, nghttp2 HTTP/2, and Go `net/http` HTTPS capture are implemented.
+They remain disabled by default while first-request timing and environment
+compatibility are evaluated.
 
 ## Purpose and scope
 
@@ -129,9 +130,8 @@ that an additional catch-up path is necessary.
 
 Mapping notification is also not limited to dynamically linked libraries. A
 statically linked executable, including a Go binary, creates executable file
-mappings when it starts. The same discovery trigger can therefore feed a future
-Go-specific symbol resolver. The current classifier reads only ELF `.symtab` and
-`.dynsym`, so this does not imply current coverage of stripped Go binaries.
+mappings when it starts. The same discovery trigger therefore feeds both ELF
+symbol lookup and the Go-specific pclntab resolver.
 
 The implemented attach path is:
 
@@ -141,13 +141,16 @@ flowchart LR
     BPF["BPF filters and emits<br/>attach candidate"]
     QUEUE["KernelIO bounded queue"]
     OPEN["Worker opens map_files<br/>and verifies identity"]
-    ELF["Read ELF symbols"]
+    ELF["Classify mapped ELF"]
+    GO["Resolve Go pclntab"]
     ATTACH["Attach selected symbols"]
     CACHE["Cache definitive non-target"]
 
     MAP --> BPF --> QUEUE --> OPEN --> ELF
-    ELF -->|"selected symbol"| ATTACH
-    ELF -->|"none defined"| CACHE
+    ELF -->|"selected C symbol"| ATTACH
+    ELF -->|"no selected C symbol"| GO
+    GO -->|"Go function offset"| ATTACH
+    GO -->|"not supported"| CACHE
 ```
 
 ### Kernel-side candidate filtering
@@ -178,11 +181,12 @@ The worker handles each candidate serially:
 
 1. Open the mapped file through `/proc/<pid>/map_files` and verify its device,
    inode, and ctime. A changed mapping is ignored and not cached.
-2. Read `.symtab` and `.dynsym`, keeping only selected functions defined by that
-   ELF. Undefined imports are not attach targets.
-3. Attach the selected functions, store their links as one attached target, and
-   keep the discovery-cache entry.
-4. If no selected function is definitively present, keep the cache entry.
+2. Look for selected C functions in `.symtab` and `.dynsym`. If none are
+   defined, try the Go pclntab resolver described in
+   [Go net/http Uprobes](go-http-uprobes.md).
+3. Attach selected symbols or resolved file offsets, store their links as one
+   attached target, and keep the discovery-cache entry.
+4. If neither resolver finds a supported function, keep the cache entry.
 5. On a transient failure or queue drop, remove the cache entry so a later
    mapping can retry.
 
@@ -213,22 +217,24 @@ flowchart LR
 | [`SSL_write_ex`](https://docs.openssl.org/master/man3/SSL_write/) | OpenSSL HTTP/1.x | same input-buffer argument positions | `openssl` |
 | [`nghttp2_submit_request`](https://nghttp2.org/documentation/nghttp2_submit_request.html) | nghttp2 HTTP/2 | `nghttp2_nv` array is argument 3; count is argument 4 | `nghttp2` |
 | [`nghttp2_submit_request2`](https://nghttp2.org/documentation/nghttp2_submit_request2.html) | nghttp2 HTTP/2 | same relevant argument positions | `nghttp2` |
+| [`net/http.(*Transport).roundTrip`](go-http-uprobes.md) | Go `net/http` HTTPS, HTTP/1.x and HTTP/2 | `*http.Request` is ABIInternal integer argument 2; stripped Go 1.18-1.27 binaries are resolved through pclntab | `go_net_http` |
 
 Selected functions with the same argument and parsing contract share one BPF
 entry.
 
 The OpenSSL path reads an HTTP/1.x request line and `Host` before encryption.
 The nghttp2 path reads `:method`, `:path`, and `:authority` before HPACK encoding.
-Both produce the same event shape.
+The Go path reads `http.Request` and `url.URL` before protocol encoding. All
+produce the same event shape.
 
 ### Event and redaction contract
 
 | Field | Value |
 | --- | --- |
 | `method` | request method, normalized to lowercase for rule evaluation |
-| `path` | origin-form request path, query removed in BPF, then normalized to lowercase |
-| `host` | HTTP/1.x `Host` or HTTP/2 `:authority`, normalized to lowercase; a port can remain |
-| `source` | `openssl` or `nghttp2` |
+| `path` | origin-form request path, with query excluded by the BPF capture, then normalized to lowercase |
+| `host` | HTTP/1.x `Host`, HTTP/2 `:authority`, or Go `Request.Host` / `URL.Host`, normalized to lowercase; a port can remain |
+| `source` | `openssl`, `nghttp2`, or `go_net_http` |
 | `process` | KernelTracker process snapshot for the caller |
 
 Raw request bytes, query parameters, other headers, and bodies do not cross the
@@ -297,7 +303,9 @@ x64 and arm64 unless noted otherwise.
 | Git over HTTPS HTTP/1.x | Not covered (verified) | GitHub-hosted Ubuntu uses a GnuTLS-backed Git HTTP helper. |
 | curl and Node over HTTPS HTTP/2 | Verified | selected nghttp2 request API |
 | Git over HTTPS HTTP/2 | Verified | selected nghttp2 request API for default negotiation and explicit `http.version=HTTP/2` |
-| Go, Java, or rustls-based HTTPS | Not covered | Does not call a currently selected function. |
+| GitHub CLI (`gh api`) | Verified on arm64 Ubuntu 24.04; hosted matrix pending | `net/http.(*Transport).roundTrip` |
+| GitLab CLI (`glab`) | Not yet verified | Real-client E2E pending. |
+| Java or rustls-based HTTPS | Not covered | Does not call a currently selected function. |
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
 
 ## Operational status and known limits
@@ -312,8 +320,9 @@ x64 and arm64 unless noted otherwise.
   a tracked cgroup. Initial catch-up scanning, periodic attach backstop, moving an
   existing process into a tracked cgroup, and later `mprotect(PROT_EXEC)` are not
   current discovery paths.
-- The current classifier requires a selected function in `.symtab` or `.dynsym`.
-  A fully stripped static binary is not captured.
+- C library capture requires a selected function in `.symtab` or `.dynsym`.
+  Go capture accepts only the pclntab layouts and ABI/object-layout range listed
+  in [Go net/http Uprobes](go-http-uprobes.md).
 - HTTP/1.x parsing starts at one write boundary. A split request line or `Host`
   outside the bounded prefix can be missed.
 - HTTP/2 is visible only before HPACK in a selected nghttp2 API. Other HTTP/2

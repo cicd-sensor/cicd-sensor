@@ -198,9 +198,9 @@ static __always_inline int nghttp2_pseudo_header_kind(const struct nghttp2_nv_ab
 // controls, DEL, and field overflow; path stops at '?', so query data never
 // crosses the kernel boundary. A value that does not fit completely within the
 // field cap is rejected rather than exposed as a silently truncated value.
-static __always_inline int nghttp2_field_length(const __u8 *value, __u64 value_len,
-                                                 __u32 field_len, int strip_query,
-                                                 __u32 *result)
+static __always_inline int http_user_field_length(const __u8 *value, __u64 value_len,
+                                                   __u32 field_len, int strip_query,
+                                                   __u32 *result)
 {
     if (!value || value_len == 0)
         return -1;
@@ -228,7 +228,7 @@ static __always_inline int nghttp2_field_length(const __u8 *value, __u64 value_l
 
 // The comparison enforces the field contract; the opaque mask separately gives
 // older verifiers a durable variable-length userspace-read bound.
-static __always_inline int nghttp2_copy_method(char *dst, const __u8 *src, __u32 n)
+static __always_inline int http_copy_user_method(char *dst, const __u8 *src, __u32 n)
 {
     if (!src || n == 0 || n >= HTTP_METHOD_LEN)
         return -1;
@@ -238,7 +238,7 @@ static __always_inline int nghttp2_copy_method(char *dst, const __u8 *src, __u32
 }
 
 // Path and authority share the same fixed field size and verifier proof.
-static __always_inline int nghttp2_copy_value(char *dst, const __u8 *src, __u32 n)
+static __always_inline int http_copy_user_value(char *dst, const __u8 *src, __u32 n)
 {
     if (!src || n == 0 || n >= HTTP_PATH_LEN)
         return -1;
@@ -323,12 +323,12 @@ int BPF_UPROBE(handle_nghttp2_required)
     const __u8 *method = (const __u8 *)s->nghttp2_method;
     const __u8 *path = (const __u8 *)s->nghttp2_path;
     __u32 method_n = 0;
-    if (nghttp2_field_length(method, s->nghttp2_method_len,
-                             HTTP_METHOD_LEN, 0, &method_n) < 0)
+    if (http_user_field_length(method, s->nghttp2_method_len,
+                               HTTP_METHOD_LEN, 0, &method_n) < 0)
         return 0;
     __u32 path_n = 0;
-    if (nghttp2_field_length(path, s->nghttp2_path_len,
-                             HTTP_PATH_LEN, 1, &path_n) < 0)
+    if (http_user_field_length(path, s->nghttp2_path_len,
+                               HTTP_PATH_LEN, 1, &path_n) < 0)
         return 0;
 
     // Standard HTTP/2 CONNECT intentionally has no :path and is dropped by the
@@ -359,8 +359,8 @@ int BPF_UPROBE(handle_nghttp2_emit)
     // becomes an empty host; method and path remain useful rule evidence.
     __u32 authority_n = 0;
     int have_authority = 0;
-    if (authority && nghttp2_field_length(authority, s->nghttp2_authority_len,
-                                          HTTP_HOST_LEN, 0, &authority_n) == 0) {
+    if (authority && http_user_field_length(authority, s->nghttp2_authority_len,
+                                            HTTP_HOST_LEN, 0, &authority_n) == 0) {
         have_authority = 1;
     }
 
@@ -380,13 +380,13 @@ int BPF_UPROBE(handle_nghttp2_emit)
     sample->_pad1 = 0;
     zero_http_request_fields(sample);
 
-    if (nghttp2_copy_method(sample->method, method, s->nghttp2_method_n) < 0 ||
-        nghttp2_copy_value(sample->path, path, s->nghttp2_path_n) < 0) {
+    if (http_copy_user_method(sample->method, method, s->nghttp2_method_n) < 0 ||
+        http_copy_user_value(sample->path, path, s->nghttp2_path_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }
     if (have_authority &&
-        nghttp2_copy_value(sample->host, authority, authority_n) < 0) {
+        http_copy_user_value(sample->host, authority, authority_n) < 0) {
         bpf_ringbuf_discard(sample, 0);
         return 0;
     }

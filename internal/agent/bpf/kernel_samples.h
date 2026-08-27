@@ -279,8 +279,8 @@ struct dns_sample {
 
 // HTTP request-line sample. method/path/host are the parsed fields only;
 // path is already query-stripped (terminated at '?') by the in-eBPF parse.
-// Shared by the cleartext, OpenSSL, and nghttp2 taps; source discriminates the
-// capture channel.
+// Shared by cleartext, OpenSSL, nghttp2, and Go net/http taps; source
+// discriminates the capture channel.
 struct http_request_sample {
     __u32 kind;
     __u8 source;          // HTTP_SOURCE_*, mirrors kerneltracker.HTTPSource*.
