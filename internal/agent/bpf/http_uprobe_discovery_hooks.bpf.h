@@ -20,7 +20,9 @@ static __always_inline void http_uprobe_inode_ctime(
 {
     if (bpf_core_field_exists(inode->i_ctime_sec)) {
         key->ctime_sec = BPF_CORE_READ(inode, i_ctime_sec);
-        key->ctime_nsec = BPF_CORE_READ(inode, i_ctime_nsec);
+        // Newer kernels reserve bit 31 as I_CTIME_QUERIED. stat(2) masks it,
+        // so remove the kernel-only flag before userspace verifies this key.
+        key->ctime_nsec = BPF_CORE_READ(inode, i_ctime_nsec) & 0x7fffffffU;
         return;
     }
 
