@@ -41,7 +41,7 @@ static __always_inline void http_uprobe_inode_ctime(
     key->ctime_nsec = BPF_CORE_READ(legacy, i_ctime.tv_nsec);
 }
 
-static __always_inline int observe_http_uprobe_mapping(struct vm_area_struct *vma)
+static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_struct *vma)
 {
     unsigned long vm_flags = 0;
     BPF_CORE_READ_INTO(&vm_flags, vma, vm_flags);
@@ -80,7 +80,7 @@ static __always_inline int observe_http_uprobe_mapping(struct vm_area_struct *vm
     if (bpf_map_update_elem(&http_uprobe_discovery_cache, &classification, &one, BPF_NOEXIST) != 0)
         return 0;
 
-    struct http_uprobe_mapping_sample *sample =
+    struct http_uprobe_attach_candidate_sample *sample =
         bpf_ringbuf_reserve(&events, sizeof(*sample), 0);
     if (!sample) {
         // A failed notification must not become a permanent file skip.
@@ -89,7 +89,7 @@ static __always_inline int observe_http_uprobe_mapping(struct vm_area_struct *vm
         return 0;
     }
 
-    sample->kind = SAMPLE_KIND_HTTP_UPROBE_MAPPING;
+    sample->kind = SAMPLE_KIND_HTTP_UPROBE_ATTACH_CANDIDATE;
     sample->tgid = current_tgid();
     sample->vm_start = BPF_CORE_READ(vma, vm_start);
     sample->vm_end = BPF_CORE_READ(vma, vm_end);
@@ -101,5 +101,5 @@ static __always_inline int observe_http_uprobe_mapping(struct vm_area_struct *vm
 SEC("fentry/uprobe_mmap")
 int BPF_PROG(handle_uprobe_mmap, struct vm_area_struct *vma)
 {
-    return observe_http_uprobe_mapping(vma);
+    return emit_http_uprobe_attach_candidate(vma);
 }

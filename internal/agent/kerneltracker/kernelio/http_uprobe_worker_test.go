@@ -3,8 +3,6 @@
 package kernelio
 
 import (
-	"debug/elf"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,34 +10,34 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func TestHTTPUprobeDiscoveryQueueMapping(t *testing.T) {
+func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 	t.Parallel()
-	mapping := httpUprobeMapping{tgid: 4321, vmStart: 0x400000, vmEnd: 0x401000}
+	candidate := httpUprobeAttachCandidate{tgid: 4321, vmStart: 0x400000, vmEnd: 0x401000}
 
-	t.Run("available queue records the mapping", func(t *testing.T) {
+	t.Run("available queue records the attach candidate", func(t *testing.T) {
 		t.Parallel()
-		d := &httpUprobeDiscovery{mappingRequests: make(chan httpUprobeMapping, 1)}
-		d.queueMapping(mapping)
+		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
+		worker.queueAttachCandidate(candidate)
 		select {
-		case got := <-d.mappingRequests:
-			if got != mapping {
-				t.Fatalf("queued mapping = %+v, want %+v", got, mapping)
+		case got := <-worker.attachCandidates:
+			if got != candidate {
+				t.Fatalf("queued attach candidate = %+v, want %+v", got, candidate)
 			}
 		default:
-			t.Fatal("expected a mapping request, queue was empty")
+			t.Fatal("expected an attach candidate, queue was empty")
 		}
 	})
 
-	t.Run("full queue drops the request without blocking", func(t *testing.T) {
+	t.Run("full queue drops the attach candidate without blocking", func(t *testing.T) {
 		t.Parallel()
-		d := &httpUprobeDiscovery{mappingRequests: make(chan httpUprobeMapping, 1)}
-		d.queueMapping(mapping)
-		d.queueMapping(httpUprobeMapping{tgid: 9876})
-		if len(d.mappingRequests) != 1 {
-			t.Fatalf("queue len = %d, want 1", len(d.mappingRequests))
+		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
+		worker.queueAttachCandidate(candidate)
+		worker.queueAttachCandidate(httpUprobeAttachCandidate{tgid: 9876})
+		if len(worker.attachCandidates) != 1 {
+			t.Fatalf("queue len = %d, want 1", len(worker.attachCandidates))
 		}
-		if d.mappingQueueDropped != 1 {
-			t.Fatalf("mappingQueueDropped = %d, want 1", d.mappingQueueDropped)
+		if worker.attachCandidateQueueDropped != 1 {
+			t.Fatalf("attachCandidateQueueDropped = %d, want 1", worker.attachCandidateQueueDropped)
 		}
 	})
 }
@@ -146,85 +144,4 @@ func TestProcessIsGone(t *testing.T) {
 	if processIsGone(&os.PathError{Op: "open", Path: filepath.Join("proc", "1", "maps"), Err: os.ErrPermission}) {
 		t.Fatal("permission error reported as a gone process")
 	}
-}
-
-func TestDefinedHTTPUprobeSymbols(t *testing.T) {
-	t.Parallel()
-
-	t.Run("ELF without a selected C symbol is definitive", func(t *testing.T) {
-		t.Parallel()
-		f, err := os.Open("/proc/self/exe")
-		if err != nil {
-			t.Fatalf("open self executable: %v", err)
-		}
-		defer f.Close()
-		got, definitive, err := definedHTTPUprobeSymbols(f, []httpUprobeSymbol{{name: "not.a.real.symbol"}})
-		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedHTTPUprobeSymbols = %+v, %v, %v", got, definitive, err)
-		}
-	})
-
-	t.Run("non ELF is a definitive non-target", func(t *testing.T) {
-		t.Parallel()
-		path := t.TempDir() + "/not-elf"
-		if err := os.WriteFile(path, []byte("plain text"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		f, err := os.Open(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer f.Close()
-		got, definitive, err := definedHTTPUprobeSymbols(f, []httpUprobeSymbol{{name: "SSL_write"}})
-		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedHTTPUprobeSymbols = %+v, %v, %v", got, definitive, err)
-		}
-	})
-
-	t.Run("reader failure remains retryable", func(t *testing.T) {
-		t.Parallel()
-		got, definitive, err := definedHTTPUprobeSymbols(failingReaderAt{}, []httpUprobeSymbol{{name: "SSL_write"}})
-		if err == nil || definitive || len(got) != 0 {
-			t.Fatalf("definedHTTPUprobeSymbols = %+v, %v, %v; want empty, false, error", got, definitive, err)
-		}
-	})
-
-	t.Run("undefined import is not selected", func(t *testing.T) {
-		t.Parallel()
-		f, err := os.Open("/bin/sh")
-		if err != nil {
-			t.Fatalf("open /bin/sh: %v", err)
-		}
-		defer f.Close()
-		parsed, err := elf.NewFile(f)
-		if err != nil {
-			t.Fatalf("parse /bin/sh: %v", err)
-		}
-		defer parsed.Close()
-		symbols, err := parsed.DynamicSymbols()
-		if err != nil {
-			t.Fatalf("dynamic symbols: %v", err)
-		}
-		var imported string
-		for _, symbol := range symbols {
-			if symbol.Name != "" && symbol.Section == elf.SHN_UNDEF && elf.ST_TYPE(symbol.Info) == elf.STT_FUNC {
-				imported = symbol.Name
-				break
-			}
-		}
-		if imported == "" {
-			t.Skip("/bin/sh has no undefined function import")
-		}
-
-		got, definitive, err := definedHTTPUprobeSymbols(f, []httpUprobeSymbol{{name: imported}})
-		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedHTTPUprobeSymbols(%q) = %+v, %v, %v", imported, got, definitive, err)
-		}
-	})
-}
-
-type failingReaderAt struct{}
-
-func (failingReaderAt) ReadAt([]byte, int64) (int, error) {
-	return 0, errors.New("test read failure")
 }

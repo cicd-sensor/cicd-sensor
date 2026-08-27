@@ -17,23 +17,23 @@ import (
 // tests exercise miss counting and fail-keep without real uprobe links. The
 // Reconcile requests contain no active cgroup IDs, so every target is absent.
 type reclaimHarness struct {
-	d *httpUprobeDiscovery
+	worker *httpUprobeWorker
 }
 
 func newReclaimHarness(t *testing.T) *reclaimHarness {
 	t.Helper()
-	return &reclaimHarness{d: newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)}
+	return &reclaimHarness{worker: newHTTPUprobeWorker(nil, nil, t.TempDir(), nil)}
 }
 
 func (h *reclaimHarness) attached(id mappedFileIdentity) *attachedUprobeTarget {
 	e := &attachedUprobeTarget{}
-	h.d.attachedTargets[id] = e
+	h.worker.attachedTargets[id] = e
 	return e
 }
 
 // An empty active-ID snapshot makes every target absent.
 func (h *reclaimHarness) sweep() {
-	h.d.reconcileTargets(nil)
+	h.worker.reconcileTargets(nil)
 }
 
 func TestHTTPUprobeReclaim(t *testing.T) {
@@ -48,11 +48,11 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		if e.missingScanCount != 1 {
 			t.Fatalf("after 1st miss: missingScanCount = %d, want 1", e.missingScanCount)
 		}
-		if _, still := h.d.attachedTargets[id]; !still {
+		if _, still := h.worker.attachedTargets[id]; !still {
 			t.Fatal("closed after a single miss; must survive the first")
 		}
 		h.sweep()
-		if _, still := h.d.attachedTargets[id]; still {
+		if _, still := h.worker.attachedTargets[id]; still {
 			t.Fatal("still attached after two complete misses; must be closed")
 		}
 	})
@@ -62,30 +62,30 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		h := newReclaimHarness(t)
 		e := h.attached(id)
 		h.sweep() // miss 1
-		cgroupPath := filepath.Join(h.d.cgroupRootPath, "unreadable")
+		cgroupPath := filepath.Join(h.worker.cgroupRootPath, "unreadable")
 		if err := os.MkdirAll(filepath.Join(cgroupPath, "cgroup.procs"), 0o755); err != nil {
 			t.Fatalf("create invalid cgroup.procs: %v", err)
 		}
-		h.d.reconcileTargets([]uint64{testPathInode(t, cgroupPath)})
+		h.worker.reconcileTargets([]uint64{testPathInode(t, cgroupPath)})
 		if e.missingScanCount != 1 {
 			t.Fatalf("empty incomplete scan changed missingScanCount to %d, want 1", e.missingScanCount)
 		}
-		if _, still := h.d.attachedTargets[id]; !still {
+		if _, still := h.worker.attachedTargets[id]; !still {
 			t.Fatal("incomplete scan must never close")
 		}
 		// complete-missing, incomplete, complete-missing => closes
 		h.sweep()
-		if _, still := h.d.attachedTargets[id]; still {
+		if _, still := h.worker.attachedTargets[id]; still {
 			t.Fatal("second complete miss across an incomplete scan must close")
 		}
 	})
 	t.Run("queueTargetReconciliation never blocks and keeps one pending sweep", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
-		d.queueTargetReconciliation([]uint64{1})
-		d.queueTargetReconciliation([]uint64{2}) // must not block on a full buffer
+		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil)
+		worker.queueTargetReconciliation([]uint64{1})
+		worker.queueTargetReconciliation([]uint64{2}) // must not block on a full buffer
 		select {
-		case got := <-d.reconcileRequests:
+		case got := <-worker.reconcileRequests:
 			if !slices.Equal(got, []uint64{1}) {
 				t.Fatalf("queued cgroup IDs = %v, want first pending snapshot [1]", got)
 			}
@@ -170,9 +170,9 @@ func TestCollectCgroupPIDs(t *testing.T) {
 				}
 			}
 
-			d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
+			worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil)
 			got := make(map[int32]struct{})
-			if complete := d.collectCgroupPIDs(path, got); complete != test.complete {
+			if complete := worker.collectCgroupPIDs(path, got); complete != test.complete {
 				t.Fatalf("complete = %v, want %v", complete, test.complete)
 			}
 			gotPIDs := slices.Sorted(maps.Keys(got))
@@ -188,9 +188,9 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("gone pid (ENOENT) is the benign race: complete", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
+		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil)
 		// PID 2^31-1 does not exist on any sane box.
-		mappings, complete := d.scanProcessMappings(2147483647)
+		mappings, complete := worker.scanProcessMappings(2147483647)
 		if !complete {
 			t.Fatal("ENOENT on /proc/<pid>/maps must be reported complete (benign race)")
 		}
@@ -201,8 +201,8 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("own executable file mappings are returned", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
-		mappings, complete := d.scanProcessMappings(int32(os.Getpid()))
+		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil)
+		mappings, complete := worker.scanProcessMappings(int32(os.Getpid()))
 		if !complete {
 			t.Fatal("scan of own maps reported incomplete")
 		}
@@ -213,12 +213,12 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("target cap does not affect mapping scan", func(t *testing.T) {
 		t.Parallel()
-		d := newHTTPUprobeDiscovery(nil, nil, t.TempDir(), nil)
+		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil)
 		for i := 0; i < maxAttachedUprobeTargets; i++ { // fill the registry to the cap
 			mapped := mappedFileIdentity{inode: uint64(i + 1)}
-			d.attachedTargets[mapped] = &attachedUprobeTarget{}
+			worker.attachedTargets[mapped] = &attachedUprobeTarget{}
 		}
-		mappings, complete := d.scanProcessMappings(int32(os.Getpid()))
+		mappings, complete := worker.scanProcessMappings(int32(os.Getpid()))
 		if !complete {
 			t.Fatal("cap-reached scan reported incomplete; reclaim would be frozen at the cap forever")
 		}

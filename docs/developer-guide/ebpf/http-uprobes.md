@@ -42,10 +42,13 @@ tracked cgroups, process context, and event attribution.
 flowchart LR
     subgraph KERNEL["Linux kernel"]
         MMAP["uprobe_mmap"]
-        FILTER["tracked cgroup<br/>executable file<br/>cache and dedup"]
+        FILTER["tracked cgroup<br/>executable file"]
+        CACHE[("HTTP uprobe<br/>discovery cache · LRU")]
         LINKS["HTTP uprobe links"]
         EVENTS["ring buffer"]
-        MMAP --> FILTER --> EVENTS
+        MMAP --> FILTER
+        FILTER -->|"lookup; insert on miss"| CACHE
+        FILTER -->|"cache miss: attach candidate"| EVENTS
         LINKS --> EVENTS
     end
 
@@ -64,15 +67,21 @@ flowchart LR
 
     EVENTS --> READER
     WORKER -->|"attach / close"| LINKS
+    WORKER -->|"reclaim: delete entry"| CACHE
     CGROUPS -->|"active cgroup IDs<br/>every minute for reclaim"| WORKER
     READER -->|"http_request event samples"| DECODE
 ```
 
-The Job and cgroup state edge is reclaim input only: KernelTracker sends active
-cgroup IDs once per minute. Attach discovery starts from mapping samples read by
-KernelIO, not from Job state.
+For each executable file mapping, BPF checks the LRU cache and inserts the file on a
+miss before emitting an attach candidate. Reclaim removes the cache entry in
+userspace before closing the corresponding links. Transient work failure and a
+full worker queue also remove the entry so a later mapping can retry.
 
-The worker serializes mapping requests and reconciliation requests on one
+The Job and cgroup state edge is reclaim input only: KernelTracker sends active
+cgroup IDs once per minute. Attach discovery starts when KernelIO reads an
+attach candidate from the ring buffer, not from Job state.
+
+The worker serializes attach candidates and reconciliation requests on one
 goroutine. No other goroutine reads or mutates its attached-target state, so
 classification, attach, and close do not require a mutex.
 
@@ -80,8 +89,8 @@ classification, attach, and close do not require a mutex.
 
 | Type | State | Purpose and identity | Access | Bound and removal |
 | --- | --- | --- | --- | --- |
-| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Maps one device/inode to its classification key, uprobe links, and consecutive complete-miss count | HTTP uprobe worker only | 4,096 files; reclaim removes an entry after two complete misses |
-| Shared BPF cache | `http_uprobe_discovery_cache` | Suppresses callbacks for files already queued, classified, or attached | BPF hook, KernelIO reader, and worker | 65,536-entry LRU; failed work and reclaim remove entries |
+| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by `mappedFileIdentity` (device, inode); stores the classification key, uprobe links, and consecutive complete-miss count for each attached file | HTTP uprobe worker only | 4,096 files; reclaim removes an entry after two complete misses |
+| Shared BPF cache | `http_uprobe_discovery_cache` | Keyed by `fileClassificationKey` (device, inode, ctime); suppresses callbacks for files already queued, classified, or attached | BPF hook, KernelIO reader, and worker | 65,536-entry LRU; failed work and reclaim remove entries |
 
 The cache is notification suppression, not the link registry. Eviction can cause
 another classification, but it cannot detach or lose a link. `attachedTargets`
@@ -99,23 +108,24 @@ Mapping notification is the primary discovery path. It reacts when a process in
 a tracked cgroup receives a new executable file mapping, before the selected
 library function is called.
 
+This also covers mappings created by later Jobs and containers on long-lived
+self-hosted or Kubernetes runners, provided their cgroup is already tracked.
+ELF inspection and attachment still run asynchronously in userspace, so the
+selected function can run first and the initial request can be missed.
+
 Each candidate carries a `fileClassificationKey` made from device, inode, and
 ctime. This identifies one file version across BPF filtering and userspace
 identity verification.
 
-| Mechanism | Role | Tradeoff |
-| --- | --- | --- |
-| executable mapping notification | Primary | Reacts to each new executable file mapping without scanning every process. Userspace attachment is still asynchronous. |
-| initial process scan | Optional catch-up | Can recover mappings that existed before tracking began. It is useful only for processes already running at that point. |
-| periodic process scan | Optional backstop | Can recover a missed notification later, but cannot guarantee the first request and adds recurring process-scan cost. |
+| Mechanism | Status | Purpose | Trade-off |
+| --- | --- | --- | --- |
+| executable mapping notification | Implemented; primary | Reacts to each new executable file mapping without scanning every process. | The first request can run before attachment and be missed. |
+| initial process scan | Not implemented | Could recover mappings that existed before tracking began. | A one-time snapshot cannot discover later processes or mappings. |
+| periodic process scan | Not implemented | Could provide a catch-up path for missed notifications. | Adds recurring scan cost and cannot guarantee the first request. |
 
-An initial scan can help in any deployment when a relevant process already has a
-mapping before tracking begins, including an already-running hosted runner. It
-cannot be the primary mechanism for self-hosted or Kubernetes deployments, where
-later Jobs, processes, containers, and Pods create new mappings after that
-snapshot. Neither initial nor periodic attach scanning is implemented today;
-either can be added if production measurements justify the additional coverage
-and cost.
+The current implementation uses mapping notifications only. Initial and
+periodic process scans can be considered later if production measurements show
+that an additional catch-up path is necessary.
 
 Mapping notification is also not limited to dynamically linked libraries. A
 statically linked executable, including a Go binary, creates executable file
@@ -128,7 +138,7 @@ The implemented attach path is:
 ```mermaid
 flowchart LR
     MAP["Tracked process creates<br/>executable file mapping"]
-    BPF["BPF filters and emits<br/>mapping request"]
+    BPF["BPF filters and emits<br/>attach candidate"]
     QUEUE["KernelIO bounded queue"]
     OPEN["Worker opens map_files<br/>and verifies identity"]
     ELF["Read ELF symbols"]
@@ -143,7 +153,7 @@ flowchart LR
 ### Kernel-side candidate filtering
 
 `fentry/uprobe_mmap` receives a completed VMA and its backing file. The BPF
-program emits a mapping request only when all of these conditions hold:
+program emits an attach candidate only when all of these conditions hold:
 
 - the VMA is executable and file-backed;
 - the current cgroup is present in `tracked_cgroups`;
@@ -155,16 +165,16 @@ above rather than the VMA range or process identity. Filtering and dedup stay in
 BPF because the kernel already has these values and rejecting a candidate there
 avoids a ring-buffer sample and userspace work.
 
-The mapping request contains discovery metadata only. It carries no HTTP bytes
+The attach candidate contains discovery metadata only. It carries no HTTP bytes
 or file content.
 
 ### Userspace classification and attach
 
-The KernelIO sample reader recognizes a mapping request and puts it on a bounded,
-non-blocking worker queue. Mapping requests do not enter KernelTracker, Job
-attribution, or CEL evaluation.
+The KernelIO sample reader recognizes an HTTP uprobe attach candidate and puts it
+on a bounded, non-blocking worker queue. Attach candidates do not enter
+KernelTracker, Job attribution, or CEL evaluation.
 
-The worker handles each request serially:
+The worker handles each candidate serially:
 
 1. Open the mapped file through `/proc/<pid>/map_files` and verify its device,
    inode, and ctime. A changed mapping is ignored and not cached.
@@ -295,10 +305,9 @@ x64 and arm64 unless noted otherwise.
 - HTTP uprobes are rollout-disabled in shipped builds. The internal switch is a
   temporary rollout control, not a permanent user-facing opt-in.
 - Mapping notification precedes the selected function call, but ELF
-  classification and attachment are asynchronous. Isolated fresh-process tests
-  on arm64 Ubuntu 24.04 with Linux 6.8 captured curl 4/10 times and Python
-  `urllib.request` 10/10 times; steady-state capture passes. This first-request
-  gap remains a rollout gate.
+  classification and attachment are asynchronous. The function can run before
+  its uprobe is attached, so the initial request can be missed. This remains a
+  rollout gate.
 - Discovery observes executable mappings created while the process is already in
   a tracked cgroup. Initial catch-up scanning, periodic attach backstop, moving an
   existing process into a tracked cgroup, and later `mprotect(PROT_EXEC)` are not

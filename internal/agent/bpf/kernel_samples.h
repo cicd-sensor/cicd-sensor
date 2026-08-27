@@ -27,7 +27,7 @@ enum agent_sample_kind {
     SAMPLE_KIND_UNIX_SOCKET_CONNECT = 13,
     SAMPLE_KIND_MOUNT = 14,
     SAMPLE_KIND_HTTP_REQUEST = 15,
-    SAMPLE_KIND_HTTP_UPROBE_MAPPING = 16,
+    SAMPLE_KIND_HTTP_UPROBE_ATTACH_CANDIDATE = 16,
 };
 
 // Field-size constants below define generated Go struct layout.
@@ -312,7 +312,7 @@ struct file_classification_key {
 };
 
 // Discovery metadata only. No HTTP bytes or file content cross this boundary.
-struct http_uprobe_mapping_sample {
+struct http_uprobe_attach_candidate_sample {
     __u32 kind;
     __s32 tgid;
     __u64 vm_start;
@@ -336,4 +336,4 @@ const volatile struct net_v6_sample *unused_net_v6_sample;
 const volatile struct dns_sample *unused_dns_sample;
 const volatile struct unix_socket_connect_sample *unused_unix_socket_connect_sample;
 const volatile struct http_request_sample *unused_http_request_sample;
-const volatile struct http_uprobe_mapping_sample *unused_http_uprobe_mapping_sample;
+const volatile struct http_uprobe_attach_candidate_sample *unused_http_uprobe_attach_candidate_sample;

@@ -19,7 +19,7 @@ binary.
 - `mount_hooks.bpf.h` — mount path exposure attempt hooks.
 - `network_hooks.bpf.h` — network connect and AF_UNIX connect hooks.
 - `dns_hooks.bpf.h` — DNS sendmsg hooks.
-- `http_uprobe_hooks.bpf.h` — OpenSSL and nghttp2 HTTP uprobe entries.
+- `http_uprobe_capture_hooks.bpf.h` — OpenSSL and nghttp2 HTTP capture entries.
 - `generate.go` — `go generate` entrypoint invoking bpf2go.
 - `README.md` — this file.
 

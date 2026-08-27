@@ -28,9 +28,9 @@ type LinuxKernelIO struct {
 	// otherwise watchRingbufDrops can race objs.Close on a Map.Lookup
 	// (-race detected this on the Phase 3 integration run).
 	loopWG sync.WaitGroup
-	// httpUprobeDiscovery finds, attaches, and reclaims HTTP uprobes. It runs in
+	// httpUprobeWorker finds, attaches, and reclaims HTTP uprobes. It runs in
 	// loopWG and closes its own attached links, so they are not stored in links.
-	httpUprobeDiscovery *httpUprobeDiscovery
+	httpUprobeWorker *httpUprobeWorker
 }
 
 // NewLinux loads the BPF objects, attaches programs, and opens the sample ring buffer.
@@ -87,7 +87,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		}
 	}
 	if config.EnableHTTPUprobes {
-		kernelIO.httpUprobeDiscovery = newHTTPUprobeDiscovery([]httpUprobeSymbol{
+		kernelIO.httpUprobeWorker = newHTTPUprobeWorker([]httpUprobeSymbol{
 			{name: "SSL_write", program: kernelIO.objs.HandleSslWrite},
 			{name: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
 			{name: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},

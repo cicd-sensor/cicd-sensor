@@ -65,7 +65,7 @@ struct {
     __type(value, __u32);
 } http_stages SEC(".maps");
 
-// Separate jump table for HTTP uprobe parsers (http_uprobe_hooks.bpf.h). It
+// Separate jump table for HTTP uprobe parsers (http_uprobe_capture_hooks.bpf.h). It
 // needs its own PROG_ARRAY because a uprobe program is kprobe-type and a tail
 // call cannot cross program types, so the fentry-type http_stages target above
 // is not reusable.

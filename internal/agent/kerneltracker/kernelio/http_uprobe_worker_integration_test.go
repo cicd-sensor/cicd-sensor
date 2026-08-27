@@ -57,7 +57,7 @@ func processMapsLibssl(pid int32) bool {
 	return strings.Contains(string(data), "libssl.so") || strings.Contains(string(data), "libssl3")
 }
 
-func newReclaimTestDiscovery(t *testing.T) *httpUprobeDiscovery {
+func newReclaimTestWorker(t *testing.T) *httpUprobeWorker {
 	t.Helper()
 	config := testLinuxConfig(t)
 	config.EnableHTTPUprobes = true
@@ -65,24 +65,24 @@ func newReclaimTestDiscovery(t *testing.T) *httpUprobeDiscovery {
 	if err != nil {
 		t.Fatalf("NewLinux: %v", err)
 	}
-	discovery := kernelIO.httpUprobeDiscovery
-	discovery.cgroupRootPath = t.TempDir()
+	worker := kernelIO.httpUprobeWorker
+	worker.cgroupRootPath = t.TempDir()
 	t.Cleanup(func() {
-		discovery.closeAll()
+		worker.closeAll()
 		_ = kernelIO.Close()
 	})
-	return discovery
+	return worker
 }
 
-func reconcileAndCount(discovery *httpUprobeDiscovery, activeCgroupIDs []uint64) int {
-	discovery.reconcileTargets(activeCgroupIDs)
-	return len(discovery.attachedTargets)
+func reconcileAndCount(worker *httpUprobeWorker, activeCgroupIDs []uint64) int {
+	worker.reconcileTargets(activeCgroupIDs)
+	return len(worker.attachedTargets)
 }
 
-func discoverAndCount(t *testing.T, discovery *httpUprobeDiscovery, pids ...int32) int {
+func discoverAndCount(t *testing.T, worker *httpUprobeWorker, pids ...int32) int {
 	t.Helper()
 	for _, pid := range pids {
-		mappings, _ := discovery.scanProcessMappings(pid)
+		mappings, _ := worker.scanProcessMappings(pid)
 		for _, candidate := range mappings {
 			startText, endText, ok := strings.Cut(candidate.addressRange, "-")
 			if !ok {
@@ -102,23 +102,23 @@ func discoverAndCount(t *testing.T, discovery *httpUprobeDiscovery, pids ...int3
 			if err != nil {
 				continue
 			}
-			if err := discovery.discoveryCache.Put(key, uint8(1)); err != nil {
+			if err := worker.discoveryCache.Put(key, uint8(1)); err != nil {
 				t.Fatalf("record discovery file: %v", err)
 			}
-			discovery.classifyAndAttachMapping(httpUprobeMapping{
+			worker.classifyAndAttach(httpUprobeAttachCandidate{
 				tgid: pid, vmStart: start, vmEnd: end, file: key,
 			})
 		}
 	}
-	return len(discovery.attachedTargets)
+	return len(worker.attachedTargets)
 }
 
-func cgroupIDsForPIDs(t *testing.T, discovery *httpUprobeDiscovery, pids ...int32) []uint64 {
+func cgroupIDsForPIDs(t *testing.T, worker *httpUprobeWorker, pids ...int32) []uint64 {
 	t.Helper()
 	if len(pids) == 0 {
 		return nil
 	}
-	cgroupPath, err := os.MkdirTemp(discovery.cgroupRootPath, "tracked-")
+	cgroupPath, err := os.MkdirTemp(worker.cgroupRootPath, "tracked-")
 	if err != nil {
 		t.Fatalf("create tracked cgroup: %v", err)
 	}
@@ -132,9 +132,9 @@ func cgroupIDsForPIDs(t *testing.T, discovery *httpUprobeDiscovery, pids ...int3
 	return []uint64{testPathInode(t, cgroupPath)}
 }
 
-func unreadableCgroupIDs(t *testing.T, discovery *httpUprobeDiscovery) []uint64 {
+func unreadableCgroupIDs(t *testing.T, worker *httpUprobeWorker) []uint64 {
 	t.Helper()
-	cgroupPath, err := os.MkdirTemp(discovery.cgroupRootPath, "unreadable-")
+	cgroupPath, err := os.MkdirTemp(worker.cgroupRootPath, "unreadable-")
 	if err != nil {
 		t.Fatalf("create unreadable cgroup: %v", err)
 	}
@@ -147,34 +147,34 @@ func unreadableCgroupIDs(t *testing.T, discovery *httpUprobeDiscovery) []uint64 
 // TestLinuxHTTPUprobeReclaimSharedInode verifies that an inode mapped by two
 // tracked processes remains attached while either process maps it.
 func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
-	discovery := newReclaimTestDiscovery(t)
+	worker := newReclaimTestWorker(t)
 	a := startLibsslMapper(t)
 	b := startLibsslMapper(t)
 
-	if got := discoverAndCount(t, discovery, a, b); got != 1 {
+	if got := discoverAndCount(t, worker, a, b); got != 1 {
 		t.Fatalf("shared libssl inode target count = %d, want 1", got)
 	}
 	var target *attachedUprobeTarget
-	for _, target = range discovery.attachedTargets {
+	for _, target = range worker.attachedTargets {
 		break
 	}
-	if target == nil || !discoveryCacheContains(t, discovery, target.classificationKey) {
+	if target == nil || !discoveryCacheContains(t, worker, target.classificationKey) {
 		t.Fatal("attached target has no BPF discovery-cache key")
 	}
-	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a, b))
-	if got := reconcileAndCount(discovery, nil); got != 1 {
+	reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, a, b))
+	if got := reconcileAndCount(worker, nil); got != 1 {
 		t.Fatalf("closed after a single miss: count = %d, want 1", got)
 	}
-	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, b)); got != 1 {
+	if got := reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, b)); got != 1 {
 		t.Fatalf("target closed while still mapped by b: count = %d, want 1", got)
 	}
-	if got := reconcileAndCount(discovery, nil); got != 1 {
+	if got := reconcileAndCount(worker, nil); got != 1 {
 		t.Fatalf("closed after a miss following reappearance: count = %d, want 1", got)
 	}
-	if got := reconcileAndCount(discovery, nil); got != 0 {
+	if got := reconcileAndCount(worker, nil); got != 0 {
 		t.Fatalf("target count after second complete miss = %d, want 0", got)
 	}
-	if discoveryCacheContains(t, discovery, target.classificationKey) {
+	if discoveryCacheContains(t, worker, target.classificationKey) {
 		t.Fatal("reclaimed target remained in the BPF discovery cache")
 	}
 }
@@ -182,18 +182,18 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 // TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep verifies that an incomplete
 // scan neither closes a target nor advances its missing count.
 func TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep(t *testing.T) {
-	discovery := newReclaimTestDiscovery(t)
+	worker := newReclaimTestWorker(t)
 	a := startLibsslMapper(t)
-	if got := discoverAndCount(t, discovery, a); got != 1 {
+	if got := discoverAndCount(t, worker, a); got != 1 {
 		t.Fatalf("target count after attach = %d, want 1", got)
 	}
-	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, a))
+	reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, a))
 
-	reconcileAndCount(discovery, nil)
-	if got := reconcileAndCount(discovery, unreadableCgroupIDs(t, discovery)); got != 1 {
+	reconcileAndCount(worker, nil)
+	if got := reconcileAndCount(worker, unreadableCgroupIDs(t, worker)); got != 1 {
 		t.Fatalf("incomplete scan closed a target: count = %d, want 1", got)
 	}
-	if got := reconcileAndCount(discovery, nil); got != 0 {
+	if got := reconcileAndCount(worker, nil); got != 0 {
 		t.Fatalf("target count after second complete miss = %d, want 0", got)
 	}
 }
@@ -201,7 +201,7 @@ func TestLinuxHTTPUprobeReclaimIncompleteIsFailKeep(t *testing.T) {
 // TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept verifies that reclaim uses
 // maps-liveness rather than pathname existence.
 func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
-	discovery := newReclaimTestDiscovery(t)
+	worker := newReclaimTestWorker(t)
 	src := findLibssl(t)
 	dst := filepath.Join(t.TempDir(), "libssl-copy.so")
 	data, err := os.ReadFile(src)
@@ -227,22 +227,22 @@ func TestLinuxHTTPUprobeReclaimUnlinkedButMappedKept(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if got := discoverAndCount(t, discovery, pid); got != 1 {
+	if got := discoverAndCount(t, worker, pid); got != 1 {
 		t.Fatalf("target count after copied libssl attach = %d, want 1", got)
 	}
-	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid))
+	reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, pid))
 	if err := os.Remove(dst); err != nil {
 		t.Fatal(err)
 	}
-	reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid))
-	if got := reconcileAndCount(discovery, cgroupIDsForPIDs(t, discovery, pid)); got != 1 {
+	reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, pid))
+	if got := reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, pid)); got != 1 {
 		t.Fatalf("unlinked-but-mapped inode was detached: count = %d, want 1", got)
 	}
 }
 
 func TestLinuxHTTPUprobeOpenMappedFileFallsBackToCurrentRange(t *testing.T) {
-	discovery := newReclaimTestDiscovery(t)
-	mappings, complete := discovery.scanProcessMappings(int32(os.Getpid()))
+	worker := newReclaimTestWorker(t)
+	mappings, complete := worker.scanProcessMappings(int32(os.Getpid()))
 	if !complete || len(mappings) == 0 {
 		t.Fatalf("own executable mappings = %d complete = %v", len(mappings), complete)
 	}
@@ -258,7 +258,7 @@ func TestLinuxHTTPUprobeOpenMappedFileFallsBackToCurrentRange(t *testing.T) {
 		t.Fatalf("classify current map_files entry: %v", err)
 	}
 
-	opened, err := discovery.openMappedFile(httpUprobeMapping{
+	opened, err := worker.openMappedFile(httpUprobeAttachCandidate{
 		tgid: int32(os.Getpid()), vmStart: 1, vmEnd: 2, file: key,
 	})
 	if err != nil {
@@ -275,16 +275,16 @@ func TestLinuxHTTPUprobeOpenMappedFileFallsBackToCurrentRange(t *testing.T) {
 }
 
 func TestLinuxHTTPUprobeDiscoveryCacheUsesBPFMap(t *testing.T) {
-	discovery := newReclaimTestDiscovery(t)
+	worker := newReclaimTestWorker(t)
 	key := fileClassificationKey{
 		mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42},
 		ctimeSec:   123, ctimeNsec: 456,
 	}
-	if discoveryCacheContains(t, discovery, key) {
+	if discoveryCacheContains(t, worker, key) {
 		t.Fatal("fresh key is already in discovery cache")
 	}
-	discovery.cacheDiscoveryFile(key)
-	if !discoveryCacheContains(t, discovery, key) {
+	worker.cacheDiscoveryFile(key)
+	if !discoveryCacheContains(t, worker, key) {
 		t.Fatal("cached key was not found in discovery cache")
 	}
 }
@@ -299,31 +299,31 @@ func TestLinuxHTTPUprobeQueueManagesDiscoveryCache(t *testing.T) {
 		{name: "dropped classification allows another process retry", fillQueue: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			discovery := newReclaimTestDiscovery(t)
-			discovery.mappingRequests = make(chan httpUprobeMapping, 1)
+			worker := newReclaimTestWorker(t)
+			worker.attachCandidates = make(chan httpUprobeAttachCandidate, 1)
 			if test.fillQueue {
-				discovery.mappingRequests <- httpUprobeMapping{}
+				worker.attachCandidates <- httpUprobeAttachCandidate{}
 			}
-			mapping := httpUprobeMapping{file: fileClassificationKey{
+			candidate := httpUprobeAttachCandidate{file: fileClassificationKey{
 				mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42},
 				ctimeSec:   123,
 				ctimeNsec:  456,
 			}}
-			if err := discovery.discoveryCache.Put(mapping.file, uint8(1)); err != nil {
+			if err := worker.discoveryCache.Put(candidate.file, uint8(1)); err != nil {
 				t.Fatalf("record discovery file: %v", err)
 			}
-			discovery.queueMapping(mapping)
-			if got := discoveryCacheContains(t, discovery, mapping.file); got != test.wantKey {
+			worker.queueAttachCandidate(candidate)
+			if got := discoveryCacheContains(t, worker, candidate.file); got != test.wantKey {
 				t.Fatalf("discovery-cache key exists = %v, want %v", got, test.wantKey)
 			}
 		})
 	}
 }
 
-func discoveryCacheContains(t *testing.T, discovery *httpUprobeDiscovery, key fileClassificationKey) bool {
+func discoveryCacheContains(t *testing.T, worker *httpUprobeWorker, key fileClassificationKey) bool {
 	t.Helper()
 	var value uint8
-	err := discovery.discoveryCache.Lookup(key, &value)
+	err := worker.discoveryCache.Lookup(key, &value)
 	if err == nil {
 		return true
 	}
@@ -335,8 +335,8 @@ func discoveryCacheContains(t *testing.T, discovery *httpUprobeDiscovery, key fi
 }
 
 func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
-	discovery := newReclaimTestDiscovery(t)
-	mappings, complete := discovery.scanProcessMappings(int32(os.Getpid()))
+	worker := newReclaimTestWorker(t)
+	mappings, complete := worker.scanProcessMappings(int32(os.Getpid()))
 	if !complete || len(mappings) == 0 {
 		t.Fatalf("own executable mappings = %d complete = %v", len(mappings), complete)
 	}
@@ -361,22 +361,22 @@ func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
 		t.Fatalf("classify current map_files entry: %v", err)
 	}
 	key.ctimeNsec++
-	if err := discovery.discoveryCache.Put(key, uint8(1)); err != nil {
+	if err := worker.discoveryCache.Put(key, uint8(1)); err != nil {
 		t.Fatalf("record discovery file: %v", err)
 	}
 
-	mapping := httpUprobeMapping{
+	candidate := httpUprobeAttachCandidate{
 		tgid: int32(os.Getpid()), vmStart: start, vmEnd: end, file: key,
 	}
-	discovery.queueMapping(mapping)
-	discovery.classifyAndAttachMapping(<-discovery.mappingRequests)
-	if discovery.identityMismatch != 1 {
-		t.Fatalf("identity mismatch count = %d, want 1", discovery.identityMismatch)
+	worker.queueAttachCandidate(candidate)
+	worker.classifyAndAttach(<-worker.attachCandidates)
+	if worker.identityMismatch != 1 {
+		t.Fatalf("identity mismatch count = %d, want 1", worker.identityMismatch)
 	}
-	if len(discovery.attachedTargets) != 0 {
-		t.Fatalf("identity mismatch attached %d targets, want 0", len(discovery.attachedTargets))
+	if len(worker.attachedTargets) != 0 {
+		t.Fatalf("identity mismatch attached %d targets, want 0", len(worker.attachedTargets))
 	}
-	if discoveryCacheContains(t, discovery, key) {
+	if discoveryCacheContains(t, worker, key) {
 		t.Fatal("identity mismatch remained in the BPF discovery cache")
 	}
 }
