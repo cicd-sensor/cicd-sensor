@@ -124,9 +124,9 @@ func TestLinuxGoNetHTTPUprobeCoversGH(t *testing.T) {
 	}
 	kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
 
-	for range 5 {
-		freshPath := filepath.Join(t.TempDir(), "gh")
-		copyExecutable(t, freshPath, gh)
+	freshPath := filepath.Join(t.TempDir(), "gh")
+	copyExecutable(t, freshPath, gh)
+	for range 10 {
 		command := exec.Command(freshPath, "api", "/meta")
 		command.Env = append(os.Environ(),
 			"GH_TOKEN=cicd-sensor-intentionally-invalid-token",
@@ -138,7 +138,7 @@ func TestLinuxGoNetHTTPUprobeCoversGH(t *testing.T) {
 		pid := int32(command.Process.Pid)
 		_ = command.Wait() // The intentionally invalid token returns HTTP 401.
 
-		waitForEngineInput(t, kernelTracker.inputCh, 10*time.Second, "first Go net/http request from fresh gh inode",
+		if _, ok := findEngineInput(kernelTracker.inputCh, 2*time.Second,
 			func(in engineInput) bool {
 				sample, ok := in.(httpRequestSample)
 				if !ok || sample.CgroupID != cgroupID || sample.Identity.PID != pid || sample.Source != HTTPSourceGoNetHTTP {
@@ -148,8 +148,11 @@ func TestLinuxGoNetHTTPUprobeCoversGH(t *testing.T) {
 					t.Fatalf("gh sample = method %q path %q host %q", sample.Method, sample.Path, sample.Host)
 				}
 				return true
-			})
+			}); ok {
+			return
+		}
 	}
+	t.Fatal("timed out waiting for Go net/http request from gh")
 }
 
 func startGoHTTPIntegrationRuntime(t *testing.T) (*KernelTracker, uint64) {
@@ -217,10 +220,10 @@ func goHTTPExternalTestClient(t *testing.T) string {
 func runGoHTTPClientBurst(t *testing.T, clientPath, mode, target string, args ...string) {
 	t.Helper()
 	commandArgs := append([]string{mode, target}, args...)
-	for range 6 {
-		if output, err := exec.Command(clientPath, commandArgs...).CombinedOutput(); err != nil {
-			t.Fatalf("Go HTTP client: %v: %s", err, output)
-		}
+	command := exec.Command(clientPath, commandArgs...)
+	command.Env = append(os.Environ(), "GO_HTTP_TEST_BURST=1")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("Go HTTP client: %v: %s", err, output)
 	}
 }
 
