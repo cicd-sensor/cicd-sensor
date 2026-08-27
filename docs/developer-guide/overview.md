@@ -24,7 +24,7 @@ Read the Agent runtime pages first:
 1. [Agent Architecture](agent.md): job lifecycle, provider flow, and runtime entrypoints.
 2. [Agent Ownership Boundaries](agent-ownership-boundaries.md): where Agent, JobRegistry, Job, and JobScopeState own state.
 3. [eBPF Runtime](ebpf-runtime.md): cgroup tracking, kernel hooks, and the KernelTracker boundary.
-4. [HTTP Uprobe Runtime](ebpf/http-uprobes.md): mapping-driven attach, event delivery, reconciliation, selected functions, and known coverage gaps.
+4. [HTTP Uprobe Runtime](ebpf/http-uprobes.md): why discovery is mapping-driven, how attach and reclaim work, and which clients are covered.
 5. [Kubernetes Runtime](kubernetes-runtime.md): how NRI and runner hooks map Kubernetes runners into the Agent model.
 6. [Rule Engine](rule-engine.md): how runtime events are evaluated against compiled rules.
 
