@@ -491,47 +491,35 @@ Example event value:
 ## `http_request`
 
 Evaluates the request line of an outgoing HTTP request: method, path, and host together.
-Only the request line and the `Host` header are captured — no other headers and no body.
+Only the request line and the `Host` header are captured. Other headers and the body are not captured.
+
+HTTP uprobe sources (`openssl`, `nghttp2`, and `go_net_http`) are currently
+disabled by default. Enable them with `--enable-uprobes=true`. Plain HTTP
+capture remains available as `cleartext_http`.
 
 | field | Type | Example value | Meaning |
 | --- | --- | --- | --- |
-| `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |
-| `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Lowercase. |
-| `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
-| `source` | string | `cleartext_http`, `openssl`, `nghttp2`, `go_net_http` | Capture channel; userspace-library taps are disabled by default during rollout. |
+| `method` | string | `get`, `post` | Request method |
+| `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed |
+| `host` | string | `api.github.com`, `example.com:8080` | Request host; may include a port |
+| `source` | string | `cleartext_http`, `openssl`, `nghttp2`, `go_net_http` | Capture source |
 | `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
 
 `source` reports where the request line was read:
 
-- `cleartext_http` — plain HTTP (`http://`) traffic, including cloud metadata
-  endpoints and plain-HTTP package mirrors.
-- `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's
-  `SSL_write` / `SSL_write_ex`. Client coverage depends on which function the
-  installed binary calls; see the developer guide's verified workload matrix.
-  This tap is disabled by default during rollout and controlled by the Agent's
-  `--enable-uprobes` flag.
-- `nghttp2` — HTTP/2 pseudo-headers read at `nghttp2_submit_request` or
-  `nghttp2_submit_request2`, before HPACK encoding. This tap shares the same
-  rollout state as `openssl`.
-- `go_net_http` — request fields read from Go `net/http` before HTTP/1.x or
-  HTTP/2 encoding. Stripped supported Go binaries are resolved through pclntab.
+- `cleartext_http`: plain HTTP traffic
+- `openssl`: HTTPS over HTTP/1.x through a supported OpenSSL client
+- `nghttp2`: HTTP/2 through a supported nghttp2 client
+- `go_net_http`: HTTP requests from a supported Go `net/http` client
 
-Known gaps (absence of an `http_request` event does **not** mean absence of
-egress — combine with `domain` and `network_connect` rules):
+`http_request` does not cover every HTTP client or protocol. The absence of this
+event does not prove that no outbound communication occurred. Use
+`network_connect` rules for general egress coverage, and combine them with
+`domain` rules when DNS observations are available.
 
-- HTTP/2 clients that do not call a selected nghttp2 request function are not
-  captured. HTTP/3/QUIC is also outside this event.
-- Java JSSE, rustls, and other stacks without a selected capture function are
-  not captured.
-- When uprobes are enabled, the stop controller uses a 500 ms attachment budget
-  for a first-seen process. A timeout resumes the process and can leave that
-  initial request uncaptured.
-
-HTTP/1.x capture is best-effort at one write boundary. A path that crosses the
-256-byte captured prefix is emitted only up to that boundary; a `Host` outside
-the prefix or too long for the field is empty. The nghttp2 tap does not emit a
-request whose method exceeds 15 bytes or whose path exceeds 255 bytes. A
-missing, invalid, or oversized HTTP/2 authority is emitted as an empty `host`.
+Event string values and rule string literals are normalized to lowercase.
+String comparisons are therefore case-insensitive. For example,
+`method == "POST"` and `method == "post"` are equivalent.
 
 Unexpected POST to the GitHub API:
 
