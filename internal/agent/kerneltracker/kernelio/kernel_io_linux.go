@@ -54,7 +54,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	kernelIO = &LinuxKernelIO{
 		logger: logger.With("component", "bpf_kernel_io"),
 	}
-	if !config.EnableHTTPUprobes {
+	if !config.EnableHTTPRequest {
 		if err := recoverAndUnpinHTTPUprobeStopLeases(); err != nil {
 			return nil, fmt.Errorf("recover disabled HTTP uprobe stop leases: %w", err)
 		}
@@ -68,7 +68,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		return nil, fmt.Errorf("configure bpf program spec: %w", err)
 	}
 	var collectionOptions *ebpf.CollectionOptions
-	if config.EnableHTTPUprobes {
+	if config.EnableHTTPRequest {
 		stopLeaseSpec := spec.Maps[httpUprobeStopMapName]
 		if stopLeaseSpec == nil {
 			return nil, fmt.Errorf("bpf map %q not found", httpUprobeStopMapName)
@@ -97,7 +97,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		}
 		_ = rollback.Close()
 	}()
-	if config.EnableHTTPUprobes {
+	if config.EnableHTTPRequest {
 		if err := recoverHTTPUprobeStopLeases(kernelIO.objs.HttpUprobeStopLeases); err != nil {
 			return nil, fmt.Errorf("recover HTTP uprobe stop leases: %w", err)
 		}
@@ -107,13 +107,11 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		)
 	}
 
-	// Only the HTTP entry program is attached to tcp_sendmsg. Install its parse
-	// target before attaching so the entry never tail-calls into an empty slot.
+	// Install parse targets before any entry program can be attached. Populating
+	// a program array alone does not capture requests while the entry hooks are absent.
 	if err := kernelIO.objs.HttpStages.Put(uint32(0), kernelIO.objs.HandleTcpSendmsgHttpParse); err != nil {
-		return nil, fmt.Errorf("install http parse target: %w", err)
+		return nil, fmt.Errorf("install HTTP parse target: %w", err)
 	}
-	// Uprobe tail targets use a separate kprobe-type jump table. Install every
-	// target before discovery or tests can attach an entry program.
 	for index, program := range []*ebpf.Program{
 		kernelIO.objs.HandleSslWriteParse,
 		kernelIO.objs.HandleNghttp2Required,
@@ -125,7 +123,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			return nil, fmt.Errorf("install HTTP uprobe stage %d: %w", index, err)
 		}
 	}
-	if config.EnableHTTPUprobes {
+	if config.EnableHTTPRequest {
 		kernelIO.httpUprobeWorker = newHTTPUprobeWorker(
 			[]symbolUprobeTarget{
 				{symbol: "SSL_write", program: kernelIO.objs.HandleSslWrite},
@@ -147,10 +145,11 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
 	// not need lsm=..., Rename/symlink observation stays in inode hooks
 	// because security_path_* cannot use bpf_d_path in container filesystems.
-	for _, attach := range []struct {
+	type tracingProgram struct {
 		name    string
 		program *ebpf.Program
-	}{
+	}
+	tracingPrograms := []tracingProgram{
 		{name: "sched_process_fork", program: kernelIO.objs.HandleSchedProcessFork},
 		{name: "sched_process_exec", program: kernelIO.objs.HandleSchedProcessExec},
 		{name: "cgroup_mkdir", program: kernelIO.objs.HandleCgroupMkdir},
@@ -167,18 +166,24 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		{name: "udp_sendmsg", program: kernelIO.objs.HandleUdpSendmsg},
 		{name: "udpv6_sendmsg", program: kernelIO.objs.HandleUdpv6Sendmsg},
 		{name: "tcp_sendmsg", program: kernelIO.objs.HandleTcpSendmsg},
-		{name: "tcp_sendmsg_http", program: kernelIO.objs.HandleTcpSendmsgHttp},
 		{name: "unix_stream_sendmsg", program: kernelIO.objs.HandleUnixStreamSendmsg},
 		{name: "unix_stream_connect", program: kernelIO.objs.HandleUnixStreamConnect},
 		{name: "unix_dgram_connect", program: kernelIO.objs.HandleUnixDgramConnect},
-	} {
+	}
+	if config.EnableHTTPRequest {
+		tracingPrograms = append(tracingPrograms, tracingProgram{
+			name:    "tcp_sendmsg_http",
+			program: kernelIO.objs.HandleTcpSendmsgHttp,
+		})
+	}
+	for _, attach := range tracingPrograms {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})
 		if err != nil {
 			return nil, fmt.Errorf("attach %s tracing program: %w", attach.name, err)
 		}
 		kernelIO.links = append(kernelIO.links, attached)
 	}
-	if config.EnableHTTPUprobes {
+	if config.EnableHTTPRequest {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: kernelIO.objs.HandleUprobeMmap})
 		if err != nil {
 			return nil, fmt.Errorf("attach uprobe_mmap tracing program: %w", err)
@@ -214,7 +219,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		return nil, fmt.Errorf("open events ringbuf: %w", err)
 	}
 	kernelIO.reader = reader
-	if config.EnableHTTPUprobes {
+	if config.EnableHTTPRequest {
 		candidateReader, err := ringbuf.NewReader(kernelIO.objs.HttpUprobeAttachCandidates)
 		if err != nil {
 			return nil, fmt.Errorf("open HTTP uprobe attach-candidate ringbuf: %w", err)

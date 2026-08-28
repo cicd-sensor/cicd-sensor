@@ -66,13 +66,22 @@ func startTrackedKernelIO(t *testing.T) (uint64, *KernelTracker, func()) {
 }
 
 func newLinuxKernelIO(t *testing.T) (*kernelio.LinuxKernelIO, string) {
+	return newLinuxKernelIOWithHTTPRequest(t, false)
+}
+
+func newLinuxHTTPRequestKernelIO(t *testing.T) (*kernelio.LinuxKernelIO, string) {
+	return newLinuxKernelIOWithHTTPRequest(t, true)
+}
+
+func newLinuxKernelIOWithHTTPRequest(t *testing.T, enableHTTPRequest bool) (*kernelio.LinuxKernelIO, string) {
 	t.Helper()
 	cgroupRoot, err := getCgroupV2Root()
 	if err != nil {
 		t.Fatalf("getCgroupV2Root: %v", err)
 	}
 	kernelIO, err := kernelio.NewLinux(nil, kernelio.Config{
-		CgroupV2RootPath: cgroupRoot,
+		CgroupV2RootPath:  cgroupRoot,
+		EnableHTTPRequest: enableHTTPRequest,
 	})
 	if err != nil {
 		t.Fatalf("kernelio.NewLinux: %v", err)

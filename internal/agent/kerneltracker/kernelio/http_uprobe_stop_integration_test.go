@@ -47,7 +47,7 @@ func TestLinuxHTTPUprobeStartupRecoversStoppedProcess(t *testing.T) {
 	waitForIntegrationProcessStopped(t, int32(pid), true)
 
 	config := testLinuxConfig(t)
-	config.EnableHTTPUprobes = false
+	config.EnableHTTPRequest = false
 	kernelIO, err := NewLinux(nil, config)
 	if err != nil {
 		t.Fatalf("start KernelIO recovery: %v", err)
@@ -58,7 +58,7 @@ func TestLinuxHTTPUprobeStartupRecoversStoppedProcess(t *testing.T) {
 
 func runHTTPUprobeStopRecoveryHelper(t *testing.T) {
 	config := testLinuxConfig(t)
-	config.EnableHTTPUprobes = true
+	config.EnableHTTPRequest = true
 	kernelIO, err := NewLinux(nil, config)
 	if err != nil {
 		t.Fatalf("start helper KernelIO: %v", err)

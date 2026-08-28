@@ -493,9 +493,8 @@ Example event value:
 Evaluates the request line of an outgoing HTTP request: method, path, and host together.
 Only the request line and the `Host` header are captured. Other headers and the body are not captured.
 
-HTTP uprobe sources (`openssl`, `nghttp2`, and `go_net_http`) are currently
-disabled by default. Enable them with `--enable-uprobes=true`. Plain HTTP
-capture remains available as `cleartext_http`.
+`http_request` capture is currently disabled by default. Enable all capture
+sources with `--enable-http-request=true`.
 
 | field | Type | Example value | Meaning |
 | --- | --- | --- | --- |

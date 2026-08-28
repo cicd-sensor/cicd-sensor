@@ -44,7 +44,7 @@ func TestLinuxKernelIOLoadAndClose(t *testing.T) {
 
 func TestLinuxKernelIOOpensDedicatedHTTPUprobeAttachReader(t *testing.T) {
 	config := testLinuxConfig(t)
-	config.EnableHTTPUprobes = true
+	config.EnableHTTPRequest = true
 	kernelIO, err := NewLinux(nil, config)
 	if err != nil {
 		t.Fatalf("NewLinux: %v", err)

@@ -223,7 +223,7 @@ func recoverHTTPUprobeStopLeases(leaseMap *ebpf.Map) error {
 	return nil
 }
 
-// recoverAndUnpinHTTPUprobeStopLeases keeps --enable-uprobes=false safe after
+// recoverAndUnpinHTTPUprobeStopLeases keeps --enable-http-request=false safe after
 // a prior enabled Agent exited while a process stop lease was still pinned.
 func recoverAndUnpinHTTPUprobeStopLeases() error {
 	pinnedPath := filepath.Join(httpUprobeBPFFSPinPath, httpUprobeStopMapName)

@@ -5,9 +5,10 @@ uprobes, emits `http_request` events, and reclaims links. Cleartext HTTP capture
 at `tcp_sendmsg` produces the same event but does not use this runtime.
 
 OpenSSL HTTP/1.x, nghttp2 HTTP/2, and Go `net/http` HTTPS capture are
-implemented. HTTP uprobes remain disabled by default while the bounded
-first-call stop and environment compatibility gates are evaluated. Operators
-can always disable them with `--enable-uprobes=false`.
+implemented. All `http_request` capture remains disabled by default while the
+bounded first-call stop and environment compatibility gates are evaluated.
+Operators can always disable it with `--enable-http-request=false`. When
+disabled, both the cleartext tap and the HTTP uprobe runtime are inactive.
 
 ## Purpose and limits
 
@@ -188,10 +189,11 @@ available if the Agent is killed.
 | another actor had already stopped the process | SIGSTOP has no sender ownership that SIGCONT can preserve. Normal completion, timeout, shutdown, or startup recovery can resume that externally stopped process. This ownership ambiguity is an accepted constraint of the CI runner deployment model. |
 
 Startup recovery runs even when the new Agent starts with
-`--enable-uprobes=false`. After recovery, the disabled runtime unpins the unused
-lease map and does not attach discovery or HTTP uprobe programs. If recovery
-fails, Agent initialization fails before the mapping hook is attached, so the
-runtime does not create additional stops while old leases remain unresolved.
+`--enable-http-request=false`. After recovery, the disabled runtime unpins the
+unused lease map and does not attach cleartext, discovery, or HTTP uprobe
+programs. If recovery fails, Agent initialization fails before the mapping hook
+is attached, so the runtime does not create additional stops while old leases
+remain unresolved.
 
 ### Discovery timing and alternatives
 
@@ -358,8 +360,9 @@ x64 and arm64 unless noted otherwise.
 
 ## Operational controls and known limits
 
-- HTTP uprobes are disabled by default during rollout. Operators can keep them
-  disabled with `--enable-uprobes=false` after the default changes.
+- `http_request` capture is disabled by default during rollout. Operators can
+  keep every capture source disabled with `--enable-http-request=false` after
+  the default changes.
 - Disabled startup still performs stop-lease recovery from an earlier enabled
   Agent. It does not attach discovery, start the worker, stop new processes, or
   create dynamic uprobe links.

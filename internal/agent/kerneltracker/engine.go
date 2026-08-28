@@ -29,7 +29,7 @@ type KernelTracker struct {
 
 // Config contains optional kernel runtime features owned by KernelTracker.
 type Config struct {
-	EnableUprobes bool
+	EnableHTTPRequest bool
 }
 
 // New builds the production KernelTracker and its KernelIO adapter.
@@ -50,7 +50,7 @@ func NewWithConfig(logger *slog.Logger, jobEndNotifier JobEndNotifier, trackerCo
 	if cgroupRoot != "" {
 		config = kernelio.Config{
 			CgroupV2RootPath:  cgroupRoot,
-			EnableHTTPUprobes: trackerConfig.EnableUprobes,
+			EnableHTTPRequest: trackerConfig.EnableHTTPRequest,
 		}
 	}
 	kernelIO, err := kernelio.New(logger, config)
