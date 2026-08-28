@@ -115,42 +115,66 @@ func TestLinuxGoNetHTTPUprobeCoversSupportedGoVersions(t *testing.T) {
 	}
 }
 
-func TestLinuxGoNetHTTPUprobeCoversGH(t *testing.T) {
-	gh, err := exec.LookPath("gh")
-	if err != nil {
-		t.Skipf("gh is required: %v", err)
+func TestLinuxGoNetHTTPUprobeCoversRealClients(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		env  []string // An intentionally invalid token makes the API return HTTP 401.
+		host string
+		path string
+	}{
+		{
+			name: "gh",
+			args: []string{"api", "/meta"},
+			env:  []string{"GH_TOKEN=cicd-sensor-intentionally-invalid-token", "GH_NO_UPDATE_NOTIFIER=1"},
+			host: "api.github.com",
+			path: "/meta",
+		},
+		{
+			name: "glab",
+			args: []string{"api", "/version"},
+			env:  []string{"GITLAB_TOKEN=cicd-sensor-intentionally-invalid-token", "GLAB_CHECK_UPDATE=false"},
+			host: "gitlab.com",
+			path: "/api/v4/version",
+		},
 	}
-	kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
 
-	freshPath := filepath.Join(t.TempDir(), "gh")
-	copyExecutable(t, freshPath, gh)
-	for range 10 {
-		command := exec.Command(freshPath, "api", "/meta")
-		command.Env = append(os.Environ(),
-			"GH_TOKEN=cicd-sensor-intentionally-invalid-token",
-			"GH_NO_UPDATE_NOTIFIER=1",
-		)
-		if err := command.Start(); err != nil {
-			t.Fatalf("start gh: %v", err)
-		}
-		pid := int32(command.Process.Pid)
-		_ = command.Wait() // The intentionally invalid token returns HTTP 401.
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			binary, err := exec.LookPath(test.name)
+			if err != nil {
+				t.Skipf("%s is required: %v", test.name, err)
+			}
+			kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
 
-		if _, ok := findEngineInput(kernelTracker.inputCh, 2*time.Second,
-			func(in engineInput) bool {
-				sample, ok := in.(httpRequestSample)
-				if !ok || sample.CgroupID != cgroupID || sample.Identity.PID != pid || sample.Source != HTTPSourceGoNetHTTP {
-					return false
+			freshPath := filepath.Join(t.TempDir(), test.name)
+			copyExecutable(t, freshPath, binary)
+			for range 10 {
+				command := exec.Command(freshPath, test.args...)
+				command.Env = append(os.Environ(), test.env...)
+				if err := command.Start(); err != nil {
+					t.Fatalf("start %s: %v", test.name, err)
 				}
-				if sample.Method != "GET" || sample.Host != "api.github.com" || sample.Path != "/meta" {
-					t.Fatalf("gh sample = method %q path %q host %q", sample.Method, sample.Path, sample.Host)
+				pid := int32(command.Process.Pid)
+				_ = command.Wait()
+
+				if _, ok := findEngineInput(kernelTracker.inputCh, 2*time.Second,
+					func(in engineInput) bool {
+						sample, ok := in.(httpRequestSample)
+						if !ok || sample.CgroupID != cgroupID || sample.Identity.PID != pid || sample.Source != HTTPSourceGoNetHTTP {
+							return false
+						}
+						if sample.Method != "GET" || sample.Host != test.host || sample.Path != test.path {
+							t.Fatalf("%s sample = method %q path %q host %q", test.name, sample.Method, sample.Path, sample.Host)
+						}
+						return true
+					}); ok {
+					return
 				}
-				return true
-			}); ok {
-			return
-		}
+			}
+			t.Fatalf("timed out waiting for Go net/http request from %s", test.name)
+		})
 	}
-	t.Fatal("timed out waiting for Go net/http request from gh")
 }
 
 func startGoHTTPIntegrationRuntime(t *testing.T) (*KernelTracker, uint64) {
