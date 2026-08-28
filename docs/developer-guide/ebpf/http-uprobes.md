@@ -303,7 +303,7 @@ x64 and arm64 unless noted otherwise.
 | Git over HTTPS HTTP/1.x | Not covered (verified) | GitHub-hosted Ubuntu uses a GnuTLS-backed Git HTTP helper. |
 | curl and Node over HTTPS HTTP/2 | Verified | selected nghttp2 request API |
 | Git over HTTPS HTTP/2 | Verified | selected nghttp2 request API for default negotiation and explicit `http.version=HTTP/2` |
-| GitHub CLI (`gh api`) | Verified on arm64 Ubuntu 24.04; hosted matrix pending | `net/http.(*Transport).roundTrip` |
+| GitHub CLI (`gh api`) | Verified | `net/http.(*Transport).roundTrip` |
 | GitLab CLI (`glab`) | Not yet verified | Real-client E2E pending. |
 | Java or rustls-based HTTPS | Not covered | Does not call a currently selected function. |
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
