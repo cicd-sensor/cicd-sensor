@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestDefinedHTTPUprobeSymbols(t *testing.T) {
+func TestDefinedSymbolTargets(t *testing.T) {
 	t.Parallel()
 
 	t.Run("ELF without a selected C symbol is definitive", func(t *testing.T) {
@@ -19,9 +19,9 @@ func TestDefinedHTTPUprobeSymbols(t *testing.T) {
 			t.Fatalf("open self executable: %v", err)
 		}
 		defer f.Close()
-		got, definitive, err := definedHTTPUprobeSymbols(f, []httpUprobeSymbol{{name: "not.a.real.symbol"}})
+		got, definitive, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: "not.a.real.symbol"}})
 		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedHTTPUprobeSymbols = %+v, %v, %v", got, definitive, err)
+			t.Fatalf("definedSymbolTargets = %+v, %v, %v", got, definitive, err)
 		}
 	})
 
@@ -36,17 +36,17 @@ func TestDefinedHTTPUprobeSymbols(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer f.Close()
-		got, definitive, err := definedHTTPUprobeSymbols(f, []httpUprobeSymbol{{name: "SSL_write"}})
+		got, definitive, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: "SSL_write"}})
 		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedHTTPUprobeSymbols = %+v, %v, %v", got, definitive, err)
+			t.Fatalf("definedSymbolTargets = %+v, %v, %v", got, definitive, err)
 		}
 	})
 
 	t.Run("reader failure remains retryable", func(t *testing.T) {
 		t.Parallel()
-		got, definitive, err := definedHTTPUprobeSymbols(failingReaderAt{}, []httpUprobeSymbol{{name: "SSL_write"}})
+		got, definitive, err := definedSymbolTargets(failingReaderAt{}, []symbolUprobeTarget{{symbol: "SSL_write"}})
 		if err == nil || definitive || len(got) != 0 {
-			t.Fatalf("definedHTTPUprobeSymbols = %+v, %v, %v; want empty, false, error", got, definitive, err)
+			t.Fatalf("definedSymbolTargets = %+v, %v, %v; want empty, false, error", got, definitive, err)
 		}
 	})
 
@@ -77,9 +77,9 @@ func TestDefinedHTTPUprobeSymbols(t *testing.T) {
 			t.Skip("/bin/sh has no undefined function import")
 		}
 
-		got, definitive, err := definedHTTPUprobeSymbols(f, []httpUprobeSymbol{{name: imported}})
+		got, definitive, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: imported}})
 		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedHTTPUprobeSymbols(%q) = %+v, %v, %v", imported, got, definitive, err)
+			t.Fatalf("definedSymbolTargets(%q) = %+v, %v, %v", imported, got, definitive, err)
 		}
 	})
 }

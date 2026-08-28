@@ -81,18 +81,29 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		kernelIO.objs.HandleSslWriteParse,
 		kernelIO.objs.HandleNghttp2Required,
 		kernelIO.objs.HandleNghttp2Emit,
+		kernelIO.objs.HandleGoNetHttpRequired,
+		kernelIO.objs.HandleGoNetHttpEmit,
 	} {
 		if err := kernelIO.objs.HttpUprobeStages.Put(uint32(index), program); err != nil {
 			return nil, fmt.Errorf("install HTTP uprobe stage %d: %w", index, err)
 		}
 	}
 	if config.EnableHTTPUprobes {
-		kernelIO.httpUprobeWorker = newHTTPUprobeWorker([]httpUprobeSymbol{
-			{name: "SSL_write", program: kernelIO.objs.HandleSslWrite},
-			{name: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
-			{name: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
-			{name: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
-		}, kernelIO.logger, config.CgroupV2RootPath, kernelIO.objs.HttpUprobeDiscoveryCache)
+		kernelIO.httpUprobeWorker = newHTTPUprobeWorker(
+			[]symbolUprobeTarget{
+				{symbol: "SSL_write", program: kernelIO.objs.HandleSslWrite},
+				{symbol: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
+				{symbol: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
+				{symbol: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
+			},
+			kernelIO.logger,
+			config.CgroupV2RootPath,
+			kernelIO.objs.HttpUprobeDiscoveryCache,
+			goUprobeTarget{
+				function: goNetHTTPRoundTripFunction,
+				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,
+			},
+		)
 	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do

@@ -26,9 +26,14 @@ import (
 // enter this worker; no caller reads this state. cgroup gates emission and
 // scopes the scan, but does not own link lifetime.
 
-type httpUprobeSymbol struct {
-	name    string
+type symbolUprobeTarget struct {
+	symbol  string
 	program *ebpf.Program
+}
+
+type goUprobeTarget struct {
+	function string
+	program  *ebpf.Program
 }
 
 // maxAttachedUprobeTargets bounds attached targets. On cap the worker refuses new
@@ -79,7 +84,8 @@ type attachedUprobeTarget struct {
 }
 
 type httpUprobeWorker struct {
-	symbols        []httpUprobeSymbol
+	symbolTargets  []symbolUprobeTarget // OpenSSL/nghttp2, attached by ELF symbol
+	goTarget       goUprobeTarget       // Go net/http, attached by resolved file offset
 	logger         *slog.Logger
 	cgroupRootPath string
 
@@ -102,13 +108,15 @@ type httpUprobeWorker struct {
 }
 
 func newHTTPUprobeWorker(
-	symbols []httpUprobeSymbol,
+	symbolTargets []symbolUprobeTarget,
 	logger *slog.Logger,
 	cgroupRootPath string,
 	discoveryCache *ebpf.Map,
+	goTarget goUprobeTarget,
 ) *httpUprobeWorker {
 	return &httpUprobeWorker{
-		symbols:           symbols,
+		symbolTargets:     symbolTargets,
+		goTarget:          goTarget,
 		logger:            logger,
 		cgroupRootPath:    cgroupRootPath,
 		attachCandidates:  make(chan httpUprobeAttachCandidate, attachCandidateQueueSize),
@@ -266,16 +274,36 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 		w.warnThrottled(&w.identityMismatch, "http_uprobe_discovery_identity_mismatch")
 		return
 	}
-	selected, definitive, err := definedHTTPUprobeSymbols(f, w.symbols)
+	selected, definitive, err := definedSymbolTargets(f, w.symbolTargets)
 	if err != nil {
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "classify_elf_symbols", "error", err)
 		return
 	}
-	if len(selected) == 0 {
-		if definitive {
+	if len(selected) > 0 {
+		ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
+		if err != nil {
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
+			return
+		}
+		retainCacheEntry = w.attachSymbolTargets(candidate.file, ex, selected)
+		return
+	}
+	if !definitive {
+		return
+	}
+
+	goFunctionOffset, found, err := resolveGoFunctionOffset(f, w.goTarget.function)
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "resolve_go_http_function", "error", err)
+		if errors.Is(err, errUnsupportedGoPclntab) {
 			retainCacheEntry = true
 			w.cacheDiscoveryFile(candidate.file)
 		}
+		return
+	}
+	if !found {
+		retainCacheEntry = true
+		w.cacheDiscoveryFile(candidate.file)
 		return
 	}
 
@@ -284,7 +312,7 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
 		return
 	}
-	retainCacheEntry = w.attachTarget(candidate.file, ex, selected)
+	retainCacheEntry = w.attachGoNetHTTPTarget(candidate.file, ex, goFunctionOffset)
 }
 
 func processIsGone(err error) bool {
@@ -352,17 +380,16 @@ func (w *httpUprobeWorker) cacheDiscoveryFile(key fileClassificationKey) {
 	}
 }
 
-// attachTarget attaches the program to the file's target symbols and records the
-// outcome. Classification is conservative: only a definitive absence of all
-// selected symbols is cached; attach failures remain retryable.
-func (w *httpUprobeWorker) attachTarget(
+// attachSymbolTargets attaches programs by ELF symbol name and records the
+// outcome. Only a definitive absence is cached; attach failures remain retryable.
+func (w *httpUprobeWorker) attachSymbolTargets(
 	id fileClassificationKey,
 	ex *link.Executable,
-	targets []httpUprobeSymbol,
+	targets []symbolUprobeTarget,
 ) (retainCacheEntry bool) {
 	var got []link.Link
 	for _, target := range targets {
-		l, err := ex.Uprobe(target.name, target.program, nil)
+		l, err := ex.Uprobe(target.symbol, target.program, nil)
 		switch {
 		case err == nil:
 			got = append(got, l)
@@ -373,7 +400,7 @@ func (w *httpUprobeWorker) attachTarget(
 			// Inconclusive: do not cache. Undo partial attaches and retry later.
 			// Unlike a plain "symbol absent", an unexpected attach failure is a
 			// real signal, so surface it (throttled).
-			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", target.name, "error", err)
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", target.symbol, "error", err)
 			closeLinks(got)
 			return false
 		}
@@ -384,6 +411,24 @@ func (w *httpUprobeWorker) attachTarget(
 		return true
 	}
 	// Every target symbol was definitively absent: keep it in the cache.
+	w.cacheDiscoveryFile(id)
+	return true
+}
+
+// attachGoNetHTTPTarget attaches by absolute ELF file offset because stripped
+// Go binaries do not expose the selected function through ELF symbols. The
+// caller resolves fileOffset from Go metadata before reaching this function.
+func (w *httpUprobeWorker) attachGoNetHTTPTarget(
+	id fileClassificationKey,
+	ex *link.Executable,
+	fileOffset uint64,
+) bool {
+	attached, err := ex.Uprobe("", w.goTarget.program, &link.UprobeOptions{Address: fileOffset})
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", w.goTarget.function, "error", err)
+		return false
+	}
+	w.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: []link.Link{attached}}
 	w.cacheDiscoveryFile(id)
 	return true
 }

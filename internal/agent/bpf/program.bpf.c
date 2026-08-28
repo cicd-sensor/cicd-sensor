@@ -23,6 +23,7 @@
 #include "dns_hooks.bpf.h"
 #include "http_hooks.bpf.h"
 #include "http_uprobe_capture_hooks.bpf.h"
+#include "go_http_uprobe_hooks.bpf.h"
 #include "http_uprobe_discovery_hooks.bpf.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
