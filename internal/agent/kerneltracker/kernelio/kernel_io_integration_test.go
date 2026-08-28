@@ -42,6 +42,38 @@ func TestLinuxKernelIOLoadAndClose(t *testing.T) {
 	}
 }
 
+func TestLinuxKernelIOOpensDedicatedHTTPUprobeAttachReader(t *testing.T) {
+	config := testLinuxConfig(t)
+	config.EnableHTTPUprobes = true
+	kernelIO, err := NewLinux(nil, config)
+	if err != nil {
+		t.Fatalf("NewLinux: %v", err)
+	}
+	closed := false
+	t.Cleanup(func() {
+		if !closed {
+			_ = kernelIO.Close()
+		}
+	})
+
+	if kernelIO.objs.HttpUprobeAttachCandidates == nil {
+		t.Fatal("HTTP uprobe attach-candidate ringbuf map is nil")
+	}
+	if kernelIO.httpUprobeAttachCandidateReader == nil {
+		t.Fatal("HTTP uprobe attach-candidate reader is nil")
+	}
+	if _, err := os.Stat(filepath.Join(httpUprobeBPFFSPinPath, httpUprobeStopMapName)); err != nil {
+		t.Fatalf("stat pinned HTTP uprobe stop leases: %v", err)
+	}
+	if err := kernelIO.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	closed = true
+	if _, err := os.Stat(filepath.Join(httpUprobeBPFFSPinPath, httpUprobeStopMapName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("pinned HTTP uprobe stop leases remain after clean close: %v", err)
+	}
+}
+
 // TestLinuxKernelIOOpenSSLUprobeAttaches proves the OpenSSL HTTP uprobe entry
 // program is attachable to a real libssl inode for both symbols it targets —
 // the load-and-attach half of Stage 1b-1 M0. A single program is attached to

@@ -10,22 +10,34 @@ import (
 	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
 )
 
-// handleHTTPUprobeAttachCandidate keeps KernelIO control samples out of the
-// KernelTracker security-event path.
-func (kernelIO *LinuxKernelIO) handleHTTPUprobeAttachCandidate(raw []byte) (bool, error) {
-	if len(raw) < 4 || binary.LittleEndian.Uint32(raw[:4]) != SampleKindHTTPUprobeAttachCandidate {
-		return false, nil
-	}
+// handleHTTPUprobeAttachCandidate consumes one record from the dedicated
+// attach-control ring buffer without entering the KernelTracker event path.
+func (kernelIO *LinuxKernelIO) handleHTTPUprobeAttachCandidate(raw []byte) error {
 	if kernelIO.httpUprobeWorker == nil {
-		return true, nil
+		return nil
 	}
 
 	candidate, err := decodeHTTPUprobeAttachCandidate(raw)
 	if err != nil {
-		return true, err
+		return err
 	}
+	if candidate.stopRequested {
+		tracked, err := kernelIO.httpUprobeStopController.track(candidate)
+		if err != nil {
+			kernelIO.logger.Warn("http_uprobe_stop_tracking_failed", "tgid", candidate.process.TGID, "error", err)
+		}
+		candidate.stopRequested = tracked
+	} else if candidate.stopStartedNS == 0 {
+		kernelIO.httpUprobeWorker.warnThrottled(
+			&kernelIO.httpUprobeWorker.stopNotEstablished,
+			"http_uprobe_stop_not_established",
+			"tgid", candidate.process.TGID,
+		)
+	}
+	// A non-zero stop timestamp with stopped=false belongs to an existing stop
+	// lease. Queue it without starting or tracking another stop.
 	kernelIO.httpUprobeWorker.queueAttachCandidate(candidate)
-	return true, nil
+	return nil
 }
 
 func decodeHTTPUprobeAttachCandidate(raw []byte) (httpUprobeAttachCandidate, error) {
@@ -40,11 +52,15 @@ func decodeHTTPUprobeAttachCandidate(raw []byte) (httpUprobeAttachCandidate, err
 	if sample.Kind != SampleKindHTTPUprobeAttachCandidate {
 		return httpUprobeAttachCandidate{}, fmt.Errorf("unexpected HTTP uprobe attach candidate kind %d", sample.Kind)
 	}
-
 	return httpUprobeAttachCandidate{
-		tgid:    sample.Tgid,
-		vmStart: sample.VmStart,
-		vmEnd:   sample.VmEnd,
+		process: httpUprobeProcessGeneration{
+			TGID:          sample.Tgid,
+			StartBoottime: sample.StartBoottime,
+		},
+		vmStart:       sample.VmStart,
+		vmEnd:         sample.VmEnd,
+		stopRequested: sample.StopRequested != 0,
+		stopStartedNS: sample.StopStartedNs,
 		file: fileClassificationKey{
 			mappedFile: mappedFileIdentity{
 				deviceMajor: sample.File.MappedFile.DeviceMajor,

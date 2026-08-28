@@ -22,7 +22,7 @@ var kernelSampleABISize = map[string]uintptr{
 	"FileRemoveSample":                1064,
 	"ForkSample":                      48,
 	"HttpRequestSample":               568,
-	"HttpUprobeAttachCandidateSample": 56,
+	"HttpUprobeAttachCandidateSample": 80,
 	"MountSample":                     2096,
 	"NetV4Sample":                     48,
 	"NetV6Sample":                     64,

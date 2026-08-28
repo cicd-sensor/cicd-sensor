@@ -112,7 +112,8 @@ ExecStart=/opt/cicd-sensor/cicd-sensor agent start \
   --provider github \
   --runner machine \
   --manager-url https://cicd-sensor-manager.example.com \
-  --manager-token-file ${CREDENTIALS_DIRECTORY}/manager_token
+  --manager-token-file ${CREDENTIALS_DIRECTORY}/manager_token \
+  --enable-uprobes=false
 Restart=always
 RestartSec=5s
 NoNewPrivileges=yes
@@ -131,6 +132,12 @@ sudo systemctl enable --now cicd-sensor-agent.service
 ```
 
 For GitLab CI/CD, change `--provider github` to `--provider gitlab`.
+
+HTTP uprobes are disabled by default during rollout. Set
+`--enable-uprobes=true` only after validating the host's BPF and bpffs setup.
+Keep `Restart=always`: when uprobes are enabled, startup recovery resumes any
+process left in the bounded first-call stop by an unexpected Agent exit.
+`--enable-uprobes=false` remains the permanent disable path.
 
 `RefuseManualStop=yes` rejects manual `systemctl stop`.
 Remove it if your maintenance workflow normally uses stop / restart.

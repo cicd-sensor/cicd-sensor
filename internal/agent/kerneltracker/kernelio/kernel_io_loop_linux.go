@@ -21,6 +21,9 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 	if kernelIO.reader == nil {
 		return errors.New("ringbuf reader is not initialized")
 	}
+	if kernelIO.httpUprobeWorker != nil && kernelIO.httpUprobeAttachCandidateReader == nil {
+		return errors.New("HTTP uprobe attach-candidate ringbuf reader is not initialized")
+	}
 	if handle == nil {
 		return errors.New("raw sample handler is nil")
 	}
@@ -33,6 +36,9 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 		kernelIO.loopWG.Go(func() {
 			kernelIO.httpUprobeWorker.run(loopCtx)
 		})
+		kernelIO.loopWG.Go(func() {
+			kernelIO.readHTTPUprobeAttachCandidates(loopCtx)
+		})
 	}
 	go func() {
 		defer kernelIO.loopWG.Done()
@@ -40,6 +46,9 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 
 		if err := kernelIO.closeReader(); err != nil {
 			kernelIO.logger.WarnContext(loopCtx, "bpf_reader_close_failed", "error", err)
+		}
+		if err := kernelIO.closeHTTPUprobeAttachCandidateReader(); err != nil {
+			kernelIO.logger.WarnContext(loopCtx, "http_uprobe_attach_candidate_reader_close_failed", "error", err)
 		}
 	}()
 
@@ -58,15 +67,6 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 					return
 				}
 			}
-			handled, err := kernelIO.handleHTTPUprobeAttachCandidate(record.RawSample)
-			if err != nil {
-				kernelIO.logger.WarnContext(loopCtx, "bpf_control_sample_decode_failed", "error", err, "bytes", len(record.RawSample))
-				continue
-			}
-			if handled {
-				continue
-			}
-
 			if err := handle(loopCtx, KernelSample(record.RawSample)); err != nil {
 				if loopCtx.Err() != nil {
 					return
@@ -83,6 +83,26 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 	}()
 
 	return nil
+}
+
+func (kernelIO *LinuxKernelIO) readHTTPUprobeAttachCandidates(ctx context.Context) {
+	var record ringbuf.Record
+	for {
+		if err := kernelIO.httpUprobeAttachCandidateReader.ReadInto(&record); err != nil {
+			switch {
+			case errors.Is(err, io.EOF), errors.Is(err, ringbuf.ErrClosed), errors.Is(err, os.ErrClosed):
+				return
+			case errors.Is(err, context.Canceled):
+				return
+			default:
+				kernelIO.logger.WarnContext(ctx, "http_uprobe_attach_candidate_reader_failed", "error", err)
+				return
+			}
+		}
+		if err := kernelIO.handleHTTPUprobeAttachCandidate(record.RawSample); err != nil {
+			kernelIO.logger.WarnContext(ctx, "http_uprobe_attach_candidate_decode_failed", "error", err, "bytes", len(record.RawSample))
+		}
+	}
 }
 
 func (kernelIO *LinuxKernelIO) watchRingbufDrops(ctx context.Context) {
@@ -166,6 +186,12 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	}
 
 	var firstErr error
+	if kernelIO.httpUprobeDiscoveryLink != nil {
+		if err := kernelIO.httpUprobeDiscoveryLink.Close(); err != nil {
+			firstErr = err
+		}
+		kernelIO.httpUprobeDiscoveryLink = nil
+	}
 
 	if kernelIO.cancelLoop != nil {
 		kernelIO.cancelLoop()
@@ -174,8 +200,35 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	if err := kernelIO.closeReader(); err != nil {
 		firstErr = err
 	}
+	if err := kernelIO.closeHTTPUprobeAttachCandidateReader(); err != nil {
+		if firstErr == nil {
+			firstErr = err
+		} else {
+			kernelIO.logger.Warn("http_uprobe_attach_candidate_reader_close_failed", "error", err)
+		}
+	}
 	// Drain goroutines before closing map FDs; the drop watcher may be in Map.Lookup.
 	kernelIO.loopWG.Wait()
+	if kernelIO.httpUprobeStopController != nil {
+		kernelIO.httpUprobeStopController.close()
+	}
+	// Recover any lease whose hook invocation was already in flight when the
+	// discovery link was detached.
+	if kernelIO.httpUprobeStopController != nil {
+		if err := recoverHTTPUprobeStopLeases(kernelIO.objs.HttpUprobeStopLeases); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			} else {
+				kernelIO.logger.Warn("http_uprobe_stop_recovery_failed", "error", err)
+			}
+		} else if err := kernelIO.objs.HttpUprobeStopLeases.Unpin(); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if firstErr == nil {
+				firstErr = err
+			} else {
+				kernelIO.logger.Warn("http_uprobe_stop_lease_unpin_failed", "error", err)
+			}
+		}
+	}
 	for _, attachedLink := range slices.Backward(kernelIO.links) {
 		if err := attachedLink.Close(); err != nil {
 			if firstErr == nil {
@@ -205,6 +258,23 @@ func (kernelIO *LinuxKernelIO) closeReader() error {
 		}
 
 		closeErr = kernelIO.reader.Close()
+		if errors.Is(closeErr, os.ErrClosed) {
+			closeErr = nil
+		}
+	})
+
+	return closeErr
+}
+
+func (kernelIO *LinuxKernelIO) closeHTTPUprobeAttachCandidateReader() error {
+	var closeErr error
+
+	kernelIO.closeHTTPUprobeAttachCandidateReaderOnce.Do(func() {
+		if kernelIO.httpUprobeAttachCandidateReader == nil {
+			return
+		}
+
+		closeErr = kernelIO.httpUprobeAttachCandidateReader.Close()
 		if errors.Is(closeErr, os.ErrClosed) {
 			closeErr = nil
 		}

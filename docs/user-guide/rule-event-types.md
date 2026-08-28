@@ -498,7 +498,7 @@ Only the request line and the `Host` header are captured — no other headers an
 | `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |
 | `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Lowercase. |
 | `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
-| `source` | string | `cleartext_http`, `openssl`, `nghttp2` | Capture channel; userspace-library taps are not yet enabled in shipped builds. |
+| `source` | string | `cleartext_http`, `openssl`, `nghttp2`, `go_net_http` | Capture channel; userspace-library taps are disabled by default during rollout. |
 | `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
 
 `source` reports where the request line was read:
@@ -508,21 +508,24 @@ Only the request line and the `Host` header are captured — no other headers an
 - `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's
   `SSL_write` / `SSL_write_ex`. Client coverage depends on which function the
   installed binary calls; see the developer guide's verified workload matrix.
-  This tap is **not yet enabled** in shipped builds; default enablement waits
-  for the remaining rollout gates (there is no separate opt-in).
+  This tap is disabled by default during rollout and controlled by the Agent's
+  `--enable-uprobes` flag.
 - `nghttp2` — HTTP/2 pseudo-headers read at `nghttp2_submit_request` or
   `nghttp2_submit_request2`, before HPACK encoding. This tap shares the same
   rollout state as `openssl`.
+- `go_net_http` — request fields read from Go `net/http` before HTTP/1.x or
+  HTTP/2 encoding. Stripped supported Go binaries are resolved through pclntab.
 
 Known gaps (absence of an `http_request` event does **not** mean absence of
 egress — combine with `domain` and `network_connect` rules):
 
 - HTTP/2 clients that do not call a selected nghttp2 request function are not
   captured. HTTP/3/QUIC is also outside this event.
-- Go `crypto/tls`, Java JSSE, rustls, and other non-OpenSSL stacks are not
-  captured. A fully symbol-stripped static binary is not captured either.
-- Capture is best-effort against uncooperative code: a process can evade a
-  uprobe, and the very first request of a brand-new process can beat the attach.
+- Java JSSE, rustls, and other stacks without a selected capture function are
+  not captured.
+- When uprobes are enabled, the stop controller uses a 500 ms attachment budget
+  for a first-seen process. A timeout resumes the process and can leave that
+  initial request uncaptured.
 
 HTTP/1.x capture is best-effort at one write boundary. A path that crosses the
 256-byte captured prefix is emitted only up to that boundary; a `Host` outside

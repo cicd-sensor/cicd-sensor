@@ -311,13 +311,25 @@ struct file_classification_key {
     __u32 _pad;
 };
 
+// One process generation owns at most one first-call stop lease. The start
+// time prevents a recycled PID from inheriting an earlier process's lease.
+struct http_uprobe_stop_lease_key {
+    __s32 tgid;
+    __u32 _pad;
+    __u64 start_boottime;
+};
+
 // Discovery metadata only. No HTTP bytes or file content cross this boundary.
 struct http_uprobe_attach_candidate_sample {
     __u32 kind;
     __s32 tgid;
+    __u64 start_boottime;
+    __u64 stop_started_ns;
     __u64 vm_start;
     __u64 vm_end;
     struct file_classification_key file;
+    __u8 stop_requested;
+    __u8 _pad[7];
 };
 
 /* Force BTF emission for bpf2go. */

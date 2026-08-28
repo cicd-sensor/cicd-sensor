@@ -69,7 +69,7 @@ The eBPF Runtime handles both rule-facing events and internal tracking samples.
 | file | `security_file_open`, `security_inode_unlink`, `security_inode_rename`, `security_inode_link` | `file_open`, `file_remove`, `file_move`, `file_link` |
 | mount | `security_sb_mount`, `security_move_mount` | `mount` for path exposure attempts |
 | domain | `udp_sendmsg`, `udpv6_sendmsg`, `tcp_sendmsg` | `domain` |
-| http | `tcp_sendmsg`; rollout-disabled `uprobe_mmap` discovery plus OpenSSL and nghttp2 uprobes | `http_request` |
+| http | `tcp_sendmsg`; rollout-disabled `uprobe_mmap` discovery plus OpenSSL, nghttp2, and Go uprobes | `http_request` |
 | unix socket | `unix_stream_connect`, `unix_dgram_connect` | `unix_socket_connect` |
 
 `cgroup/connect4/6` is not attached per tracked cgroup. The agent attaches once to the cgroup v2 root detected at startup, and the program uses `tracked_cgroups` lookup to handle only target jobs.
@@ -112,6 +112,7 @@ those remain in the KernelTracker/KernelIO userspace owners.
 | `tracked_cgroups` | cgroup ID | Lets BPF hooks decide on the fast path whether the current cgroup is in scope |
 | `staging_map` | Docker cgroup basename | Lets the `cgroup_mkdir` hook detect cgroup creation staged by the Docker proxy |
 | `http_uprobe_discovery_cache` | device, inode, ctime | Suppresses mapping notifications for files already queued, classified, or attached; eviction only causes reclassification |
+| `http_uprobe_stop_leases` | tgid, process start boottime | Pinned recovery ledger for bounded first-call SIGSTOP; KernelIO deletes entries on SIGCONT or startup recovery |
 
 `staging_map` does not contain JobIdentity. The kernel side only matches the basename; userspace mirror state knows which job it belongs to.
 
@@ -162,6 +163,10 @@ Manager `runtime_event` output uses the same 64k queue capacity so the post-eval
 
 The BPF `events` ring buffer is a node-level ingress buffer before KernelTracker can attribute samples to Jobs.
 KernelIO sizes it from node CPU count, so larger runner nodes get a larger kernel-to-userspace buffer before per-Job delivery begins.
+HTTP uprobe attach candidates use a separate fixed 1 MiB
+`http_uprobe_attach_candidates` ring buffer. KernelIO reads this control path
+independently so uprobe attachment does not queue behind security-event delivery
+or evaluation while a target process is stopped.
 
 ## Implementation layout
 

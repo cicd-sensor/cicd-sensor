@@ -115,10 +115,8 @@ func TestLinuxOpenSSLUprobeDoubleAttachDuplicatesEvents(t *testing.T) {
 	}
 }
 
-// TestLinuxOpenSSLUprobeCapturesHTTPS drives mapping-triggered discovery and
-// steady-state capture end to end for clients that use SSL_write and
-// SSL_write_ex. First-request timing is measured separately because attach is
-// asynchronous and is not part of this deterministic integration contract.
+// TestLinuxOpenSSLUprobeCapturesHTTPS verifies that the bounded mapping stop
+// attaches before the first real SSL_write and SSL_write_ex request.
 func TestLinuxOpenSSLUprobeCapturesHTTPS(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -198,13 +196,8 @@ func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArg
 	t.Cleanup(server.Close)
 	url := server.URL + path + "?token=secret"
 
-	// The first short-lived process can finish before asynchronous attach. Each
-	// later process maps the same file again and retries discovery; once attached,
-	// the file-scoped link covers subsequent processes without an artificial wait.
-	for range 4 {
-		if output, err := exec.Command(client, clientArgs(url)...).CombinedOutput(); err != nil {
-			t.Fatalf("HTTPS client %s: %v: %s", client, err, output)
-		}
+	if output, err := exec.Command(client, clientArgs(url)...).CombinedOutput(); err != nil {
+		t.Fatalf("first HTTPS client %s: %v: %s", client, err, output)
 	}
 
 	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "openssl http_request for "+path,

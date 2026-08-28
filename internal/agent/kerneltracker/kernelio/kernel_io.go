@@ -13,9 +13,7 @@ type Config struct {
 	// EnableHTTPUprobes starts the HTTP uprobe attach-discovery worker
 	// (mapping-triggered classification, attach, and maps-liveness reclaim). It does
 	// not gate BPF load: LoadAndAssign loads and verifies the programs at startup.
-	// Disabled instances shrink the HTTP-only BPF caches to placeholder entries.
-	// Keep this rollout switch off until the HTTP uprobe environment gates pass;
-	// it is not intended as a long-lived user-facing setting.
+	// The CLI keeps a permanent disable path even after rollout defaults change.
 	EnableHTTPUprobes bool
 }
 

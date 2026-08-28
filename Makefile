@@ -127,7 +127,7 @@ integration:
 
 .PHONY: bpf-integration
 bpf-integration:
-	$(SUDO) -n env GOCACHE=$(GOCACHE) $(GO) test $(GO_MOD_FLAG) -tags bpf_integration -count=1 ./internal/agent/kerneltracker/...
+	$(SUDO) -n env GOCACHE=$(GOCACHE) $(GO) test $(GO_MOD_FLAG) -p=1 -tags bpf_integration -count=1 ./internal/agent/kerneltracker/...
 
 .PHONY: rules-validate
 rules-validate:

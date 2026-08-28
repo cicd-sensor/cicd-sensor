@@ -106,7 +106,7 @@ func discoverAndCount(t *testing.T, worker *httpUprobeWorker, pids ...int32) int
 				t.Fatalf("record discovery file: %v", err)
 			}
 			worker.classifyAndAttach(httpUprobeAttachCandidate{
-				tgid: pid, vmStart: start, vmEnd: end, file: key,
+				process: httpUprobeProcessGeneration{TGID: pid}, vmStart: start, vmEnd: end, file: key,
 			})
 		}
 	}
@@ -259,7 +259,7 @@ func TestLinuxHTTPUprobeOpenMappedFileFallsBackToCurrentRange(t *testing.T) {
 	}
 
 	opened, err := worker.openMappedFile(httpUprobeAttachCandidate{
-		tgid: int32(os.Getpid()), vmStart: 1, vmEnd: 2, file: key,
+		process: httpUprobeProcessGeneration{TGID: int32(os.Getpid())}, vmStart: 1, vmEnd: 2, file: key,
 	})
 	if err != nil {
 		t.Fatalf("openMappedFile stale-range fallback: %v", err)
@@ -366,7 +366,7 @@ func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
 	}
 
 	attachCandidate := httpUprobeAttachCandidate{
-		tgid: int32(os.Getpid()), vmStart: start, vmEnd: end, file: key,
+		process: httpUprobeProcessGeneration{TGID: int32(os.Getpid())}, vmStart: start, vmEnd: end, file: key,
 	}
 	worker.queueAttachCandidate(attachCandidate)
 	worker.classifyAndAttach(<-worker.attachCandidates)

@@ -218,12 +218,23 @@ type BPFProgramHttpScratch struct {
 }
 
 type BPFProgramHttpUprobeAttachCandidateSample struct {
-	_       structs.HostLayout
-	Kind    uint32
-	Tgid    int32
-	VmStart uint64
-	VmEnd   uint64
-	File    BPFProgramFileClassificationKey
+	_             structs.HostLayout
+	Kind          uint32
+	Tgid          int32
+	StartBoottime uint64
+	StopStartedNs uint64
+	VmStart       uint64
+	VmEnd         uint64
+	File          BPFProgramFileClassificationKey
+	StopRequested uint8
+	Pad           [7]uint8
+}
+
+type BPFProgramHttpUprobeStopLeaseKey struct {
+	_             structs.HostLayout
+	Tgid          int32
+	Pad           uint32
+	StartBoottime uint64
 }
 
 type BPFProgramMountSample struct {
@@ -314,8 +325,10 @@ const (
 	BPFProgramMapEvents                                = "events"
 	BPFProgramMapHttpScratch                           = "http_scratch"
 	BPFProgramMapHttpStages                            = "http_stages"
+	BPFProgramMapHttpUprobeAttachCandidates            = "http_uprobe_attach_candidates"
 	BPFProgramMapHttpUprobeDiscoveryCache              = "http_uprobe_discovery_cache"
 	BPFProgramMapHttpUprobeStages                      = "http_uprobe_stages"
+	BPFProgramMapHttpUprobeStopLeases                  = "http_uprobe_stop_leases"
 	BPFProgramMapPathScratch                           = "path_scratch"
 	BPFProgramMapRingbufDropCount                      = "ringbuf_drop_count"
 	BPFProgramMapStagingMap                            = "staging_map"
@@ -451,15 +464,17 @@ type BPFProgramProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BPFProgramMapSpecs struct {
-	Events                   *ebpf.MapSpec `ebpf:"events"`
-	HttpScratch              *ebpf.MapSpec `ebpf:"http_scratch"`
-	HttpStages               *ebpf.MapSpec `ebpf:"http_stages"`
-	HttpUprobeDiscoveryCache *ebpf.MapSpec `ebpf:"http_uprobe_discovery_cache"`
-	HttpUprobeStages         *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
-	PathScratch              *ebpf.MapSpec `ebpf:"path_scratch"`
-	RingbufDropCount         *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
-	StagingMap               *ebpf.MapSpec `ebpf:"staging_map"`
-	TrackedCgroups           *ebpf.MapSpec `ebpf:"tracked_cgroups"`
+	Events                     *ebpf.MapSpec `ebpf:"events"`
+	HttpScratch                *ebpf.MapSpec `ebpf:"http_scratch"`
+	HttpStages                 *ebpf.MapSpec `ebpf:"http_stages"`
+	HttpUprobeAttachCandidates *ebpf.MapSpec `ebpf:"http_uprobe_attach_candidates"`
+	HttpUprobeDiscoveryCache   *ebpf.MapSpec `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeStages           *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
+	HttpUprobeStopLeases       *ebpf.MapSpec `ebpf:"http_uprobe_stop_leases"`
+	PathScratch                *ebpf.MapSpec `ebpf:"path_scratch"`
+	RingbufDropCount           *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
+	StagingMap                 *ebpf.MapSpec `ebpf:"staging_map"`
+	TrackedCgroups             *ebpf.MapSpec `ebpf:"tracked_cgroups"`
 }
 
 // BPFProgramVariableSpecs contains global variables before they are loaded into the kernel.
@@ -505,15 +520,17 @@ func (o *BPFProgramObjects) Close() error {
 //
 // It can be passed to LoadBPFProgramObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BPFProgramMaps struct {
-	Events                   *ebpf.Map `ebpf:"events"`
-	HttpScratch              *ebpf.Map `ebpf:"http_scratch"`
-	HttpStages               *ebpf.Map `ebpf:"http_stages"`
-	HttpUprobeDiscoveryCache *ebpf.Map `ebpf:"http_uprobe_discovery_cache"`
-	HttpUprobeStages         *ebpf.Map `ebpf:"http_uprobe_stages"`
-	PathScratch              *ebpf.Map `ebpf:"path_scratch"`
-	RingbufDropCount         *ebpf.Map `ebpf:"ringbuf_drop_count"`
-	StagingMap               *ebpf.Map `ebpf:"staging_map"`
-	TrackedCgroups           *ebpf.Map `ebpf:"tracked_cgroups"`
+	Events                     *ebpf.Map `ebpf:"events"`
+	HttpScratch                *ebpf.Map `ebpf:"http_scratch"`
+	HttpStages                 *ebpf.Map `ebpf:"http_stages"`
+	HttpUprobeAttachCandidates *ebpf.Map `ebpf:"http_uprobe_attach_candidates"`
+	HttpUprobeDiscoveryCache   *ebpf.Map `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeStages           *ebpf.Map `ebpf:"http_uprobe_stages"`
+	HttpUprobeStopLeases       *ebpf.Map `ebpf:"http_uprobe_stop_leases"`
+	PathScratch                *ebpf.Map `ebpf:"path_scratch"`
+	RingbufDropCount           *ebpf.Map `ebpf:"ringbuf_drop_count"`
+	StagingMap                 *ebpf.Map `ebpf:"staging_map"`
+	TrackedCgroups             *ebpf.Map `ebpf:"tracked_cgroups"`
 }
 
 func (m *BPFProgramMaps) Close() error {
@@ -521,8 +538,10 @@ func (m *BPFProgramMaps) Close() error {
 		m.Events,
 		m.HttpScratch,
 		m.HttpStages,
+		m.HttpUprobeAttachCandidates,
 		m.HttpUprobeDiscoveryCache,
 		m.HttpUprobeStages,
+		m.HttpUprobeStopLeases,
 		m.PathScratch,
 		m.RingbufDropCount,
 		m.StagingMap,

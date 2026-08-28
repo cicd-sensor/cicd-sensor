@@ -63,6 +63,26 @@ func TestLinuxGoNetHTTPUprobeCapturesHTTPS(t *testing.T) {
 	}
 }
 
+func TestLinuxGoNetHTTPUprobeCapturesFirstRequest(t *testing.T) {
+	clientPath := goHTTPTestClient(t)
+	kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	const path = "/go-first-request"
+	command := exec.Command(clientPath, "client", server.URL+path)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("first Go HTTPS request: %v: %s", err, output)
+	}
+	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "first Go net/http request",
+		func(in engineInput) bool {
+			sample, ok := in.(httpRequestSample)
+			return ok && sample.CgroupID == cgroupID && sample.Source == HTTPSourceGoNetHTTP && sample.Path == path
+		})
+}
+
 func TestLinuxGoNetHTTPUprobeCapturesExternallyLinkedHTTPS(t *testing.T) {
 	clientPath := goHTTPExternalTestClient(t)
 	for _, clientMode := range []string{"client", "transport"} {

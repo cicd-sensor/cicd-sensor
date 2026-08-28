@@ -28,6 +28,7 @@ type Agent struct {
 	githubK8sRunnerSocketPath string
 	shutdownGrace             time.Duration
 	jobTTL                    time.Duration
+	enableUprobes             bool
 	reaperCancel              context.CancelFunc
 	cancelEngine              context.CancelFunc
 	engineDone                <-chan error
@@ -71,6 +72,11 @@ func (a *Agent) SetJobTTL(ttl time.Duration) {
 	}
 }
 
+// SetUprobesEnabled controls mapping discovery and dynamic HTTP uprobe links.
+func (a *Agent) SetUprobesEnabled(enabled bool) {
+	a.enableUprobes = enabled
+}
+
 // SetGitHubK8sRunnerSocketPath enables the GitHub Kubernetes runner socket.
 func (a *Agent) SetGitHubK8sRunnerSocketPath(path string) {
 	a.githubK8sRunnerSocketPath = path
@@ -102,7 +108,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	jobRegistry := jobregistry.New(a.logger)
 	jobRegistry.SetJobTTL(a.jobTTL)
 
-	kernelTracker, err := kerneltracker.New(a.logger, jobRegistry)
+	kernelTracker, err := kerneltracker.NewWithConfig(a.logger, jobRegistry, kerneltracker.Config{
+		EnableUprobes: a.enableUprobes,
+	})
 	if err != nil {
 		return fmt.Errorf("new kernel tracker: %w", err)
 	}

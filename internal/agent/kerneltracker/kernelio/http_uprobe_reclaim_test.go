@@ -22,7 +22,7 @@ type reclaimHarness struct {
 
 func newReclaimHarness(t *testing.T) *reclaimHarness {
 	t.Helper()
-	return &reclaimHarness{worker: newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})}
+	return &reclaimHarness{worker: newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{}, nil)}
 }
 
 func (h *reclaimHarness) attached(id mappedFileIdentity) *attachedUprobeTarget {
@@ -81,7 +81,7 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 	})
 	t.Run("queueTargetReconciliation never blocks and keeps one pending sweep", func(t *testing.T) {
 		t.Parallel()
-		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
+		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{}, nil)
 		worker.queueTargetReconciliation([]uint64{1})
 		worker.queueTargetReconciliation([]uint64{2}) // must not block on a full buffer
 		select {
@@ -170,7 +170,7 @@ func TestCollectCgroupPIDs(t *testing.T) {
 				}
 			}
 
-			worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
+			worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{}, nil)
 			got := make(map[int32]struct{})
 			if complete := worker.collectCgroupPIDs(path, got); complete != test.complete {
 				t.Fatalf("complete = %v, want %v", complete, test.complete)
@@ -188,7 +188,7 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("gone pid (ENOENT) is the benign race: complete", func(t *testing.T) {
 		t.Parallel()
-		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
+		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{}, nil)
 		// PID 2^31-1 does not exist on any sane box.
 		mappings, complete := worker.scanProcessMappings(2147483647)
 		if !complete {
@@ -201,7 +201,7 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("own executable file mappings are returned", func(t *testing.T) {
 		t.Parallel()
-		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
+		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{}, nil)
 		mappings, complete := worker.scanProcessMappings(int32(os.Getpid()))
 		if !complete {
 			t.Fatal("scan of own maps reported incomplete")
@@ -213,7 +213,7 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 
 	t.Run("target cap does not affect mapping scan", func(t *testing.T) {
 		t.Parallel()
-		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
+		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{}, nil)
 		for i := 0; i < maxAttachedUprobeTargets; i++ { // fill the registry to the cap
 			mapped := mappedFileIdentity{inode: uint64(i + 1)}
 			worker.attachedTargets[mapped] = &attachedUprobeTarget{}

@@ -35,6 +35,7 @@ type agentStartOptions struct {
 	GitHubK8sRunnerSocketPath string
 	ShutdownGrace             time.Duration
 	JobTTL                    time.Duration
+	EnableUprobes             bool
 }
 
 func runAgentSubcommand(args []string) {
@@ -61,6 +62,7 @@ func runAgentStart(args []string) {
 	var githubK8sRunnerSocketPath string
 	var shutdownGrace time.Duration
 	var jobTTL time.Duration
+	var enableUprobes bool
 	socketPath = defaultSocketPath
 	githubK8sRunnerSocketPath = os.Getenv("CICD_SENSOR_GITHUB_K8S_RUNNER_SOCKET")
 	fs.Usage = func() {
@@ -82,6 +84,8 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output(), "  --shutdown-grace DURATION")
 		fmt.Fprintln(fs.Output(), "        Best-effort drain window used after SIGTERM. (default 8s)")
 		fmt.Fprintf(fs.Output(), "  --job-ttl DURATION\n        Job age threshold after which the job is expired and forcibly finalized.\n        Expiry is checked about once per minute, so finalization may happen up to\n        about one minute after the TTL is reached. (default %s)\n", formatDuration(job.DefaultTTL))
+		fmt.Fprintln(fs.Output(), "  --enable-uprobes=BOOL")
+		fmt.Fprintln(fs.Output(), "        Enable HTTP uprobe discovery and capture. (default false)")
 	}
 	fs.StringVar(&socketPath, "socket", socketPath, "Agent control socket path.")
 	fs.StringVar(&githubK8sRunnerSocketPath, "github-k8s-runner-socket", githubK8sRunnerSocketPath, "GitHub Kubernetes runner socket path.")
@@ -91,6 +95,7 @@ func runAgentStart(args []string) {
 	fs.StringVar(&managerTokenFilePath, "manager-token-file", "", "Path to a file containing the host scope manager bearer token. Overrides CICD_SENSOR_MANAGER_TOKEN.")
 	fs.DurationVar(&shutdownGrace, "shutdown-grace", 8*time.Second, "Best-effort drain window used after SIGTERM. Must end before the supervisor's kill timeout (for example systemd TimeoutStopSec), or the drain is cut off mid-flight.")
 	fs.DurationVar(&jobTTL, "job-ttl", job.DefaultTTL, "Job age threshold after which the job is expired and forcibly finalized; expiry is checked about once per minute.")
+	fs.BoolVar(&enableUprobes, "enable-uprobes", false, "Enable HTTP uprobe discovery and capture.")
 	if err := fs.Parse(args[1:]); err != nil {
 		os.Exit(2)
 	}
@@ -113,6 +118,7 @@ func runAgentStart(args []string) {
 		GitHubK8sRunnerSocketPath: githubK8sRunnerSocketPath,
 		ShutdownGrace:             shutdownGrace,
 		JobTTL:                    jobTTL,
+		EnableUprobes:             enableUprobes,
 	}
 	if err := validateAgentStartRequiredOptions(opts); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -166,6 +172,7 @@ func runAgentStart(args []string) {
 	a := agent.NewAgent(logger, opts.SocketPath, jobcontext.Provider(opts.Provider), opts.Runner, hostManager, hostManagerClient)
 	a.SetShutdownGrace(opts.ShutdownGrace)
 	a.SetJobTTL(opts.JobTTL)
+	a.SetUprobesEnabled(opts.EnableUprobes)
 	a.SetGitHubK8sRunnerSocketPath(opts.GitHubK8sRunnerSocketPath)
 	if err := a.Run(ctx); err != nil {
 		if errors.Is(err, listener.ErrAlreadyRunning) {

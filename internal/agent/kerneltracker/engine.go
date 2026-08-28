@@ -27,8 +27,18 @@ type KernelTracker struct {
 	jobTracking *jobTrackingState
 }
 
+// Config contains optional kernel runtime features owned by KernelTracker.
+type Config struct {
+	EnableUprobes bool
+}
+
 // New builds the production KernelTracker and its KernelIO adapter.
 func New(logger *slog.Logger, jobEndNotifier JobEndNotifier) (*KernelTracker, error) {
+	return NewWithConfig(logger, jobEndNotifier, Config{})
+}
+
+// NewWithConfig builds KernelTracker with optional kernel runtime features.
+func NewWithConfig(logger *slog.Logger, jobEndNotifier JobEndNotifier, trackerConfig Config) (*KernelTracker, error) {
 	cgroupRoot, err := getCgroupV2Root()
 	if errors.Is(err, kernelio.ErrNotSupported) {
 		cgroupRoot = ""
@@ -38,7 +48,10 @@ func New(logger *slog.Logger, jobEndNotifier JobEndNotifier) (*KernelTracker, er
 
 	config := kernelio.Config{}
 	if cgroupRoot != "" {
-		config = kernelio.Config{CgroupV2RootPath: cgroupRoot}
+		config = kernelio.Config{
+			CgroupV2RootPath:  cgroupRoot,
+			EnableHTTPUprobes: trackerConfig.EnableUprobes,
+		}
 	}
 	kernelIO, err := kernelio.New(logger, config)
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -64,10 +65,12 @@ type fileClassificationKey struct {
 }
 
 type httpUprobeAttachCandidate struct {
-	tgid    int32
-	vmStart uint64
-	vmEnd   uint64
-	file    fileClassificationKey
+	process       httpUprobeProcessGeneration
+	vmStart       uint64
+	vmEnd         uint64
+	file          fileClassificationKey
+	stopRequested bool
+	stopStartedNS uint64
 }
 
 type processMapping struct {
@@ -97,10 +100,13 @@ type httpUprobeWorker struct {
 	// concurrency-safe kernel objects shared with the hook and sample reader.
 	attachedTargets map[mappedFileIdentity]*attachedUprobeTarget
 	discoveryCache  *ebpf.Map
+	stopController  *httpUprobeStopController
 
 	// Throttled-warning counters. attachCandidateQueueDropped is sample-reader-owned;
-	// the others are worker-owned. Each counter is touched by one goroutine.
+	// stopNotEstablished is also sample-reader-owned; the others are worker-owned.
+	// Each counter is touched by one goroutine.
 	attachCandidateQueueDropped uint64
+	stopNotEstablished          uint64
 	permDenied                  uint64
 	opErrors                    uint64
 	identityMismatch            uint64
@@ -113,6 +119,7 @@ func newHTTPUprobeWorker(
 	cgroupRootPath string,
 	discoveryCache *ebpf.Map,
 	goTarget goUprobeTarget,
+	stopController *httpUprobeStopController,
 ) *httpUprobeWorker {
 	return &httpUprobeWorker{
 		symbolTargets:     symbolTargets,
@@ -123,6 +130,7 @@ func newHTTPUprobeWorker(
 		reconcileRequests: make(chan []uint64, 1),
 		attachedTargets:   make(map[mappedFileIdentity]*attachedUprobeTarget),
 		discoveryCache:    discoveryCache,
+		stopController:    stopController,
 	}
 }
 
@@ -156,6 +164,9 @@ func (w *httpUprobeWorker) queueAttachCandidate(candidate httpUprobeAttachCandid
 			w.warn("http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
 		}
 		w.warnThrottled(&w.attachCandidateQueueDropped, "http_uprobe_attach_candidate_dropped")
+		if candidate.stopRequested {
+			w.stopController.release(candidate.process, "queue_full")
+		}
 	}
 }
 
@@ -171,9 +182,96 @@ func (w *httpUprobeWorker) run(ctx context.Context) {
 		case activeCgroupIDs := <-w.reconcileRequests:
 			w.reconcileTargets(activeCgroupIDs)
 		case candidate := <-w.attachCandidates:
-			w.classifyAndAttach(candidate)
+			w.handleAttachCandidate(ctx, candidate)
 		}
 	}
+}
+
+func (w *httpUprobeWorker) handleAttachCandidate(ctx context.Context, candidate httpUprobeAttachCandidate) {
+	if !candidate.stopRequested || !w.stopController.isActive(candidate.process) {
+		w.classifyAndAttach(candidate)
+		return
+	}
+	defer w.stopController.release(candidate.process, "attach_complete")
+
+	stopped, gone := w.waitForProcessStop(ctx, candidate.process)
+	if gone {
+		return
+	}
+	if !stopped {
+		if err := w.deleteDiscoveryCacheEntry(candidate.file); err != nil {
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+		}
+		w.warn("http_uprobe_group_stop_incomplete", "tgid", candidate.process.TGID)
+		return
+	}
+
+	// Classify the mapping that triggered the stop first, then use the stable
+	// stopped process snapshot to catch every other executable mapping already
+	// present before resuming the process.
+	w.classifyAndAttach(candidate)
+	w.classifyUncachedProcessMappings(candidate.process.TGID)
+}
+
+func (w *httpUprobeWorker) waitForProcessStop(ctx context.Context, identity httpUprobeProcessGeneration) (stopped bool, gone bool) {
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if !w.stopController.isActive(identity) {
+			return false, false
+		}
+		stopped, gone, err := processGroupStopped(identity.TGID)
+		if err != nil {
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "wait_process_stop", "error", err)
+			return false, false
+		}
+		if stopped || gone {
+			return stopped, gone
+		}
+		select {
+		case <-ctx.Done():
+			return false, false
+		case <-ticker.C:
+		}
+	}
+}
+
+func (w *httpUprobeWorker) classifyUncachedProcessMappings(pid int32) {
+	mappings, _ := w.scanProcessMappings(pid)
+	for _, mapping := range mappings {
+		f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, mapping.addressRange))
+		if err != nil {
+			continue
+		}
+		classification, err := classificationKeyFromFile(f)
+		_ = f.Close()
+		if err != nil || w.discoveryFileCached(classification) {
+			continue
+		}
+		startText, endText, found := strings.Cut(mapping.addressRange, "-")
+		if !found {
+			continue
+		}
+		start, startErr := strconv.ParseUint(startText, 16, 64)
+		end, endErr := strconv.ParseUint(endText, 16, 64)
+		if startErr != nil || endErr != nil {
+			continue
+		}
+		w.classifyAndAttach(httpUprobeAttachCandidate{
+			process: httpUprobeProcessGeneration{TGID: pid},
+			vmStart: start,
+			vmEnd:   end,
+			file:    classification,
+		})
+	}
+}
+
+func (w *httpUprobeWorker) discoveryFileCached(key fileClassificationKey) bool {
+	if w.discoveryCache == nil {
+		return false
+	}
+	var value uint8
+	return w.discoveryCache.Lookup(key, &value) == nil
 }
 
 // scanProcessMappings returns the executable file mappings of pid. It returns
@@ -323,18 +421,18 @@ func processIsGone(err error) bool {
 // can merge before userspace opens map_files, so ENOENT gets one current-maps
 // lookup by device/inode. Other failures are returned unchanged.
 func (w *httpUprobeWorker) openMappedFile(candidate httpUprobeAttachCandidate) (*os.File, error) {
-	f, err := os.Open(mappedFilePath(candidate.tgid, candidate.vmStart, candidate.vmEnd))
+	f, err := os.Open(mappedFilePath(candidate.process.TGID, candidate.vmStart, candidate.vmEnd))
 	if err == nil || !errors.Is(err, os.ErrNotExist) {
 		return f, err
 	}
 
-	mappings, complete := w.scanProcessMappings(candidate.tgid)
+	mappings, complete := w.scanProcessMappings(candidate.process.TGID)
 	if !complete {
 		return nil, err
 	}
 	for _, current := range mappings {
 		if current.mappedFile == candidate.file.mappedFile {
-			return os.Open(fmt.Sprintf("/proc/%d/map_files/%s", candidate.tgid, current.addressRange))
+			return os.Open(fmt.Sprintf("/proc/%d/map_files/%s", candidate.process.TGID, current.addressRange))
 		}
 	}
 	return nil, err

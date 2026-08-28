@@ -30,6 +30,21 @@ func TestStartKernelSampleLoopRequiresHandler(t *testing.T) {
 	}
 }
 
+func TestStartKernelSampleLoopRequiresHTTPUprobeAttachCandidateReader(t *testing.T) {
+	t.Parallel()
+
+	kernelIO := &LinuxKernelIO{
+		reader:           &ringbuf.Reader{},
+		httpUprobeWorker: &httpUprobeWorker{},
+	}
+	err := kernelIO.StartKernelSampleLoop(t.Context(), func(context.Context, KernelSample) error {
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected uninitialized HTTP uprobe attach-candidate reader error")
+	}
+}
+
 func TestCloseZeroValueKernelIO(t *testing.T) {
 	t.Parallel()
 

@@ -12,9 +12,11 @@ import (
 
 func TestDecodeHTTPUprobeAttachCandidate(t *testing.T) {
 	want := httpUprobeAttachCandidate{
-		tgid:    1234,
-		vmStart: 0x400000,
-		vmEnd:   0x401000,
+		process:       httpUprobeProcessGeneration{TGID: 1234, StartBoottime: 5678},
+		vmStart:       0x400000,
+		vmEnd:         0x401000,
+		stopRequested: true,
+		stopStartedNS: 9012,
 		file: fileClassificationKey{
 			mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 99},
 			ctimeSec:   123,
@@ -38,6 +40,14 @@ func TestDecodeHTTPUprobeAttachCandidate(t *testing.T) {
 			t.Fatal("decodeHTTPUprobeAttachCandidate succeeded for a short sample")
 		}
 	})
+
+	t.Run("wrong sample kind cannot enter the private control path", func(t *testing.T) {
+		raw := bytes.Clone(raw)
+		binary.LittleEndian.PutUint32(raw[:4], 1)
+		if _, err := decodeHTTPUprobeAttachCandidate(raw); err == nil {
+			t.Fatal("decodeHTTPUprobeAttachCandidate succeeded for the wrong sample kind")
+		}
+	})
 }
 
 func TestFileClassificationKeyBPFMapABI(t *testing.T) {
@@ -49,33 +59,33 @@ func TestFileClassificationKeyBPFMapABI(t *testing.T) {
 }
 
 func TestHandleHTTPUprobeAttachCandidate(t *testing.T) {
-	candidate := httpUprobeAttachCandidate{tgid: 1234, vmStart: 0x400000, vmEnd: 0x401000}
-
-	t.Run("ordinary security sample stays on the caller path", func(t *testing.T) {
-		kernelIO := &LinuxKernelIO{}
-		handled, err := kernelIO.handleHTTPUprobeAttachCandidate([]byte{1, 0, 0, 0})
-		if err != nil || handled {
-			t.Fatalf("handled = %v, err = %v, want false, nil", handled, err)
-		}
-	})
+	candidate := httpUprobeAttachCandidate{process: httpUprobeProcessGeneration{TGID: 1234}, vmStart: 0x400000, vmEnd: 0x401000}
 
 	t.Run("attach candidate is queued without entering KernelTracker", func(t *testing.T) {
 		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
 		kernelIO := &LinuxKernelIO{httpUprobeWorker: worker}
-		handled, err := kernelIO.handleHTTPUprobeAttachCandidate(encodeHTTPUprobeAttachCandidate(t, candidate))
-		if err != nil || !handled {
-			t.Fatalf("handled = %v, err = %v, want true, nil", handled, err)
+		if err := kernelIO.handleHTTPUprobeAttachCandidate(encodeHTTPUprobeAttachCandidate(t, candidate)); err != nil {
+			t.Fatalf("handleHTTPUprobeAttachCandidate: %v", err)
 		}
 		if got := <-worker.attachCandidates; got != candidate {
 			t.Fatalf("queued attach candidate = %+v, want %+v", got, candidate)
 		}
 	})
 
-	t.Run("disabled worker consumes its private control sample", func(t *testing.T) {
-		kernelIO := &LinuxKernelIO{}
-		handled, err := kernelIO.handleHTTPUprobeAttachCandidate(encodeHTTPUprobeAttachCandidate(t, candidate))
-		if err != nil || !handled {
-			t.Fatalf("handled = %v, err = %v, want true, nil", handled, err)
+	t.Run("mapping covered by an existing stop is queued without another lease", func(t *testing.T) {
+		candidate := candidate
+		candidate.stopStartedNS = 9012
+		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
+		kernelIO := &LinuxKernelIO{httpUprobeWorker: worker}
+
+		if err := kernelIO.handleHTTPUprobeAttachCandidate(encodeHTTPUprobeAttachCandidate(t, candidate)); err != nil {
+			t.Fatalf("handleHTTPUprobeAttachCandidate: %v", err)
+		}
+		if got := <-worker.attachCandidates; got != candidate {
+			t.Fatalf("queued attach candidate = %+v, want %+v", got, candidate)
+		}
+		if worker.stopNotEstablished != 0 {
+			t.Fatalf("stop-not-established warnings = %d, want 0", worker.stopNotEstablished)
 		}
 	})
 }
@@ -83,10 +93,13 @@ func TestHandleHTTPUprobeAttachCandidate(t *testing.T) {
 func encodeHTTPUprobeAttachCandidate(t *testing.T, candidate httpUprobeAttachCandidate) KernelSample {
 	t.Helper()
 	sample := bpfprog.BPFProgramHttpUprobeAttachCandidateSample{
-		Kind:    SampleKindHTTPUprobeAttachCandidate,
-		Tgid:    candidate.tgid,
-		VmStart: candidate.vmStart,
-		VmEnd:   candidate.vmEnd,
+		Kind:          SampleKindHTTPUprobeAttachCandidate,
+		Tgid:          candidate.process.TGID,
+		StartBoottime: candidate.process.StartBoottime,
+		StopStartedNs: candidate.stopStartedNS,
+		StopRequested: boolToUint8(candidate.stopRequested),
+		VmStart:       candidate.vmStart,
+		VmEnd:         candidate.vmEnd,
 		File: bpfprog.BPFProgramFileClassificationKey{
 			CtimeSec:  candidate.file.ctimeSec,
 			CtimeNsec: candidate.file.ctimeNsec,
@@ -100,4 +113,11 @@ func encodeHTTPUprobeAttachCandidate(t *testing.T, candidate httpUprobeAttachCan
 		t.Fatalf("encode HTTP uprobe attach candidate: %v", err)
 	}
 	return buf.Bytes()
+}
+
+func boolToUint8(value bool) uint8 {
+	if value {
+		return 1
+	}
+	return 0
 }

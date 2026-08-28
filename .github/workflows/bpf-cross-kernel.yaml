@@ -106,7 +106,7 @@ jobs:
             -test.v \
             -test.count=1 \
             -test.timeout=10m \
-            -test.run '^TestLinux(OpenSSLUprobeCoversCommonClients|Nghttp2UprobeCoversHTTP2Clients|GoNetHTTPUprobe(CapturesHTTPS|CapturesExternallyLinkedHTTPS|CoversGH))$'
+            -test.run '^TestLinux(OpenSSLUprobeCoversCommonClients|Nghttp2UprobeCoversHTTP2Clients|GoNetHTTPUprobe(CapturesHTTPS|CapturesFirstRequest|CapturesExternallyLinkedHTTPS|CoversGH))$'
 
   go-http-version-coverage:
     name: "Go HTTP versions on ${{ matrix.runner }}"

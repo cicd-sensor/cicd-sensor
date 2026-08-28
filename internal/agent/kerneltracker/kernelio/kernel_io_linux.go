@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 
 	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
@@ -17,12 +18,14 @@ import (
 
 // LinuxKernelIO owns BPF program, map, and ring buffer I/O.
 type LinuxKernelIO struct {
-	logger          *slog.Logger
-	objs            bpfprog.BPFProgramObjects
-	links           []link.Link
-	reader          *ringbuf.Reader
-	cancelLoop      context.CancelFunc
-	closeReaderOnce sync.Once
+	logger                                   *slog.Logger
+	objs                                     bpfprog.BPFProgramObjects
+	links                                    []link.Link
+	reader                                   *ringbuf.Reader
+	httpUprobeAttachCandidateReader          *ringbuf.Reader
+	cancelLoop                               context.CancelFunc
+	closeReaderOnce                          sync.Once
+	closeHTTPUprobeAttachCandidateReaderOnce sync.Once
 	// loopWG tracks goroutines spawned by StartKernelSampleLoop. Close
 	// must wait for them to exit before tearing down objs / map FDs;
 	// otherwise watchRingbufDrops can race objs.Close on a Map.Lookup
@@ -31,6 +34,12 @@ type LinuxKernelIO struct {
 	// httpUprobeWorker finds, attaches, and reclaims HTTP uprobes. It runs in
 	// loopWG and closes its own attached links, so they are not stored in links.
 	httpUprobeWorker *httpUprobeWorker
+	// httpUprobeDiscoveryLink is kept separate so shutdown can stop new process
+	// leases before the reader and stop controller are drained.
+	httpUprobeDiscoveryLink link.Link
+	// httpUprobeStopController bounds and recovers process stops independently
+	// of potentially slow ELF classification on httpUprobeWorker.
+	httpUprobeStopController *httpUprobeStopController
 }
 
 // NewLinux loads the BPF objects, attaches programs, and opens the sample ring buffer.
@@ -45,6 +54,11 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	kernelIO = &LinuxKernelIO{
 		logger: logger.With("component", "bpf_kernel_io"),
 	}
+	if !config.EnableHTTPUprobes {
+		if err := recoverAndUnpinHTTPUprobeStopLeases(); err != nil {
+			return nil, fmt.Errorf("recover disabled HTTP uprobe stop leases: %w", err)
+		}
+	}
 
 	spec, err := bpfprog.LoadBPFProgram()
 	if err != nil {
@@ -53,7 +67,21 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	if err := configureBPFProgramSpec(spec); err != nil {
 		return nil, fmt.Errorf("configure bpf program spec: %w", err)
 	}
-	if err := spec.LoadAndAssign(&kernelIO.objs, nil); err != nil {
+	var collectionOptions *ebpf.CollectionOptions
+	if config.EnableHTTPUprobes {
+		stopLeaseSpec := spec.Maps[httpUprobeStopMapName]
+		if stopLeaseSpec == nil {
+			return nil, fmt.Errorf("bpf map %q not found", httpUprobeStopMapName)
+		}
+		if err := os.MkdirAll(httpUprobeBPFFSPinPath, 0o700); err != nil {
+			return nil, fmt.Errorf("create HTTP uprobe BPF pin path: %w", err)
+		}
+		stopLeaseSpec.Pinning = ebpf.PinByName
+		collectionOptions = &ebpf.CollectionOptions{
+			Maps: ebpf.MapOptions{PinPath: httpUprobeBPFFSPinPath},
+		}
+	}
+	if err := spec.LoadAndAssign(&kernelIO.objs, collectionOptions); err != nil {
 		return nil, fmt.Errorf("load bpf objects: %w", err)
 	}
 
@@ -69,6 +97,15 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		}
 		_ = rollback.Close()
 	}()
+	if config.EnableHTTPUprobes {
+		if err := recoverHTTPUprobeStopLeases(kernelIO.objs.HttpUprobeStopLeases); err != nil {
+			return nil, fmt.Errorf("recover HTTP uprobe stop leases: %w", err)
+		}
+		kernelIO.httpUprobeStopController = newHTTPUprobeStopController(
+			kernelIO.logger,
+			kernelIO.objs.HttpUprobeStopLeases,
+		)
+	}
 
 	// Only the HTTP entry program is attached to tcp_sendmsg. Install its parse
 	// target before attaching so the entry never tail-calls into an empty slot.
@@ -103,6 +140,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 				function: goNetHTTPRoundTripFunction,
 				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,
 			},
+			kernelIO.httpUprobeStopController,
 		)
 	}
 
@@ -145,7 +183,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		if err != nil {
 			return nil, fmt.Errorf("attach uprobe_mmap tracing program: %w", err)
 		}
-		kernelIO.links = append(kernelIO.links, attached)
+		kernelIO.httpUprobeDiscoveryLink = attached
 	}
 
 	// Cgroup programs use AttachCgroup because they run from the cgroup v2
@@ -176,5 +214,12 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		return nil, fmt.Errorf("open events ringbuf: %w", err)
 	}
 	kernelIO.reader = reader
+	if config.EnableHTTPUprobes {
+		candidateReader, err := ringbuf.NewReader(kernelIO.objs.HttpUprobeAttachCandidates)
+		if err != nil {
+			return nil, fmt.Errorf("open HTTP uprobe attach-candidate ringbuf: %w", err)
+		}
+		kernelIO.httpUprobeAttachCandidateReader = candidateReader
+	}
 	return kernelIO, nil
 }

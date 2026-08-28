@@ -12,7 +12,7 @@ import (
 
 func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 	t.Parallel()
-	candidate := httpUprobeAttachCandidate{tgid: 4321, vmStart: 0x400000, vmEnd: 0x401000}
+	candidate := httpUprobeAttachCandidate{process: httpUprobeProcessGeneration{TGID: 4321}, vmStart: 0x400000, vmEnd: 0x401000}
 
 	t.Run("available queue records the attach candidate", func(t *testing.T) {
 		t.Parallel()
@@ -32,7 +32,7 @@ func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 		t.Parallel()
 		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
 		worker.queueAttachCandidate(candidate)
-		worker.queueAttachCandidate(httpUprobeAttachCandidate{tgid: 9876})
+		worker.queueAttachCandidate(httpUprobeAttachCandidate{process: httpUprobeProcessGeneration{TGID: 9876}})
 		if len(worker.attachCandidates) != 1 {
 			t.Fatalf("queue len = %d, want 1", len(worker.attachCandidates))
 		}

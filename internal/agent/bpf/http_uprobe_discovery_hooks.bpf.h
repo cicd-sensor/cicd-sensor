@@ -4,6 +4,7 @@
 // uprobe_mmap receives a completed file-backed VMA. Filtering here keeps
 // ordinary data mappings and already-known files out of userspace.
 #define HTTP_UPROBE_VM_EXEC 0x4
+#define HTTP_UPROBE_SIGSTOP 19
 
 // CO-RE flavor structs expose inode ctime layouts used before Linux 6.12.
 struct inode___http_uprobe_legacy {
@@ -43,6 +44,10 @@ static __always_inline void http_uprobe_inode_ctime(
 
 static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_struct *vma)
 {
+    __u64 cgroup_id = current_cgroup_id();
+    if (!cgroup_is_tracked(cgroup_id))
+        return 0;
+
     unsigned long vm_flags = 0;
     BPF_CORE_READ_INTO(&vm_flags, vma, vm_flags);
     if (!(vm_flags & HTTP_UPROBE_VM_EXEC))
@@ -50,10 +55,6 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
 
     struct file *file = BPF_CORE_READ(vma, vm_file);
     if (!file)
-        return 0;
-
-    __u64 cgroup_id = current_cgroup_id();
-    if (!cgroup_is_tracked(cgroup_id))
         return 0;
 
     struct inode *inode = BPF_CORE_READ(file, f_inode);
@@ -81,8 +82,25 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     if (bpf_map_update_elem(&http_uprobe_discovery_cache, &classification, &one, BPF_NOEXIST) != 0)
         return 0;
 
+    struct http_uprobe_stop_lease_key lease = {
+        .tgid = current_tgid(),
+        .start_boottime = current_start_boottime(),
+    };
+    if (lease.start_boottime == 0) {
+        bpf_map_delete_elem(&http_uprobe_discovery_cache, &classification);
+        return 0;
+    }
+
+    __u64 pending_stop_started_ns = 0;
+    // An existing lease suppresses another SIGSTOP, not this mapping's
+    // notification: resume can race with userspace lease deletion.
+    __u64 *pending_lease =
+        bpf_map_lookup_elem(&http_uprobe_stop_leases, &lease);
+    if (pending_lease)
+        pending_stop_started_ns = *pending_lease;
+
     struct http_uprobe_attach_candidate_sample *sample =
-        bpf_ringbuf_reserve(&events, sizeof(*sample), 0);
+        bpf_ringbuf_reserve(&http_uprobe_attach_candidates, sizeof(*sample), 0);
     if (!sample) {
         // A failed notification must not become a permanent file skip.
         bpf_map_delete_elem(&http_uprobe_discovery_cache, &classification);
@@ -91,10 +109,35 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     }
 
     sample->kind = SAMPLE_KIND_HTTP_UPROBE_ATTACH_CANDIDATE;
-    sample->tgid = current_tgid();
+    sample->tgid = lease.tgid;
+    sample->start_boottime = lease.start_boottime;
+    sample->stop_started_ns = pending_stop_started_ns;
     sample->vm_start = BPF_CORE_READ(vma, vm_start);
     sample->vm_end = BPF_CORE_READ(vma, vm_end);
     sample->file = classification;
+    sample->stop_requested = 0;
+    __builtin_memset(sample->_pad, 0, sizeof(sample->_pad));
+
+    if (pending_stop_started_ns == 0) {
+        __u64 stopped_at_ns = bpf_ktime_get_ns();
+        if (bpf_map_update_elem(&http_uprobe_stop_leases, &lease, &stopped_at_ns, BPF_NOEXIST) == 0) {
+            if (bpf_send_signal(HTTP_UPROBE_SIGSTOP) == 0) {
+                sample->stop_requested = 1;
+                sample->stop_started_ns = stopped_at_ns;
+            } else {
+                // Submit the candidate so classification can continue, but leave
+                // no recovery lease for a stop that was not established.
+                bpf_map_delete_elem(&http_uprobe_stop_leases, &lease);
+            }
+        } else {
+            // Another thread can create this process lease after the lookup
+            // above. Preserve that lease timestamp instead of reporting a
+            // false stop-establishment failure.
+            pending_lease = bpf_map_lookup_elem(&http_uprobe_stop_leases, &lease);
+            if (pending_lease)
+                sample->stop_started_ns = *pending_lease;
+        }
+    }
     bpf_ringbuf_submit(sample, 0);
     return 0;
 }

@@ -153,8 +153,9 @@ No Go-specific worker, queue, registry, target cap, or reclaim path exists.
   are not supported.
 - Binaries whose retained Go metadata is not supported by the pinned profiler
   dependency are not captured.
-- Classification and attachment are asynchronous, so the first request can run
-  before the uprobe is attached.
+- Classification and attachment use the common bounded-stop lifecycle. Timeout
+  or stop-establishment failure can still resume execution before attachment;
+  see [Stop safety and recovery](http-uprobes.md#stop-safety-and-recovery).
 - Retries and redirects can produce more than one request event.
 - A request attempt can be emitted even if transport validation or network
   delivery later fails.
@@ -165,9 +166,7 @@ Unit tests build stripped non-PIE, PIE, and cgo externally linked PIE clients,
 resolve `Transport.roundTrip` through the profiler dependency, validate the ELF
 file-offset conversion, and verify the fixed Request/URL offsets. BPF
 integration tests exercise both `http.Client.Do` and direct
-`Transport.RoundTrip` over HTTP/1.1 and HTTP/2. A dedicated Ubuntu 24.04 matrix
-uses stripped internally and externally linked fixtures built with Go 1.18.10,
-1.20.14, 1.26.7, and 1.27.0 on amd64 and arm64. Real-client coverage includes
-the `gh` binary. Fixture requests are repeated within one process because
-asynchronous attachment does not guarantee capture of a newly mapped file's
-first request.
+`Transport.RoundTrip` over HTTP/1.1 and HTTP/2, including a fresh-process
+first-request case. A dedicated Ubuntu 24.04 matrix uses stripped internally
+and externally linked fixtures built with Go 1.18.10, 1.20.14, 1.26.7, and
+1.27.0 on amd64 and arm64. Real-client coverage includes the `gh` binary.

@@ -103,6 +103,13 @@ struct {
     __uint(max_entries, 1 << 20);
 } events SEC(".maps");
 
+// Keep stopped-process attach control independent from security-event
+// delivery. The fixed 1 MiB buffer holds only bounded attach-candidate records.
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 20);
+} http_uprobe_attach_candidates SEC(".maps");
+
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 65536);
@@ -142,6 +149,15 @@ struct {
     __type(key, struct file_classification_key);
     __type(value, __u8);
 } http_uprobe_discovery_cache SEC(".maps");
+
+// Process generations successfully stopped for first-call uprobe attachment.
+// Userspace pins this non-LRU recovery ledger while HTTP uprobes are enabled.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 4096);
+    __type(key, struct http_uprobe_stop_lease_key);
+    __type(value, __u64);
+} http_uprobe_stop_leases SEC(".maps");
 
 // staging_map: basename -> staging_value. Userspace stages sibling-container
 // basenames; cgroup_mkdir promotes and deletes matching entries in-kernel.
