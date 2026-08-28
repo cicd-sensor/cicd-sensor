@@ -165,8 +165,9 @@ Unit tests build stripped non-PIE, PIE, and cgo externally linked PIE clients,
 resolve `Transport.roundTrip` through the profiler dependency, validate the ELF
 file-offset conversion, and verify the fixed Request/URL offsets. BPF
 integration tests exercise both `http.Client.Do` and direct
-`Transport.RoundTrip` over HTTP/1.1 and HTTP/2. They use stripped internally and
-externally linked fixtures built with Go 1.18.10, 1.20.14, 1.25.14, 1.26.7, and
-1.27.0, plus the real `gh` binary. The CI matrix runs these tests on amd64 and
-arm64. Fixture requests are repeated within one process because asynchronous
-attachment does not guarantee capture of a newly mapped file's first request.
+`Transport.RoundTrip` over HTTP/1.1 and HTTP/2. A dedicated Ubuntu 24.04 matrix
+uses stripped internally and externally linked fixtures built with Go 1.18.10,
+1.20.14, 1.26.7, and 1.27.0 on amd64 and arm64. Real-client coverage includes
+the `gh` binary. Fixture requests are repeated within one process because
+asynchronous attachment does not guarantee capture of a newly mapped file's
+first request.
