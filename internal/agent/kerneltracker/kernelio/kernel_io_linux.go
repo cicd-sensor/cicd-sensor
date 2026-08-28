@@ -89,12 +89,21 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		}
 	}
 	if config.EnableHTTPUprobes {
-		kernelIO.httpUprobeWorker = newHTTPUprobeWorker([]httpUprobeSymbol{
-			{name: "SSL_write", program: kernelIO.objs.HandleSslWrite},
-			{name: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
-			{name: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
-			{name: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
-		}, kernelIO.logger, config.CgroupV2RootPath, kernelIO.objs.HttpUprobeDiscoveryCache, kernelIO.objs.HandleGoNetHttpRoundTrip)
+		kernelIO.httpUprobeWorker = newHTTPUprobeWorker(
+			[]symbolUprobeTarget{
+				{symbol: "SSL_write", program: kernelIO.objs.HandleSslWrite},
+				{symbol: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
+				{symbol: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
+				{symbol: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
+			},
+			kernelIO.logger,
+			config.CgroupV2RootPath,
+			kernelIO.objs.HttpUprobeDiscoveryCache,
+			goUprobeTarget{
+				function: goNetHTTPRoundTripFunction,
+				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,
+			},
+		)
 	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do

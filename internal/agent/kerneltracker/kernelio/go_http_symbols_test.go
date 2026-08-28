@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
-func TestResolveGoHTTPFunction(t *testing.T) {
+func TestResolveGoFunctionOffset(t *testing.T) {
 	tests := []struct {
 		name      string
 		buildMode string
@@ -36,19 +36,19 @@ func TestResolveGoHTTPFunction(t *testing.T) {
 			}
 			defer file.Close()
 
-			resolved, found, err := resolveGoHTTPFunction(file, goHTTPRoundTripFunction)
+			fileOffset, found, err := resolveGoFunctionOffset(file, goNetHTTPRoundTripFunction)
 			if err != nil {
-				t.Fatalf("resolveGoHTTPFunction: %v", err)
+				t.Fatalf("resolveGoFunctionOffset: %v", err)
 			}
 			if !found {
-				t.Fatal("resolveGoHTTPFunction did not find roundTrip")
+				t.Fatal("resolveGoFunctionOffset did not find roundTrip")
 			}
-			if resolved.name != goHTTPRoundTripFunction || resolved.fileOffset == 0 {
-				t.Fatalf("resolved = %+v", resolved)
+			if fileOffset == 0 {
+				t.Fatal("resolved file offset is zero")
 			}
 
 			code := make([]byte, 16)
-			if _, err := file.ReadAt(code, int64(resolved.fileOffset)); err != nil {
+			if _, err := file.ReadAt(code, int64(fileOffset)); err != nil {
 				t.Fatalf("read resolved code: %v", err)
 			}
 			if bytes.Equal(code, make([]byte, len(code))) {
@@ -82,14 +82,14 @@ func TestResolveGoHTTPFunction(t *testing.T) {
 			t.Fatalf("open fixture: %v", err)
 		}
 		defer file.Close()
-		_, found, err := resolveGoHTTPFunction(file, "not/a/real.GoFunction")
+		_, found, err := resolveGoFunctionOffset(file, "not/a/real.GoFunction")
 		if err != nil || found {
 			t.Fatalf("resolve missing function = found %v, error %v; want false, nil", found, err)
 		}
 	})
 
 	t.Run("non-ELF input is a definitive non-target", func(t *testing.T) {
-		_, found, err := resolveGoHTTPFunction(bytes.NewReader([]byte("not an ELF")), goHTTPRoundTripFunction)
+		_, found, err := resolveGoFunctionOffset(bytes.NewReader([]byte("not an ELF")), goNetHTTPRoundTripFunction)
 		if err != nil || found {
 			t.Fatalf("resolve non-ELF = found %v, error %v; want false, nil", found, err)
 		}
@@ -101,15 +101,15 @@ func TestResolveGoHTTPFunction(t *testing.T) {
 			t.Fatalf("open /bin/sh: %v", err)
 		}
 		defer file.Close()
-		_, found, err := resolveGoHTTPFunction(file, goHTTPRoundTripFunction)
+		_, found, err := resolveGoFunctionOffset(file, goNetHTTPRoundTripFunction)
 		if err != nil || found {
 			t.Fatalf("resolve /bin/sh = found %v, error %v; want false, nil", found, err)
 		}
 	})
 
 	t.Run("ELF read failure remains retryable", func(t *testing.T) {
-		_, found, err := resolveGoHTTPFunction(failingReaderAt{}, goHTTPRoundTripFunction)
-		if err == nil || found || errors.Is(err, errUnsupportedGoPCLN) {
+		_, found, err := resolveGoFunctionOffset(failingReaderAt{}, goNetHTTPRoundTripFunction)
+		if err == nil || found || errors.Is(err, errUnsupportedGoPclntab) {
 			t.Fatalf("resolve read failure = found %v, error %v; want retryable error", found, err)
 		}
 	})
@@ -129,8 +129,8 @@ func TestResolveGoHTTPFunction(t *testing.T) {
 			t.Fatal("fixture has no .gopclntab")
 		}
 		clear(data[section.Offset : section.Offset+16])
-		_, found, err := resolveGoHTTPFunction(bytes.NewReader(data), goHTTPRoundTripFunction)
-		if found || !errors.Is(err, errUnsupportedGoPCLN) {
+		_, found, err := resolveGoFunctionOffset(bytes.NewReader(data), goNetHTTPRoundTripFunction)
+		if found || !errors.Is(err, errUnsupportedGoPclntab) {
 			t.Fatalf("resolve malformed pclntab = found %v, error %v", found, err)
 		}
 	})
@@ -206,23 +206,28 @@ func TestExecutableFileOffset(t *testing.T) {
 func buildGoHTTPTestClient(t *testing.T, buildMode string) string {
 	t.Helper()
 	output := filepath.Join(t.TempDir(), "go-http-client")
-	args := []string{"build", "-buildvcs=false", "-trimpath", "-ldflags=-s -w", "-o", output}
 	commandEnv := os.Environ()
+	ldflags := "-s -w"
+	var buildModeArgs []string
 	switch buildMode {
 	case "exe":
+		commandEnv = append(commandEnv, "CGO_ENABLED=0")
 	case "pie":
-		args = append(args, "-buildmode=pie")
+		commandEnv = append(commandEnv, "CGO_ENABLED=0")
+		buildModeArgs = []string{"-buildmode=pie"}
 	case "external-pie":
 		compiler, err := exec.LookPath("cc")
 		if err != nil {
 			t.Skipf("C compiler is required for an externally linked fixture: %v", err)
 		}
-		args[3] = "-ldflags=-s -w -linkmode=external"
-		args = append(args, "-buildmode=pie")
+		ldflags += " -linkmode=external"
+		buildModeArgs = []string{"-buildmode=pie"}
 		commandEnv = append(commandEnv, "CGO_ENABLED=1", "CC="+compiler)
 	default:
 		t.Fatalf("unknown Go HTTP fixture build mode %q", buildMode)
 	}
+	args := []string{"build", "-buildvcs=false", "-trimpath", "-ldflags=" + ldflags, "-o", output}
+	args = append(args, buildModeArgs...)
 	args = append(args, "../testdata/go_http_client")
 	command := exec.Command("go", args...)
 	command.Env = commandEnv

@@ -9,12 +9,12 @@ import (
 	"io"
 )
 
-// definedHTTPUprobeSymbols returns selected symbols that this ELF defines.
+// definedSymbolTargets returns selected symbol-based targets that this ELF defines.
 // Undefined imports are not attach targets and may be cached as a non-target.
-func definedHTTPUprobeSymbols(
+func definedSymbolTargets(
 	reader io.ReaderAt,
-	candidates []httpUprobeSymbol,
-) (selected []httpUprobeSymbol, definitive bool, err error) {
+	candidates []symbolUprobeTarget,
+) (selected []symbolUprobeTarget, definitive bool, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			selected = nil
@@ -38,7 +38,7 @@ func definedHTTPUprobeSymbols(
 
 	wanted := make(map[string]struct{}, len(candidates))
 	for _, candidate := range candidates {
-		wanted[candidate.name] = struct{}{}
+		wanted[candidate.symbol] = struct{}{}
 	}
 	found := make(map[string]struct{}, len(candidates))
 	collect := func(symbols []elf.Symbol) {
@@ -64,7 +64,7 @@ func definedHTTPUprobeSymbols(
 	}
 
 	for _, candidate := range candidates {
-		if _, ok := found[candidate.name]; ok {
+		if _, ok := found[candidate.symbol]; ok {
 			selected = append(selected, candidate)
 		}
 	}
