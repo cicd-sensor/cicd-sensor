@@ -31,19 +31,13 @@ Address resolution therefore uses
 [opentelemetry-ebpf-profiler](https://github.com/open-telemetry/opentelemetry-ebpf-profiler),
 which already tracks these layouts for profiling stripped Go binaries.
 
-The integration intentionally uses only these public packages:
-
-- `go.opentelemetry.io/ebpf-profiler/libpf/pfelf` opens and validates the ELF;
-- `go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo` reads pclntab
-  metadata and resolves the selected function name;
-- `go.opentelemetry.io/ebpf-profiler/libpf` supplies the symbol name and result
-  types.
-
-The dependency returns a function virtual address. cicd-sensor still owns the
-selected function, converts that address to an executable ELF file offset,
-validates the Go ABI and object-field contract, and owns the resulting uprobe
-link. Dependency updates must pass the supported-version and real-client tests
-before merge.
+The resolver integration is implemented in
+[`go_http_symbols.go`](https://github.com/cicd-sensor/cicd-sensor/blob/main/internal/agent/kerneltracker/kernelio/go_http_symbols.go).
+The dependency returns a function virtual address. cicd-sensor still selects
+the function, converts the address to an executable ELF file offset, validates
+the Go ABI and object-field contract, and owns the resulting uprobe link.
+Dependency updates must pass the supported-version and real-client tests before
+merge.
 
 ```mermaid
 flowchart LR
