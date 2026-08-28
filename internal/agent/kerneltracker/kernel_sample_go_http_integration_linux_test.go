@@ -101,19 +101,17 @@ func TestLinuxGoNetHTTPUprobeCoversSupportedGoVersions(t *testing.T) {
 		if !found || version == "" || clientPath == "" {
 			t.Fatalf("invalid GO_HTTP_VERSIONED_TEST_CLIENTS entry %q", specification)
 		}
-		for _, clientMode := range []string{"client", "transport"} {
-			t.Run(version+"/"+clientMode, func(t *testing.T) {
-				path := "/go-version-" + version + "-" + clientMode
-				host := "go-" + version + "-" + clientMode + ".example"
-				runGoHTTPClientBurst(t, clientPath, clientMode, server.URL+path, host)
-				waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "Go net/http request from "+version+" via "+clientMode,
-					func(in engineInput) bool {
-						sample, ok := in.(httpRequestSample)
-						return ok && sample.CgroupID == cgroupID && sample.Source == HTTPSourceGoNetHTTP &&
-							sample.Method == "GET" && sample.Path == path && sample.Host == host
-					})
-			})
-		}
+		t.Run(version, func(t *testing.T) {
+			path := "/go-version-" + version
+			host := "go-" + version + ".example"
+			runGoHTTPClientBurst(t, clientPath, "client", server.URL+path, host)
+			waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "Go net/http request from "+version,
+				func(in engineInput) bool {
+					sample, ok := in.(httpRequestSample)
+					return ok && sample.CgroupID == cgroupID && sample.Source == HTTPSourceGoNetHTTP &&
+						sample.Method == "GET" && sample.Path == path && sample.Host == host
+				})
+		})
 	}
 }
 

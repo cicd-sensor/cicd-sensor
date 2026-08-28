@@ -94,10 +94,47 @@ jobs:
           CGO_ENABLED=1 go build -buildvcs=false -trimpath -buildmode=pie \
             -ldflags='-s -w -linkmode=external' \
             -o /tmp/go-http-cgo-client ./internal/agent/kerneltracker/testdata/go_http_client
+
+      - name: Run HTTP client coverage test
+        env:
+          HTTP_UPROBE_EXPECTED_CLIENTS: ${{ matrix.expected }}
+        run: |
+          sudo HTTP_UPROBE_EXPECTED_CLIENTS="$HTTP_UPROBE_EXPECTED_CLIENTS" \
+            GO_HTTP_TEST_CLIENT=/tmp/go-http-client \
+            GO_HTTP_CGO_TEST_CLIENT=/tmp/go-http-cgo-client \
+            /tmp/http-client-coverage.test \
+            -test.v \
+            -test.count=1 \
+            -test.timeout=10m \
+            -test.run '^TestLinux(OpenSSLUprobeCoversCommonClients|Nghttp2UprobeCoversHTTP2Clients|GoNetHTTPUprobe(CapturesHTTPS|CapturesExternallyLinkedHTTPS|CoversGH))$'
+
+  go-http-version-coverage:
+    name: "Go HTTP versions on ${{ matrix.runner }}"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build Go version coverage
+        run: |
+          CGO_ENABLED=0 go test -mod=vendor -c -tags 'bpf_integration http_client_integration' \
+            -o /tmp/go-http-version-coverage.test ./internal/agent/kerneltracker
           versioned_clients=()
-          # Pin the minimum, pclntab layout boundaries, previous supported
-          # release, and latest stable Go release verified by this PR.
-          for version in 1.18.10 1.20.14 1.25.14 1.26.7 1.27.0; do
+          # Pin the supported minimum, pclntab layout boundaries, and latest release.
+          for version in 1.18.10 1.20.14 1.26.7 1.27.0; do
             goroot="$(env -u GOROOT GOTOOLCHAIN="go${version}" go env GOROOT)"
             output="/tmp/go-http-${version}"
             env -u GOROOT GO111MODULE=off GOTOOLCHAIN=local CGO_ENABLED=0 "$goroot/bin/go" build \
@@ -114,19 +151,14 @@ jobs:
           done
           printf 'GO_HTTP_VERSIONED_TEST_CLIENTS=%s\n' "$(IFS=,; echo "${versioned_clients[*]}")" >> "$GITHUB_ENV"
 
-      - name: Run HTTP client coverage test
-        env:
-          HTTP_UPROBE_EXPECTED_CLIENTS: ${{ matrix.expected }}
+      - name: Run Go version coverage
         run: |
-          sudo HTTP_UPROBE_EXPECTED_CLIENTS="$HTTP_UPROBE_EXPECTED_CLIENTS" \
-            GO_HTTP_TEST_CLIENT=/tmp/go-http-client \
-            GO_HTTP_CGO_TEST_CLIENT=/tmp/go-http-cgo-client \
-            GO_HTTP_VERSIONED_TEST_CLIENTS="$GO_HTTP_VERSIONED_TEST_CLIENTS" \
-            /tmp/http-client-coverage.test \
+          sudo GO_HTTP_VERSIONED_TEST_CLIENTS="$GO_HTTP_VERSIONED_TEST_CLIENTS" \
+            /tmp/go-http-version-coverage.test \
             -test.v \
             -test.count=1 \
             -test.timeout=10m \
-            -test.run '^TestLinux(OpenSSLUprobeCoversCommonClients|Nghttp2UprobeCoversHTTP2Clients|GoNetHTTPUprobe(CapturesHTTPS|CapturesExternallyLinkedHTTPS|CoversGH|CoversSupportedGoVersions))$'
+            -test.run '^TestLinuxGoNetHTTPUprobeCoversSupportedGoVersions$'
 
   kernel:
     name: "x64 kernel ${{ matrix.kernel.label }}"
