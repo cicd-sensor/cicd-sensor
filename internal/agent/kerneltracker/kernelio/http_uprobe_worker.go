@@ -105,17 +105,15 @@ type httpUprobeWorker struct {
 	// concurrency-safe kernel objects shared with the hook and sample reader.
 	attachedTargets map[mappedFileIdentity]*attachedUprobeTarget
 	discoveryCache  *ebpf.Map
-	stopController  *httpUprobeStopController
+	stopLeases      *ebpf.Map
 
-	// Throttled-warning counters. attachCandidateQueueDropped is sample-reader-owned;
-	// stopNotEstablished is also sample-reader-owned; the others are worker-owned.
-	// Each counter is touched by one goroutine.
-	attachCandidateQueueDropped uint64
-	stopNotEstablished          uint64
-	permDenied                  uint64
-	opErrors                    uint64
-	identityMismatch            uint64
-	capReached                  uint64
+	// Throttled-warning counters. stopNotEstablished is sample-reader-owned;
+	// the others are worker-owned. Each counter is touched by one goroutine.
+	stopNotEstablished uint64
+	permDenied         uint64
+	opErrors           uint64
+	identityMismatch   uint64
+	capReached         uint64
 }
 
 func newHTTPUprobeWorker(
@@ -124,7 +122,7 @@ func newHTTPUprobeWorker(
 	cgroupRootPath string,
 	discoveryCache *ebpf.Map,
 	goTarget goUprobeTarget,
-	stopController *httpUprobeStopController,
+	stopLeases *ebpf.Map,
 ) *httpUprobeWorker {
 	return &httpUprobeWorker{
 		symbolTargets:     symbolTargets,
@@ -135,7 +133,7 @@ func newHTTPUprobeWorker(
 		reconcileRequests: make(chan []uint64, 1),
 		attachedTargets:   make(map[mappedFileIdentity]*attachedUprobeTarget),
 		discoveryCache:    discoveryCache,
-		stopController:    stopController,
+		stopLeases:        stopLeases,
 	}
 }
 
@@ -158,32 +156,29 @@ func (kernelIO *LinuxKernelIO) QueueHTTPUprobeReconciliation(activeCgroupIDs []u
 	kernelIO.httpUprobeWorker.queueTargetReconciliation(activeCgroupIDs)
 }
 
-// queueAttachCandidate schedules classification and attachment without blocking
-// sample intake. The discovery-cache entry stays present while the candidate is
-// queued; dropping it releases the entry so a later mapping can retry.
-func (w *httpUprobeWorker) queueAttachCandidate(candidate httpUprobeAttachCandidate) {
+// queueAttachCandidate hands one stopped-process candidate to the sole worker.
+// Blocking is safe because this input has a dedicated ring buffer; if that
+// buffer fills, BPF rolls back the cache entry before requesting SIGSTOP.
+func (w *httpUprobeWorker) queueAttachCandidate(ctx context.Context, candidate httpUprobeAttachCandidate) {
 	select {
 	case w.attachCandidates <- candidate:
-	default:
-		if err := w.deleteDiscoveryCacheEntry(candidate.file); err != nil {
-			w.warn("http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
-		}
-		w.warnThrottled(&w.attachCandidateQueueDropped, "http_uprobe_attach_candidate_dropped")
-		if candidate.stopRequested {
-			w.stopController.release(candidate.process, "queue_full")
-		}
+	case <-ctx.Done():
 	}
 }
 
-// run processes attach candidates and reconcile requests on one goroutine until ctx
-// is cancelled, then closes every attached link. It is the sole owner of
-// attachedTargets and link lifecycle; there is no separate closer goroutine.
+// run owns attach, normal SIGCONT, expired-lease recovery, and link reclaim on
+// one goroutine. The five-second safety sweep avoids per-process timer
+// callbacks and concurrent SIGCONT paths.
 func (w *httpUprobeWorker) run(ctx context.Context) {
 	defer w.closeAll()
+	stopSafetyTicker := time.NewTicker(httpUprobeStopSafetyPeriod)
+	defer stopSafetyTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-stopSafetyTicker.C:
+			w.resumeExpiredStopLeases()
 		case activeCgroupIDs := <-w.reconcileRequests:
 			w.reconcileTargets(activeCgroupIDs)
 		case candidate := <-w.attachCandidates:
@@ -193,13 +188,13 @@ func (w *httpUprobeWorker) run(ctx context.Context) {
 }
 
 func (w *httpUprobeWorker) handleAttachCandidate(ctx context.Context, candidate httpUprobeAttachCandidate) {
-	if !candidate.stopRequested || !w.stopController.isActive(candidate.process) {
+	if !candidate.stopRequested {
 		w.classifyAndAttach(candidate)
 		return
 	}
-	defer w.stopController.release(candidate.process, "attach_complete")
+	defer w.resumeStopLease(candidate.process, "attach_complete")
 
-	stopped, gone := w.waitForProcessStop(ctx, candidate.process)
+	stopped, gone := w.waitForProcessStop(ctx, candidate.process, candidate.stopStartedNS)
 	if gone {
 		return
 	}
@@ -218,13 +213,26 @@ func (w *httpUprobeWorker) handleAttachCandidate(ctx context.Context, candidate 
 	w.classifyUnresolvedProcessMappings(candidate.process.TGID)
 }
 
-func (w *httpUprobeWorker) waitForProcessStop(ctx context.Context, identity httpUprobeProcessGeneration) (stopped bool, gone bool) {
+func (w *httpUprobeWorker) waitForProcessStop(
+	ctx context.Context,
+	identity httpUprobeProcessGeneration,
+	stopStartedNS uint64,
+) (stopped bool, gone bool) {
+	// Count reader/queue delay against the same bounded stop window that BPF
+	// started; this synchronous deadline does not create another SIGCONT owner.
 	ticker := time.NewTicker(time.Millisecond)
 	defer ticker.Stop()
-	for {
-		if !w.stopController.isActive(identity) {
+	remaining := httpUprobeStopSafetyPeriod
+	if nowNS, err := monotonicNowNS(); err == nil && nowNS > stopStartedNS {
+		elapsed := time.Duration(nowNS - stopStartedNS)
+		if elapsed >= httpUprobeStopSafetyPeriod {
 			return false, false
 		}
+		remaining -= elapsed
+	}
+	deadline := time.NewTimer(remaining)
+	defer deadline.Stop()
+	for {
 		stopped, gone, err := processGroupStopped(identity.TGID)
 		if err != nil {
 			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "wait_process_stop", "error", err)
@@ -236,8 +244,56 @@ func (w *httpUprobeWorker) waitForProcessStop(ctx context.Context, identity http
 		select {
 		case <-ctx.Done():
 			return false, false
+		case <-deadline.C:
+			return false, false
 		case <-ticker.C:
 		}
+	}
+}
+
+func (w *httpUprobeWorker) resumeStopLease(
+	identity httpUprobeProcessGeneration,
+	reason string,
+) {
+	// Signal before deleting the crash-recovery ledger. The worker is the only
+	// userspace owner, and BPF never replaces an existing process lease.
+	if err := resumeHTTPUprobeProcess(identity); err != nil {
+		w.warn("http_uprobe_resume_failed", "tgid", identity.TGID, "reason", reason, "error", err)
+		return
+	}
+	if err := deleteHTTPUprobeStopLease(w.stopLeases, identity); err != nil {
+		w.warn("http_uprobe_stop_lease_delete_failed", "tgid", identity.TGID, "error", err)
+		return
+	}
+	if reason == "lease_expired" {
+		w.warn("http_uprobe_stop_lease_expired", "tgid", identity.TGID)
+	}
+}
+
+func (w *httpUprobeWorker) resumeExpiredStopLeases() {
+	if w.stopLeases == nil {
+		return
+	}
+	nowNS, err := monotonicNowNS()
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "stop_lease_clock", "error", err)
+		return
+	}
+
+	var expired []httpUprobeStopLease
+	iterator := w.stopLeases.Iterate()
+	var lease httpUprobeStopLease
+	for iterator.Next(&lease.identity, &lease.startedNS) {
+		if httpUprobeStopLeaseExpired(nowNS, lease.startedNS) {
+			expired = append(expired, lease)
+		}
+	}
+	if err := iterator.Err(); err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "stop_lease_iterate", "error", err)
+		return
+	}
+	for _, lease := range expired {
+		w.resumeStopLease(lease.identity, "lease_expired")
 	}
 }
 

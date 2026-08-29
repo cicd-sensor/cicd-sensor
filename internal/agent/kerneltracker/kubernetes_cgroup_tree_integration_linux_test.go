@@ -19,7 +19,7 @@ func TestBindPodCgroupTreeForProcess_KubernetesPod(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine, err := New(logger, nil)
+	engine, err := New(logger, nil, Config{})
 	if err != nil {
 		t.Fatalf("new kernel tracker: %v", err)
 	}

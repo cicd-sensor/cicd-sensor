@@ -5,12 +5,10 @@ package kernelio
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -18,10 +16,10 @@ import (
 )
 
 const (
-	httpUprobeBPFFSPinPath = "/sys/fs/bpf/cicd-sensor"
-	httpUprobeStopMapName  = "http_uprobe_stop_leases"
-	httpUprobeStopTimeout  = 500 * time.Millisecond
-	linuxProcClockTicks    = 100
+	httpUprobeBPFFSPinPath     = "/sys/fs/bpf/cicd-sensor"
+	httpUprobeStopMapName      = "http_uprobe_stop_leases"
+	httpUprobeStopSafetyPeriod = 5 * time.Second
+	linuxProcClockTicks        = 100
 )
 
 type httpUprobeProcessGeneration struct {
@@ -30,180 +28,70 @@ type httpUprobeProcessGeneration struct {
 	StartBoottime uint64
 }
 
-type activeHTTPUprobeStop struct {
-	pidfd int
-	timer *time.Timer
+type httpUprobeStopLease struct {
+	identity  httpUprobeProcessGeneration
+	startedNS uint64
 }
 
-// httpUprobeStopController owns only the bounded SIGSTOP/SIGCONT lifecycle.
-// ELF classification and uprobe links stay on the single HTTP uprobe worker.
-type httpUprobeStopController struct {
-	logger   *slog.Logger
-	leaseMap *ebpf.Map
-	timeout  time.Duration
-
-	mu     sync.Mutex
-	active map[httpUprobeProcessGeneration]*activeHTTPUprobeStop
-}
-
-func newHTTPUprobeStopController(logger *slog.Logger, leaseMap *ebpf.Map) *httpUprobeStopController {
-	return &httpUprobeStopController{
-		logger:   logger,
-		leaseMap: leaseMap,
-		timeout:  httpUprobeStopTimeout,
-		active:   make(map[httpUprobeProcessGeneration]*activeHTTPUprobeStop),
-	}
-}
-
-// track starts an independent best-effort pause timer after the BPF hook
-// successfully requested SIGSTOP. A false result means the process was resumed.
-func (controller *httpUprobeStopController) track(candidate httpUprobeAttachCandidate) (bool, error) {
-	identity := candidate.process
-	pidfd, err := unix.PidfdOpen(int(identity.TGID), 0)
-	if err != nil {
-		controller.resumeWithoutPidfd(identity)
-		return false, fmt.Errorf("open pidfd for stopped process %d: %w", identity.TGID, err)
-	}
-	matches, err := processGenerationMatches(identity)
-	if err != nil {
-		resumeErr := unix.PidfdSendSignal(pidfd, unix.SIGCONT, nil, 0)
-		_ = unix.Close(pidfd)
-		if resumeErr == nil || errors.Is(resumeErr, unix.ESRCH) {
-			controller.deleteLease(identity)
-		}
-		return false, errors.Join(
-			fmt.Errorf("verify stopped process %d generation: %w", identity.TGID, err),
-			resumeErr,
-		)
-	}
-	if !matches {
-		_ = unix.Close(pidfd)
-		controller.deleteLease(identity)
-		return false, nil
-	}
-
-	controller.mu.Lock()
-	if _, exists := controller.active[identity]; exists {
-		controller.mu.Unlock()
-		_ = unix.Close(pidfd)
-		return true, nil
-	}
-	entry := &activeHTTPUprobeStop{pidfd: pidfd}
-	controller.active[identity] = entry
-	remaining := controller.remaining(candidate.stopStartedNS)
-	entry.timer = time.AfterFunc(remaining, func() {
-		controller.release(identity, "timeout")
-	})
-	controller.mu.Unlock()
-	return true, nil
-}
-
-func (controller *httpUprobeStopController) remaining(startedNS uint64) time.Duration {
-	if startedNS == 0 {
-		return controller.timeout
-	}
+func monotonicNowNS() (uint64, error) {
 	var now unix.Timespec
 	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &now); err != nil {
-		return controller.timeout
+		return 0, err
 	}
-	nowNS := uint64(now.Sec)*uint64(time.Second) + uint64(now.Nsec)
+	return uint64(now.Sec)*uint64(time.Second) + uint64(now.Nsec), nil
+}
+
+func httpUprobeStopLeaseExpired(nowNS, startedNS uint64) bool {
+	if startedNS == 0 {
+		return true
+	}
 	if nowNS <= startedNS {
-		return controller.timeout
+		return false
 	}
-	elapsed := time.Duration(nowNS - startedNS)
-	if elapsed >= controller.timeout {
-		return 0
-	}
-	return controller.timeout - elapsed
+	return nowNS-startedNS >= uint64(httpUprobeStopSafetyPeriod)
 }
 
-// release is safe from the worker, queue-failure path, timeout callback, and
-// shutdown. Exactly one caller owns the pidfd and sends SIGCONT.
-func (controller *httpUprobeStopController) release(identity httpUprobeProcessGeneration, reason string) {
-	controller.mu.Lock()
-	entry, ok := controller.active[identity]
-	if ok {
-		delete(controller.active, identity)
-		if entry.timer != nil {
-			entry.timer.Stop()
-		}
+// resumeHTTPUprobeProcess opens a pidfd before the procfs generation check so
+// PID reuse cannot redirect SIGCONT. A gone or reused process needs no signal.
+func resumeHTTPUprobeProcess(identity httpUprobeProcessGeneration) error {
+	pidfd, err := unix.PidfdOpen(int(identity.TGID), 0)
+	if errors.Is(err, unix.ESRCH) {
+		return nil
 	}
-	controller.mu.Unlock()
-	if !ok {
-		return
+	if err != nil {
+		return fmt.Errorf("open pidfd for stopped process %d: %w", identity.TGID, err)
 	}
+	defer unix.Close(pidfd)
 
-	resumeErr := unix.PidfdSendSignal(entry.pidfd, unix.SIGCONT, nil, 0)
-	_ = unix.Close(entry.pidfd)
-	if resumeErr == nil || errors.Is(resumeErr, unix.ESRCH) {
-		controller.deleteLease(identity)
-	} else {
-		controller.warn("http_uprobe_resume_failed", "tgid", identity.TGID, "reason", reason, "error", resumeErr)
-	}
-	if reason == "timeout" {
-		controller.warn("http_uprobe_stop_timeout", "tgid", identity.TGID)
-	}
-}
-
-func (controller *httpUprobeStopController) resumeWithoutPidfd(identity httpUprobeProcessGeneration) {
 	matches, err := processGenerationMatches(identity)
 	if err != nil {
 		if processIsGone(err) {
-			controller.deleteLease(identity)
-			return
+			return nil
 		}
-		controller.warn("http_uprobe_resume_failed", "tgid", identity.TGID, "reason", "pidfd_open_failed_generation_check", "error", err)
-		return
+		return fmt.Errorf("verify stopped process %d generation: %w", identity.TGID, err)
 	}
 	if !matches {
-		controller.deleteLease(identity)
-		return
+		return nil
 	}
-	if err := unix.Kill(int(identity.TGID), unix.SIGCONT); err != nil && !errors.Is(err, unix.ESRCH) {
-		controller.warn("http_uprobe_resume_failed", "tgid", identity.TGID, "reason", "pidfd_open_failed", "error", err)
-		return
+	if err := unix.PidfdSendSignal(pidfd, unix.SIGCONT, nil, 0); err != nil && !errors.Is(err, unix.ESRCH) {
+		return fmt.Errorf("resume stopped process %d: %w", identity.TGID, err)
 	}
-	controller.deleteLease(identity)
+	return nil
 }
 
-func (controller *httpUprobeStopController) close() {
-	controller.mu.Lock()
-	identities := make([]httpUprobeProcessGeneration, 0, len(controller.active))
-	for identity := range controller.active {
-		identities = append(identities, identity)
+func deleteHTTPUprobeStopLease(leaseMap *ebpf.Map, identity httpUprobeProcessGeneration) error {
+	if leaseMap == nil {
+		return nil
 	}
-	controller.mu.Unlock()
-	for _, identity := range identities {
-		controller.release(identity, "shutdown")
+	if err := leaseMap.Delete(identity); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
+		return err
 	}
-}
-
-func (controller *httpUprobeStopController) isActive(identity httpUprobeProcessGeneration) bool {
-	controller.mu.Lock()
-	defer controller.mu.Unlock()
-	_, ok := controller.active[identity]
-	return ok
-}
-
-func (controller *httpUprobeStopController) deleteLease(identity httpUprobeProcessGeneration) {
-	if controller.leaseMap == nil {
-		return
-	}
-	if err := controller.leaseMap.Delete(identity); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
-		controller.warn("http_uprobe_stop_lease_delete_failed", "tgid", identity.TGID, "error", err)
-	}
-}
-
-func (controller *httpUprobeStopController) warn(msg string, args ...any) {
-	if controller.logger != nil {
-		controller.logger.Warn(msg, args...)
-	}
+	return nil
 }
 
 // recoverHTTPUprobeStopLeases runs before the mapping hook is attached. It
 // resumes only the process generation recorded by BPF, then removes every
-// lease. A pidfd is opened before checking procfs so the later signal cannot
-// move to a recycled numeric PID.
+// lease.
 func recoverHTTPUprobeStopLeases(leaseMap *ebpf.Map) error {
 	if leaseMap == nil {
 		return nil
@@ -212,25 +100,10 @@ func recoverHTTPUprobeStopLeases(leaseMap *ebpf.Map) error {
 	var identity httpUprobeProcessGeneration
 	var stoppedAtNS uint64
 	for iterator.Next(&identity, &stoppedAtNS) {
-		pidfd, err := unix.PidfdOpen(int(identity.TGID), 0)
-		if err != nil && !errors.Is(err, unix.ESRCH) {
-			return fmt.Errorf("open pidfd for HTTP uprobe stop lease %d: %w", identity.TGID, err)
+		if err := resumeHTTPUprobeProcess(identity); err != nil {
+			return err
 		}
-		if err == nil {
-			matches, matchErr := processGenerationMatches(identity)
-			if matchErr != nil && !processIsGone(matchErr) {
-				_ = unix.Close(pidfd)
-				return fmt.Errorf("verify HTTP uprobe stop lease for %d: %w", identity.TGID, matchErr)
-			}
-			if matches {
-				err = unix.PidfdSendSignal(pidfd, unix.SIGCONT, nil, 0)
-			}
-			_ = unix.Close(pidfd)
-			if err != nil && !errors.Is(err, unix.ESRCH) {
-				return fmt.Errorf("resume HTTP uprobe stop lease for %d: %w", identity.TGID, err)
-			}
-		}
-		if err := leaseMap.Delete(identity); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
+		if err := deleteHTTPUprobeStopLease(leaseMap, identity); err != nil {
 			return fmt.Errorf("delete HTTP uprobe stop lease for %d: %w", identity.TGID, err)
 		}
 	}

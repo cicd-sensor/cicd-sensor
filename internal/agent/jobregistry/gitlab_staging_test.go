@@ -19,7 +19,7 @@ func TestJobRegistry_StageCgroupBasenameForJob_BlockedDuringHostStartInflight(t 
 	}
 	jr := jobregistry.New(testLogger)
 
-	kernelTracker, err := kerneltracker.New(testLogger, nil)
+	kernelTracker, err := kerneltracker.New(testLogger, nil, kerneltracker.Config{})
 	if err != nil {
 		t.Skipf("kernel tracker unavailable: %v", err)
 	}

@@ -32,13 +32,8 @@ type Config struct {
 	EnableHTTPRequest bool
 }
 
-// New builds the production KernelTracker and its KernelIO adapter.
-func New(logger *slog.Logger, jobEndNotifier JobEndNotifier) (*KernelTracker, error) {
-	return NewWithConfig(logger, jobEndNotifier, Config{})
-}
-
-// NewWithConfig builds KernelTracker with optional kernel runtime features.
-func NewWithConfig(logger *slog.Logger, jobEndNotifier JobEndNotifier, trackerConfig Config) (*KernelTracker, error) {
+// New builds KernelTracker and its KernelIO adapter.
+func New(logger *slog.Logger, jobEndNotifier JobEndNotifier, trackerConfig Config) (*KernelTracker, error) {
 	cgroupRoot, err := getCgroupV2Root()
 	if errors.Is(err, kernelio.ErrNotSupported) {
 		cgroupRoot = ""

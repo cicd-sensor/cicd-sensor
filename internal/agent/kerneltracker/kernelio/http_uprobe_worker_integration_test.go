@@ -342,34 +342,20 @@ func TestLinuxHTTPUprobeStoppedProcessScanClassifiesPendingMapping(t *testing.T)
 	}
 }
 
-func TestLinuxHTTPUprobeQueueManagesDiscoveryCache(t *testing.T) {
-	for _, test := range []struct {
-		name      string
-		fillQueue bool
-		wantKey   bool
-	}{
-		{name: "queued classification remains deduplicated", wantKey: true},
-		{name: "dropped classification allows another process retry", fillQueue: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			worker := newReclaimTestWorker(t)
-			worker.attachCandidates = make(chan httpUprobeAttachCandidate, 1)
-			if test.fillQueue {
-				worker.attachCandidates <- httpUprobeAttachCandidate{}
-			}
-			candidate := httpUprobeAttachCandidate{file: fileClassificationKey{
-				mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42},
-				ctimeSec:   123,
-				ctimeNsec:  456,
-			}}
-			if err := worker.discoveryCache.Put(candidate.file, discoveryPending); err != nil {
-				t.Fatalf("record discovery file: %v", err)
-			}
-			worker.queueAttachCandidate(candidate)
-			if got := discoveryCacheContains(t, worker, candidate.file); got != test.wantKey {
-				t.Fatalf("discovery-cache key exists = %v, want %v", got, test.wantKey)
-			}
-		})
+func TestLinuxHTTPUprobeQueuedCandidateRemainsDeduplicated(t *testing.T) {
+	worker := newReclaimTestWorker(t)
+	worker.attachCandidates = make(chan httpUprobeAttachCandidate, 1)
+	candidate := httpUprobeAttachCandidate{file: fileClassificationKey{
+		mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42},
+		ctimeSec:   123,
+		ctimeNsec:  456,
+	}}
+	if err := worker.discoveryCache.Put(candidate.file, discoveryPending); err != nil {
+		t.Fatalf("record discovery file: %v", err)
+	}
+	worker.queueAttachCandidate(t.Context(), candidate)
+	if !discoveryCacheContains(t, worker, candidate.file) {
+		t.Fatal("queued classification was removed from the discovery cache")
 	}
 }
 
@@ -421,7 +407,7 @@ func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
 	attachCandidate := httpUprobeAttachCandidate{
 		process: httpUprobeProcessGeneration{TGID: int32(os.Getpid())}, vmStart: start, vmEnd: end, file: key,
 	}
-	worker.queueAttachCandidate(attachCandidate)
+	worker.queueAttachCandidate(t.Context(), attachCandidate)
 	worker.classifyAndAttach(<-worker.attachCandidates)
 	if worker.identityMismatch != 1 {
 		t.Fatalf("identity mismatch count = %d, want 1", worker.identityMismatch)

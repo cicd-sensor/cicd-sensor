@@ -134,8 +134,8 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
         return 0;
     }
 
-    // Reserve before SIGSTOP so a stopped process always has a notification
-    // that can arm the userspace resume timer.
+    // Reserve before SIGSTOP: a full ring buffer returns without stopping.
+    // Every successful stop therefore has a notification slot and recovery lease.
     struct http_uprobe_attach_candidate_sample *sample =
         bpf_ringbuf_reserve(&http_uprobe_attach_candidates, sizeof(*sample), 0);
     if (!sample) {

@@ -32,17 +32,15 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 	loopCtx, cancelLoop := context.WithCancel(ctx)
 	kernelIO.cancelLoop = cancelLoop
 
-	kernelIO.loopWG.Add(3)
 	if kernelIO.httpUprobeWorker != nil {
 		kernelIO.loopWG.Go(func() {
 			kernelIO.httpUprobeWorker.run(loopCtx)
 		})
 		kernelIO.loopWG.Go(func() {
-			kernelIO.readHTTPUprobeAttachCandidates()
+			kernelIO.readHTTPUprobeAttachCandidates(loopCtx)
 		})
 	}
-	go func() {
-		defer kernelIO.loopWG.Done()
+	kernelIO.loopWG.Go(func() {
 		<-loopCtx.Done()
 
 		if err := kernelIO.closeReader(); err != nil {
@@ -51,10 +49,9 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 		if err := kernelIO.closeHTTPUprobeAttachCandidateReader(); err != nil {
 			kernelIO.logger.WarnContext(loopCtx, "http_uprobe_attach_candidate_reader_close_failed", "error", err)
 		}
-	}()
+	})
 
-	go func() {
-		defer kernelIO.loopWG.Done()
+	kernelIO.loopWG.Go(func() {
 		var record ringbuf.Record
 		for {
 			if err := kernelIO.reader.ReadInto(&record); err != nil {
@@ -76,17 +73,16 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 				continue
 			}
 		}
-	}()
+	})
 
-	go func() {
-		defer kernelIO.loopWG.Done()
+	kernelIO.loopWG.Go(func() {
 		kernelIO.watchRingbufDrops(loopCtx)
-	}()
+	})
 
 	return nil
 }
 
-func (kernelIO *LinuxKernelIO) readHTTPUprobeAttachCandidates() {
+func (kernelIO *LinuxKernelIO) readHTTPUprobeAttachCandidates(ctx context.Context) {
 	var record ringbuf.Record
 	for {
 		if err := kernelIO.httpUprobeAttachCandidateReader.ReadInto(&record); err != nil {
@@ -100,15 +96,14 @@ func (kernelIO *LinuxKernelIO) readHTTPUprobeAttachCandidates() {
 				return
 			}
 		}
-		if err := kernelIO.handleHTTPUprobeAttachCandidate(record.RawSample); err != nil {
+		if err := kernelIO.handleHTTPUprobeAttachCandidate(ctx, record.RawSample); err != nil {
 			return
 		}
 	}
 }
 
-// failHTTPUprobeDiscovery prevents an attach-control failure from leaving a
-// process stopped without a userspace timer. Existing uprobes keep running, but
-// no new mapping can request SIGSTOP after the discovery link is detached.
+// failHTTPUprobeDiscovery stops new SIGSTOP requests. The worker's periodic
+// lease sweep resumes any process whose candidate could not be consumed.
 func (kernelIO *LinuxKernelIO) failHTTPUprobeDiscovery(cause error) {
 	kernelIO.httpUprobeDiscoveryMu.Lock()
 	if kernelIO.httpUprobeDiscoveryFailed {
@@ -128,14 +123,6 @@ func (kernelIO *LinuxKernelIO) failHTTPUprobeDiscovery(cause error) {
 			if kernelIO.logger != nil {
 				kernelIO.logger.Error("http_uprobe_discovery_link_close_failed", "error", err)
 			}
-		}
-	}
-	if kernelIO.httpUprobeStopController != nil {
-		kernelIO.httpUprobeStopController.close()
-	}
-	if err := recoverHTTPUprobeStopLeases(kernelIO.objs.HttpUprobeStopLeases); err != nil {
-		if kernelIO.logger != nil {
-			kernelIO.logger.Error("http_uprobe_stop_recovery_failed", "error", err)
 		}
 	}
 }
@@ -249,14 +236,11 @@ func (kernelIO *LinuxKernelIO) Close() error {
 			kernelIO.logger.Warn("http_uprobe_attach_candidate_reader_close_failed", "error", err)
 		}
 	}
-	// Drain goroutines before closing map FDs; the drop watcher may be in Map.Lookup.
+	// Drain goroutines before closing map FDs; workers may still be using maps.
 	kernelIO.loopWG.Wait()
-	if kernelIO.httpUprobeStopController != nil {
-		kernelIO.httpUprobeStopController.close()
-	}
 	// Recover any lease whose hook invocation was already in flight when the
 	// discovery link was detached.
-	if kernelIO.httpUprobeStopController != nil {
+	if kernelIO.httpUprobeWorker != nil {
 		if err := recoverHTTPUprobeStopLeases(kernelIO.objs.HttpUprobeStopLeases); err != nil {
 			if firstErr == nil {
 				firstErr = err

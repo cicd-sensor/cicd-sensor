@@ -108,7 +108,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	jobRegistry := jobregistry.New(a.logger)
 	jobRegistry.SetJobTTL(a.jobTTL)
 
-	kernelTracker, err := kerneltracker.NewWithConfig(a.logger, jobRegistry, kerneltracker.Config{
+	kernelTracker, err := kerneltracker.New(a.logger, jobRegistry, kerneltracker.Config{
 		EnableHTTPRequest: a.enableHTTPRequest,
 	})
 	if err != nil {

@@ -785,7 +785,7 @@ func setupGitLabListenerWithHostManager(t *testing.T, hostManagerClient jobregis
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	registry := jobregistry.New(logger)
 
-	engine, err := kerneltracker.New(logger, registry)
+	engine, err := kerneltracker.New(logger, registry, kerneltracker.Config{})
 	if err != nil {
 		t.Skipf("kernel tracker unavailable: %v", err)
 	}

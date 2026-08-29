@@ -154,8 +154,8 @@ No Go-specific worker, queue, registry, target cap, or reclaim path exists.
 - Binaries whose retained Go metadata is not supported by the pinned profiler
   dependency are not captured.
 - Classification and attachment use the common bounded SIGSTOP lifecycle.
-  Timeout or failure to establish SIGSTOP can still resume execution before
-  attachment; see
+  Failure to establish SIGSTOP or expiry in the safety sweep can still resume
+  execution before attachment; see
   [SIGSTOP safety and recovery](http-uprobes.md#sigstop-safety-and-recovery).
 - Retries and redirects can produce more than one request event.
 - A request attempt can be emitted even if transport validation or network

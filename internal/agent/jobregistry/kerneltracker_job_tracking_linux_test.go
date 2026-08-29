@@ -30,7 +30,7 @@ func startPeerPIDAuthRegistry(t *testing.T) (*JobRegistry, context.Context) {
 	ctx, cancel := context.WithCancel(testCtx)
 
 	jr := New(testLogger)
-	kernelTracker, err := kerneltracker.New(testLogger, jr)
+	kernelTracker, err := kerneltracker.New(testLogger, jr, kerneltracker.Config{})
 	if err != nil {
 		t.Skipf("kernel tracker unavailable: %v", err)
 	}

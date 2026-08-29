@@ -37,11 +37,8 @@ type LinuxKernelIO struct {
 	// loopWG and closes its own attached links, so they are not stored in links.
 	httpUprobeWorker *httpUprobeWorker
 	// httpUprobeDiscoveryLink is kept separate so shutdown can stop new process
-	// leases before the reader and stop controller are drained.
+	// leases before the reader and worker are drained.
 	httpUprobeDiscoveryLink link.Link
-	// httpUprobeStopController bounds and recovers process stops independently
-	// of potentially slow ELF classification on httpUprobeWorker.
-	httpUprobeStopController *httpUprobeStopController
 }
 
 // NewLinux loads the BPF objects, attaches programs, and opens the sample ring buffer.
@@ -103,10 +100,6 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		if err := recoverHTTPUprobeStopLeases(kernelIO.objs.HttpUprobeStopLeases); err != nil {
 			return nil, fmt.Errorf("recover HTTP uprobe stop leases: %w", err)
 		}
-		kernelIO.httpUprobeStopController = newHTTPUprobeStopController(
-			kernelIO.logger,
-			kernelIO.objs.HttpUprobeStopLeases,
-		)
 	}
 
 	// Install parse targets before any entry program can be attached. Populating
@@ -140,7 +133,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 				function: goNetHTTPRoundTripFunction,
 				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,
 			},
-			kernelIO.httpUprobeStopController,
+			kernelIO.objs.HttpUprobeStopLeases,
 		)
 	}
 

@@ -3,6 +3,7 @@
 package kernelio
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cilium/ebpf"
 	"golang.org/x/sys/unix"
 )
 
@@ -54,6 +56,46 @@ func TestLinuxHTTPUprobeStartupRecoversStoppedProcess(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = kernelIO.Close() })
 	waitForIntegrationProcessStopped(t, int32(pid), false)
+}
+
+func TestLinuxHTTPUprobeSafetySweepResumesExpiredLease(t *testing.T) {
+	config := testLinuxConfig(t)
+	config.EnableHTTPRequest = true
+	kernelIO, err := NewLinux(nil, config)
+	if err != nil {
+		t.Fatalf("start KernelIO: %v", err)
+	}
+	t.Cleanup(func() { _ = kernelIO.Close() })
+
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	})
+	pid := int32(cmd.Process.Pid)
+	identity := testProcessGeneration(t, pid)
+	nowNS, err := monotonicNowNS()
+	if err != nil {
+		t.Fatalf("read monotonic clock: %v", err)
+	}
+	startedNS := nowNS - uint64(httpUprobeStopSafetyPeriod)
+	if err := kernelIO.objs.HttpUprobeStopLeases.Put(identity, startedNS); err != nil {
+		t.Fatalf("insert expired stop lease: %v", err)
+	}
+	if err := unix.Kill(int(pid), unix.SIGSTOP); err != nil {
+		t.Fatalf("stop child: %v", err)
+	}
+	waitForIntegrationProcessStopped(t, pid, true)
+
+	kernelIO.httpUprobeWorker.resumeExpiredStopLeases()
+	waitForIntegrationProcessStopped(t, pid, false)
+	var remaining uint64
+	if err := kernelIO.objs.HttpUprobeStopLeases.Lookup(identity, &remaining); !errors.Is(err, ebpf.ErrKeyNotExist) {
+		t.Fatalf("expired stop lease lookup error = %v, want ErrKeyNotExist", err)
+	}
 }
 
 func runHTTPUprobeStopRecoveryHelper(t *testing.T) {

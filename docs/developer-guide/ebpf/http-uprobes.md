@@ -76,17 +76,17 @@ waiting for normal event processing.
 ```mermaid
 sequenceDiagram
     participant BPF as Linux kernel / BPF
-    participant IO as KernelIO reader / SIGSTOP controller
+    participant IO as KernelIO attach-candidate reader
     participant W as KernelIO HTTP uprobe worker
 
     BPF->>BPF: executable mapping: scope and discovery-cache check
     BPF->>BPF: reserve candidate, record SIGSTOP lease, request SIGSTOP
     BPF->>IO: attach candidate through dedicated ring buffer
-    IO->>W: open and classify mapped ELF
+    IO->>W: queue candidate
+    W->>W: open and classify mapped ELF
     W->>BPF: attach uprobe links and update discovery cache
-    Note over W: owns attachedTargets and every link operation
-    W-->>IO: finish attach work
-    IO->>BPF: SIGCONT and SIGSTOP lease deletion
+    W->>BPF: SIGCONT and SIGSTOP lease deletion
+    Note over W: owns attach, resume, and link operations
 ```
 
 The implemented lifecycle is:
@@ -96,13 +96,12 @@ The implemented lifecycle is:
 2. BPF reserves the dedicated attach-candidate ring buffer, records a
    process-generation SIGSTOP lease, and requests SIGSTOP before returning to
    userspace.
-3. KernelIO opens a pidfd and starts a best-effort resume timer based on the BPF
-   SIGSTOP timestamp.
+3. The dedicated KernelIO reader queues the candidate directly to the worker.
 4. The worker waits for visible tasks to enter the SIGSTOP state, classifies the
    mapped ELF, scans the process's other executable mappings, and attaches
    selected functions.
-5. Completion, error, queue rejection, timeout, and shutdown all converge on
-   SIGCONT and lease deletion.
+5. The worker immediately sends SIGCONT and deletes the lease. Every five
+   seconds, the same worker also resumes leases at least five seconds old.
 
 A second mapping created under the same process SIGSTOP lease is queued without
 sending another SIGSTOP. Its discovery-cache entry remains `pending` until
@@ -117,10 +116,15 @@ accept, while a single outbound HTTP request can be the entire exfiltration
 attempt. The design therefore prioritizes reliable first-request capture over
 zero scheduling intervention.
 
-Successful attachment resumes the process immediately; the process does not
-wait for the full timeout. The 500 ms timeout is a safety ceiling that prevents
-a live but stalled Agent from holding the process indefinitely. If it expires,
-the controller resumes the process even when attachment has not finished.
+Successful attachment resumes the process immediately. A five-second worker
+sweep is the abnormal-path safety net: a lease at least five seconds old is
+resumed even when attachment did not finish. Because the sweep itself runs every
+five seconds, recovery normally occurs between five and ten seconds after
+SIGSTOP when the worker is able to run. The worker's synchronous wait for the
+process to stop is also limited to five seconds from the BPF timestamp. This is
+not an independent watchdog: a worker blocked later in classification or
+attachment can delay recovery. Keeping normal completion and expiry on one
+goroutine avoids per-process timer callbacks and concurrent SIGCONT paths.
 
 ### Candidate classification
 
@@ -141,7 +145,7 @@ to userspace, then the worker attaches links before resuming the process. This
 preserves first-call capture. The lease allows recovery if the Agent disappears
 before sending SIGCONT. Ring-buffer reservation failure removes the cache entry
 for a later retry. Failure to establish SIGSTOP falls back to asynchronous
-classification. Only those degraded paths, or the 500 ms safety timeout, can
+classification. Only those degraded paths, or the expired-lease safety sweep, can
 let the first call run before attachment.
 
 The worker handles each file serially:
@@ -161,8 +165,9 @@ no other goroutine mutates its link registry.
 
 ### SIGSTOP safety and recovery
 
-On the normal path, attach completion, an error or timeout, and clean Agent
-shutdown all release the process with SIGCONT. The remaining failure mode is an
+On the normal path, attach completion, an error or expired-lease sweep, and
+clean Agent shutdown all release the process with SIGCONT. The remaining
+failure mode is an
 unexpected Agent termination, such as a crash or SIGKILL, after SIGSTOP but
 before SIGCONT. The pinned `http_uprobe_stop_leases` map is therefore a recovery
 ledger, not a discovery cache. BPF writes the lease before requesting SIGSTOP,
@@ -170,13 +175,13 @@ and the map remains available across that abnormal termination.
 
 | Situation | Result and recovery |
 | --- | --- |
-| attach completes | The controller sends SIGCONT and deletes the lease. |
-| classification error, queue rejection, or timeout | The same release path sends SIGCONT and deletes the lease. Attachment may remain incomplete. |
-| attach-control reader or candidate handling fails | KernelIO detaches the mapping hook, resumes controller-owned stops, and sweeps the pinned ledger. Existing links keep running, but discovery remains disabled until Agent restart. |
-| clean Agent shutdown | KernelIO first detaches the mapping hook, resumes controller-owned stops, sweeps the pinned ledger for a hook invocation that was already in flight, then unpins the empty ledger. |
+| attach completes or classification fails | The worker sends SIGCONT and deletes the lease. |
+| lease is at least five seconds old | The worker's five-second safety sweep sends SIGCONT and deletes the lease. Attachment may remain incomplete. |
+| attach-control reader or candidate handling fails | KernelIO detaches the mapping hook. The worker's safety sweep resumes leases whose candidates could not be consumed. Existing links keep running, but discovery remains disabled until Agent restart. |
+| clean Agent shutdown | KernelIO first detaches the mapping hook, stops the worker, sweeps the pinned ledger for queued or in-flight candidates, then unpins the empty ledger. |
 | Agent receives SIGKILL or crashes after SIGSTOP | No userspace cleanup can run. The workload can remain in the SIGSTOP state until cicd-sensor starts again. On startup, before attaching the mapping hook, KernelIO opens the pinned ledger, verifies each `(tgid, start_boottime)` against `/proc/<pid>/stat`, sends SIGCONT to the matching process, and deletes the lease. If the Agent is not restarted, this recovery does not occur. |
 | PID has exited or been reused before startup recovery | The process-generation check fails, so KernelIO deletes the stale lease without signaling the unrelated process. |
-| another actor had already sent SIGSTOP | SIGSTOP has no sender ownership that SIGCONT can preserve. Normal completion, timeout, shutdown, or startup recovery can resume a process that another actor placed in the SIGSTOP state. This ownership ambiguity is an accepted constraint of the CI runner deployment model. |
+| another actor had already sent SIGSTOP | SIGSTOP has no sender ownership that SIGCONT can preserve. Normal completion, safety sweep, shutdown, or startup recovery can resume a process that another actor placed in the SIGSTOP state. This ownership ambiguity is an accepted constraint of the CI runner deployment model. |
 
 Startup recovery runs even when the new Agent starts with
 `--enable-http-request=false`. After recovery, the disabled runtime unpins the
@@ -198,7 +203,7 @@ files and have different first-call guarantees.
 | **process-start scan** | Not adopted | On a process-exec event, scan that PID. | Can see the main executable, but shared libraries can be mapped later by the dynamic loader. The process can also run before userspace classification finishes. |
 | **fanotify permission mediation** | Not adopted | Intercept executable opens with `FAN_OPEN_EXEC_PERM`; ordinary shared-library opens require broad `FAN_OPEN_PERM` marks. | Can block an open while userspace decides, but broad marks also deliver unrelated opens before cgroup filtering and add queue, response, and mount-lifecycle failure modes. |
 | **mapping notification without SIGSTOP** | Not adopted | On an executable mapping during startup or later `dlopen`, run `fentry/uprobe_mmap`. | Covers the main executable, shared libraries, and later mappings without scanning. It does not pause the workload; fresh-process experiments reproduced missed first HTTPS requests. |
-| **mapping notification + bounded SIGSTOP** | Implemented; primary | On the same `fentry/uprobe_mmap` event, filter and deduplicate in BPF. | Normally keeps the process from reaching a selected function until its links are attached, providing reliable first-call capture. Failure to establish SIGSTOP or timeout can still resume before attachment completes. |
+| **mapping notification + bounded SIGSTOP** | Implemented; primary | On the same `fentry/uprobe_mmap` event, filter and deduplicate in BPF. | Normally keeps the process from reaching a selected function until its links are attached, providing reliable first-call capture. Failure to establish SIGSTOP or the safety sweep can still resume before attachment completes. |
 | **periodic process scan** | Not adopted | At each configured interval, scan current target processes and mappings. | Can catch up after missed discovery, but adds recurring scan cost and still cannot guarantee the first request. |
 
 The bounded mapping SIGSTOP reuses the existing hook, cache, worker, and ELF
@@ -319,7 +324,7 @@ closes every remaining link during normal shutdown.
 | --- | --- | --- | --- |
 | HTTP uprobe worker | `attachedTargets` | Link registry keyed by mapped-file identity. Each entry holds the classification key, links, and consecutive complete-miss count. | 4,096 files; reclaim removes an entry after two complete misses. |
 | BPF and KernelIO | `http_uprobe_discovery_cache` | Notification-suppression cache keyed by device, inode, and ctime. `pending` means queued but not yet classified; `resolved` means definitively non-target or attached. It does not own links. | 65,536-entry LRU; transient failure and reclaim remove entries. Eviction only permits reclassification. |
-| BPF and SIGSTOP controller | `http_uprobe_stop_leases` | Pinned recovery ledger keyed by tgid and start boottime. It records a process that may require SIGCONT after normal completion, timeout, shutdown, or Agent restart. | 4,096-entry hash; every release path removes its entry. |
+| BPF and KernelIO | `http_uprobe_stop_leases` | Pinned recovery ledger keyed by tgid and start boottime. The worker handles normal completion and the safety sweep; KernelIO handles shutdown and Agent restart. | 4,096-entry hash; every release path removes its entry. |
 
 `attachedTargets` is the source of truth for links. Neither discovery-cache
 eviction nor SIGSTOP lease deletion can close a link.
@@ -357,8 +362,9 @@ x64 and arm64 unless noted otherwise.
   enabled Agent. It does not attach discovery, start the worker, send SIGSTOP to
   new processes, or create dynamic uprobe links.
 - The normal bounded SIGSTOP path holds the process until attachment completes
-  and preserves first-call capture. Failure to establish SIGSTOP or the 500 ms
-  safety timeout can allow the process to run before attachment completes.
+  and preserves first-call capture. Failure to establish SIGSTOP or the
+  five-second expired-lease sweep can allow the process to run before attachment
+  completes.
 - If the Agent is killed after SIGSTOP, the workload can remain in the SIGSTOP
   state until the Agent restarts and processes the pinned recovery ledger. See
   [SIGSTOP safety and recovery](#sigstop-safety-and-recovery).

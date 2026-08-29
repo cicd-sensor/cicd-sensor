@@ -3,6 +3,7 @@
 package kernelio
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,7 @@ func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 	t.Run("available queue records the attach candidate", func(t *testing.T) {
 		t.Parallel()
 		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
-		worker.queueAttachCandidate(candidate)
+		worker.queueAttachCandidate(t.Context(), candidate)
 		select {
 		case got := <-worker.attachCandidates:
 			if got != candidate {
@@ -28,16 +29,15 @@ func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 		}
 	})
 
-	t.Run("full queue drops the attach candidate without blocking", func(t *testing.T) {
+	t.Run("cancellation stops a blocked handoff", func(t *testing.T) {
 		t.Parallel()
 		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
-		worker.queueAttachCandidate(candidate)
-		worker.queueAttachCandidate(httpUprobeAttachCandidate{process: httpUprobeProcessGeneration{TGID: 9876}})
+		worker.queueAttachCandidate(t.Context(), candidate)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		worker.queueAttachCandidate(ctx, httpUprobeAttachCandidate{})
 		if len(worker.attachCandidates) != 1 {
 			t.Fatalf("queue len = %d, want 1", len(worker.attachCandidates))
-		}
-		if worker.attachCandidateQueueDropped != 1 {
-			t.Fatalf("attachCandidateQueueDropped = %d, want 1", worker.attachCandidateQueueDropped)
 		}
 	})
 }

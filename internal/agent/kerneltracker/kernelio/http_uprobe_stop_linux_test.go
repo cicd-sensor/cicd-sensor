@@ -5,10 +5,8 @@ package kernelio
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"os"
 	"os/exec"
-	"sync"
 	"testing"
 	"time"
 
@@ -22,41 +20,28 @@ func TestHTTPUprobeStopLeaseBPFMapABI(t *testing.T) {
 	}
 }
 
-func TestHTTPUprobeStopControllerTimeoutResumesProcess(t *testing.T) {
-	cmd := exec.Command("sleep", "30")
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start child: %v", err)
+func TestHTTPUprobeStopLeaseExpired(t *testing.T) {
+	now := uint64(10 * time.Second)
+	for _, test := range []struct {
+		name      string
+		startedNS uint64
+		want      bool
+	}{
+		{name: "zero timestamp is invalid and expires", want: true},
+		{name: "younger than safety period remains", startedNS: now - uint64(httpUprobeStopSafetyPeriod) + 1},
+		{name: "exact safety period expires", startedNS: now - uint64(httpUprobeStopSafetyPeriod), want: true},
+		{name: "older than safety period expires", startedNS: 1, want: true},
+		{name: "future timestamp remains", startedNS: now + 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := httpUprobeStopLeaseExpired(now, test.startedNS); got != test.want {
+				t.Fatalf("httpUprobeStopLeaseExpired(%d, %d) = %v, want %v", now, test.startedNS, got, test.want)
+			}
+		})
 	}
-	defer func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-	}()
-
-	pid := int32(cmd.Process.Pid)
-	if err := unix.Kill(int(pid), unix.SIGSTOP); err != nil {
-		t.Fatalf("stop child: %v", err)
-	}
-	waitForTestProcessState(t, pid, true)
-
-	var now unix.Timespec
-	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &now); err != nil {
-		t.Fatalf("clock_gettime: %v", err)
-	}
-	controller := newHTTPUprobeStopController(nil, nil)
-	controller.timeout = 25 * time.Millisecond
-	tracked, err := controller.track(httpUprobeAttachCandidate{
-		process:       testProcessGeneration(t, pid),
-		stopRequested: true,
-		stopStartedNS: uint64(now.Sec)*uint64(time.Second) + uint64(now.Nsec),
-	})
-	if err != nil || !tracked {
-		t.Fatalf("track stopped child = %v, %v", tracked, err)
-	}
-	waitForTestProcessState(t, pid, false)
-	controller.close()
 }
 
-func TestHTTPUprobeStopControllerReleaseIsIdempotent(t *testing.T) {
+func TestResumeHTTPUprobeProcess(t *testing.T) {
 	cmd := exec.Command("sleep", "30")
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start child: %v", err)
@@ -72,22 +57,13 @@ func TestHTTPUprobeStopControllerReleaseIsIdempotent(t *testing.T) {
 	}
 	waitForTestProcessState(t, pid, true)
 	identity := testProcessGeneration(t, pid)
-	controller := newHTTPUprobeStopController(nil, nil)
-	controller.timeout = time.Second
-	tracked, err := controller.track(httpUprobeAttachCandidate{process: identity, stopRequested: true})
-	if err != nil || !tracked {
-		t.Fatalf("track stopped child = %v, %v", tracked, err)
+	if err := resumeHTTPUprobeProcess(identity); err != nil {
+		t.Fatalf("resume stopped child: %v", err)
 	}
-
-	var callers sync.WaitGroup
-	for range 8 {
-		callers.Go(func() { controller.release(identity, "test") })
-	}
-	callers.Wait()
 	waitForTestProcessState(t, pid, false)
 }
 
-func TestHTTPUprobeDiscoveryFailureResumesTrackedProcess(t *testing.T) {
+func TestResumeHTTPUprobeProcessDoesNotSignalReusedPID(t *testing.T) {
 	cmd := exec.Command("sleep", "30")
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start child: %v", err)
@@ -102,24 +78,13 @@ func TestHTTPUprobeDiscoveryFailureResumesTrackedProcess(t *testing.T) {
 		t.Fatalf("stop child: %v", err)
 	}
 	waitForTestProcessState(t, pid, true)
-	controller := newHTTPUprobeStopController(nil, nil)
-	controller.timeout = time.Minute
 	identity := testProcessGeneration(t, pid)
-	tracked, err := controller.track(httpUprobeAttachCandidate{process: identity})
-	if err != nil || !tracked {
-		t.Fatalf("track stopped child = %v, %v", tracked, err)
+	identity.StartBoottime += uint64(time.Second)
+	if err := resumeHTTPUprobeProcess(identity); err != nil {
+		t.Fatalf("ignore mismatched process generation: %v", err)
 	}
-
-	kernelIO := &LinuxKernelIO{httpUprobeStopController: controller}
-	kernelIO.failHTTPUprobeDiscovery(errors.New("reader failed"))
-	kernelIO.failHTTPUprobeDiscovery(errors.New("second reader failure"))
-	waitForTestProcessState(t, pid, false)
-	if !kernelIO.httpUprobeDiscoveryFailed {
-		t.Fatal("HTTP uprobe discovery failure was not recorded")
-	}
-	if controller.isActive(identity) {
-		t.Fatal("stopped process remained controller-owned after fail-safe recovery")
-	}
+	waitForTestProcessState(t, pid, true)
+	_ = unix.Kill(int(pid), unix.SIGCONT)
 }
 
 func testProcessGeneration(t *testing.T, pid int32) httpUprobeProcessGeneration {

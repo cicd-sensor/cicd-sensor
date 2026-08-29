@@ -4,6 +4,7 @@ package kernelio
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 
@@ -12,7 +13,7 @@ import (
 
 // handleHTTPUprobeAttachCandidate consumes one record from the dedicated
 // attach-control ring buffer without entering the KernelTracker event path.
-func (kernelIO *LinuxKernelIO) handleHTTPUprobeAttachCandidate(raw []byte) error {
+func (kernelIO *LinuxKernelIO) handleHTTPUprobeAttachCandidate(ctx context.Context, raw []byte) error {
 	if kernelIO.httpUprobeWorker == nil {
 		return nil
 	}
@@ -23,24 +24,16 @@ func (kernelIO *LinuxKernelIO) handleHTTPUprobeAttachCandidate(raw []byte) error
 		kernelIO.failHTTPUprobeDiscovery(decodeErr)
 		return decodeErr
 	}
-	if candidate.stopRequested {
-		tracked, err := kernelIO.httpUprobeStopController.track(candidate)
-		if err != nil {
-			trackErr := fmt.Errorf("track stopped process %d: %w", candidate.process.TGID, err)
-			kernelIO.failHTTPUprobeDiscovery(trackErr)
-			return trackErr
-		}
-		candidate.stopRequested = tracked
-	} else if candidate.stopStartedNS == 0 {
+	if !candidate.stopRequested && candidate.stopStartedNS == 0 {
 		kernelIO.httpUprobeWorker.warnThrottled(
 			&kernelIO.httpUprobeWorker.stopNotEstablished,
 			"http_uprobe_stop_not_established",
 			"tgid", candidate.process.TGID,
 		)
 	}
-	// A non-zero stop timestamp with stopped=false belongs to an existing stop
-	// lease. Queue it without starting or tracking another stop.
-	kernelIO.httpUprobeWorker.queueAttachCandidate(candidate)
+	// A non-zero timestamp with stopRequested=false shares an existing process
+	// lease. Its owner candidate performs the eventual SIGCONT.
+	kernelIO.httpUprobeWorker.queueAttachCandidate(ctx, candidate)
 	return nil
 }
 

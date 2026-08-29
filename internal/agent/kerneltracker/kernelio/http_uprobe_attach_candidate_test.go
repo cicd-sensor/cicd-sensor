@@ -64,7 +64,7 @@ func TestHandleHTTPUprobeAttachCandidate(t *testing.T) {
 	t.Run("attach candidate is queued without entering KernelTracker", func(t *testing.T) {
 		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
 		kernelIO := &LinuxKernelIO{httpUprobeWorker: worker}
-		if err := kernelIO.handleHTTPUprobeAttachCandidate(encodeHTTPUprobeAttachCandidate(t, candidate)); err != nil {
+		if err := kernelIO.handleHTTPUprobeAttachCandidate(t.Context(), encodeHTTPUprobeAttachCandidate(t, candidate)); err != nil {
 			t.Fatalf("handleHTTPUprobeAttachCandidate: %v", err)
 		}
 		if got := <-worker.attachCandidates; got != candidate {
@@ -78,7 +78,7 @@ func TestHandleHTTPUprobeAttachCandidate(t *testing.T) {
 		worker := &httpUprobeWorker{attachCandidates: make(chan httpUprobeAttachCandidate, 1)}
 		kernelIO := &LinuxKernelIO{httpUprobeWorker: worker}
 
-		if err := kernelIO.handleHTTPUprobeAttachCandidate(encodeHTTPUprobeAttachCandidate(t, candidate)); err != nil {
+		if err := kernelIO.handleHTTPUprobeAttachCandidate(t.Context(), encodeHTTPUprobeAttachCandidate(t, candidate)); err != nil {
 			t.Fatalf("handleHTTPUprobeAttachCandidate: %v", err)
 		}
 		if got := <-worker.attachCandidates; got != candidate {
@@ -92,7 +92,7 @@ func TestHandleHTTPUprobeAttachCandidate(t *testing.T) {
 
 func TestHandleHTTPUprobeAttachCandidateDecodeFailureDisablesDiscovery(t *testing.T) {
 	kernelIO := &LinuxKernelIO{httpUprobeWorker: &httpUprobeWorker{}}
-	if err := kernelIO.handleHTTPUprobeAttachCandidate([]byte{1}); err == nil {
+	if err := kernelIO.handleHTTPUprobeAttachCandidate(t.Context(), []byte{1}); err == nil {
 		t.Fatal("expected malformed attach-candidate error")
 	}
 	if !kernelIO.httpUprobeDiscoveryFailed {

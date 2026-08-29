@@ -107,7 +107,7 @@ func TestJobRegistry_ApplyGitHubHostStart_PendingDuplicateReturnsError(t *testin
 
 func TestJobRegistry_ApplyGitHubHostStart_UnwindsOnBindFailure(t *testing.T) {
 	jr := newJobRegistry(t)
-	kernelTracker, err := kerneltracker.New(testLogger, nil)
+	kernelTracker, err := kerneltracker.New(testLogger, nil, kerneltracker.Config{})
 	if err != nil {
 		t.Skipf("kernel tracker unavailable: %v", err)
 	}
