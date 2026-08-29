@@ -54,6 +54,8 @@ Kubernetes nodes must provide:
 - runc systemd cgroups.
 - A privileged node-level cicd-sensor DaemonSet running as root (`runAsUser: 0`).
 - Host cgroup v2 mounted into the agent container.
+- Host `/sys/fs/bpf` mounted into the agent container for the HTTP uprobe
+  SIGSTOP recovery ledger.
 
 cicd-sensor does not patch or restart containerd.
 Before installing the DaemonSet, verify that the node already exposes the NRI socket:
@@ -74,6 +76,7 @@ Kubernetes runner deployments use:
 | --- | --- |
 | cicd-sensor DaemonSet | Runs the agent and NRI observer on each node. |
 | host cgroup v2 mount | Lets the agent attach and track job cgroups from the host cgroup hierarchy. |
+| host bpffs mount | Preserves the HTTP uprobe SIGSTOP recovery ledger across agent Pod restarts. |
 | cicd-sensor Manager | Provides config, rules, and log delivery. |
 
 ## YAML

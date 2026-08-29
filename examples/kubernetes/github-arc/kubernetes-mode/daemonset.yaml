@@ -63,6 +63,8 @@ spec:
             - name: cgroupfs
               mountPath: /sys/fs/cgroup
               readOnly: true
+            - name: bpffs
+              mountPath: /sys/fs/bpf
         - name: nri
           image: ghcr.io/cicd-sensor/cicd-sensor-agent:latest
           imagePullPolicy: IfNotPresent
@@ -91,4 +93,8 @@ spec:
         - name: cgroupfs
           hostPath:
             path: /sys/fs/cgroup
+            type: Directory
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
             type: Directory

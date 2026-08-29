@@ -5,6 +5,7 @@ package kernelio
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -113,23 +114,31 @@ func recoverHTTPUprobeStopLeases(leaseMap *ebpf.Map) error {
 	return nil
 }
 
-// recoverAndUnpinHTTPUprobeStopLeases keeps --enable-http-request=false safe after
-// a prior enabled Agent exited while a process stop lease was still pinned.
-func recoverAndUnpinHTTPUprobeStopLeases() error {
+// resetHTTPUprobeStopLeasePin recovers leases when their layout is readable,
+// then removes the old pin so every Agent generation starts with its own map.
+func resetHTTPUprobeStopLeasePin(logger *slog.Logger) error {
 	pinnedPath := filepath.Join(httpUprobeBPFFSPinPath, httpUprobeStopMapName)
 	leaseMap, err := ebpf.LoadPinnedMap(pinnedPath, nil)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("open pinned HTTP uprobe stop leases: %w", err)
+		// An unreadable pin cannot be used for recovery or by the new BPF
+		// collection. Remove it rather than making the Agent permanently
+		// unstartable after a map-layout change.
+		if removeErr := os.Remove(pinnedPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return fmt.Errorf("remove unreadable HTTP uprobe stop leases after %v: %w", err, removeErr)
+		}
+		logger.Error("http_uprobe_stop_lease_recovery_skipped", "error", err)
+		return nil
 	}
 	defer leaseMap.Close()
-	if err := recoverHTTPUprobeStopLeases(leaseMap); err != nil {
-		return err
-	}
+	recoveryErr := recoverHTTPUprobeStopLeases(leaseMap)
 	if err := leaseMap.Unpin(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("unpin HTTP uprobe stop leases: %w", err)
+	}
+	if recoveryErr != nil {
+		logger.Error("http_uprobe_stop_lease_recovery_skipped", "error", recoveryErr)
 	}
 	return nil
 }

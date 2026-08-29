@@ -186,9 +186,13 @@ and the map remains available across that abnormal termination.
 Startup recovery runs even when the new Agent starts with
 `--enable-http-request=false`. After recovery, the disabled runtime unpins the
 unused lease map and does not attach cleartext, discovery, or HTTP uprobe
-programs. If recovery fails, Agent initialization fails before the mapping hook
-is attached, so the runtime does not create additional stops while old leases
-remain unresolved.
+programs. Every startup removes the previous pin before loading the current map
+specification. If an incompatible ledger cannot be decoded, KernelIO logs the
+failed recovery, removes the old pin, and starts with an empty ledger rather
+than leaving the Agent unable to start.
+
+Containerized agents mount the host `/sys/fs/bpf` at the same path. This keeps
+the recovery ledger available when the agent Pod is replaced.
 
 ### Discovery timing and alternatives
 

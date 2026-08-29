@@ -53,10 +53,11 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	kernelIO = &LinuxKernelIO{
 		logger: logger.With("component", "bpf_kernel_io"),
 	}
-	if !config.EnableHTTPRequest {
-		if err := recoverAndUnpinHTTPUprobeStopLeases(); err != nil {
-			return nil, fmt.Errorf("recover disabled HTTP uprobe stop leases: %w", err)
-		}
+	// The pin is a crash-recovery ledger, not persistent runtime state. Recover
+	// what the previous Agent left behind and always create a fresh current-spec
+	// map below, avoiding startup failure after a map-layout change.
+	if err := resetHTTPUprobeStopLeasePin(kernelIO.logger); err != nil {
+		return nil, fmt.Errorf("reset HTTP uprobe stop leases: %w", err)
 	}
 
 	spec, err := bpfprog.LoadBPFProgram()
@@ -96,12 +97,6 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		}
 		_ = rollback.Close()
 	}()
-	if config.EnableHTTPRequest {
-		if err := recoverHTTPUprobeStopLeases(kernelIO.objs.HttpUprobeStopLeases); err != nil {
-			return nil, fmt.Errorf("recover HTTP uprobe stop leases: %w", err)
-		}
-	}
-
 	// Install parse targets before any entry program can be attached. Populating
 	// a program array alone does not capture requests while the entry hooks are absent.
 	if err := kernelIO.objs.HttpStages.Put(uint32(0), kernelIO.objs.HandleTcpSendmsgHttpParse); err != nil {

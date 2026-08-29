@@ -4,6 +4,7 @@ package kernelio
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -71,6 +72,55 @@ func TestLinuxKernelIOOpensDedicatedHTTPUprobeAttachReader(t *testing.T) {
 	closed = true
 	if _, err := os.Stat(filepath.Join(httpUprobeBPFFSPinPath, httpUprobeStopMapName)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("pinned HTTP uprobe stop leases remain after clean close: %v", err)
+	}
+}
+
+func TestLinuxKernelIOReplacesIncompatibleHTTPUprobeStopLeasePin(t *testing.T) {
+	if err := os.MkdirAll(httpUprobeBPFFSPinPath, 0o700); err != nil {
+		t.Fatalf("create BPF pin directory: %v", err)
+	}
+	pinnedPath := filepath.Join(httpUprobeBPFFSPinPath, httpUprobeStopMapName)
+	if err := os.Remove(pinnedPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("remove existing stop lease pin: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(pinnedPath) })
+
+	incompatible, err := ebpf.NewMap(&ebpf.MapSpec{
+		Name:       "old_stop_lease",
+		Type:       ebpf.Hash,
+		KeySize:    4,
+		ValueSize:  4,
+		MaxEntries: 1,
+	})
+	if err != nil {
+		t.Fatalf("create incompatible stop lease map: %v", err)
+	}
+	if err := incompatible.Put(uint32(1), uint32(1)); err != nil {
+		_ = incompatible.Close()
+		t.Fatalf("seed incompatible stop lease map: %v", err)
+	}
+	if err := incompatible.Pin(pinnedPath); err != nil {
+		_ = incompatible.Close()
+		t.Fatalf("pin incompatible stop lease map: %v", err)
+	}
+	if err := incompatible.Close(); err != nil {
+		t.Fatalf("close incompatible stop lease map: %v", err)
+	}
+
+	config := testLinuxConfig(t)
+	config.EnableHTTPRequest = true
+	kernelIO, err := NewLinux(nil, config)
+	if err != nil {
+		t.Fatalf("NewLinux with incompatible stop lease pin: %v", err)
+	}
+	t.Cleanup(func() { _ = kernelIO.Close() })
+
+	info, err := kernelIO.objs.HttpUprobeStopLeases.Info()
+	if err != nil {
+		t.Fatalf("read replacement stop lease map info: %v", err)
+	}
+	if got, want := info.KeySize, uint32(binary.Size(httpUprobeProcessGeneration{})); got != want {
+		t.Fatalf("replacement stop lease key size = %d, want %d", got, want)
 	}
 }
 

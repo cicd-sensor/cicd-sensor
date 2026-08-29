@@ -63,6 +63,8 @@ spec:
             - name: cgroupfs
               mountPath: /sys/fs/cgroup
               readOnly: true
+            - name: bpffs
+              mountPath: /sys/fs/bpf
       volumes:
         - name: run
           hostPath:
@@ -71,4 +73,8 @@ spec:
         - name: cgroupfs
           hostPath:
             path: /sys/fs/cgroup
+            type: Directory
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
             type: Directory
