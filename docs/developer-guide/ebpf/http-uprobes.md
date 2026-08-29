@@ -59,12 +59,14 @@ sequenceDiagram
     W->>BPF: after two complete misses: close links and delete cache entries
 ```
 
-Attach candidates remain inside KernelIO and never enter CEL evaluation. They
-use the dedicated 1 MiB `http_uprobe_attach_candidates` ring buffer and KernelIO
-reader. Normal `events` delivery, KernelTracker attribution, and CEL
-backpressure therefore cannot place attach work behind the security-event
-pipeline for a process that BPF has requested to stop. KernelTracker supplies
-only the active cgroup IDs needed by the worker's once-per-minute reclaim pass.
+Attach candidates remain inside KernelIO and never enter KernelTracker
+attribution or CEL evaluation. They use the dedicated 1 MiB
+`http_uprobe_attach_candidates` ring buffer and reader, so backlog or drops in
+the normal `events` ring buffer do not queue them behind security events. The
+independent reader sends candidates directly to the HTTP uprobe worker. This
+gives attach work a shorter, isolated path, not OS-level scheduling priority.
+KernelTracker supplies only the active cgroup IDs needed by the worker's
+once-per-minute reclaim pass.
 Exact cache and lease identities and bounds are listed under
 [Retained state](#retained-state).
 
