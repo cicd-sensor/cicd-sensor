@@ -166,7 +166,7 @@ KernelIO sizes it from node CPU count, so larger runner nodes get a larger kerne
 HTTP uprobe attach candidates use a separate fixed 1 MiB
 `http_uprobe_attach_candidates` ring buffer. KernelIO reads this control path
 independently so uprobe attachment does not queue behind security-event delivery
-or evaluation while a target process is stopped.
+or evaluation while a target process is in the SIGSTOP state.
 
 ## Implementation layout
 
