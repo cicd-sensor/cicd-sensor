@@ -19,12 +19,16 @@ func (kernelIO *LinuxKernelIO) handleHTTPUprobeAttachCandidate(raw []byte) error
 
 	candidate, err := decodeHTTPUprobeAttachCandidate(raw)
 	if err != nil {
-		return err
+		decodeErr := fmt.Errorf("decode %d-byte attach candidate: %w", len(raw), err)
+		kernelIO.failHTTPUprobeDiscovery(decodeErr)
+		return decodeErr
 	}
 	if candidate.stopRequested {
 		tracked, err := kernelIO.httpUprobeStopController.track(candidate)
 		if err != nil {
-			kernelIO.logger.Warn("http_uprobe_stop_tracking_failed", "tgid", candidate.process.TGID, "error", err)
+			trackErr := fmt.Errorf("track stopped process %d: %w", candidate.process.TGID, err)
+			kernelIO.failHTTPUprobeDiscovery(trackErr)
+			return trackErr
 		}
 		candidate.stopRequested = tracked
 	} else if candidate.stopStartedNS == 0 {

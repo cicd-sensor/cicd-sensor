@@ -90,6 +90,16 @@ func TestHandleHTTPUprobeAttachCandidate(t *testing.T) {
 	})
 }
 
+func TestHandleHTTPUprobeAttachCandidateDecodeFailureDisablesDiscovery(t *testing.T) {
+	kernelIO := &LinuxKernelIO{httpUprobeWorker: &httpUprobeWorker{}}
+	if err := kernelIO.handleHTTPUprobeAttachCandidate([]byte{1}); err == nil {
+		t.Fatal("expected malformed attach-candidate error")
+	}
+	if !kernelIO.httpUprobeDiscoveryFailed {
+		t.Fatal("malformed attach candidate did not disable discovery")
+	}
+}
+
 func encodeHTTPUprobeAttachCandidate(t *testing.T, candidate httpUprobeAttachCandidate) KernelSample {
 	t.Helper()
 	sample := bpfprog.BPFProgramHttpUprobeAttachCandidateSample{

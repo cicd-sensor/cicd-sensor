@@ -26,6 +26,8 @@ type LinuxKernelIO struct {
 	cancelLoop                               context.CancelFunc
 	closeReaderOnce                          sync.Once
 	closeHTTPUprobeAttachCandidateReaderOnce sync.Once
+	httpUprobeDiscoveryMu                    sync.Mutex
+	httpUprobeDiscoveryFailed                bool
 	// loopWG tracks goroutines spawned by StartKernelSampleLoop. Close
 	// must wait for them to exit before tearing down objs / map FDs;
 	// otherwise watchRingbufDrops can race objs.Close on a Map.Lookup

@@ -140,9 +140,15 @@ struct {
     __type(value, __u64);
 } ringbuf_drop_count SEC(".maps");
 
-// Files whose discovery is pending or already resolved. Presence means that
-// another mapping notification is unnecessary. LRU eviction only causes a
-// later reclassification; attached links remain owned by userspace.
+enum http_uprobe_discovery_state {
+    HTTP_UPROBE_DISCOVERY_PENDING = 1,
+    HTTP_UPROBE_DISCOVERY_RESOLVED = 2,
+};
+
+// Files whose discovery is pending or already resolved. Presence suppresses
+// another mapping notification; userspace still classifies pending entries
+// found while a process is stopped. LRU eviction only causes a later
+// reclassification; attached links remain owned by userspace.
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, 65536);
@@ -152,6 +158,8 @@ struct {
 
 // Process generations successfully stopped for first-call uprobe attachment.
 // Userspace pins this non-LRU recovery ledger while HTTP uprobes are enabled.
+// Its key and value layout are a recovery ABI and must remain readable across
+// Agent upgrades.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 4096);

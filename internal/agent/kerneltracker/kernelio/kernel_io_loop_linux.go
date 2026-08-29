@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 )
 
@@ -37,7 +38,7 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 			kernelIO.httpUprobeWorker.run(loopCtx)
 		})
 		kernelIO.loopWG.Go(func() {
-			kernelIO.readHTTPUprobeAttachCandidates(loopCtx)
+			kernelIO.readHTTPUprobeAttachCandidates()
 		})
 	}
 	go func() {
@@ -85,7 +86,7 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 	return nil
 }
 
-func (kernelIO *LinuxKernelIO) readHTTPUprobeAttachCandidates(ctx context.Context) {
+func (kernelIO *LinuxKernelIO) readHTTPUprobeAttachCandidates() {
 	var record ringbuf.Record
 	for {
 		if err := kernelIO.httpUprobeAttachCandidateReader.ReadInto(&record); err != nil {
@@ -95,14 +96,56 @@ func (kernelIO *LinuxKernelIO) readHTTPUprobeAttachCandidates(ctx context.Contex
 			case errors.Is(err, context.Canceled):
 				return
 			default:
-				kernelIO.logger.WarnContext(ctx, "http_uprobe_attach_candidate_reader_failed", "error", err)
+				kernelIO.failHTTPUprobeDiscovery(fmt.Errorf("read attach candidate: %w", err))
 				return
 			}
 		}
 		if err := kernelIO.handleHTTPUprobeAttachCandidate(record.RawSample); err != nil {
-			kernelIO.logger.WarnContext(ctx, "http_uprobe_attach_candidate_decode_failed", "error", err, "bytes", len(record.RawSample))
+			return
 		}
 	}
+}
+
+// failHTTPUprobeDiscovery prevents an attach-control failure from leaving a
+// process stopped without a userspace timer. Existing uprobes keep running, but
+// no new mapping can request SIGSTOP after the discovery link is detached.
+func (kernelIO *LinuxKernelIO) failHTTPUprobeDiscovery(cause error) {
+	kernelIO.httpUprobeDiscoveryMu.Lock()
+	if kernelIO.httpUprobeDiscoveryFailed {
+		kernelIO.httpUprobeDiscoveryMu.Unlock()
+		return
+	}
+	kernelIO.httpUprobeDiscoveryFailed = true
+	discoveryLink := kernelIO.httpUprobeDiscoveryLink
+	kernelIO.httpUprobeDiscoveryLink = nil
+	kernelIO.httpUprobeDiscoveryMu.Unlock()
+
+	if kernelIO.logger != nil {
+		kernelIO.logger.Error("http_uprobe_discovery_disabled", "error", cause)
+	}
+	if discoveryLink != nil {
+		if err := discoveryLink.Close(); err != nil {
+			if kernelIO.logger != nil {
+				kernelIO.logger.Error("http_uprobe_discovery_link_close_failed", "error", err)
+			}
+		}
+	}
+	if kernelIO.httpUprobeStopController != nil {
+		kernelIO.httpUprobeStopController.close()
+	}
+	if err := recoverHTTPUprobeStopLeases(kernelIO.objs.HttpUprobeStopLeases); err != nil {
+		if kernelIO.logger != nil {
+			kernelIO.logger.Error("http_uprobe_stop_recovery_failed", "error", err)
+		}
+	}
+}
+
+func (kernelIO *LinuxKernelIO) takeHTTPUprobeDiscoveryLink() link.Link {
+	kernelIO.httpUprobeDiscoveryMu.Lock()
+	defer kernelIO.httpUprobeDiscoveryMu.Unlock()
+	discoveryLink := kernelIO.httpUprobeDiscoveryLink
+	kernelIO.httpUprobeDiscoveryLink = nil
+	return discoveryLink
 }
 
 func (kernelIO *LinuxKernelIO) watchRingbufDrops(ctx context.Context) {
@@ -186,11 +229,10 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	}
 
 	var firstErr error
-	if kernelIO.httpUprobeDiscoveryLink != nil {
-		if err := kernelIO.httpUprobeDiscoveryLink.Close(); err != nil {
+	if discoveryLink := kernelIO.takeHTTPUprobeDiscoveryLink(); discoveryLink != nil {
+		if err := discoveryLink.Close(); err != nil {
 			firstErr = err
 		}
-		kernelIO.httpUprobeDiscoveryLink = nil
 	}
 
 	if kernelIO.cancelLoop != nil {

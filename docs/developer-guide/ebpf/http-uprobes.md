@@ -104,10 +104,11 @@ The implemented lifecycle is:
 5. Completion, error, queue rejection, timeout, and shutdown all converge on
    SIGCONT and lease deletion.
 
-A second mapping created under the same process SIGSTOP lease is queued without sending
-another SIGSTOP. The worker scan and explicit candidates can overlap safely
-because file-level discovery deduplication makes repeated classification
-harmless.
+A second mapping created under the same process SIGSTOP lease is queued without
+sending another SIGSTOP. Its discovery-cache entry remains `pending` until
+classification finishes. The stopped-process scan handles pending mappings
+before SIGCONT; a later explicit candidate is harmless because attached targets
+and resolved non-targets are idempotent.
 
 **Why accept this trade-off.** SIGSTOP is an unusual observation barrier and
 would be a poor default for a latency-sensitive production service. cicd-sensor
@@ -130,9 +131,10 @@ create several executable VMAs, so deduplication uses file identity rather than
 VMA range or process identity.
 
 The candidate carries device, inode, ctime, VMA range, process generation, and
-SIGSTOP state. It contains no HTTP bytes or file content. BPF inserts the cache
-entry before notification so unrelated mappings of the same file do not create
-repeated userspace work.
+SIGSTOP state. It contains no HTTP bytes or file content. BPF inserts a
+`pending` cache entry before notification so unrelated mappings of the same file
+do not create repeated userspace work. Userspace changes it to `resolved` only
+after definitive non-target classification or successful attachment.
 
 On the normal path, BPF records the lease and requests SIGSTOP before returning
 to userspace, then the worker attaches links before resuming the process. This
@@ -170,6 +172,7 @@ and the map remains available across that abnormal termination.
 | --- | --- |
 | attach completes | The controller sends SIGCONT and deletes the lease. |
 | classification error, queue rejection, or timeout | The same release path sends SIGCONT and deletes the lease. Attachment may remain incomplete. |
+| attach-control reader or candidate handling fails | KernelIO detaches the mapping hook, resumes controller-owned stops, and sweeps the pinned ledger. Existing links keep running, but discovery remains disabled until Agent restart. |
 | clean Agent shutdown | KernelIO first detaches the mapping hook, resumes controller-owned stops, sweeps the pinned ledger for a hook invocation that was already in flight, then unpins the empty ledger. |
 | Agent receives SIGKILL or crashes after SIGSTOP | No userspace cleanup can run. The workload can remain in the SIGSTOP state until cicd-sensor starts again. On startup, before attaching the mapping hook, KernelIO opens the pinned ledger, verifies each `(tgid, start_boottime)` against `/proc/<pid>/stat`, sends SIGCONT to the matching process, and deletes the lease. If the Agent is not restarted, this recovery does not occur. |
 | PID has exited or been reused before startup recovery | The process-generation check fails, so KernelIO deletes the stale lease without signaling the unrelated process. |
@@ -315,7 +318,7 @@ closes every remaining link during normal shutdown.
 | Owner | State | Meaning | Bound and removal |
 | --- | --- | --- | --- |
 | HTTP uprobe worker | `attachedTargets` | Link registry keyed by mapped-file identity. Each entry holds the classification key, links, and consecutive complete-miss count. | 4,096 files; reclaim removes an entry after two complete misses. |
-| BPF and KernelIO | `http_uprobe_discovery_cache` | Notification-suppression cache keyed by device, inode, and ctime. It records files already queued, classified, or attached; it does not own links. | 65,536-entry LRU; transient failure and reclaim remove entries. Eviction only permits reclassification. |
+| BPF and KernelIO | `http_uprobe_discovery_cache` | Notification-suppression cache keyed by device, inode, and ctime. `pending` means queued but not yet classified; `resolved` means definitively non-target or attached. It does not own links. | 65,536-entry LRU; transient failure and reclaim remove entries. Eviction only permits reclassification. |
 | BPF and SIGSTOP controller | `http_uprobe_stop_leases` | Pinned recovery ledger keyed by tgid and start boottime. It records a process that may require SIGCONT after normal completion, timeout, shutdown, or Agent restart. | 4,096-entry hash; every release path removes its entry. |
 
 `attachedTargets` is the source of truth for links. Neither discovery-cache

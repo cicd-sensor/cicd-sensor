@@ -78,8 +78,8 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     if (bpf_map_lookup_elem(&http_uprobe_discovery_cache, &classification))
         return 0;
 
-    __u8 one = 1;
-    if (bpf_map_update_elem(&http_uprobe_discovery_cache, &classification, &one, BPF_NOEXIST) != 0)
+    __u8 pending = HTTP_UPROBE_DISCOVERY_PENDING;
+    if (bpf_map_update_elem(&http_uprobe_discovery_cache, &classification, &pending, BPF_NOEXIST) != 0)
         return 0;
 
     struct http_uprobe_stop_lease_key lease = {

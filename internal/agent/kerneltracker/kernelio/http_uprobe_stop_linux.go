@@ -64,6 +64,23 @@ func (controller *httpUprobeStopController) track(candidate httpUprobeAttachCand
 		controller.resumeWithoutPidfd(identity)
 		return false, fmt.Errorf("open pidfd for stopped process %d: %w", identity.TGID, err)
 	}
+	matches, err := processGenerationMatches(identity)
+	if err != nil {
+		resumeErr := unix.PidfdSendSignal(pidfd, unix.SIGCONT, nil, 0)
+		_ = unix.Close(pidfd)
+		if resumeErr == nil || errors.Is(resumeErr, unix.ESRCH) {
+			controller.deleteLease(identity)
+		}
+		return false, errors.Join(
+			fmt.Errorf("verify stopped process %d generation: %w", identity.TGID, err),
+			resumeErr,
+		)
+	}
+	if !matches {
+		_ = unix.Close(pidfd)
+		controller.deleteLease(identity)
+		return false, nil
+	}
 
 	controller.mu.Lock()
 	if _, exists := controller.active[identity]; exists {

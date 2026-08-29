@@ -102,7 +102,7 @@ func discoverAndCount(t *testing.T, worker *httpUprobeWorker, pids ...int32) int
 			if err != nil {
 				continue
 			}
-			if err := worker.discoveryCache.Put(key, uint8(1)); err != nil {
+			if err := worker.discoveryCache.Put(key, discoveryPending); err != nil {
 				t.Fatalf("record discovery file: %v", err)
 			}
 			worker.classifyAndAttach(httpUprobeAttachCandidate{
@@ -274,7 +274,7 @@ func TestLinuxHTTPUprobeOpenMappedFileFallsBackToCurrentRange(t *testing.T) {
 	}
 }
 
-func TestLinuxHTTPUprobeDiscoveryCacheUsesBPFMap(t *testing.T) {
+func TestLinuxHTTPUprobeDiscoveryCacheDistinguishesPendingAndResolved(t *testing.T) {
 	worker := newReclaimTestWorker(t)
 	key := fileClassificationKey{
 		mappedFile: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42},
@@ -283,9 +283,62 @@ func TestLinuxHTTPUprobeDiscoveryCacheUsesBPFMap(t *testing.T) {
 	if discoveryCacheContains(t, worker, key) {
 		t.Fatal("fresh key is already in discovery cache")
 	}
-	worker.cacheDiscoveryFile(key)
-	if !discoveryCacheContains(t, worker, key) {
-		t.Fatal("cached key was not found in discovery cache")
+	if err := worker.discoveryCache.Put(key, discoveryPending); err != nil {
+		t.Fatalf("record pending discovery file: %v", err)
+	}
+	if worker.discoveryFileResolved(key) {
+		t.Fatal("pending discovery file reported as resolved")
+	}
+	worker.markDiscoveryFileResolved(key)
+	if !worker.discoveryFileResolved(key) {
+		t.Fatal("resolved discovery file was not reported as resolved")
+	}
+}
+
+func TestLinuxHTTPUprobeStoppedProcessScanClassifiesPendingMapping(t *testing.T) {
+	worker := newReclaimTestWorker(t)
+	pid := int32(os.Getpid())
+	self, err := os.Open("/proc/self/exe")
+	if err != nil {
+		t.Fatalf("open self executable: %v", err)
+	}
+	selfKey, err := classificationKeyFromFile(self)
+	_ = self.Close()
+	if err != nil {
+		t.Fatalf("classify self executable: %v", err)
+	}
+
+	mappings, complete := worker.scanProcessMappings(pid)
+	if !complete {
+		t.Fatal("scan self mappings was incomplete")
+	}
+	foundSelf := false
+	for _, mapping := range mappings {
+		f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, mapping.addressRange))
+		if err != nil {
+			continue
+		}
+		key, err := classificationKeyFromFile(f)
+		_ = f.Close()
+		if err != nil {
+			continue
+		}
+		state := discoveryResolved
+		if key == selfKey {
+			state = discoveryPending
+			foundSelf = true
+		}
+		if err := worker.discoveryCache.Put(key, state); err != nil {
+			t.Fatalf("seed discovery state: %v", err)
+		}
+	}
+	if !foundSelf {
+		t.Fatal("self executable was absent from executable mappings")
+	}
+
+	worker.classifyUnresolvedProcessMappings(pid)
+	if !worker.discoveryFileResolved(selfKey) {
+		t.Fatal("stopped-process scan left the queued self mapping pending")
 	}
 }
 
@@ -309,7 +362,7 @@ func TestLinuxHTTPUprobeQueueManagesDiscoveryCache(t *testing.T) {
 				ctimeSec:   123,
 				ctimeNsec:  456,
 			}}
-			if err := worker.discoveryCache.Put(candidate.file, uint8(1)); err != nil {
+			if err := worker.discoveryCache.Put(candidate.file, discoveryPending); err != nil {
 				t.Fatalf("record discovery file: %v", err)
 			}
 			worker.queueAttachCandidate(candidate)
@@ -361,7 +414,7 @@ func TestLinuxHTTPUprobeIdentityMismatchIsRetryable(t *testing.T) {
 		t.Fatalf("classify current map_files entry: %v", err)
 	}
 	key.ctimeNsec++
-	if err := worker.discoveryCache.Put(key, uint8(1)); err != nil {
+	if err := worker.discoveryCache.Put(key, discoveryPending); err != nil {
 		t.Fatalf("record discovery file: %v", err)
 	}
 

@@ -46,6 +46,11 @@ const maxAttachedUprobeTargets = 4096
 // symbol classification and uprobe attach run on the single owner worker.
 const attachCandidateQueueSize = 4096
 
+const (
+	discoveryPending  uint8 = 1
+	discoveryResolved uint8 = 2
+)
+
 // missingScanLimit is the number of complete scans that must miss an attached
 // target before its links are closed. Incomplete scans do not count; finding
 // the target again resets its count.
@@ -210,7 +215,7 @@ func (w *httpUprobeWorker) handleAttachCandidate(ctx context.Context, candidate 
 	// stopped process snapshot to catch every other executable mapping already
 	// present before resuming the process.
 	w.classifyAndAttach(candidate)
-	w.classifyUncachedProcessMappings(candidate.process.TGID)
+	w.classifyUnresolvedProcessMappings(candidate.process.TGID)
 }
 
 func (w *httpUprobeWorker) waitForProcessStop(ctx context.Context, identity httpUprobeProcessGeneration) (stopped bool, gone bool) {
@@ -236,7 +241,7 @@ func (w *httpUprobeWorker) waitForProcessStop(ctx context.Context, identity http
 	}
 }
 
-func (w *httpUprobeWorker) classifyUncachedProcessMappings(pid int32) {
+func (w *httpUprobeWorker) classifyUnresolvedProcessMappings(pid int32) {
 	mappings, _ := w.scanProcessMappings(pid)
 	for _, mapping := range mappings {
 		f, err := os.Open(fmt.Sprintf("/proc/%d/map_files/%s", pid, mapping.addressRange))
@@ -245,7 +250,7 @@ func (w *httpUprobeWorker) classifyUncachedProcessMappings(pid int32) {
 		}
 		classification, err := classificationKeyFromFile(f)
 		_ = f.Close()
-		if err != nil || w.discoveryFileCached(classification) {
+		if err != nil || w.discoveryFileResolved(classification) {
 			continue
 		}
 		startText, endText, found := strings.Cut(mapping.addressRange, "-")
@@ -266,12 +271,12 @@ func (w *httpUprobeWorker) classifyUncachedProcessMappings(pid int32) {
 	}
 }
 
-func (w *httpUprobeWorker) discoveryFileCached(key fileClassificationKey) bool {
+func (w *httpUprobeWorker) discoveryFileResolved(key fileClassificationKey) bool {
 	if w.discoveryCache == nil {
 		return false
 	}
 	var value uint8
-	return w.discoveryCache.Lookup(key, &value) == nil
+	return w.discoveryCache.Lookup(key, &value) == nil && value == discoveryResolved
 }
 
 // scanProcessMappings returns the executable file mappings of pid. It returns
@@ -341,7 +346,7 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 			attached.classificationKey = candidate.file
 		}
 		retainCacheEntry = true
-		w.cacheDiscoveryFile(candidate.file)
+		w.markDiscoveryFileResolved(candidate.file)
 		return
 	}
 	if len(w.attachedTargets) >= maxAttachedUprobeTargets {
@@ -395,13 +400,13 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "resolve_go_http_function", "error", err)
 		if errors.Is(err, errUnsupportedGoPclntab) {
 			retainCacheEntry = true
-			w.cacheDiscoveryFile(candidate.file)
+			w.markDiscoveryFileResolved(candidate.file)
 		}
 		return
 	}
 	if !found {
 		retainCacheEntry = true
-		w.cacheDiscoveryFile(candidate.file)
+		w.markDiscoveryFileResolved(candidate.file)
 		return
 	}
 
@@ -469,11 +474,11 @@ func (w *httpUprobeWorker) deleteDiscoveryCacheEntry(key fileClassificationKey) 
 	return err
 }
 
-func (w *httpUprobeWorker) cacheDiscoveryFile(key fileClassificationKey) {
+func (w *httpUprobeWorker) markDiscoveryFileResolved(key fileClassificationKey) {
 	if w.discoveryCache == nil {
 		return
 	}
-	if err := w.discoveryCache.Put(key, uint8(1)); err != nil {
+	if err := w.discoveryCache.Put(key, discoveryResolved); err != nil {
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_update", "error", err)
 	}
 }
@@ -505,11 +510,11 @@ func (w *httpUprobeWorker) attachSymbolTargets(
 	}
 	if len(got) > 0 {
 		w.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: got}
-		w.cacheDiscoveryFile(id)
+		w.markDiscoveryFileResolved(id)
 		return true
 	}
 	// Every target symbol was definitively absent: keep it in the cache.
-	w.cacheDiscoveryFile(id)
+	w.markDiscoveryFileResolved(id)
 	return true
 }
 
@@ -527,7 +532,7 @@ func (w *httpUprobeWorker) attachGoNetHTTPTarget(
 		return false
 	}
 	w.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: []link.Link{attached}}
-	w.cacheDiscoveryFile(id)
+	w.markDiscoveryFileResolved(id)
 	return true
 }
 
