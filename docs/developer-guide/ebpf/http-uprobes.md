@@ -32,8 +32,9 @@ not prove that no HTTP or network communication occurred.
 ## Runtime architecture
 
 HTTP uprobes are part of the [eBPF Runtime](../ebpf-runtime.md). KernelIO owns
-kernel-facing resources and one HTTP uprobe worker. KernelTracker owns Jobs,
-tracked cgroups, process context, and event attribution.
+kernel-facing resources and one HTTP uprobe worker. JobRegistry owns Jobs.
+KernelTracker owns tracked-cgroup and process tracking state, and attributes
+decoded kernel events to Job IDs.
 
 ### Discovery and attachment phase
 
