@@ -42,6 +42,47 @@ static __always_inline void http_uprobe_inode_ctime(
     key->ctime_nsec = BPF_CORE_READ(legacy, i_ctime.tv_nsec);
 }
 
+// http_uprobe_request_process_stop creates at most one recovery lease for a
+// process generation. Another mapping reuses the existing lease timestamp and
+// does not send another SIGSTOP. The return value is 1 only when this call
+// successfully requested the stop.
+static __always_inline __u8 http_uprobe_request_process_stop(
+    const struct http_uprobe_stop_lease_key *lease_key,
+    __u64 *stop_started_ns)
+{
+    __u64 stopped_at_ns = bpf_ktime_get_ns();
+    // BPF_NOEXIST atomically selects one mapping as the stop owner.
+    if (bpf_map_update_elem(
+            &http_uprobe_stop_leases,
+            lease_key,
+            &stopped_at_ns,
+            BPF_NOEXIST) != 0) {
+        __u64 *existing_stop_started_ns =
+            bpf_map_lookup_elem(&http_uprobe_stop_leases, lease_key);
+        if (!existing_stop_started_ns)
+            return 0;
+
+        *stop_started_ns = *existing_stop_started_ns;
+        // The existing lease owns the SIGSTOP; this mapping did not request
+        // another stop and only reuses the original stop timestamp.
+        return 0;
+    }
+
+    if (bpf_send_signal(HTTP_UPROBE_SIGSTOP) != 0) {
+        // No stop was established, so there is nothing to recover after a
+        // crash. Classification still proceeds without the first-call guard.
+        bpf_map_delete_elem(&http_uprobe_stop_leases, lease_key);
+        return 0;
+    }
+
+    *stop_started_ns = stopped_at_ns;
+    return 1;
+}
+
+// For the first executable mapping of a file in a tracked cgroup, claim the
+// file for classification, request one bounded process stop, and notify the
+// userspace worker. The order is safety-critical: reserve the notification
+// before SIGSTOP, and keep the cache pending until userspace resolves it.
 static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_struct *vma)
 {
     __u64 cgroup_id = current_cgroup_id();
@@ -75,30 +116,26 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     };
     http_uprobe_inode_ctime(inode, &classification);
 
+    // The cache suppresses repeat notifications for the same file. Userspace
+    // changes this pending entry to resolved after classification and attach.
     if (bpf_map_lookup_elem(&http_uprobe_discovery_cache, &classification))
         return 0;
 
-    __u8 pending = HTTP_UPROBE_DISCOVERY_PENDING;
-    if (bpf_map_update_elem(&http_uprobe_discovery_cache, &classification, &pending, BPF_NOEXIST) != 0)
+    __u8 pending_state = HTTP_UPROBE_DISCOVERY_PENDING;
+    if (bpf_map_update_elem(&http_uprobe_discovery_cache, &classification, &pending_state, BPF_NOEXIST) != 0)
         return 0;
 
-    struct http_uprobe_stop_lease_key lease = {
+    struct http_uprobe_stop_lease_key lease_key = {
         .tgid = current_tgid(),
         .start_boottime = current_start_boottime(),
     };
-    if (lease.start_boottime == 0) {
+    if (lease_key.start_boottime == 0) {
         bpf_map_delete_elem(&http_uprobe_discovery_cache, &classification);
         return 0;
     }
 
-    __u64 pending_stop_started_ns = 0;
-    // An existing lease suppresses another SIGSTOP, not this mapping's
-    // notification: resume can race with userspace lease deletion.
-    __u64 *pending_lease =
-        bpf_map_lookup_elem(&http_uprobe_stop_leases, &lease);
-    if (pending_lease)
-        pending_stop_started_ns = *pending_lease;
-
+    // Reserve before SIGSTOP so a stopped process always has a notification
+    // that can arm the userspace resume timer.
     struct http_uprobe_attach_candidate_sample *sample =
         bpf_ringbuf_reserve(&http_uprobe_attach_candidates, sizeof(*sample), 0);
     if (!sample) {
@@ -108,36 +145,22 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
         return 0;
     }
 
+    __u64 stop_started_ns = 0;
+    __u8 stop_requested =
+        http_uprobe_request_process_stop(&lease_key, &stop_started_ns);
+
+    // Emit only identities and stop metadata. ELF bytes remain in the mapped
+    // file and HTTP bytes never enter this control-plane sample.
     sample->kind = SAMPLE_KIND_HTTP_UPROBE_ATTACH_CANDIDATE;
-    sample->tgid = lease.tgid;
-    sample->start_boottime = lease.start_boottime;
-    sample->stop_started_ns = pending_stop_started_ns;
+    sample->tgid = lease_key.tgid;
+    sample->start_boottime = lease_key.start_boottime;
+    sample->stop_started_ns = stop_started_ns;
     sample->vm_start = BPF_CORE_READ(vma, vm_start);
     sample->vm_end = BPF_CORE_READ(vma, vm_end);
     sample->file = classification;
-    sample->stop_requested = 0;
+    sample->stop_requested = stop_requested;
     __builtin_memset(sample->_pad, 0, sizeof(sample->_pad));
 
-    if (pending_stop_started_ns == 0) {
-        __u64 stopped_at_ns = bpf_ktime_get_ns();
-        if (bpf_map_update_elem(&http_uprobe_stop_leases, &lease, &stopped_at_ns, BPF_NOEXIST) == 0) {
-            if (bpf_send_signal(HTTP_UPROBE_SIGSTOP) == 0) {
-                sample->stop_requested = 1;
-                sample->stop_started_ns = stopped_at_ns;
-            } else {
-                // Submit the candidate so classification can continue, but leave
-                // no recovery lease for a stop that was not established.
-                bpf_map_delete_elem(&http_uprobe_stop_leases, &lease);
-            }
-        } else {
-            // Another thread can create this process lease after the lookup
-            // above. Preserve that lease timestamp instead of reporting a
-            // false stop-establishment failure.
-            pending_lease = bpf_map_lookup_elem(&http_uprobe_stop_leases, &lease);
-            if (pending_lease)
-                sample->stop_started_ns = *pending_lease;
-        }
-    }
     bpf_ringbuf_submit(sample, 0);
     return 0;
 }

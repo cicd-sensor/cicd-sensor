@@ -156,10 +156,11 @@ struct {
     __type(value, __u8);
 } http_uprobe_discovery_cache SEC(".maps");
 
-// Process generations successfully stopped for first-call uprobe attachment.
-// Userspace pins this non-LRU recovery ledger while HTTP uprobes are enabled.
-// Its key and value layout are a recovery ABI and must remain readable across
-// Agent upgrades.
+// Outstanding SIGSTOP requests for first-call uprobe attachment.
+// Key: (tgid, process start_boottime), which identifies one process generation.
+// Value: bpf_ktime_get_ns() when that process's stop was requested.
+// Userspace pins this non-LRU recovery ledger while HTTP uprobes are enabled;
+// its key and value layout must remain readable across Agent upgrades.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 4096);
