@@ -492,13 +492,15 @@ Example event value:
 
 Evaluates the request line of an outgoing HTTP request: method, path, and host together.
 Only the request line and the `Host` header are captured — no other headers and no body.
+Capture is disabled by default during rollout. Enable the cleartext and
+uprobe-based sources together with `--enable-http-request=true`.
 
 | field | Type | Example value | Meaning |
 | --- | --- | --- | --- |
 | `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |
 | `path` | string | `/repos/cli/cli/releases` | Request path with the query string removed. Lowercase. |
 | `host` | string | `api.github.com`, `example.com:8080` | Request host (`Host` header). Lowercase; may include a port. |
-| `source` | string | `cleartext_http`, `openssl`, `nghttp2` | Capture channel; userspace-library taps are not yet enabled in shipped builds. |
+| `source` | string | `cleartext_http`, `openssl`, `nghttp2`, `go_net_http` | Capture channel. |
 | `process` | object | `process.exec_path == "/usr/bin/curl"` | Process that sent the request |
 
 `source` reports where the request line was read:
@@ -508,19 +510,19 @@ Only the request line and the `Host` header are captured — no other headers an
 - `openssl` — HTTPS **HTTP/1.x** read before encryption at OpenSSL's
   `SSL_write` / `SSL_write_ex`. Client coverage depends on which function the
   installed binary calls; see the developer guide's verified workload matrix.
-  This tap is **not yet enabled** in shipped builds; default enablement waits
-  for the remaining rollout gates (there is no separate opt-in).
 - `nghttp2` — HTTP/2 pseudo-headers read at `nghttp2_submit_request` or
   `nghttp2_submit_request2`, before HPACK encoding. This tap shares the same
   rollout state as `openssl`.
+- `go_net_http` — Go `net/http` request values read before protocol encoding.
+  Stripped Go binaries are resolved through their pclntab metadata.
 
 Known gaps (absence of an `http_request` event does **not** mean absence of
 egress — combine with `domain` and `network_connect` rules):
 
 - HTTP/2 clients that do not call a selected nghttp2 request function are not
   captured. HTTP/3/QUIC is also outside this event.
-- Go `crypto/tls`, Java JSSE, rustls, and other non-OpenSSL stacks are not
-  captured. A fully symbol-stripped static binary is not captured either.
+- Java JSSE, rustls, and other stacks without a selected capture point are not
+  captured.
 - Capture is best-effort against uncooperative code: a process can evade a
   uprobe, and the very first request of a brand-new process can beat the attach.
 
