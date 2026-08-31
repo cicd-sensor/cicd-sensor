@@ -10,13 +10,9 @@ var ErrNotSupported = errors.New("not supported")
 // Config contains the cgroup v2 root detected by KernelTracker.
 type Config struct {
 	CgroupV2RootPath string
-	// EnableHTTPUprobes starts the HTTP uprobe attach-discovery worker
-	// (mapping-triggered classification, attach, and maps-liveness reclaim). It does
-	// not gate BPF load: LoadAndAssign loads and verifies the programs at startup.
-	// Disabled instances shrink the HTTP-only BPF caches to placeholder entries.
-	// Keep this rollout switch off until the HTTP uprobe environment gates pass;
-	// it is not intended as a long-lived user-facing setting.
-	EnableHTTPUprobes bool
+	// EnableHTTPRequest enables cleartext capture and the HTTP uprobe runtime.
+	// It does not gate BPF load: LoadAndAssign verifies all programs at startup.
+	EnableHTTPRequest bool
 }
 
 // KernelIO is the BPF program/map/ringbuf I/O boundary. It stays as an

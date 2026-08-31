@@ -69,21 +69,22 @@ The eBPF Runtime handles both rule-facing events and internal tracking samples.
 | file | `security_file_open`, `security_inode_unlink`, `security_inode_rename`, `security_inode_link` | `file_open`, `file_remove`, `file_move`, `file_link` |
 | mount | `security_sb_mount`, `security_move_mount` | `mount` for path exposure attempts |
 | domain | `udp_sendmsg`, `udpv6_sendmsg`, `tcp_sendmsg` | `domain` |
-| http | `tcp_sendmsg`; rollout-disabled `uprobe_mmap` discovery plus OpenSSL and nghttp2 uprobes | `http_request` |
+| http | rollout-disabled cleartext `tcp_sendmsg`; `uprobe_mmap` discovery plus OpenSSL, nghttp2, and Go uprobes | `http_request` |
 | unix socket | `unix_stream_connect`, `unix_dgram_connect` | `unix_socket_connect` |
 
 `cgroup/connect4/6` is not attached per tracked cgroup. The agent attaches once to the cgroup v2 root detected at startup, and the program uses `tracked_cgroups` lookup to handle only target jobs.
 
 `unix_stream_connect` / `unix_dgram_connect` observe AF_UNIX connects at the proto_ops entry points, so connects denied earlier by an LSM (AppArmor, SELinux, BPF LSM) are not observable.
 
-The `http_request` hook detects cleartext HTTP by content, not by port: a
+When `--enable-http-request=true`, the `http_request` hook detects cleartext
+HTTP by content, not by port: a
 send whose first bytes match a request-method token is parsed **in eBPF**
 (request line + `Host` only, query stripped at `?`), and only the parsed
 `method` / `path` / `host` fields leave the kernel — the raw send prefix
 stays in a per-CPU scratch map and never enters the ring buffer. TLS writes
 start with a record byte and never match a method token; KTLS plaintext sends
 are intercepted by the TLS ULP before `tcp_sendmsg` and do not reach the
-hook. The rollout-disabled OpenSSL path reads HTTP/1.x before encryption, while
+hook. The OpenSSL path reads HTTP/1.x before encryption, while
 the nghttp2 path reads HTTP/2 pseudo-headers before HPACK encoding. See
 [HTTP Uprobe Runtime](ebpf/http-uprobes.md) for the discovery rationale, attach
 and event lifecycle, selected functions, verified clients, and known gaps.

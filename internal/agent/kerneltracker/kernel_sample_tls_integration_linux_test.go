@@ -161,6 +161,33 @@ with urllib.request.urlopen(sys.argv[1], context=context, timeout=10) as respons
 	}
 }
 
+func TestLinuxOpenSSLUprobeDisabled(t *testing.T) {
+	curl := requireBinary(t, "curl")
+	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	t.Cleanup(func() { _ = kernelIO.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	kernelTracker := newTestKernelTracker(nil, nil, noopKernelIO{}, cgroupRoot)
+	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
+	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
+
+	const path = "/disabled-openssl"
+	url := h1TLSServer(t) + path
+	for range 3 {
+		if output, err := exec.Command(curl, "-sk", "--http1.1", "--max-time", "3", url).CombinedOutput(); err != nil {
+			t.Fatalf("curl: %v: %s", err, output)
+		}
+	}
+
+	if _, found := findEngineInput(kernelTracker.inputCh, 500*time.Millisecond, func(in engineInput) bool {
+		sample, ok := in.(httpRequestSample)
+		return ok && sample.CgroupID == cgroupID && sample.Path == path
+	}); found {
+		t.Fatal("OpenSSL http_request sample emitted while capture is disabled")
+	}
+}
+
 // testOpenSSLUprobeCapturesHTTPS verifies mapping-triggered attach and capture
 // for real OpenSSL clients.
 func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArgs func(string) []string) {
@@ -172,7 +199,7 @@ func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArg
 	}
 	kernelIO, err := kernelio.NewLinux(nil, kernelio.Config{
 		CgroupV2RootPath:  cgroupRoot,
-		EnableHTTPUprobes: true,
+		EnableHTTPRequest: true,
 	})
 	if err != nil {
 		t.Fatalf("kernelio.NewLinux: %v", err)

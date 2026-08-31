@@ -88,7 +88,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			return nil, fmt.Errorf("install HTTP uprobe stage %d: %w", index, err)
 		}
 	}
-	if config.EnableHTTPUprobes {
+	if config.EnableHTTPRequest {
 		kernelIO.httpUprobeWorker = newHTTPUprobeWorker(
 			[]symbolUprobeTarget{
 				{symbol: "SSL_write", program: kernelIO.objs.HandleSslWrite},
@@ -109,10 +109,11 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
 	// not need lsm=..., Rename/symlink observation stays in inode hooks
 	// because security_path_* cannot use bpf_d_path in container filesystems.
-	for _, attach := range []struct {
+	type tracingProgram struct {
 		name    string
 		program *ebpf.Program
-	}{
+	}
+	tracingPrograms := []tracingProgram{
 		{name: "sched_process_fork", program: kernelIO.objs.HandleSchedProcessFork},
 		{name: "sched_process_exec", program: kernelIO.objs.HandleSchedProcessExec},
 		{name: "cgroup_mkdir", program: kernelIO.objs.HandleCgroupMkdir},
@@ -129,18 +130,24 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		{name: "udp_sendmsg", program: kernelIO.objs.HandleUdpSendmsg},
 		{name: "udpv6_sendmsg", program: kernelIO.objs.HandleUdpv6Sendmsg},
 		{name: "tcp_sendmsg", program: kernelIO.objs.HandleTcpSendmsg},
-		{name: "tcp_sendmsg_http", program: kernelIO.objs.HandleTcpSendmsgHttp},
 		{name: "unix_stream_sendmsg", program: kernelIO.objs.HandleUnixStreamSendmsg},
 		{name: "unix_stream_connect", program: kernelIO.objs.HandleUnixStreamConnect},
 		{name: "unix_dgram_connect", program: kernelIO.objs.HandleUnixDgramConnect},
-	} {
+	}
+	if config.EnableHTTPRequest {
+		tracingPrograms = append(tracingPrograms, tracingProgram{
+			name:    "tcp_sendmsg_http",
+			program: kernelIO.objs.HandleTcpSendmsgHttp,
+		})
+	}
+	for _, attach := range tracingPrograms {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})
 		if err != nil {
 			return nil, fmt.Errorf("attach %s tracing program: %w", attach.name, err)
 		}
 		kernelIO.links = append(kernelIO.links, attached)
 	}
-	if config.EnableHTTPUprobes {
+	if config.EnableHTTPRequest {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: kernelIO.objs.HandleUprobeMmap})
 		if err != nil {
 			return nil, fmt.Errorf("attach uprobe_mmap tracing program: %w", err)

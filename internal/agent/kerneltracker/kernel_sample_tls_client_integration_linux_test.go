@@ -212,7 +212,7 @@ func testNghttp2ClientCoverage(
 	}
 	kernelIO, err := kernelio.NewLinux(nil, kernelio.Config{
 		CgroupV2RootPath:  cgroupRoot,
-		EnableHTTPUprobes: true,
+		EnableHTTPRequest: true,
 	})
 	if err != nil {
 		t.Fatalf("kernelio.NewLinux: %v", err)
@@ -286,7 +286,7 @@ func testOpenSSLClientCoverage(
 	}
 	kernelIO, err := kernelio.NewLinux(nil, kernelio.Config{
 		CgroupV2RootPath:  cgroupRoot,
-		EnableHTTPUprobes: true,
+		EnableHTTPRequest: true,
 	})
 	if err != nil {
 		t.Fatalf("kernelio.NewLinux: %v", err)

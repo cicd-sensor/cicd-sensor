@@ -5,9 +5,10 @@ how it discovers and attaches uprobes, how requests become events, and how
 attachments are reclaimed. Cleartext HTTP capture at `tcp_sendmsg` uses the same
 `http_request` event but does not use this discovery lifecycle.
 
-OpenSSL HTTP/1.x, nghttp2 HTTP/2, and Go `net/http` HTTPS capture are implemented.
-They remain disabled by default while first-request timing and environment
-compatibility are evaluated.
+Cleartext HTTP, OpenSSL HTTP/1.x, nghttp2 HTTP/2, and Go `net/http` HTTPS
+capture are implemented. All `http_request` sources remain disabled by default
+while first-request timing and environment compatibility are evaluated. Enable
+them together with `--enable-http-request=true`.
 
 ## Purpose and scope
 
@@ -310,8 +311,9 @@ x64 and arm64 unless noted otherwise.
 
 ## Operational status and known limits
 
-- HTTP uprobes are rollout-disabled in shipped builds. The internal switch is a
-  temporary rollout control, not a permanent user-facing opt-in.
+- `http_request` capture is disabled by default during rollout. The
+  `--enable-http-request` switch controls both the cleartext tap and the HTTP
+  uprobe runtime, and remains the disable path after default enablement.
 - Mapping notification precedes the selected function call, but ELF
   classification and attachment are asynchronous. The function can run before
   its uprobe is attached, so the initial request can be missed. This remains a

@@ -62,6 +62,21 @@ func TestLinuxKernelSampleHTTPRequestEmitsEvent(t *testing.T) {
 		})
 }
 
+func TestLinuxKernelSampleHTTPRequestDisabled(t *testing.T) {
+	f := newHTTPCaptureFixtureWithEnabled(t, false)
+	request := "GET /disabled HTTP/1.1\r\nHost: disabled.example\r\n\r\n"
+	if _, err := f.conn.Write([]byte(request)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if _, found := findEngineInput(f.inputCh, 250*time.Millisecond, func(in engineInput) bool {
+		sample, ok := in.(httpRequestSample)
+		return ok && sample.CgroupID == f.cgroupID && sample.Path == "/disabled"
+	}); found {
+		t.Fatal("http_request sample emitted while capture is disabled")
+	}
+}
+
 // TestLinuxKernelSampleHTTPRequestIgnoresNonHTTP asserts the content
 // pre-check: a TLS-record-like first byte on the same tracked socket path
 // must not produce an http_request sample. A subsequent valid request acts
@@ -119,8 +134,18 @@ func (f *httpCaptureFixture) dial(t *testing.T) net.Conn {
 }
 
 func newHTTPCaptureFixture(t *testing.T) *httpCaptureFixture {
+	return newHTTPCaptureFixtureWithEnabled(t, true)
+}
+
+func newHTTPCaptureFixtureWithEnabled(t *testing.T, enabled bool) *httpCaptureFixture {
 	t.Helper()
-	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	var kernelIO *kernelio.LinuxKernelIO
+	var cgroupRoot string
+	if enabled {
+		kernelIO, cgroupRoot = newLinuxHTTPRequestKernelIO(t)
+	} else {
+		kernelIO, cgroupRoot = newLinuxKernelIO(t)
+	}
 	t.Cleanup(func() { kernelIO.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -429,7 +454,7 @@ func workerIDFromHost(host string) (int, bool) {
 // sample — the redaction invariant stated in http_helpers.bpf.h, checked end to
 // end.
 func TestLinuxKernelSampleHTTPRequestRawSampleCarriesNoRequestBytes(t *testing.T) {
-	kernelIO, cgroupRoot := newLinuxKernelIO(t)
+	kernelIO, cgroupRoot := newLinuxHTTPRequestKernelIO(t)
 	t.Cleanup(func() { kernelIO.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
