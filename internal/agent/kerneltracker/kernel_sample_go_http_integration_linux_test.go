@@ -45,18 +45,10 @@ func TestLinuxGoNetHTTPUprobeCapturesHTTPS(t *testing.T) {
 			server.StartTLS()
 			t.Cleanup(server.Close)
 
-			clients := make([]*deferredHTTPUprobeExec, 0, 4)
-			for range 4 {
-				clients = append(clients, prepareGoHTTPClient(t, clientPath, test.clientMode, server.URL+test.path+"?token=must-not-leave-kernel"))
-			}
+			client := prepareGoHTTPClient(t, clientPath, test.clientMode, server.URL+test.path+"?token=must-not-leave-kernel")
 			kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
-			// fanotify captures the first process on supported filesystems. Multiple
-			// processes also keep this coverage test valid where mmap discovery is
-			// the documented asynchronous fallback.
-			for _, client := range clients {
-				if output, err := client.run(); err != nil {
-					t.Fatalf("Go HTTP client: %v: %s", err, output)
-				}
+			if output, err := client.run(); err != nil {
+				t.Fatalf("Go HTTP client: %v: %s", err, output)
 			}
 			waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "Go net/http request for "+test.path,
 				func(in engineInput) bool {
@@ -83,15 +75,10 @@ func TestLinuxGoNetHTTPUprobeCapturesExternallyLinkedHTTPS(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			path := "/go-http-cgo-" + clientMode
-			clients := make([]*deferredHTTPUprobeExec, 0, 4)
-			for range 4 {
-				clients = append(clients, prepareGoHTTPClient(t, clientPath, clientMode, server.URL+path))
-			}
+			client := prepareGoHTTPClient(t, clientPath, clientMode, server.URL+path)
 			kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
-			for _, client := range clients {
-				if output, err := client.run(); err != nil {
-					t.Fatalf("Go HTTP client: %v: %s", err, output)
-				}
+			if output, err := client.run(); err != nil {
+				t.Fatalf("Go HTTP client: %v: %s", err, output)
 			}
 			waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "externally linked Go net/http request",
 				func(in engineInput) bool {

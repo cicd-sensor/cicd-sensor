@@ -22,23 +22,27 @@ func main() {
 		os.Exit(2)
 	}
 	client := &http.Client{Transport: transport}
-	request, err := http.NewRequest(http.MethodGet, os.Args[2], nil)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	// Keep one mapped executable alive long enough to exercise asynchronous mmap
+	// discovery on filesystems where fanotify permission marks are unavailable.
+	for range 20 {
+		request, err := http.NewRequest(http.MethodGet, os.Args[2], nil)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if len(os.Args) == 4 {
+			request.Host = os.Args[3]
+		}
+		var response *http.Response
+		if mode == "client" {
+			response, err = client.Do(request)
+		} else {
+			response, err = transport.RoundTrip(request)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		_ = response.Body.Close()
 	}
-	if len(os.Args) == 4 {
-		request.Host = os.Args[3]
-	}
-	var response *http.Response
-	if mode == "client" {
-		response, err = client.Do(request)
-	} else {
-		response, err = transport.RoundTrip(request)
-	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	_ = response.Body.Close()
 }
