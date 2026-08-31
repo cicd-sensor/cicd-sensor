@@ -88,12 +88,20 @@ jobs:
           int main(void)
           {
               const struct probe probes[] = {
-                  {"permission/filesystem", FAN_CLASS_PRE_CONTENT, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC_PERM, "/"},
-                  {"notification/filesystem", FAN_CLASS_NOTIF, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC, "/"},
-                  {"permission/mount", FAN_CLASS_PRE_CONTENT, FAN_MARK_MOUNT, FAN_OPEN_EXEC_PERM, "/"},
-                  {"notification/mount", FAN_CLASS_NOTIF, FAN_MARK_MOUNT, FAN_OPEN_EXEC, "/"},
-                  {"permission/inode", FAN_CLASS_PRE_CONTENT, 0, FAN_OPEN_EXEC_PERM, "/bin/true"},
-                  {"notification/inode", FAN_CLASS_NOTIF, 0, FAN_OPEN_EXEC, "/bin/true"},
+                  {"root permission/filesystem", FAN_CLASS_PRE_CONTENT, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC_PERM, "/"},
+                  {"root notification/filesystem", FAN_CLASS_NOTIF, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC, "/"},
+                  {"root permission/mount", FAN_CLASS_PRE_CONTENT, FAN_MARK_MOUNT, FAN_OPEN_EXEC_PERM, "/"},
+                  {"root notification/mount", FAN_CLASS_NOTIF, FAN_MARK_MOUNT, FAN_OPEN_EXEC, "/"},
+                  {"root permission/inode", FAN_CLASS_PRE_CONTENT, 0, FAN_OPEN_EXEC_PERM, "/bin/true"},
+                  {"root notification/inode", FAN_CLASS_NOTIF, 0, FAN_OPEN_EXEC, "/bin/true"},
+                  {"tmpfs permission/filesystem", FAN_CLASS_PRE_CONTENT, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC_PERM, "/mnt/cicd-sensor-fanotify-probe"},
+                  {"tmpfs notification/filesystem", FAN_CLASS_NOTIF, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC, "/mnt/cicd-sensor-fanotify-probe"},
+                  {"tmpfs permission/mount", FAN_CLASS_PRE_CONTENT, FAN_MARK_MOUNT, FAN_OPEN_EXEC_PERM, "/mnt/cicd-sensor-fanotify-probe"},
+                  {"tmpfs notification/mount", FAN_CLASS_NOTIF, FAN_MARK_MOUNT, FAN_OPEN_EXEC, "/mnt/cicd-sensor-fanotify-probe"},
+                  {"tmpfs permission/inode", FAN_CLASS_PRE_CONTENT, 0, FAN_OPEN_EXEC_PERM, "/mnt/cicd-sensor-fanotify-probe/true"},
+                  {"tmpfs notification/inode", FAN_CLASS_NOTIF, 0, FAN_OPEN_EXEC, "/mnt/cicd-sensor-fanotify-probe/true"},
+                  {"proc permission/filesystem", FAN_CLASS_PRE_CONTENT, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC_PERM, "/proc"},
+                  {"proc notification/filesystem", FAN_CLASS_NOTIF, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC, "/proc"},
               };
 
               for (size_t i = 0; i < sizeof(probes) / sizeof(probes[0]); i++) {
@@ -101,7 +109,7 @@ jobs:
                   int fd = fanotify_init(probes[i].init_class | FAN_CLOEXEC | FAN_NONBLOCK,
                                          O_RDONLY | O_LARGEFILE | O_CLOEXEC);
                   if (fd < 0) {
-                      printf("%-28s init=FAIL errno=%d (%s)\n",
+                      printf("%-34s init=FAIL errno=%d (%s)\n",
                              probes[i].name, errno, strerror(errno));
                       continue;
                   }
@@ -110,16 +118,21 @@ jobs:
                   int rc = fanotify_mark(fd, FAN_MARK_ADD | probes[i].mark_type,
                                          probes[i].event_mask, AT_FDCWD, probes[i].path);
                   if (rc < 0) {
-                      printf("%-28s init=OK mark=FAIL errno=%d (%s)\n",
+                      printf("%-34s init=OK mark=FAIL errno=%d (%s)\n",
                              probes[i].name, errno, strerror(errno));
                   } else {
-                      printf("%-28s init=OK mark=OK\n", probes[i].name);
+                      printf("%-34s init=OK mark=OK\n", probes[i].name);
                   }
                   close(fd);
               }
               return 0;
           }
           EOF
+
+          sudo mkdir -p /mnt/cicd-sensor-fanotify-probe
+          sudo mount -t tmpfs -o size=1m cicd-sensor-fanotify-probe /mnt/cicd-sensor-fanotify-probe
+          trap 'sudo umount /mnt/cicd-sensor-fanotify-probe; sudo rmdir /mnt/cicd-sensor-fanotify-probe' EXIT
+          sudo cp /bin/true /mnt/cicd-sensor-fanotify-probe/true
 
           {
             echo '## fanotify capability probe'
@@ -128,6 +141,9 @@ jobs:
             findmnt -T /bin/true -o TARGET,FSTYPE,SOURCE,OPTIONS
             stat -f -c 'path=/ type=%T magic=0x%t' /
             stat -f -c 'path=/bin/true type=%T magic=0x%t' /bin/true
+            findmnt -T /mnt/cicd-sensor-fanotify-probe -o TARGET,FSTYPE,SOURCE,OPTIONS
+            stat -f -c 'path=/mnt/cicd-sensor-fanotify-probe type=%T magic=0x%t' /mnt/cicd-sensor-fanotify-probe
+            stat -f -c 'path=/proc type=%T magic=0x%t' /proc
             config="/boot/config-$(uname -r)"
             if [ -r "$config" ]; then
               grep '^CONFIG_FANOTIFY' "$config" || true
