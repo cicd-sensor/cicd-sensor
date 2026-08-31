@@ -34,8 +34,6 @@ func TestLinuxGoNetHTTPUprobeCapturesHTTPS(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
-
 			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
 			}))
@@ -47,7 +45,11 @@ func TestLinuxGoNetHTTPUprobeCapturesHTTPS(t *testing.T) {
 			server.StartTLS()
 			t.Cleanup(server.Close)
 
-			runGoHTTPClientBurst(t, clientPath, test.clientMode, server.URL+test.path+"?token=must-not-leave-kernel")
+			client := prepareGoHTTPClient(t, clientPath, test.clientMode, server.URL+test.path+"?token=must-not-leave-kernel")
+			kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
+			if output, err := client.run(); err != nil {
+				t.Fatalf("Go HTTP client: %v: %s", err, output)
+			}
 			waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "Go net/http request for "+test.path,
 				func(in engineInput) bool {
 					sample, ok := in.(httpRequestSample)
@@ -67,14 +69,17 @@ func TestLinuxGoNetHTTPUprobeCapturesExternallyLinkedHTTPS(t *testing.T) {
 	clientPath := goHTTPExternalTestClient(t)
 	for _, clientMode := range []string{"client", "transport"} {
 		t.Run(clientMode, func(t *testing.T) {
-			kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
 			}))
 			t.Cleanup(server.Close)
 
 			path := "/go-http-cgo-" + clientMode
-			runGoHTTPClientBurst(t, clientPath, clientMode, server.URL+path)
+			client := prepareGoHTTPClient(t, clientPath, clientMode, server.URL+path)
+			kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
+			if output, err := client.run(); err != nil {
+				t.Fatalf("Go HTTP client: %v: %s", err, output)
+			}
 			waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "externally linked Go net/http request",
 				func(in engineInput) bool {
 					sample, ok := in.(httpRequestSample)
@@ -90,26 +95,43 @@ func TestLinuxGoNetHTTPUprobeCoversSupportedGoVersions(t *testing.T) {
 	if clients == "" {
 		t.Skip("GO_HTTP_VERSIONED_TEST_CLIENTS is not set")
 	}
-	kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
 
+	type versionedClient struct {
+		version string
+		path    string
+		host    string
+		command *deferredHTTPUprobeExec
+	}
+	var prepared []versionedClient
 	for _, specification := range strings.Split(clients, ",") {
 		version, clientPath, found := strings.Cut(specification, "=")
 		if !found || version == "" || clientPath == "" {
 			t.Fatalf("invalid GO_HTTP_VERSIONED_TEST_CLIENTS entry %q", specification)
 		}
-		t.Run(version, func(t *testing.T) {
-			path := "/go-version-" + version
-			host := "go-" + version + ".example"
-			runGoHTTPClientBurst(t, clientPath, "client", server.URL+path, host)
-			waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "Go net/http request from "+version,
+		path := "/go-version-" + version
+		host := "go-" + version + ".example"
+		prepared = append(prepared, versionedClient{
+			version: version,
+			path:    path,
+			host:    host,
+			command: prepareGoHTTPClient(t, clientPath, "client", server.URL+path, host),
+		})
+	}
+	kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
+	for _, client := range prepared {
+		t.Run(client.version, func(t *testing.T) {
+			if output, err := client.command.run(); err != nil {
+				t.Fatalf("Go HTTP client: %v: %s", err, output)
+			}
+			waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "Go net/http request from "+client.version,
 				func(in engineInput) bool {
 					sample, ok := in.(httpRequestSample)
 					return ok && sample.CgroupID == cgroupID && sample.Source == HTTPSourceGoNetHTTP &&
-						sample.Method == "GET" && sample.Path == path && sample.Host == host
+						sample.Method == "GET" && sample.Path == client.path && sample.Host == client.host
 				})
 		})
 	}
@@ -120,37 +142,28 @@ func TestLinuxGoNetHTTPUprobeCoversGH(t *testing.T) {
 	if err != nil {
 		t.Skipf("gh is required: %v", err)
 	}
-	kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
-
 	freshPath := filepath.Join(t.TempDir(), "gh")
 	copyExecutable(t, freshPath, gh)
-	for range 10 {
-		command := exec.Command(freshPath, "api", "/meta")
-		command.Env = append(os.Environ(),
-			"GH_TOKEN=cicd-sensor-intentionally-invalid-token",
-			"GH_NO_UPDATE_NOTIFIER=1",
-		)
-		if err := command.Start(); err != nil {
-			t.Fatalf("start gh: %v", err)
-		}
-		pid := int32(command.Process.Pid)
-		_ = command.Wait() // The intentionally invalid token returns HTTP 401.
+	command := exec.Command(freshPath, "api", "/meta")
+	command.Env = append(os.Environ(),
+		"GH_TOKEN=cicd-sensor-intentionally-invalid-token",
+		"GH_NO_UPDATE_NOTIFIER=1",
+	)
+	client := prepareHTTPUprobeExec(t, command)
+	kernelTracker, cgroupID := startGoHTTPIntegrationRuntime(t)
+	_, _ = client.run() // The intentionally invalid token returns HTTP 401.
 
-		if _, ok := findEngineInput(kernelTracker.inputCh, 2*time.Second,
-			func(in engineInput) bool {
-				sample, ok := in.(httpRequestSample)
-				if !ok || sample.CgroupID != cgroupID || sample.Identity.PID != pid || sample.Source != HTTPSourceGoNetHTTP {
-					return false
-				}
-				if sample.Method != "GET" || sample.Host != "api.github.com" || sample.Path != "/meta" {
-					t.Fatalf("gh sample = method %q path %q host %q", sample.Method, sample.Path, sample.Host)
-				}
-				return true
-			}); ok {
-			return
-		}
-	}
-	t.Fatal("timed out waiting for Go net/http request from gh")
+	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "Go net/http request from gh",
+		func(in engineInput) bool {
+			sample, ok := in.(httpRequestSample)
+			if !ok || sample.CgroupID != cgroupID || sample.Identity.PID != client.pid() || sample.Source != HTTPSourceGoNetHTTP {
+				return false
+			}
+			if sample.Method != "GET" || sample.Host != "api.github.com" || sample.Path != "/meta" {
+				t.Fatalf("gh sample = method %q path %q host %q", sample.Method, sample.Path, sample.Host)
+			}
+			return true
+		})
 }
 
 func startGoHTTPIntegrationRuntime(t *testing.T) (*KernelTracker, uint64) {
@@ -215,14 +228,10 @@ func goHTTPExternalTestClient(t *testing.T) string {
 	return output
 }
 
-func runGoHTTPClientBurst(t *testing.T, clientPath, mode, target string, args ...string) {
+func prepareGoHTTPClient(t *testing.T, clientPath, mode, target string, args ...string) *deferredHTTPUprobeExec {
 	t.Helper()
 	commandArgs := append([]string{mode, target}, args...)
-	command := exec.Command(clientPath, commandArgs...)
-	command.Env = append(os.Environ(), "GO_HTTP_TEST_BURST=1")
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("Go HTTP client: %v: %s", err, output)
-	}
+	return prepareHTTPUprobeExec(t, exec.Command(clientPath, commandArgs...))
 }
 
 func copyExecutable(t *testing.T, destination, source string) {

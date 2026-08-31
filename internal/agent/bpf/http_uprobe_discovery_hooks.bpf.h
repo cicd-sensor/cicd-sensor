@@ -41,6 +41,75 @@ static __always_inline void http_uprobe_inode_ctime(
     key->ctime_nsec = BPF_CORE_READ(legacy, i_ctime.tv_nsec);
 }
 
+// uprobe_register receives the backing inode used by the kernel's uprobe
+// matching code. Only an attach initiated by this Agent has a rendezvous entry.
+SEC("fentry/uprobe_register")
+int BPF_PROG(observe_http_uprobe_register, struct inode *inode, loff_t offset,
+             struct uprobe_consumer *consumer)
+{
+    __u32 tgid = current_tgid();
+    struct uprobe_inode_resolution *pending =
+        bpf_map_lookup_elem(&http_uprobe_inode_resolutions, &tgid);
+    if (!pending || !inode)
+        return 0;
+
+    struct super_block *super = BPF_CORE_READ(inode, i_sb);
+    if (!super)
+        return 0;
+
+    struct file_classification_key classification = {};
+    http_uprobe_inode_ctime(inode, &classification);
+    struct uprobe_inode_resolution observed = {
+        .generation = pending->generation,
+        .device = BPF_CORE_READ(super, s_dev),
+        .inode = BPF_CORE_READ(inode, i_ino),
+        .offset = offset,
+        .ctime_sec = classification.ctime_sec,
+        .ctime_nsec = classification.ctime_nsec,
+        .resolved = 1,
+    };
+    bpf_map_update_elem(&http_uprobe_inode_resolutions, &tgid, &observed, BPF_ANY);
+    return 0;
+}
+
+// Reclaim reads this iterator once per sweep. Filtering by TGID in-kernel keeps
+// unrelated host processes and non-executable VMAs out of the iterator stream.
+SEC("iter/task_vma")
+int iter_http_uprobe_vma_inodes(struct bpf_iter__task_vma *ctx)
+{
+    struct task_struct *task = ctx->task;
+    struct vm_area_struct *vma = ctx->vma;
+    if (!task || !vma)
+        return 0;
+
+    __u32 tgid = BPF_CORE_READ(task, tgid);
+    if (!bpf_map_lookup_elem(&http_uprobe_reclaim_tgids, &tgid))
+        return 0;
+
+    unsigned long vm_flags = 0;
+    BPF_CORE_READ_INTO(&vm_flags, vma, vm_flags);
+    if (!(vm_flags & HTTP_UPROBE_VM_EXEC))
+        return 0;
+
+    struct file *file = BPF_CORE_READ(vma, vm_file);
+    if (!file)
+        return 0;
+    struct inode *inode = BPF_CORE_READ(file, f_inode);
+    if (!inode)
+        return 0;
+    struct super_block *super = BPF_CORE_READ(inode, i_sb);
+    if (!super)
+        return 0;
+
+    struct iterated_vma_inode record = {
+        .tgid = tgid,
+        .device = BPF_CORE_READ(super, s_dev),
+        .inode = BPF_CORE_READ(inode, i_ino),
+    };
+    bpf_seq_write(ctx->meta->seq, &record, sizeof(record));
+    return 0;
+}
+
 static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_struct *vma)
 {
     unsigned long vm_flags = 0;

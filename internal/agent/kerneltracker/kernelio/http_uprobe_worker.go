@@ -4,9 +4,12 @@ package kernelio
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -14,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
@@ -36,6 +40,13 @@ type goUprobeTarget struct {
 	program  *ebpf.Program
 }
 
+type httpUprobeWorkerBPF struct {
+	discoveryCache   *ebpf.Map
+	inodeResolutions *ebpf.Map
+	reclaimTGIDs     *ebpf.Map
+	vmaIterator      *ebpf.Program
+}
+
 // maxAttachedUprobeTargets bounds attached targets. On cap the worker refuses new
 // targets and never evicts a live one; reclaim keeps the steady state bounded,
 // so the cap is reached only under adversarial fan-out.
@@ -49,6 +60,10 @@ const attachCandidateQueueSize = 4096
 // target before its links are closed. Incomplete scans do not count; finding
 // the target again resets its count.
 const missingScanLimit = 2
+
+const (
+	discoveryCacheClassified uint8 = 2
+)
 
 type mappedFileIdentity struct {
 	deviceMajor uint32
@@ -70,17 +85,23 @@ type httpUprobeAttachCandidate struct {
 	file    fileClassificationKey
 }
 
+type httpUprobePermissionRequest struct {
+	file *os.File
+	done chan struct{}
+}
+
 type processMapping struct {
 	addressRange string
 	mappedFile   mappedFileIdentity
 }
 
-// attachedUprobeTarget is one attached inode. Its classification key identifies
-// the discovery-cache entry removed before the links are reclaimed.
+// attachedUprobeTarget is one backing inode selected by uprobe_register.
+// Multiple visible file views can lead to it, so reclaim removes every cache
+// key associated with the one link set.
 type attachedUprobeTarget struct {
-	classificationKey fileClassificationKey
-	links             []link.Link
-	missingScanCount  uint8
+	classificationKeys map[fileClassificationKey]struct{}
+	links              []link.Link
+	missingScanCount   uint8
 }
 
 type httpUprobeWorker struct {
@@ -90,13 +111,18 @@ type httpUprobeWorker struct {
 	cgroupRootPath string
 
 	// Worker inputs. run consumes both serially.
-	attachCandidates  chan httpUprobeAttachCandidate // candidates emitted by BPF and decoded by KernelIO
-	reconcileRequests chan []uint64                  // immutable active cgroup IDs from KernelTracker
+	permissionRequests chan httpUprobePermissionRequest
+	attachCandidates   chan httpUprobeAttachCandidate // candidates emitted by BPF and decoded by KernelIO
+	reconcileRequests  chan []uint64                  // immutable active cgroup IDs from KernelTracker
 
 	// Worker-owned userspace state (single goroutine, no locking). BPF maps are
 	// concurrency-safe kernel objects shared with the hook and sample reader.
-	attachedTargets map[mappedFileIdentity]*attachedUprobeTarget
-	discoveryCache  *ebpf.Map
+	attachedTargets  map[mappedFileIdentity]*attachedUprobeTarget
+	discoveryCache   *ebpf.Map
+	inodeResolutions *ebpf.Map
+	reclaimTGIDs     *ebpf.Map
+	vmaIterator      *ebpf.Program
+	attachGeneration uint64
 
 	// Throttled-warning counters. attachCandidateQueueDropped is sample-reader-owned;
 	// the others are worker-owned. Each counter is touched by one goroutine.
@@ -111,18 +137,22 @@ func newHTTPUprobeWorker(
 	symbolTargets []symbolUprobeTarget,
 	logger *slog.Logger,
 	cgroupRootPath string,
-	discoveryCache *ebpf.Map,
+	bpfObjects httpUprobeWorkerBPF,
 	goTarget goUprobeTarget,
 ) *httpUprobeWorker {
 	return &httpUprobeWorker{
-		symbolTargets:     symbolTargets,
-		goTarget:          goTarget,
-		logger:            logger,
-		cgroupRootPath:    cgroupRootPath,
-		attachCandidates:  make(chan httpUprobeAttachCandidate, attachCandidateQueueSize),
-		reconcileRequests: make(chan []uint64, 1),
-		attachedTargets:   make(map[mappedFileIdentity]*attachedUprobeTarget),
-		discoveryCache:    discoveryCache,
+		symbolTargets:      symbolTargets,
+		goTarget:           goTarget,
+		logger:             logger,
+		cgroupRootPath:     cgroupRootPath,
+		permissionRequests: make(chan httpUprobePermissionRequest, 1),
+		attachCandidates:   make(chan httpUprobeAttachCandidate, attachCandidateQueueSize),
+		reconcileRequests:  make(chan []uint64, 1),
+		attachedTargets:    make(map[mappedFileIdentity]*attachedUprobeTarget),
+		discoveryCache:     bpfObjects.discoveryCache,
+		inodeResolutions:   bpfObjects.inodeResolutions,
+		reclaimTGIDs:       bpfObjects.reclaimTGIDs,
+		vmaIterator:        bpfObjects.vmaIterator,
 	}
 }
 
@@ -163,17 +193,53 @@ func (w *httpUprobeWorker) queueAttachCandidate(candidate httpUprobeAttachCandid
 // is cancelled, then closes every attached link. It is the sole owner of
 // attachedTargets and link lifecycle; there is no separate closer goroutine.
 func (w *httpUprobeWorker) run(ctx context.Context) {
-	defer w.closeAll()
+	defer func() {
+		w.releasePendingPermissionRequests()
+		w.closeAll()
+	}()
 	for {
+		// Permission requests hold an exec open, so check them before ordinary
+		// mmap backstop and reclaim work at every worker loop boundary.
+		select {
+		case request := <-w.permissionRequests:
+			w.handlePermissionRequest(request)
+			continue
+		default:
+		}
+
 		select {
 		case <-ctx.Done():
 			return
+		case request := <-w.permissionRequests:
+			w.handlePermissionRequest(request)
 		case activeCgroupIDs := <-w.reconcileRequests:
 			w.reconcileTargets(activeCgroupIDs)
 		case candidate := <-w.attachCandidates:
 			w.classifyAndAttach(candidate)
 		}
 	}
+}
+
+// releasePendingPermissionRequests closes event-FD duplicates that were queued
+// when shutdown won the worker select. Closing each done channel also releases
+// its fanotify response waiter; the group itself is closed independently.
+func (w *httpUprobeWorker) releasePendingPermissionRequests() {
+	for {
+		select {
+		case request := <-w.permissionRequests:
+			_ = request.file.Close()
+			close(request.done)
+		default:
+			return
+		}
+	}
+}
+
+func (w *httpUprobeWorker) handlePermissionRequest(request httpUprobePermissionRequest) {
+	defer close(request.done)
+	defer request.file.Close()
+
+	w.classifyOpenFile(request.file)
 }
 
 // scanProcessMappings returns the executable file mappings of pid. It returns
@@ -232,25 +298,6 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 		}
 	}()
 
-	if attached, ok := w.attachedTargets[candidate.file.mappedFile]; ok {
-		if attached.classificationKey != candidate.file {
-			// An older process may still use this inode's existing mapping. Keep
-			// its links, replace only the discovery-cache key with the new ctime,
-			// and let reclaim close the links after every mapping is gone.
-			if err := w.deleteDiscoveryCacheEntry(attached.classificationKey); err != nil {
-				w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
-			}
-			attached.classificationKey = candidate.file
-		}
-		retainCacheEntry = true
-		w.cacheDiscoveryFile(candidate.file)
-		return
-	}
-	if len(w.attachedTargets) >= maxAttachedUprobeTargets {
-		w.warnThrottled(&w.capReached, "http_uprobe_target_cap_reached", "targets", len(w.attachedTargets))
-		return
-	}
-
 	f, err := w.openMappedFile(candidate)
 	if err != nil {
 		if processIsGone(err) {
@@ -274,45 +321,79 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 		w.warnThrottled(&w.identityMismatch, "http_uprobe_discovery_identity_mismatch")
 		return
 	}
+	// fanotify can classify the executable before this previously emitted mmap
+	// candidate reaches the worker. The classified cache state covers positive
+	// and negative results, so do not parse or attach the same file again.
+	if state, ok := w.discoveryCacheState(candidate.file); ok && state == discoveryCacheClassified {
+		retainCacheEntry = true
+		return
+	}
+	retainCacheEntry = w.classifyOpenFileWithKey(f, candidate.file)
+}
+
+func (w *httpUprobeWorker) classifyOpenFile(f *os.File) bool {
+	key, err := classificationKeyFromFile(f)
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "fstat", "error", err)
+		return false
+	}
+
+	if state, ok := w.discoveryCacheState(key); ok && state == discoveryCacheClassified {
+		return true
+	}
+	// Do not create a pending entry on the fanotify path. If its bounded wait
+	// expires, the subsequent mmap must remain able to emit the retry candidate.
+	return w.classifyOpenFileWithKey(f, key)
+}
+
+func (w *httpUprobeWorker) classifyOpenFileWithKey(
+	f *os.File,
+	key fileClassificationKey,
+) bool {
+	// Both fanotify and mmap discovery converge here, so enforce the one global
+	// link-registry cap before either path can create another target.
+	if len(w.attachedTargets) >= maxAttachedUprobeTargets {
+		w.warnThrottled(&w.capReached, "http_uprobe_target_cap_reached", "targets", len(w.attachedTargets))
+		return false
+	}
+
 	selected, definitive, err := definedSymbolTargets(f, w.symbolTargets)
 	if err != nil {
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "classify_elf_symbols", "error", err)
-		return
+		return false
 	}
 	if len(selected) > 0 {
 		ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
 		if err != nil {
 			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
-			return
+			return false
 		}
-		retainCacheEntry = w.attachSymbolTargets(candidate.file, ex, selected)
-		return
+		return w.attachSymbolTargets(key, ex, selected)
 	}
 	if !definitive {
-		return
+		return false
 	}
 
 	goFunctionOffset, found, err := resolveGoFunctionOffset(f, w.goTarget.function)
 	if err != nil {
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "resolve_go_http_function", "error", err)
 		if errors.Is(err, errUnsupportedGoPclntab) {
-			retainCacheEntry = true
-			w.cacheDiscoveryFile(candidate.file)
+			w.cacheDiscoveryFile(key)
+			return true
 		}
-		return
+		return false
 	}
 	if !found {
-		retainCacheEntry = true
-		w.cacheDiscoveryFile(candidate.file)
-		return
+		w.cacheDiscoveryFile(key)
+		return true
 	}
 
 	ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
 	if err != nil {
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
-		return
+		return false
 	}
-	retainCacheEntry = w.attachGoNetHTTPTarget(candidate.file, ex, goFunctionOffset)
+	return w.attachGoNetHTTPTarget(key, ex, goFunctionOffset)
 }
 
 func processIsGone(err error) bool {
@@ -372,12 +453,112 @@ func (w *httpUprobeWorker) deleteDiscoveryCacheEntry(key fileClassificationKey) 
 }
 
 func (w *httpUprobeWorker) cacheDiscoveryFile(key fileClassificationKey) {
+	w.cacheDiscoveryFileState(key, discoveryCacheClassified)
+}
+
+func (w *httpUprobeWorker) cacheDiscoveryFileState(key fileClassificationKey, state uint8) {
 	if w.discoveryCache == nil {
 		return
 	}
-	if err := w.discoveryCache.Put(key, uint8(1)); err != nil {
+	if err := w.discoveryCache.Put(key, state); err != nil {
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_update", "error", err)
 	}
+}
+
+func (w *httpUprobeWorker) discoveryCacheState(key fileClassificationKey) (uint8, bool) {
+	if w.discoveryCache == nil {
+		return 0, false
+	}
+	var state uint8
+	if err := w.discoveryCache.Lookup(key, &state); err != nil {
+		if !errors.Is(err, ebpf.ErrKeyNotExist) {
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_lookup", "error", err)
+		}
+		return 0, false
+	}
+	return state, true
+}
+
+func (w *httpUprobeWorker) beginInodeResolution() (uint64, error) {
+	if w.inodeResolutions == nil {
+		return 0, nil
+	}
+	w.attachGeneration++
+	if w.attachGeneration == 0 {
+		w.attachGeneration++
+	}
+	generation := w.attachGeneration
+	pending := bpfprog.BPFProgramUprobeInodeResolution{Generation: generation}
+	if err := w.inodeResolutions.Put(uint32(os.Getpid()), pending); err != nil {
+		return 0, err
+	}
+	return generation, nil
+}
+
+func (w *httpUprobeWorker) finishInodeResolution(
+	generation uint64,
+	fallback fileClassificationKey,
+) (fileClassificationKey, error) {
+	if w.inodeResolutions == nil {
+		return fallback, nil
+	}
+	defer w.inodeResolutions.Delete(uint32(os.Getpid()))
+
+	var observed bpfprog.BPFProgramUprobeInodeResolution
+	if err := w.inodeResolutions.Lookup(uint32(os.Getpid()), &observed); err != nil {
+		return fileClassificationKey{}, err
+	}
+	if observed.Resolved == 0 || observed.Generation != generation {
+		return fileClassificationKey{}, errors.New("uprobe backing inode was not resolved")
+	}
+	return fileClassificationKey{
+		mappedFile: mappedIdentityFromKernelDevice(observed.Device, observed.Inode),
+		ctimeSec:   observed.CtimeSec,
+		ctimeNsec:  observed.CtimeNsec,
+	}, nil
+}
+
+func (w *httpUprobeWorker) cancelInodeResolution() {
+	if w.inodeResolutions != nil {
+		_ = w.inodeResolutions.Delete(uint32(os.Getpid()))
+	}
+}
+
+func mappedIdentityFromKernelDevice(device, inode uint64) mappedFileIdentity {
+	return mappedFileIdentity{
+		deviceMajor: uint32(device >> 20),
+		deviceMinor: uint32(device & ((1 << 20) - 1)),
+		inode:       inode,
+	}
+}
+
+func (w *httpUprobeWorker) recordAttachedTarget(
+	candidateKey fileClassificationKey,
+	canonicalKey fileClassificationKey,
+	links []link.Link,
+) {
+	if existing, ok := w.attachedTargets[canonicalKey.mappedFile]; ok {
+		closeLinks(links)
+		if existing.classificationKeys == nil {
+			existing.classificationKeys = make(map[fileClassificationKey]struct{})
+		}
+		existing.classificationKeys[candidateKey] = struct{}{}
+		existing.classificationKeys[canonicalKey] = struct{}{}
+		w.cacheDiscoveryFile(candidateKey)
+		w.cacheDiscoveryFile(canonicalKey)
+		return
+	}
+
+	keys := map[fileClassificationKey]struct{}{
+		candidateKey: {},
+		canonicalKey: {},
+	}
+	w.attachedTargets[canonicalKey.mappedFile] = &attachedUprobeTarget{
+		classificationKeys: keys,
+		links:              links,
+	}
+	w.cacheDiscoveryFile(candidateKey)
+	w.cacheDiscoveryFile(canonicalKey)
 }
 
 // attachSymbolTargets attaches programs by ELF symbol name and records the
@@ -387,6 +568,18 @@ func (w *httpUprobeWorker) attachSymbolTargets(
 	ex *link.Executable,
 	targets []symbolUprobeTarget,
 ) (retainCacheEntry bool) {
+	generation, err := w.beginInodeResolution()
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_inode_resolution_begin", "error", err)
+		return false
+	}
+	resolutionPending := true
+	defer func() {
+		if resolutionPending {
+			w.cancelInodeResolution()
+		}
+	}()
+
 	var got []link.Link
 	for _, target := range targets {
 		l, err := ex.Uprobe(target.symbol, target.program, nil)
@@ -406,10 +599,18 @@ func (w *httpUprobeWorker) attachSymbolTargets(
 		}
 	}
 	if len(got) > 0 {
-		w.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: got}
-		w.cacheDiscoveryFile(id)
+		canonical, err := w.finishInodeResolution(generation, id)
+		resolutionPending = false
+		if err != nil {
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_inode_resolution_finish", "error", err)
+			closeLinks(got)
+			return false
+		}
+		w.recordAttachedTarget(id, canonical, got)
 		return true
 	}
+	w.cancelInodeResolution()
+	resolutionPending = false
 	// Every target symbol was definitively absent: keep it in the cache.
 	w.cacheDiscoveryFile(id)
 	return true
@@ -423,13 +624,24 @@ func (w *httpUprobeWorker) attachGoNetHTTPTarget(
 	ex *link.Executable,
 	fileOffset uint64,
 ) bool {
+	generation, err := w.beginInodeResolution()
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_inode_resolution_begin", "error", err)
+		return false
+	}
 	attached, err := ex.Uprobe("", w.goTarget.program, &link.UprobeOptions{Address: fileOffset})
 	if err != nil {
+		w.cancelInodeResolution()
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", w.goTarget.function, "error", err)
 		return false
 	}
-	w.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: []link.Link{attached}}
-	w.cacheDiscoveryFile(id)
+	canonical, err := w.finishInodeResolution(generation, id)
+	if err != nil {
+		_ = attached.Close()
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_inode_resolution_finish", "error", err)
+		return false
+	}
+	w.recordAttachedTarget(id, canonical, []link.Link{attached})
 	return true
 }
 
@@ -437,6 +649,97 @@ func (w *httpUprobeWorker) closeAll() {
 	for _, entry := range w.attachedTargets {
 		closeLinks(entry.links)
 	}
+}
+
+func (w *httpUprobeWorker) observedBackingFiles(
+	pids map[int32]struct{},
+) (map[mappedFileIdentity]struct{}, bool) {
+	// Unit tests and non-Linux substitutes can omit the iterator objects. The
+	// production constructor always supplies all three together.
+	if w.reclaimTGIDs == nil || w.vmaIterator == nil {
+		observed := make(map[mappedFileIdentity]struct{})
+		complete := true
+		for pid := range pids {
+			mappings, scanComplete := w.scanProcessMappings(pid)
+			if !scanComplete {
+				complete = false
+			}
+			for _, mapping := range mappings {
+				observed[mapping.mappedFile] = struct{}{}
+			}
+		}
+		return observed, complete
+	}
+
+	if err := clearMap(w.reclaimTGIDs); err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "reclaim_tgid_clear", "error", err)
+		return nil, false
+	}
+	defer clearMap(w.reclaimTGIDs)
+
+	one := uint8(1)
+	for pid := range pids {
+		if pid <= 0 {
+			continue
+		}
+		if err := w.reclaimTGIDs.Put(uint32(pid), one); err != nil {
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "reclaim_tgid_update", "error", err)
+			return nil, false
+		}
+	}
+
+	iterator, err := link.AttachIter(link.IterOptions{Program: w.vmaIterator})
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "attach_vma_iterator", "error", err)
+		return nil, false
+	}
+	defer iterator.Close()
+
+	reader, err := iterator.Open()
+	if err != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_vma_iterator", "error", err)
+		return nil, false
+	}
+	raw, readErr := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if readErr != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "read_vma_iterator", "error", readErr)
+		return nil, false
+	}
+	if closeErr != nil {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "close_vma_iterator", "error", closeErr)
+		return nil, false
+	}
+
+	recordSize := binary.Size(bpfprog.BPFProgramIteratedVmaInode{})
+	if recordSize <= 0 || len(raw)%recordSize != 0 {
+		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "decode_vma_iterator", "bytes", len(raw))
+		return nil, false
+	}
+
+	observed := make(map[mappedFileIdentity]struct{})
+	decoder := bytes.NewReader(raw)
+	for decoder.Len() > 0 {
+		var record bpfprog.BPFProgramIteratedVmaInode
+		if err := binary.Read(decoder, binary.LittleEndian, &record); err != nil {
+			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "decode_vma_iterator", "error", err)
+			return observed, false
+		}
+		observed[mappedIdentityFromKernelDevice(record.Device, record.Inode)] = struct{}{}
+	}
+	return observed, true
+}
+
+func clearMap(m *ebpf.Map) error {
+	var key uint32
+	var value uint8
+	iterator := m.Iterate()
+	for iterator.Next(&key, &value) {
+		if err := m.Delete(key); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
+			return err
+		}
+	}
+	return iterator.Err()
 }
 
 // reconcileTargets is the reclaim sweep. It resolves the immutable active-ID
@@ -448,7 +751,6 @@ func (w *httpUprobeWorker) closeAll() {
 // reset to zero. We do not retain the prior scan result; each attached target
 // only records how many complete scans have omitted it.
 func (w *httpUprobeWorker) reconcileTargets(activeCgroupIDs []uint64) {
-	observedMappedFiles := make(map[mappedFileIdentity]struct{})
 	activeCgroupPaths, complete := resolveActiveCgroupPaths(w.cgroupRootPath, activeCgroupIDs)
 	pids := make(map[int32]struct{})
 	for _, cgroupPath := range activeCgroupPaths {
@@ -456,14 +758,9 @@ func (w *httpUprobeWorker) reconcileTargets(activeCgroupIDs []uint64) {
 			complete = false
 		}
 	}
-	for pid := range pids {
-		mappings, scanComplete := w.scanProcessMappings(pid)
-		if !scanComplete {
-			complete = false
-		}
-		for _, mapping := range mappings {
-			observedMappedFiles[mapping.mappedFile] = struct{}{}
-		}
+	observedMappedFiles, mappingScanComplete := w.observedBackingFiles(pids)
+	if !mappingScanComplete {
+		complete = false
 	}
 
 	closed := 0
@@ -479,8 +776,14 @@ func (w *httpUprobeWorker) reconcileTargets(activeCgroupIDs []uint64) {
 		if entry.missingScanCount >= missingScanLimit {
 			// Delete the discovery-cache entry first. If that fails, keep the link;
 			// closing it would prevent a later mapping from requesting re-attach.
-			if err := w.deleteDiscoveryCacheEntry(entry.classificationKey); err != nil {
-				w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+			cacheDeleted := true
+			for key := range entry.classificationKeys {
+				if err := w.deleteDiscoveryCacheEntry(key); err != nil {
+					w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+					cacheDeleted = false
+				}
+			}
+			if !cacheDeleted {
 				continue
 			}
 			closeLinks(entry.links)

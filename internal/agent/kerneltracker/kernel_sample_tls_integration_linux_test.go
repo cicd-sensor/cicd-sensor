@@ -193,6 +193,21 @@ func TestLinuxOpenSSLUprobeDisabled(t *testing.T) {
 func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArgs func(string) []string) {
 	t.Helper()
 
+	// HTTP/1.1-only TLS server so the request line is plaintext to SSL_write
+	// (an h2 client would hand SSL_write HPACK, which the tap rejects by design).
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	url := server.URL + path + "?token=secret"
+
+	clients := make([]*deferredHTTPUprobeExec, 0, 4)
+	for range 4 {
+		clients = append(clients, prepareHTTPUprobeExec(t, exec.Command(client, clientArgs(url)...)))
+	}
+
 	cgroupRoot, err := getCgroupV2Root()
 	if err != nil {
 		t.Fatalf("getCgroupV2Root: %v", err)
@@ -215,21 +230,11 @@ func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArg
 	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
 	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
 
-	// HTTP/1.1-only TLS server so the request line is plaintext to SSL_write
-	// (an h2 client would hand SSL_write HPACK, which the tap rejects by design).
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
-	server.StartTLS()
-	t.Cleanup(server.Close)
-	url := server.URL + path + "?token=secret"
-
 	// The first short-lived process can finish before asynchronous attach. Each
 	// later process maps the same file again and retries discovery; once attached,
 	// the file-scoped link covers subsequent processes without an artificial wait.
-	for range 4 {
-		if output, err := exec.Command(client, clientArgs(url)...).CombinedOutput(); err != nil {
+	for _, prepared := range clients {
+		if output, err := prepared.run(); err != nil {
 			t.Fatalf("HTTPS client %s: %v: %s", client, err, output)
 		}
 	}

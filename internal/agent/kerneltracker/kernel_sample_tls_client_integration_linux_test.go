@@ -206,6 +206,22 @@ func testNghttp2ClientCoverage(
 ) {
 	t.Helper()
 
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor != 2 {
+			t.Errorf("protocol = %s, want HTTP/2", r.Proto)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	target := server.URL + urlPath + "?token=secret"
+
+	clients := make([]*deferredHTTPUprobeExec, 0, 4)
+	for range 4 {
+		clients = append(clients, prepareHTTPUprobeExec(t, command(target)))
+	}
+
 	cgroupRoot, err := getCgroupV2Root()
 	if err != nil {
 		t.Fatalf("getCgroupV2Root: %v", err)
@@ -225,21 +241,10 @@ func testNghttp2ClientCoverage(
 	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
 	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
 
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ProtoMajor != 2 {
-			t.Errorf("protocol = %s, want HTTP/2", r.Proto)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	server.EnableHTTP2 = true
-	server.StartTLS()
-	t.Cleanup(server.Close)
-
-	target := server.URL + urlPath + "?token=secret"
 	// Use separate processes so a mapping missed during asynchronous attach is
 	// retried naturally and the resulting file-scoped link covers a later client.
-	for range 4 {
-		if output, err := command(target).CombinedOutput(); err != nil {
+	for _, prepared := range clients {
+		if output, err := prepared.run(); err != nil {
 			t.Fatalf("HTTP/2 client: %v: %s", err, output)
 		}
 	}
@@ -280,6 +285,28 @@ func testOpenSSLClientCoverage(
 ) bool {
 	t.Helper()
 
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/-/ping"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("{}"))
+		case strings.HasSuffix(r.URL.Path, "/info/refs"):
+			w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
+			_, _ = w.Write([]byte("001e# service=git-upload-pack\n0000"))
+		default:
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<!doctype html><html></html>"))
+		}
+	}))
+	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	clients := make([]*deferredHTTPUprobeExec, 0, 8)
+	for range 8 {
+		clients = append(clients, prepareHTTPUprobeExec(t, command(server.URL+urlPath)))
+	}
+
 	cgroupRoot, err := getCgroupV2Root()
 	if err != nil {
 		t.Fatalf("getCgroupV2Root: %v", err)
@@ -299,23 +326,6 @@ func testOpenSSLClientCoverage(
 	startKernelSampleLoop(t, ctx, kernelIO, kernelTracker)
 	cgroupID := trackTestProcessCgroup(t, ctx, kernelIO, cgroupRoot)
 
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/-/ping"):
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("{}"))
-		case strings.HasSuffix(r.URL.Path, "/info/refs"):
-			w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
-			_, _ = w.Write([]byte("001e# service=git-upload-pack\n0000"))
-		default:
-			w.Header().Set("Content-Type", "text/html")
-			_, _ = w.Write([]byte("<!doctype html><html></html>"))
-		}
-	}))
-	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
-	server.StartTLS()
-	t.Cleanup(server.Close)
-
 	waitForPath := func(path string) bool {
 		deadline := time.NewTimer(5 * time.Second)
 		defer deadline.Stop()
@@ -333,17 +343,17 @@ func testOpenSSLClientCoverage(
 		}
 	}
 
-	runClients := func() {
+	runClients := func(prepared []*deferredHTTPUprobeExec) {
 		// Use separate processes for the same mapping/attach contract as the
 		// HTTP/2 test above; do not hide first-request timing behind a sleep.
-		for range 4 {
-			if output, err := command(server.URL + urlPath).CombinedOutput(); err != nil {
+		for _, client := range prepared {
+			if output, err := client.run(); err != nil {
 				t.Fatalf("HTTPS client: %v: %s", err, output)
 			}
 		}
 	}
 
-	runClients()
+	runClients(clients[:4])
 	if captured := waitForPath(eventPath); captured || !expectCapture {
 		return captured
 	}
@@ -352,6 +362,6 @@ func testOpenSSLClientCoverage(
 	// still classifying its executable. A second process burst verifies eventual
 	// file-scoped attachment without turning this coverage test into a first-call
 	// delivery guarantee.
-	runClients()
+	runClients(clients[4:])
 	return waitForPath(eventPath)
 }

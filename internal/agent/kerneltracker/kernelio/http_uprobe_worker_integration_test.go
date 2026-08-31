@@ -158,8 +158,13 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 	for _, target = range worker.attachedTargets {
 		break
 	}
-	if target == nil || !discoveryCacheContains(t, worker, target.classificationKey) {
+	if target == nil || len(target.classificationKeys) == 0 {
 		t.Fatal("attached target has no BPF discovery-cache key")
+	}
+	for key := range target.classificationKeys {
+		if !discoveryCacheContains(t, worker, key) {
+			t.Fatalf("attached target cache key %+v is missing", key)
+		}
 	}
 	reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, a, b))
 	if got := reconcileAndCount(worker, nil); got != 1 {
@@ -174,8 +179,10 @@ func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
 	if got := reconcileAndCount(worker, nil); got != 0 {
 		t.Fatalf("target count after second complete miss = %d, want 0", got)
 	}
-	if discoveryCacheContains(t, worker, target.classificationKey) {
-		t.Fatal("reclaimed target remained in the BPF discovery cache")
+	for key := range target.classificationKeys {
+		if discoveryCacheContains(t, worker, key) {
+			t.Fatalf("reclaimed target cache key %+v remained in the BPF discovery cache", key)
+		}
 	}
 }
 

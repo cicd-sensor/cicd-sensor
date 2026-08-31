@@ -43,8 +43,9 @@ tracked cgroups, process context, and event attribution.
 ```mermaid
 flowchart LR
     subgraph KERNEL["Linux kernel"]
+        EXEC["FAN_OPEN_EXEC_PERM"]
         MMAP["uprobe_mmap"]
-        FILTER["tracked cgroup<br/>executable file"]
+        FILTER["tracked cgroup<br/>executable mapping"]
         CACHE[("HTTP uprobe<br/>discovery cache · LRU")]
         LINKS["HTTP uprobe links"]
         EVENTS["ring buffer"]
@@ -55,9 +56,12 @@ flowchart LR
     end
 
     subgraph KIO["KernelIO"]
+        FAN["fanotify reader<br/>cgroup gate + FAN_ALLOW"]
         READER["sample reader"]
         WORKER["HTTP uprobe worker<br/>single owner goroutine"]
-        TARGETS[("attached targets")]
+        TARGETS[("attached targets<br/>backing inode keys")]
+        EXEC --> FAN
+        FAN -->|"tracked executable FD<br/>bounded permission wait"| WORKER
         READER -->|"mapping control samples"| WORKER
         WORKER -.->|"owns"| TARGETS
     end
@@ -70,14 +74,21 @@ flowchart LR
     EVENTS --> READER
     WORKER -->|"attach / close"| LINKS
     WORKER -->|"reclaim: delete entry"| CACHE
-    CGROUPS -->|"active cgroup IDs<br/>every minute for reclaim"| WORKER
+    CGROUPS -->|"active cgroup IDs"| WORKER
     READER -->|"http_request event samples"| DECODE
 ```
 
-For each executable file mapping, BPF checks the LRU cache and inserts the file on a
-miss before emitting an attach candidate. Reclaim removes the cache entry in
-userspace before closing the corresponding links. Transient work failure and a
-full worker queue also remove the entry so a later mapping can retry.
+There are two discovery inputs. fanotify holds a directly executed file while
+the worker classifies and attaches that file. The existing BPF mapping hook
+asynchronously discovers executable mappings and remains the backstop for
+shared libraries, `dlopen`, fanotify timeout, and filesystems outside the
+fanotify mark.
+
+For each executable mapping, BPF checks the LRU cache and inserts a pending file
+on a miss before emitting an attach candidate. The worker changes definitive
+results to classified. Reclaim removes all cache keys associated with a target
+before closing its links. Transient work failure and a full worker queue remove
+pending entries so a later mapping can retry.
 
 The Job and cgroup state edge is reclaim input only: KernelTracker sends active
 cgroup IDs once per minute. Attach discovery starts when KernelIO reads an
@@ -91,8 +102,8 @@ classification, attach, and close do not require a mutex.
 
 | Type | State | Purpose and identity | Access | Bound and removal |
 | --- | --- | --- | --- | --- |
-| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by `mappedFileIdentity` (device, inode); stores the classification key, uprobe links, and consecutive complete-miss count for each attached file | HTTP uprobe worker only | 4,096 files; reclaim removes an entry after two complete misses |
-| Shared BPF cache | `http_uprobe_discovery_cache` | Keyed by `fileClassificationKey` (device, inode, ctime); suppresses callbacks for files already queued, classified, or attached | BPF hook, KernelIO reader, and worker | 65,536-entry LRU; failed work and reclaim remove entries |
+| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by the backing device/inode selected by `uprobe_register`; stores all classification-cache keys, uprobe links, and consecutive complete-miss count | HTTP uprobe worker only | 4,096 backing files; reclaim removes an entry after two complete misses |
+| Shared BPF cache | `http_uprobe_discovery_cache` | Keyed by device, inode, and ctime; value is pending or classified | BPF mapping hook and worker | 65,536-entry LRU; failed work and reclaim remove entries |
 
 The cache is notification suppression, not the link registry. Eviction can cause
 another classification, but it cannot detach or lose a link. `attachedTargets`
@@ -106,14 +117,16 @@ share the same file and attachment. Every HTTP uprobe BPF entry therefore checks
 
 ### Discovery model
 
-Mapping notification is the primary discovery path. It reacts when a process in
-a tracked cgroup receives a new executable file mapping, before the selected
-library function is called.
+fanotify permission events are the primary path for a directly executed ELF.
+The reader allows untracked executions immediately. For a tracked process it
+hands the already-open executable FD to the worker and delays `FAN_ALLOW` for
+at most 250 ms. This lets a stripped Go executable attach before its first
+selected `net/http` call without sending a process signal.
 
-This also covers mappings created by later Jobs and containers on long-lived
-self-hosted or Kubernetes runners, provided their cgroup is already tracked.
-ELF inspection and attachment still run asynchronously in userspace, so the
-selected function can run first and the initial request can be missed.
+The BPF mapping notification remains the primary path for shared libraries and
+later executable mappings. It covers OpenSSL, nghttp2, `dlopen`, and files
+outside the fanotify mark, but userspace attach is asynchronous and can miss the
+first selected library call.
 
 Each candidate carries a `fileClassificationKey` made from device, inode, and
 ctime. This identifies one file version across BPF filtering and userspace
@@ -121,38 +134,48 @@ identity verification.
 
 | Mechanism | Status | Purpose | Trade-off |
 | --- | --- | --- | --- |
-| executable mapping notification | Implemented; primary | Reacts to each new executable file mapping without scanning every process. | The first request can run before attachment and be missed. |
+| fanotify executable permission | Implemented; primary for directly executed files | Holds a tracked exec while its event FD is classified and attached. | Host-wide permission mediation requires `CAP_SYS_ADMIN`; a stalled or exhausted permission path can delay or fail exec. |
+| executable mapping notification | Implemented; library and catch-up backstop | Reacts to executable file mappings without scanning every process. | Userspace attach is asynchronous, so the first selected call can be missed. |
 | initial process scan | Not implemented | Could recover mappings that existed before tracking began. | A one-time snapshot cannot discover later processes or mappings. |
 | periodic process scan | Not implemented | Could provide a catch-up path for missed notifications. | Adds recurring scan cost and cannot guarantee the first request. |
 
-The current implementation uses mapping notifications only. Initial and
-periodic process scans can be considered later if production measurements show
-that an additional catch-up path is necessary.
+The current implementation uses both fanotify and mapping notifications.
+Initial and periodic process scans can be considered later if production
+measurements justify their recurring cost.
 
 Mapping notification is also not limited to dynamically linked libraries. A
 statically linked executable, including a Go binary, creates executable file
 mappings when it starts. The same discovery trigger therefore feeds both ELF
 symbol lookup and the Go-specific pclntab resolver.
 
-The implemented attach path is:
+The implemented attach paths converge on one worker:
 
 ```mermaid
 flowchart LR
-    MAP["Tracked process creates<br/>executable file mapping"]
-    BPF["BPF filters and emits<br/>attach candidate"]
-    QUEUE["KernelIO bounded queue"]
-    OPEN["Worker opens map_files<br/>and verifies identity"]
-    ELF["Classify mapped ELF"]
+    EXEC["Tracked process<br/>opens ELF for exec"]
+    FAN["fanotify reader<br/>bounded permission wait"]
+    MAP["Tracked executable mapping"]
+    BPF["BPF cache miss<br/>attach candidate"]
+    OPEN["Open event FD or map_files"]
+    ELF["Worker classifies ELF"]
     GO["Resolve Go pclntab"]
-    ATTACH["Attach selected symbols"]
+    ATTACH["Attach selected function"]
     CACHE["Cache definitive non-target"]
 
-    MAP --> BPF --> QUEUE --> OPEN --> ELF
+    EXEC --> FAN --> OPEN
+    MAP --> BPF --> OPEN
+    OPEN --> ELF
     ELF -->|"selected C symbol"| ATTACH
     ELF -->|"no selected C symbol"| GO
     GO -->|"Go function offset"| ATTACH
     GO -->|"not supported"| CACHE
+    ATTACH -->|"fanotify path"| ALLOW["FAN_ALLOW"]
 ```
+
+The synchronous fanotify path classifies only the event FD. It does not inspect
+`/proc/<pid>/root` or predict dynamic-loader dependencies while exec is
+held. An experiment that did so stalled host-wide exec under repeated load.
+Shared libraries therefore remain the responsibility of mapping discovery.
 
 ### Kernel-side candidate filtering
 
@@ -174,19 +197,36 @@ or file content.
 
 ### Userspace classification and attach
 
-The KernelIO sample reader recognizes an HTTP uprobe attach candidate and puts it
-on a bounded, non-blocking worker queue. Attach candidates do not enter
+The fanotify reader validates metadata, checks the process cgroup against the
+existing `tracked_cgroups` map, and writes `FAN_ALLOW`. It does not parse
+ELF or own links. One buffered permission request gives held execs priority at
+worker loop boundaries. A busy worker or 250 ms deadline allows the exec and
+leaves mapping discovery as the backstop.
+
+fanotify writes only definitive classification results to the shared cache. It
+does not create a pending entry, so a permission timeout leaves the following
+mmap free to emit a retry candidate.
+
+The Agent does not launch Job commands. The runner or container runtime is the
+workload launcher, while the separate Agent process owns the fanotify group and
+can continue serving permission events. Integration tests preserve this
+boundary with an external launcher created before the fanotify group starts;
+the group-owning Go process must not call `os/exec` for a tracked workload.
+
+The KernelIO sample reader recognizes a mapping attach candidate and puts it on
+the existing bounded, non-blocking worker queue. Neither discovery input enters
 KernelTracker, Job attribution, or CEL evaluation.
 
 The worker handles each candidate serially:
 
-1. Open the mapped file through `/proc/<pid>/map_files` and verify its device,
-   inode, and ctime. A changed mapping is ignored and not cached.
+1. Use the fanotify event FD directly, or open the mapped file through
+   `/proc/<pid>/map_files` and verify its device, inode, and ctime.
 2. Look for selected C functions in `.symtab` and `.dynsym`. If none are
    defined, try the Go pclntab resolver described in
    [Go net/http Uprobes](go-http-uprobes.md).
-3. Attach selected symbols or resolved file offsets, store their links as one
-   attached target, and keep the discovery-cache entry.
+3. Attach selected symbols or resolved file offsets. A short
+   `fentry/uprobe_register` rendezvous records the backing inode selected by
+   the kernel, which becomes the attached-target key.
 4. If neither resolver finds a supported function, keep the cache entry.
 5. On a transient failure or queue drop, remove the cache entry so a later
    mapping can retry.
@@ -249,8 +289,10 @@ execute the mapped file. A file can also be shared by several Jobs or containers
 Link lifetime therefore cannot follow one PID, Job, pathname, or cgroup owner.
 
 KernelTracker starts reconciliation once per minute and sends an immutable
-snapshot of active cgroup IDs to the worker. The worker expands that snapshot to
-current process mappings and compares them with attached targets.
+snapshot of active cgroup IDs to the worker. The worker expands the snapshot to
+current TGIDs, then reads one `task_vma` BPF iterator stream. The iterator
+uses the same backing-inode view as `uprobe_register`, so OverlayFS-visible
+device numbers are not compared with backing-inode target keys.
 
 ```mermaid
 flowchart LR
@@ -258,7 +300,7 @@ flowchart LR
     IDS["snapshot active<br/>cgroup IDs"]
     PATHS["Worker resolves<br/>cgroupfs paths"]
     PIDS["read cgroup.procs"]
-    MAPS["read process maps"]
+    MAPS["task_vma iterator<br/>backing inodes"]
     COMPARE["compare with<br/>attached targets"]
     CACHE["remove discovery<br/>cache entry"]
     CLOSE["close links and remove<br/>attached target"]
@@ -314,14 +356,25 @@ x64 and arm64 unless noted otherwise.
 - `http_request` capture is disabled by default during rollout. The
   `--enable-http-request` switch controls both the cleartext tap and the HTTP
   uprobe runtime, and remains the disable path after default enablement.
-- Mapping notification precedes the selected function call, but ELF
-  classification and attachment are asynchronous. The function can run before
-  its uprobe is attached, so the initial request can be missed. This remains a
-  rollout gate.
-- Discovery observes executable mappings created while the process is already in
-  a tracked cgroup. Initial catch-up scanning, periodic attach backstop, moving an
-  existing process into a tracked cgroup, and later `mprotect(PROT_EXEC)` are not
-  current discovery paths.
+- When fanotify permission mediation is available, a directly executed tracked
+  ELF is classified before exec continues. This closes the measured first-call
+  gap for stripped Go clients. A busy worker or 250 ms deadline allows the exec
+  and falls back to asynchronous mapping discovery.
+- OpenSSL and nghttp2 are shared-library mappings, not the directly executed
+  fanotify event FD. Their attach remains asynchronous and the initial request
+  can still be missed.
+- fanotify uses a host-filesystem permission mark and requires
+  `CAP_SYS_ADMIN`. Unsupported setup falls back to mmap discovery. The kernel
+  provides no per-event timeout, and permission-event queue exhaustion can fail
+  exec before userspace responds. Queue stress, reader failure, and Kubernetes
+  filesystem coverage remain default-enable gates.
+- The Agent process must remain separate from the workload launcher. This is
+  the current architecture; changing the Agent to spawn tracked commands would
+  require a separate permission-reader design.
+- Discovery observes directly executed files and executable mappings created
+  while the process is already in a tracked cgroup. Initial catch-up scanning,
+  periodic attach scanning, moving an existing process into a tracked cgroup,
+  and later `mprotect(PROT_EXEC)` are not current discovery paths.
 - C library capture requires a selected function in `.symtab` or `.dynsym`.
   Go capture accepts only the pclntab layouts and ABI/object-layout range listed
   in [Go net/http Uprobes](go-http-uprobes.md).

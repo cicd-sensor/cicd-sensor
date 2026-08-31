@@ -133,15 +133,34 @@ struct {
     __type(value, __u64);
 } ringbuf_drop_count SEC(".maps");
 
-// Files whose discovery is pending or already resolved. Presence means that
-// another mapping notification is unnecessary. LRU eviction only causes a
-// later reclassification; attached links remain owned by userspace.
+// Files whose discovery is pending (1) or classified (2). The mmap hook treats
+// either state as notified; fanotify may skip synchronous work only for state 2.
+// LRU eviction only causes later reclassification; userspace owns all links.
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, 65536);
     __type(key, struct file_classification_key);
     __type(value, __u8);
 } http_uprobe_discovery_cache SEC(".maps");
+
+// The single HTTP uprobe worker serializes link creation, so one Agent TGID
+// rendezvous is normally active. Extra capacity keeps unexpected concurrent
+// Agent-side attaches from overwriting another key.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16);
+    __type(key, __u32);
+    __type(value, struct uprobe_inode_resolution);
+} http_uprobe_inode_resolutions SEC(".maps");
+
+// Reclaim populates this set with the TGIDs currently in tracked cgroups. The
+// task_vma iterator emits backing inodes only for members of this set.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 65536);
+    __type(key, __u32);
+    __type(value, __u8);
+} http_uprobe_reclaim_tgids SEC(".maps");
 
 // staging_map: basename -> staging_value. Userspace stages sibling-container
 // basenames; cgroup_mkdir promotes and deletes matching entries in-kernel.

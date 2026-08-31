@@ -18,6 +18,7 @@ import (
 // LinuxKernelIO owns BPF program, map, and ring buffer I/O.
 type LinuxKernelIO struct {
 	logger          *slog.Logger
+	cgroupRootPath  string
 	objs            bpfprog.BPFProgramObjects
 	links           []link.Link
 	reader          *ringbuf.Reader
@@ -30,7 +31,8 @@ type LinuxKernelIO struct {
 	loopWG sync.WaitGroup
 	// httpUprobeWorker finds, attaches, and reclaims HTTP uprobes. It runs in
 	// loopWG and closes its own attached links, so they are not stored in links.
-	httpUprobeWorker *httpUprobeWorker
+	httpUprobeWorker   *httpUprobeWorker
+	httpUprobeFanotify *httpUprobeFanotify
 }
 
 type tracingProgram struct {
@@ -48,7 +50,8 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	}
 
 	kernelIO = &LinuxKernelIO{
-		logger: logger.With("component", "bpf_kernel_io"),
+		logger:         logger.With("component", "bpf_kernel_io"),
+		cgroupRootPath: config.CgroupV2RootPath,
 	}
 
 	spec, err := bpfprog.LoadBPFProgram()
@@ -125,6 +128,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		tracingPrograms = append(tracingPrograms,
 			tracingProgram{name: "tcp_sendmsg_http", program: kernelIO.objs.HandleTcpSendmsgHttp},
 			tracingProgram{name: "uprobe_mmap", program: kernelIO.objs.HandleUprobeMmap},
+			tracingProgram{name: "uprobe_register", program: kernelIO.objs.ObserveHttpUprobeRegister},
 		)
 		kernelIO.httpUprobeWorker = newHTTPUprobeWorker(
 			[]symbolUprobeTarget{
@@ -135,7 +139,12 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			},
 			kernelIO.logger,
 			config.CgroupV2RootPath,
-			kernelIO.objs.HttpUprobeDiscoveryCache,
+			httpUprobeWorkerBPF{
+				discoveryCache:   kernelIO.objs.HttpUprobeDiscoveryCache,
+				inodeResolutions: kernelIO.objs.HttpUprobeInodeResolutions,
+				reclaimTGIDs:     kernelIO.objs.HttpUprobeReclaimTgids,
+				vmaIterator:      kernelIO.objs.IterHttpUprobeVmaInodes,
+			},
 			goUprobeTarget{
 				function: goNetHTTPRoundTripFunction,
 				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,

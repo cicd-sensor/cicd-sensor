@@ -28,10 +28,33 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 	loopCtx, cancelLoop := context.WithCancel(ctx)
 	kernelIO.cancelLoop = cancelLoop
 
+	if kernelIO.httpUprobeWorker != nil {
+		fanotify, fanotifyErr := newHTTPUprobeFanotify(
+			kernelIO.logger,
+			kernelIO.cgroupRootPath,
+			kernelIO.objs.TrackedCgroups,
+			kernelIO.httpUprobeWorker,
+		)
+		if fanotifyErr != nil {
+			kernelIO.logger.Warn(
+				"http_uprobe_fanotify_unavailable",
+				"error", fanotifyErr,
+				"fallback", "uprobe_mmap",
+			)
+		} else {
+			kernelIO.httpUprobeFanotify = fanotify
+		}
+	}
+
 	kernelIO.loopWG.Add(3)
 	if kernelIO.httpUprobeWorker != nil {
 		kernelIO.loopWG.Go(func() {
 			kernelIO.httpUprobeWorker.run(loopCtx)
+		})
+	}
+	if kernelIO.httpUprobeFanotify != nil {
+		kernelIO.loopWG.Go(func() {
+			kernelIO.httpUprobeFanotify.run(loopCtx)
 		})
 	}
 	go func() {
@@ -40,6 +63,9 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 
 		if err := kernelIO.closeReader(); err != nil {
 			kernelIO.logger.WarnContext(loopCtx, "bpf_reader_close_failed", "error", err)
+		}
+		if err := kernelIO.closeHTTPUprobeFanotify(); err != nil {
+			kernelIO.logger.WarnContext(loopCtx, "http_uprobe_fanotify_close_failed", "error", err)
 		}
 	}()
 
@@ -174,6 +200,13 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	if err := kernelIO.closeReader(); err != nil {
 		firstErr = err
 	}
+	if err := kernelIO.closeHTTPUprobeFanotify(); err != nil {
+		if firstErr == nil {
+			firstErr = err
+		} else {
+			kernelIO.logger.Warn("http_uprobe_fanotify_close_failed", "error", err)
+		}
+	}
 	// Drain goroutines before closing map FDs; the drop watcher may be in Map.Lookup.
 	kernelIO.loopWG.Wait()
 	for _, attachedLink := range slices.Backward(kernelIO.links) {
@@ -194,6 +227,13 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	}
 
 	return firstErr
+}
+
+func (kernelIO *LinuxKernelIO) closeHTTPUprobeFanotify() error {
+	if kernelIO.httpUprobeFanotify == nil {
+		return nil
+	}
+	return kernelIO.httpUprobeFanotify.close()
 }
 
 func (kernelIO *LinuxKernelIO) closeReader() error {

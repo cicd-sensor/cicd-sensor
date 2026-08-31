@@ -3,12 +3,36 @@
 package kernelio
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"golang.org/x/sys/unix"
 )
+
+func TestHTTPUprobeWorkerReleasesPendingPermissionRequests(t *testing.T) {
+	t.Parallel()
+
+	eventFile, err := os.CreateTemp(t.TempDir(), "fanotify-event")
+	if err != nil {
+		t.Fatalf("create event file: %v", err)
+	}
+	done := make(chan struct{})
+	worker := &httpUprobeWorker{permissionRequests: make(chan httpUprobePermissionRequest, 1)}
+	worker.permissionRequests <- httpUprobePermissionRequest{file: eventFile, done: done}
+
+	worker.releasePendingPermissionRequests()
+
+	select {
+	case <-done:
+	default:
+		t.Fatal("pending fanotify waiter was not released")
+	}
+	if _, err := eventFile.Stat(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("event file stat error = %v, want os.ErrClosed", err)
+	}
+}
 
 func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 	t.Parallel()
@@ -46,18 +70,23 @@ func TestHTTPUprobeWorkerKeepsInodeTargetAcrossCTimeChange(t *testing.T) {
 	mapped := mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42}
 	oldKey := fileClassificationKey{mappedFile: mapped, ctimeSec: 1}
 	newKey := fileClassificationKey{mappedFile: mapped, ctimeSec: 2}
-	target := &attachedUprobeTarget{classificationKey: oldKey}
+	target := &attachedUprobeTarget{
+		classificationKeys: map[fileClassificationKey]struct{}{oldKey: {}},
+	}
 	worker := &httpUprobeWorker{
 		attachedTargets: map[mappedFileIdentity]*attachedUprobeTarget{mapped: target},
 	}
 
-	worker.classifyAndAttach(httpUprobeAttachCandidate{file: newKey})
+	worker.recordAttachedTarget(newKey, newKey, nil)
 
 	if got := worker.attachedTargets[mapped]; got != target {
 		t.Fatal("ctime change replaced the inode-owned target")
 	}
-	if target.classificationKey != newKey {
-		t.Fatalf("classification key = %+v, want %+v", target.classificationKey, newKey)
+	if _, ok := target.classificationKeys[oldKey]; !ok {
+		t.Fatal("old classification key was discarded while its mapping can remain live")
+	}
+	if _, ok := target.classificationKeys[newKey]; !ok {
+		t.Fatal("new classification key was not associated with the inode target")
 	}
 }
 

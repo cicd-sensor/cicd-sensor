@@ -226,6 +226,14 @@ type BPFProgramHttpUprobeAttachCandidateSample struct {
 	File    BPFProgramFileClassificationKey
 }
 
+type BPFProgramIteratedVmaInode struct {
+	_      structs.HostLayout
+	Tgid   uint32
+	Pad    uint32
+	Device uint64
+	Inode  uint64
+}
+
 type BPFProgramMountSample struct {
 	_               structs.HostLayout
 	Kind            uint32
@@ -307,6 +315,18 @@ type BPFProgramUnixSocketConnectSample struct {
 	Cwd              [1024]int8
 }
 
+type BPFProgramUprobeInodeResolution struct {
+	_          structs.HostLayout
+	Generation uint64
+	Device     uint64
+	Inode      uint64
+	Offset     uint64
+	CtimeSec   int64
+	CtimeNsec  uint32
+	Resolved   uint8
+	Pad        [3]uint8
+}
+
 // Names of all BPF objects in the ELF.
 //
 // Used for safe lookups in a Collection or CollectionSpec.
@@ -315,6 +335,8 @@ const (
 	BPFProgramMapHttpScratch                           = "http_scratch"
 	BPFProgramMapHttpStages                            = "http_stages"
 	BPFProgramMapHttpUprobeDiscoveryCache              = "http_uprobe_discovery_cache"
+	BPFProgramMapHttpUprobeInodeResolutions            = "http_uprobe_inode_resolutions"
+	BPFProgramMapHttpUprobeReclaimTgids                = "http_uprobe_reclaim_tgids"
 	BPFProgramMapHttpUprobeStages                      = "http_uprobe_stages"
 	BPFProgramMapPathScratch                           = "path_scratch"
 	BPFProgramMapRingbufDropCount                      = "ringbuf_drop_count"
@@ -352,6 +374,8 @@ const (
 	BPFProgramProgHandleUnixStreamConnect              = "handle_unix_stream_connect"
 	BPFProgramProgHandleUnixStreamSendmsg              = "handle_unix_stream_sendmsg"
 	BPFProgramProgHandleUprobeMmap                     = "handle_uprobe_mmap"
+	BPFProgramProgIterHttpUprobeVmaInodes              = "iter_http_uprobe_vma_inodes"
+	BPFProgramProgObserveHttpUprobeRegister            = "observe_http_uprobe_register"
 	BPFProgramVarUnusedCgroupAttachSample              = "unused_cgroup_attach_sample"
 	BPFProgramVarUnusedCgroupMkdirSample               = "unused_cgroup_mkdir_sample"
 	BPFProgramVarUnusedCgroupRmdirSample               = "unused_cgroup_rmdir_sample"
@@ -364,11 +388,13 @@ const (
 	BPFProgramVarUnusedForkSample                      = "unused_fork_sample"
 	BPFProgramVarUnusedHttpRequestSample               = "unused_http_request_sample"
 	BPFProgramVarUnusedHttpUprobeAttachCandidateSample = "unused_http_uprobe_attach_candidate_sample"
+	BPFProgramVarUnusedIteratedVmaInode                = "unused_iterated_vma_inode"
 	BPFProgramVarUnusedMountSample                     = "unused_mount_sample"
 	BPFProgramVarUnusedNetV4Sample                     = "unused_net_v4_sample"
 	BPFProgramVarUnusedNetV6Sample                     = "unused_net_v6_sample"
 	BPFProgramVarUnusedStagingValue                    = "unused_staging_value"
 	BPFProgramVarUnusedUnixSocketConnectSample         = "unused_unix_socket_connect_sample"
+	BPFProgramVarUnusedUprobeInodeResolution           = "unused_uprobe_inode_resolution"
 )
 
 // LoadBPFProgram returns the embedded CollectionSpec for BPFProgram.
@@ -445,21 +471,25 @@ type BPFProgramProgramSpecs struct {
 	HandleUnixStreamConnect    *ebpf.ProgramSpec `ebpf:"handle_unix_stream_connect"`
 	HandleUnixStreamSendmsg    *ebpf.ProgramSpec `ebpf:"handle_unix_stream_sendmsg"`
 	HandleUprobeMmap           *ebpf.ProgramSpec `ebpf:"handle_uprobe_mmap"`
+	IterHttpUprobeVmaInodes    *ebpf.ProgramSpec `ebpf:"iter_http_uprobe_vma_inodes"`
+	ObserveHttpUprobeRegister  *ebpf.ProgramSpec `ebpf:"observe_http_uprobe_register"`
 }
 
 // BPFProgramMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BPFProgramMapSpecs struct {
-	Events                   *ebpf.MapSpec `ebpf:"events"`
-	HttpScratch              *ebpf.MapSpec `ebpf:"http_scratch"`
-	HttpStages               *ebpf.MapSpec `ebpf:"http_stages"`
-	HttpUprobeDiscoveryCache *ebpf.MapSpec `ebpf:"http_uprobe_discovery_cache"`
-	HttpUprobeStages         *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
-	PathScratch              *ebpf.MapSpec `ebpf:"path_scratch"`
-	RingbufDropCount         *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
-	StagingMap               *ebpf.MapSpec `ebpf:"staging_map"`
-	TrackedCgroups           *ebpf.MapSpec `ebpf:"tracked_cgroups"`
+	Events                     *ebpf.MapSpec `ebpf:"events"`
+	HttpScratch                *ebpf.MapSpec `ebpf:"http_scratch"`
+	HttpStages                 *ebpf.MapSpec `ebpf:"http_stages"`
+	HttpUprobeDiscoveryCache   *ebpf.MapSpec `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeInodeResolutions *ebpf.MapSpec `ebpf:"http_uprobe_inode_resolutions"`
+	HttpUprobeReclaimTgids     *ebpf.MapSpec `ebpf:"http_uprobe_reclaim_tgids"`
+	HttpUprobeStages           *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
+	PathScratch                *ebpf.MapSpec `ebpf:"path_scratch"`
+	RingbufDropCount           *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
+	StagingMap                 *ebpf.MapSpec `ebpf:"staging_map"`
+	TrackedCgroups             *ebpf.MapSpec `ebpf:"tracked_cgroups"`
 }
 
 // BPFProgramVariableSpecs contains global variables before they are loaded into the kernel.
@@ -478,11 +508,13 @@ type BPFProgramVariableSpecs struct {
 	UnusedForkSample                      *ebpf.VariableSpec `ebpf:"unused_fork_sample"`
 	UnusedHttpRequestSample               *ebpf.VariableSpec `ebpf:"unused_http_request_sample"`
 	UnusedHttpUprobeAttachCandidateSample *ebpf.VariableSpec `ebpf:"unused_http_uprobe_attach_candidate_sample"`
+	UnusedIteratedVmaInode                *ebpf.VariableSpec `ebpf:"unused_iterated_vma_inode"`
 	UnusedMountSample                     *ebpf.VariableSpec `ebpf:"unused_mount_sample"`
 	UnusedNetV4Sample                     *ebpf.VariableSpec `ebpf:"unused_net_v4_sample"`
 	UnusedNetV6Sample                     *ebpf.VariableSpec `ebpf:"unused_net_v6_sample"`
 	UnusedStagingValue                    *ebpf.VariableSpec `ebpf:"unused_staging_value"`
 	UnusedUnixSocketConnectSample         *ebpf.VariableSpec `ebpf:"unused_unix_socket_connect_sample"`
+	UnusedUprobeInodeResolution           *ebpf.VariableSpec `ebpf:"unused_uprobe_inode_resolution"`
 }
 
 // BPFProgramObjects contains all objects after they have been loaded into the kernel.
@@ -505,15 +537,17 @@ func (o *BPFProgramObjects) Close() error {
 //
 // It can be passed to LoadBPFProgramObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BPFProgramMaps struct {
-	Events                   *ebpf.Map `ebpf:"events"`
-	HttpScratch              *ebpf.Map `ebpf:"http_scratch"`
-	HttpStages               *ebpf.Map `ebpf:"http_stages"`
-	HttpUprobeDiscoveryCache *ebpf.Map `ebpf:"http_uprobe_discovery_cache"`
-	HttpUprobeStages         *ebpf.Map `ebpf:"http_uprobe_stages"`
-	PathScratch              *ebpf.Map `ebpf:"path_scratch"`
-	RingbufDropCount         *ebpf.Map `ebpf:"ringbuf_drop_count"`
-	StagingMap               *ebpf.Map `ebpf:"staging_map"`
-	TrackedCgroups           *ebpf.Map `ebpf:"tracked_cgroups"`
+	Events                     *ebpf.Map `ebpf:"events"`
+	HttpScratch                *ebpf.Map `ebpf:"http_scratch"`
+	HttpStages                 *ebpf.Map `ebpf:"http_stages"`
+	HttpUprobeDiscoveryCache   *ebpf.Map `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeInodeResolutions *ebpf.Map `ebpf:"http_uprobe_inode_resolutions"`
+	HttpUprobeReclaimTgids     *ebpf.Map `ebpf:"http_uprobe_reclaim_tgids"`
+	HttpUprobeStages           *ebpf.Map `ebpf:"http_uprobe_stages"`
+	PathScratch                *ebpf.Map `ebpf:"path_scratch"`
+	RingbufDropCount           *ebpf.Map `ebpf:"ringbuf_drop_count"`
+	StagingMap                 *ebpf.Map `ebpf:"staging_map"`
+	TrackedCgroups             *ebpf.Map `ebpf:"tracked_cgroups"`
 }
 
 func (m *BPFProgramMaps) Close() error {
@@ -522,6 +556,8 @@ func (m *BPFProgramMaps) Close() error {
 		m.HttpScratch,
 		m.HttpStages,
 		m.HttpUprobeDiscoveryCache,
+		m.HttpUprobeInodeResolutions,
+		m.HttpUprobeReclaimTgids,
 		m.HttpUprobeStages,
 		m.PathScratch,
 		m.RingbufDropCount,
@@ -546,11 +582,13 @@ type BPFProgramVariables struct {
 	UnusedForkSample                      *ebpf.Variable `ebpf:"unused_fork_sample"`
 	UnusedHttpRequestSample               *ebpf.Variable `ebpf:"unused_http_request_sample"`
 	UnusedHttpUprobeAttachCandidateSample *ebpf.Variable `ebpf:"unused_http_uprobe_attach_candidate_sample"`
+	UnusedIteratedVmaInode                *ebpf.Variable `ebpf:"unused_iterated_vma_inode"`
 	UnusedMountSample                     *ebpf.Variable `ebpf:"unused_mount_sample"`
 	UnusedNetV4Sample                     *ebpf.Variable `ebpf:"unused_net_v4_sample"`
 	UnusedNetV6Sample                     *ebpf.Variable `ebpf:"unused_net_v6_sample"`
 	UnusedStagingValue                    *ebpf.Variable `ebpf:"unused_staging_value"`
 	UnusedUnixSocketConnectSample         *ebpf.Variable `ebpf:"unused_unix_socket_connect_sample"`
+	UnusedUprobeInodeResolution           *ebpf.Variable `ebpf:"unused_uprobe_inode_resolution"`
 }
 
 // BPFProgramPrograms contains all programs after they have been loaded into the kernel.
@@ -589,6 +627,8 @@ type BPFProgramPrograms struct {
 	HandleUnixStreamConnect    *ebpf.Program `ebpf:"handle_unix_stream_connect"`
 	HandleUnixStreamSendmsg    *ebpf.Program `ebpf:"handle_unix_stream_sendmsg"`
 	HandleUprobeMmap           *ebpf.Program `ebpf:"handle_uprobe_mmap"`
+	IterHttpUprobeVmaInodes    *ebpf.Program `ebpf:"iter_http_uprobe_vma_inodes"`
+	ObserveHttpUprobeRegister  *ebpf.Program `ebpf:"observe_http_uprobe_register"`
 }
 
 func (p *BPFProgramPrograms) Close() error {
@@ -625,6 +665,8 @@ func (p *BPFProgramPrograms) Close() error {
 		p.HandleUnixStreamConnect,
 		p.HandleUnixStreamSendmsg,
 		p.HandleUprobeMmap,
+		p.IterHttpUprobeVmaInodes,
+		p.ObserveHttpUprobeRegister,
 	)
 }
 

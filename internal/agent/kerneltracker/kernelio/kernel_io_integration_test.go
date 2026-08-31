@@ -6,9 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
 	"github.com/cilium/ebpf"
@@ -254,6 +257,133 @@ func TestLinuxKernelIOStartLoopAndClose(t *testing.T) {
 		_ = kernelIO.Close()
 		t.Fatalf("StartKernelSampleLoop: %v", err)
 	}
+	if err := kernelIO.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestLinuxHTTPUprobeFanotifyStartsAndCloses(t *testing.T) {
+	config := testLinuxConfig(t)
+	config.EnableHTTPRequest = true
+	kernelIO, err := NewLinux(nil, config)
+	if err != nil {
+		t.Fatalf("NewLinux: %v", err)
+	}
+	// Start the launcher before this process owns a fanotify permission group.
+	// Production KernelIO does not spawn Job commands; this shell preserves that
+	// ownership boundary while still exercising an untracked exec permission.
+	launcher := exec.Command("/bin/sh", "-c", `IFS= read -r _; exec /bin/true`)
+	launcherInput, err := launcher.StdinPipe()
+	if err != nil {
+		_ = kernelIO.Close()
+		t.Fatalf("create launcher input: %v", err)
+	}
+	if err := launcher.Start(); err != nil {
+		_ = kernelIO.Close()
+		t.Fatalf("start launcher: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = launcher.Process.Kill()
+		_ = launcher.Wait()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := kernelIO.StartKernelSampleLoop(ctx, func(context.Context, KernelSample) error {
+		return nil
+	}); err != nil {
+		_ = kernelIO.Close()
+		t.Fatalf("StartKernelSampleLoop: %v", err)
+	}
+	if kernelIO.httpUprobeFanotify == nil {
+		_ = kernelIO.Close()
+		t.Fatal("fanotify permission path is unavailable")
+	}
+
+	// An untracked exec must pass through the host-wide mark without waiting
+	// for HTTP classification.
+	if _, err := io.WriteString(launcherInput, "\n"); err != nil {
+		_ = kernelIO.Close()
+		t.Fatalf("release launcher: %v", err)
+	}
+	_ = launcherInput.Close()
+	if err := launcher.Wait(); err != nil {
+		_ = kernelIO.Close()
+		t.Fatalf("execute /bin/true through fanotify: %v", err)
+	}
+	if err := kernelIO.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestLinuxHTTPUprobeFanotifyAllowsUntrackedExecBurst(t *testing.T) {
+	const processCount = 64
+
+	config := testLinuxConfig(t)
+	config.EnableHTTPRequest = true
+	kernelIO, err := NewLinux(nil, config)
+	if err != nil {
+		t.Fatalf("NewLinux: %v", err)
+	}
+
+	launchers := make([]*exec.Cmd, 0, processCount)
+	inputs := make([]io.WriteCloser, 0, processCount)
+	for range processCount {
+		launcher := exec.Command("/bin/sh", "-c", `IFS= read -r _; exec /bin/true`)
+		input, err := launcher.StdinPipe()
+		if err != nil {
+			_ = kernelIO.Close()
+			t.Fatalf("create launcher input: %v", err)
+		}
+		if err := launcher.Start(); err != nil {
+			_ = input.Close()
+			_ = kernelIO.Close()
+			t.Fatalf("start launcher: %v", err)
+		}
+		launchers = append(launchers, launcher)
+		inputs = append(inputs, input)
+	}
+	t.Cleanup(func() {
+		for _, launcher := range launchers {
+			_ = launcher.Process.Kill()
+			_ = launcher.Wait()
+		}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := kernelIO.StartKernelSampleLoop(ctx, func(context.Context, KernelSample) error {
+		return nil
+	}); err != nil {
+		_ = kernelIO.Close()
+		t.Fatalf("StartKernelSampleLoop: %v", err)
+	}
+	if kernelIO.httpUprobeFanotify == nil {
+		_ = kernelIO.Close()
+		t.Fatal("fanotify permission path is unavailable")
+	}
+
+	startedAt := time.Now()
+	for _, input := range inputs {
+		if _, err := io.WriteString(input, "\n"); err != nil {
+			_ = kernelIO.Close()
+			t.Fatalf("release launcher: %v", err)
+		}
+		_ = input.Close()
+	}
+	for _, launcher := range launchers {
+		if err := launcher.Wait(); err != nil {
+			_ = kernelIO.Close()
+			t.Fatalf("untracked exec: %v", err)
+		}
+	}
+	elapsed := time.Since(startedAt)
+	if elapsed > 5*time.Second {
+		_ = kernelIO.Close()
+		t.Fatalf("%d untracked execs took %s, want at most 5s", processCount, elapsed)
+	}
+	t.Logf("allowed %d untracked execs in %s", processCount, elapsed)
+
 	if err := kernelIO.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}

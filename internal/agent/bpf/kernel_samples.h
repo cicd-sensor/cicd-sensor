@@ -311,6 +311,28 @@ struct file_classification_key {
     __u32 _pad;
 };
 
+// One userspace attach rendezvous. The worker writes generation before
+// link creation; fentry/uprobe_register fills the backing inode selected by
+// the kernel. This is control-plane metadata and never leaves the Agent.
+struct uprobe_inode_resolution {
+    __u64 generation;
+    __u64 device;
+    __u64 inode;
+    __u64 offset;
+    __s64 ctime_sec;
+    __u32 ctime_nsec;
+    __u8 resolved;
+    __u8 _pad[3];
+};
+
+// Binary record emitted by the task_vma iterator during link reclaim.
+struct iterated_vma_inode {
+    __u32 tgid;
+    __u32 _pad;
+    __u64 device;
+    __u64 inode;
+};
+
 // Discovery metadata only. No HTTP bytes or file content cross this boundary.
 struct http_uprobe_attach_candidate_sample {
     __u32 kind;
@@ -337,3 +359,5 @@ const volatile struct dns_sample *unused_dns_sample;
 const volatile struct unix_socket_connect_sample *unused_unix_socket_connect_sample;
 const volatile struct http_request_sample *unused_http_request_sample;
 const volatile struct http_uprobe_attach_candidate_sample *unused_http_uprobe_attach_candidate_sample;
+const volatile struct uprobe_inode_resolution *unused_uprobe_inode_resolution;
+const volatile struct iterated_vma_inode *unused_iterated_vma_inode;
