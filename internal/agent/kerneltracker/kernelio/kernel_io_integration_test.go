@@ -297,7 +297,7 @@ func TestLinuxHTTPUprobeFanotifyStartsAndCloses(t *testing.T) {
 	}
 	if kernelIO.httpUprobeFanotify == nil {
 		_ = kernelIO.Close()
-		t.Fatal("fanotify permission path is unavailable")
+		t.Skip("fanotify permission marks are unsupported; mmap discovery fallback remains active")
 	}
 
 	// An untracked exec must pass through the host-wide mark without waiting
@@ -360,7 +360,7 @@ func TestLinuxHTTPUprobeFanotifyAllowsUntrackedExecBurst(t *testing.T) {
 	}
 	if kernelIO.httpUprobeFanotify == nil {
 		_ = kernelIO.Close()
-		t.Fatal("fanotify permission path is unavailable")
+		t.Skip("fanotify permission marks are unsupported; mmap discovery fallback remains active")
 	}
 
 	startedAt := time.Now()

@@ -50,15 +50,28 @@ func newHTTPUprobeFanotify(
 	if err != nil {
 		return nil, fmt.Errorf("fanotify_init: %w", err)
 	}
-	if err := unix.FanotifyMark(
+	filesystemErr := unix.FanotifyMark(
 		fd,
 		unix.FAN_MARK_ADD|unix.FAN_MARK_FILESYSTEM,
 		unix.FAN_OPEN_EXEC_PERM,
 		unix.AT_FDCWD,
 		"/",
-	); err != nil {
-		_ = unix.Close(fd)
-		return nil, fmt.Errorf("mark root filesystem: %w", err)
+	)
+	if filesystemErr != nil {
+		// Some overlay and virtual filesystems reject a filesystem-wide mark.
+		// A root-mount mark still covers ordinary host execs; mmap discovery
+		// remains the backstop for child mounts and container filesystems.
+		mountErr := unix.FanotifyMark(
+			fd,
+			unix.FAN_MARK_ADD|unix.FAN_MARK_MOUNT,
+			unix.FAN_OPEN_EXEC_PERM,
+			unix.AT_FDCWD,
+			"/",
+		)
+		if mountErr != nil {
+			_ = unix.Close(fd)
+			return nil, fmt.Errorf("mark root filesystem (%v) or mount: %w", filesystemErr, mountErr)
+		}
 	}
 	return &httpUprobeFanotify{
 		fd:             fd,
