@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 	client := &http.Client{Transport: transport}
 	// Keep one mapped executable alive long enough to exercise asynchronous mmap
 	// discovery on filesystems where fanotify permission marks are unavailable.
-	for range 20 {
+	for i := 0; i < 20; i++ {
 		request, err := http.NewRequest(http.MethodGet, os.Args[2], nil)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -44,5 +45,8 @@ func main() {
 			os.Exit(1)
 		}
 		_ = response.Body.Close()
+		if i+1 < 20 {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 }
