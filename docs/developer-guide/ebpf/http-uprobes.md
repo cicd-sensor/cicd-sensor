@@ -363,9 +363,8 @@ x64 and arm64 unless noted otherwise.
 - OpenSSL and nghttp2 are shared-library mappings, not the directly executed
   fanotify event FD. Their attach remains asynchronous and the initial request
   can still be missed.
-- fanotify first uses a host-filesystem permission mark and falls back to a
-  root-mount mark when the filesystem-wide mark is unsupported. Both require
-  `CAP_SYS_ADMIN`; unsupported setup falls back to mmap discovery. The kernel
+- fanotify uses a host-filesystem permission mark and requires
+  `CAP_SYS_ADMIN`. Unsupported setup falls back to mmap discovery. The kernel
   provides no per-event timeout, and permission-event queue exhaustion can fail
   exec before userspace responds. Queue stress, reader failure, and Kubernetes
   filesystem coverage remain default-enable gates.

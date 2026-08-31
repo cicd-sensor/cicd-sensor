@@ -37,7 +37,9 @@ func TestLinuxOpenSSLUprobeCoversCommonClients(t *testing.T) {
 			urlPath:   "/curl",
 			eventPath: "/curl",
 			command: func(url string) *exec.Cmd {
-				return exec.Command("curl", "-sk", "--http1.1", "--max-time", "10", url)
+				// Reuse one mapped libssl for several requests so this coverage
+				// test measures eventual shared-library attachment, not first-call timing.
+				return exec.Command("curl", "-sk", "--http1.1", "--max-time", "10", url, url, url, url)
 			},
 		},
 		{
