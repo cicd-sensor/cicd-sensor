@@ -33,6 +33,11 @@ type LinuxKernelIO struct {
 	httpUprobeWorker *httpUprobeWorker
 }
 
+type tracingProgram struct {
+	name    string
+	program *ebpf.Program
+}
+
 // NewLinux loads the BPF objects, attaches programs, and opens the sample ring buffer.
 func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err error) {
 	if logger == nil {
@@ -70,13 +75,13 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		_ = rollback.Close()
 	}()
 
-	// Only the HTTP entry program is attached to tcp_sendmsg. Install its parse
-	// target before attaching so the entry never tail-calls into an empty slot.
+	// HTTP parsing uses tail-call pipelines. Populate every target before an
+	// entry program can be attached. Do this regardless of the rollout setting:
+	// EnableHTTPRequest controls external hooks and worker startup, while the
+	// loaded BPF object always contains complete parse pipelines.
 	if err := kernelIO.objs.HttpStages.Put(uint32(0), kernelIO.objs.HandleTcpSendmsgHttpParse); err != nil {
 		return nil, fmt.Errorf("install http parse target: %w", err)
 	}
-	// Uprobe tail targets use a separate kprobe-type jump table. Install every
-	// target before discovery or tests can attach an entry program.
 	for index, program := range []*ebpf.Program{
 		kernelIO.objs.HandleSslWriteParse,
 		kernelIO.objs.HandleNghttp2Required,
@@ -88,31 +93,10 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			return nil, fmt.Errorf("install HTTP uprobe stage %d: %w", index, err)
 		}
 	}
-	if config.EnableHTTPRequest {
-		kernelIO.httpUprobeWorker = newHTTPUprobeWorker(
-			[]symbolUprobeTarget{
-				{symbol: "SSL_write", program: kernelIO.objs.HandleSslWrite},
-				{symbol: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
-				{symbol: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
-				{symbol: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
-			},
-			kernelIO.logger,
-			config.CgroupV2RootPath,
-			kernelIO.objs.HttpUprobeDiscoveryCache,
-			goUprobeTarget{
-				function: goNetHTTPRoundTripFunction,
-				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,
-			},
-		)
-	}
 
 	// fentry/security_file_open is used instead of BPF LSM so deployments do
 	// not need lsm=..., Rename/symlink observation stays in inode hooks
 	// because security_path_* cannot use bpf_d_path in container filesystems.
-	type tracingProgram struct {
-		name    string
-		program *ebpf.Program
-	}
 	tracingPrograms := []tracingProgram{
 		{name: "sched_process_fork", program: kernelIO.objs.HandleSchedProcessFork},
 		{name: "sched_process_exec", program: kernelIO.objs.HandleSchedProcessExec},
@@ -135,22 +119,33 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 		{name: "unix_dgram_connect", program: kernelIO.objs.HandleUnixDgramConnect},
 	}
 	if config.EnableHTTPRequest {
-		tracingPrograms = append(tracingPrograms, tracingProgram{
-			name:    "tcp_sendmsg_http",
-			program: kernelIO.objs.HandleTcpSendmsgHttp,
-		})
+		// One rollout switch enables both HTTP paths: cleartext parsing at
+		// tcp_sendmsg and mmap-triggered discovery for OpenSSL, nghttp2, and Go
+		// uprobes. The worker owns the links created by the discovery path.
+		tracingPrograms = append(tracingPrograms,
+			tracingProgram{name: "tcp_sendmsg_http", program: kernelIO.objs.HandleTcpSendmsgHttp},
+			tracingProgram{name: "uprobe_mmap", program: kernelIO.objs.HandleUprobeMmap},
+		)
+		kernelIO.httpUprobeWorker = newHTTPUprobeWorker(
+			[]symbolUprobeTarget{
+				{symbol: "SSL_write", program: kernelIO.objs.HandleSslWrite},
+				{symbol: "SSL_write_ex", program: kernelIO.objs.HandleSslWrite},
+				{symbol: "nghttp2_submit_request", program: kernelIO.objs.HandleNghttp2SubmitRequest},
+				{symbol: "nghttp2_submit_request2", program: kernelIO.objs.HandleNghttp2SubmitRequest},
+			},
+			kernelIO.logger,
+			config.CgroupV2RootPath,
+			kernelIO.objs.HttpUprobeDiscoveryCache,
+			goUprobeTarget{
+				function: goNetHTTPRoundTripFunction,
+				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,
+			},
+		)
 	}
 	for _, attach := range tracingPrograms {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})
 		if err != nil {
 			return nil, fmt.Errorf("attach %s tracing program: %w", attach.name, err)
-		}
-		kernelIO.links = append(kernelIO.links, attached)
-	}
-	if config.EnableHTTPRequest {
-		attached, err := link.AttachTracing(link.TracingOptions{Program: kernelIO.objs.HandleUprobeMmap})
-		if err != nil {
-			return nil, fmt.Errorf("attach uprobe_mmap tracing program: %w", err)
 		}
 		kernelIO.links = append(kernelIO.links, attached)
 	}
