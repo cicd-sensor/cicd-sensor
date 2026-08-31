@@ -65,6 +65,82 @@ jobs:
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Probe fanotify capabilities
+        run: |
+          cat >/tmp/fanotify-capability-probe.c <<'EOF'
+          #define _GNU_SOURCE
+          #include <errno.h>
+          #include <fcntl.h>
+          #include <stdint.h>
+          #include <stdio.h>
+          #include <string.h>
+          #include <sys/fanotify.h>
+          #include <unistd.h>
+
+          struct probe {
+              const char *name;
+              unsigned int init_class;
+              unsigned int mark_type;
+              uint64_t event_mask;
+              const char *path;
+          };
+
+          int main(void)
+          {
+              const struct probe probes[] = {
+                  {"permission/filesystem", FAN_CLASS_PRE_CONTENT, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC_PERM, "/"},
+                  {"notification/filesystem", FAN_CLASS_NOTIF, FAN_MARK_FILESYSTEM, FAN_OPEN_EXEC, "/"},
+                  {"permission/mount", FAN_CLASS_PRE_CONTENT, FAN_MARK_MOUNT, FAN_OPEN_EXEC_PERM, "/"},
+                  {"notification/mount", FAN_CLASS_NOTIF, FAN_MARK_MOUNT, FAN_OPEN_EXEC, "/"},
+                  {"permission/inode", FAN_CLASS_PRE_CONTENT, 0, FAN_OPEN_EXEC_PERM, "/bin/true"},
+                  {"notification/inode", FAN_CLASS_NOTIF, 0, FAN_OPEN_EXEC, "/bin/true"},
+              };
+
+              for (size_t i = 0; i < sizeof(probes) / sizeof(probes[0]); i++) {
+                  errno = 0;
+                  int fd = fanotify_init(probes[i].init_class | FAN_CLOEXEC | FAN_NONBLOCK,
+                                         O_RDONLY | O_LARGEFILE | O_CLOEXEC);
+                  if (fd < 0) {
+                      printf("%-28s init=FAIL errno=%d (%s)\n",
+                             probes[i].name, errno, strerror(errno));
+                      continue;
+                  }
+
+                  errno = 0;
+                  int rc = fanotify_mark(fd, FAN_MARK_ADD | probes[i].mark_type,
+                                         probes[i].event_mask, AT_FDCWD, probes[i].path);
+                  if (rc < 0) {
+                      printf("%-28s init=OK mark=FAIL errno=%d (%s)\n",
+                             probes[i].name, errno, strerror(errno));
+                  } else {
+                      printf("%-28s init=OK mark=OK\n", probes[i].name);
+                  }
+                  close(fd);
+              }
+              return 0;
+          }
+          EOF
+
+          {
+            echo '## fanotify capability probe'
+            echo '```'
+            findmnt -T / -o TARGET,FSTYPE,SOURCE,OPTIONS
+            findmnt -T /bin/true -o TARGET,FSTYPE,SOURCE,OPTIONS
+            stat -f -c 'path=/ type=%T magic=0x%t' /
+            stat -f -c 'path=/bin/true type=%T magic=0x%t' /bin/true
+            config="/boot/config-$(uname -r)"
+            if [ -r "$config" ]; then
+              grep '^CONFIG_FANOTIFY' "$config" || true
+            elif [ -r /proc/config.gz ]; then
+              zgrep '^CONFIG_FANOTIFY' /proc/config.gz || true
+            else
+              echo 'kernel fanotify config: unavailable'
+            fi
+            cc -O2 -Wall -Wextra -Werror /tmp/fanotify-capability-probe.c -o /tmp/fanotify-capability-probe
+            sudo /tmp/fanotify-capability-probe
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Run BPF integration tests
         run: |
           make bpf-integration SUDO=sudo
