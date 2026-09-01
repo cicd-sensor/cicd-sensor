@@ -43,6 +43,12 @@ func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle
 			)
 		} else {
 			kernelIO.httpUprobeFanotify = fanotify
+			if !fanotify.permissionMode {
+				kernelIO.logger.Warn(
+					"http_uprobe_fanotify_permission_unavailable",
+					"fallback", "fan_open_exec_notification",
+				)
+			}
 		}
 	}
 

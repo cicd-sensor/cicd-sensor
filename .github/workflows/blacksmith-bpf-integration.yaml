@@ -15,8 +15,14 @@ concurrency:
 
 jobs:
   bpf-integration:
-    name: BPF integration
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    name: Fanotify spike (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - blacksmith-2vcpu-ubuntu-2204
+          - blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     env:
       GOCACHE: ${{ github.workspace }}/.gocache
@@ -42,6 +48,12 @@ jobs:
             echo '```'
             uname -a
             cat /etc/os-release
+            config="/boot/config-$(uname -r)"
+            if [ -r "$config" ]; then
+              grep 'CONFIG_FANOTIFY' "$config" || true
+            elif [ -r /proc/config.gz ]; then
+              zgrep 'CONFIG_FANOTIFY' /proc/config.gz || true
+            fi
             go version
             for binary in curl python3 node npm wget git gh; do
               echo "$ $binary --version"
@@ -79,15 +91,22 @@ jobs:
             -ldflags='-s -w -linkmode=external' \
             -o /tmp/go-http-cgo-client ./internal/agent/kerneltracker/testdata/go_http_client
 
-      - name: Run HTTP client coverage test
-        env:
-          HTTP_UPROBE_EXPECTED_CLIENTS: curl,python_urllib,python_requests,pip,node,npm,wget
+      - name: Probe fresh Go first-request capture
         run: |
-          sudo HTTP_UPROBE_EXPECTED_CLIENTS="$HTTP_UPROBE_EXPECTED_CLIENTS" \
-            GO_HTTP_TEST_CLIENT=/tmp/go-http-client \
+          sudo GO_HTTP_TEST_CLIENT=/tmp/go-http-client \
             GO_HTTP_CGO_TEST_CLIENT=/tmp/go-http-cgo-client \
             /tmp/http-client-coverage.test \
             -test.v \
-            -test.count=1 \
+            -test.count=20 \
             -test.timeout=10m \
-            -test.run '^TestLinux(OpenSSLUprobeCoversCommonClients|Nghttp2UprobeCoversHTTP2Clients|GoNetHTTPUprobe(CapturesHTTPS|CapturesExternallyLinkedHTTPS|CoversGH))$'
+            -test.run '^TestLinuxGoNetHTTPUprobeCapturesHTTPS/Client.Do_reaches_the_shared_hook_over_HTTP/1.1$'
+
+      - name: Probe fresh gh first-request capture
+        run: |
+          sudo GO_HTTP_TEST_CLIENT=/tmp/go-http-client \
+            GO_HTTP_CGO_TEST_CLIENT=/tmp/go-http-cgo-client \
+            /tmp/http-client-coverage.test \
+            -test.v \
+            -test.count=5 \
+            -test.timeout=10m \
+            -test.run '^TestLinuxGoNetHTTPUprobeCoversGH$'

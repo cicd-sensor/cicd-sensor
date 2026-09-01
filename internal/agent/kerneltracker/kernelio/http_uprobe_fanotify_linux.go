@@ -26,6 +26,7 @@ const (
 
 type httpUprobeFanotify struct {
 	fd              int
+	permissionMode  bool
 	logger          *slog.Logger
 	cgroupRootPath  string
 	trackedCgroups  *ebpf.Map
@@ -43,30 +44,61 @@ func newHTTPUprobeFanotify(
 	trackedCgroups *ebpf.Map,
 	worker *httpUprobeWorker,
 ) (*httpUprobeFanotify, error) {
-	fd, err := unix.FanotifyInit(
-		unix.FAN_CLASS_PRE_CONTENT|unix.FAN_CLOEXEC|unix.FAN_NONBLOCK,
-		unix.O_RDONLY|unix.O_LARGEFILE|unix.O_CLOEXEC,
-	)
+	fd, permissionMode, err := openHTTPUprobeFanotifyGroup()
 	if err != nil {
-		return nil, fmt.Errorf("fanotify_init: %w", err)
-	}
-	if err := unix.FanotifyMark(
-		fd,
-		unix.FAN_MARK_ADD|unix.FAN_MARK_FILESYSTEM,
-		unix.FAN_OPEN_EXEC_PERM,
-		unix.AT_FDCWD,
-		"/",
-	); err != nil {
-		_ = unix.Close(fd)
-		return nil, fmt.Errorf("mark root filesystem: %w", err)
+		return nil, err
 	}
 	return &httpUprobeFanotify{
 		fd:             fd,
+		permissionMode: permissionMode,
 		logger:         logger,
 		cgroupRootPath: cgroupRootPath,
 		trackedCgroups: trackedCgroups,
 		worker:         worker,
 	}, nil
+}
+
+func openHTTPUprobeFanotifyGroup() (int, bool, error) {
+	permissionFD, permissionErr := openHTTPUprobeFanotifyMode(
+		unix.FAN_CLASS_PRE_CONTENT,
+		unix.FAN_OPEN_EXEC_PERM,
+	)
+	if permissionErr == nil {
+		return permissionFD, true, nil
+	}
+
+	notificationFD, notificationErr := openHTTPUprobeFanotifyMode(
+		unix.FAN_CLASS_NOTIF,
+		unix.FAN_OPEN_EXEC,
+	)
+	if notificationErr == nil {
+		return notificationFD, false, nil
+	}
+	return -1, false, errors.Join(
+		fmt.Errorf("permission mode: %w", permissionErr),
+		fmt.Errorf("notification mode: %w", notificationErr),
+	)
+}
+
+func openHTTPUprobeFanotifyMode(class uint, mask uint64) (int, error) {
+	fd, err := unix.FanotifyInit(
+		class|unix.FAN_CLOEXEC|unix.FAN_NONBLOCK,
+		unix.O_RDONLY|unix.O_LARGEFILE|unix.O_CLOEXEC,
+	)
+	if err != nil {
+		return -1, fmt.Errorf("fanotify_init: %w", err)
+	}
+	if err := unix.FanotifyMark(
+		fd,
+		unix.FAN_MARK_ADD|unix.FAN_MARK_FILESYSTEM,
+		mask,
+		unix.AT_FDCWD,
+		"/",
+	); err != nil {
+		_ = unix.Close(fd)
+		return -1, fmt.Errorf("mark root filesystem: %w", err)
+	}
+	return fd, nil
 }
 
 func (f *httpUprobeFanotify) close() error {
@@ -152,11 +184,14 @@ func (f *httpUprobeFanotify) handleEvents(ctx context.Context, buffer []byte) er
 			_ = unix.Close(int(metadata.Fd))
 			continue
 		}
-		if metadata.Mask&unix.FAN_OPEN_EXEC_PERM == 0 {
+		switch {
+		case metadata.Mask&unix.FAN_OPEN_EXEC_PERM != 0:
+			f.handleExecPermission(ctx, metadata.Pid, eventFile)
+		case metadata.Mask&unix.FAN_OPEN_EXEC != 0:
+			f.handleExecNotification(ctx, metadata.Pid, eventFile)
+		default:
 			_ = eventFile.Close()
-			continue
 		}
-		f.handleExecPermission(ctx, metadata.Pid, eventFile)
 	}
 	return nil
 }
@@ -240,6 +275,30 @@ func (f *httpUprobeFanotify) handleExecPermission(
 		_ = workerFile.Close()
 		f.warnAtPowerOfTwo(&f.busyCount, "http_uprobe_fanotify_worker_busy")
 		f.allowAndClose(eventFile)
+	}
+}
+
+func (f *httpUprobeFanotify) handleExecNotification(
+	ctx context.Context,
+	tgid int32,
+	eventFile *os.File,
+) {
+	tracked, err := f.processIsTracked(tgid)
+	if err != nil {
+		f.warnAtPowerOfTwo(&f.trackingErrors, "http_uprobe_fanotify_cgroup_lookup_failed", "error", err)
+		_ = eventFile.Close()
+		return
+	}
+	if !tracked || ctx.Err() != nil {
+		_ = eventFile.Close()
+		return
+	}
+
+	select {
+	case f.worker.permissionRequests <- httpUprobePermissionRequest{file: eventFile}:
+	default:
+		_ = eventFile.Close()
+		f.warnAtPowerOfTwo(&f.busyCount, "http_uprobe_fanotify_worker_busy")
 	}
 }
 

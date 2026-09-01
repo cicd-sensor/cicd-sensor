@@ -228,7 +228,9 @@ func (w *httpUprobeWorker) releasePendingPermissionRequests() {
 		select {
 		case request := <-w.permissionRequests:
 			_ = request.file.Close()
-			close(request.done)
+			if request.done != nil {
+				close(request.done)
+			}
 		default:
 			return
 		}
@@ -236,7 +238,9 @@ func (w *httpUprobeWorker) releasePendingPermissionRequests() {
 }
 
 func (w *httpUprobeWorker) handlePermissionRequest(request httpUprobePermissionRequest) {
-	defer close(request.done)
+	if request.done != nil {
+		defer close(request.done)
+	}
 	defer request.file.Close()
 
 	w.classifyOpenFile(request.file)
