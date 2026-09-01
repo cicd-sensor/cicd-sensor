@@ -15,7 +15,6 @@ concurrency:
 
 jobs:
   bpf-integration:
-    if: ${{ false }}
     name: Fanotify spike (${{ matrix.runner }})
     strategy:
       fail-fast: false
@@ -79,7 +78,6 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run BPF integration tests
-        continue-on-error: true
         run: |
           make bpf-integration SUDO=sudo
 
@@ -112,51 +110,3 @@ jobs:
             -test.count=5 \
             -test.timeout=10m \
             -test.run '^TestLinuxGoNetHTTPUprobeCoversGH$'
-
-  arm-capability:
-    name: Fanotify capability (${{ matrix.runner }})
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - blacksmith-2vcpu-ubuntu-2204-arm
-          - blacksmith-2vcpu-ubuntu-2404-arm
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 5
-    steps:
-      - name: Probe kernel fanotify configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-          uname -a
-          config="/boot/config-$(uname -r)"
-          if [[ -r "$config" ]]; then
-            grep 'CONFIG_FANOTIFY' "$config" || true
-          elif [[ -r /proc/config.gz ]]; then
-            zgrep 'CONFIG_FANOTIFY' /proc/config.gz || true
-          fi
-
-          source_file="$(mktemp --suffix=.c)"
-          binary="$(mktemp)"
-          trap 'rm -f "$source_file" "$binary"' EXIT
-          printf '%s\n' \
-            '#include <errno.h>' \
-            '#include <fcntl.h>' \
-            '#include <stdio.h>' \
-            '#include <string.h>' \
-            '#include <sys/fanotify.h>' \
-            '#include <unistd.h>' \
-            'static void probe(unsigned int flags, unsigned long long mask, const char *name) {' \
-            '  int fd = fanotify_init(flags | FAN_CLOEXEC | FAN_NONBLOCK, O_RDONLY | O_CLOEXEC);' \
-            '  if (fd < 0) { printf("%s init: %s\\n", name, strerror(errno)); return; }' \
-            '  int rc = fanotify_mark(fd, FAN_MARK_ADD | FAN_MARK_FILESYSTEM, mask, AT_FDCWD, "/");' \
-            '  printf("%s mark: %s\\n", name, rc == 0 ? "OK" : strerror(errno));' \
-            '  close(fd);' \
-            '}' \
-            'int main(void) {' \
-            '  probe(FAN_CLASS_PRE_CONTENT, FAN_OPEN_EXEC_PERM, "permission");' \
-            '  probe(FAN_CLASS_NOTIF, FAN_OPEN_EXEC, "notification");' \
-            '  return 0;' \
-            '}' > "$source_file"
-          cc -O2 -Wall -Wextra -Werror "$source_file" -o "$binary"
-          sudo "$binary"
