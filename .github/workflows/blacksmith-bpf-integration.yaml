@@ -147,7 +147,7 @@ jobs:
             '#include <sys/fanotify.h>' \
             '#include <unistd.h>' \
             'static void probe(unsigned int flags, unsigned long long mask, const char *name) {' \
-            '  int fd = fanotify_init(flags | FAN_CLOEXEC | FAN_NONBLOCK, O_RDONLY | O_LARGEFILE | O_CLOEXEC);' \
+            '  int fd = fanotify_init(flags | FAN_CLOEXEC | FAN_NONBLOCK, O_RDONLY | O_CLOEXEC);' \
             '  if (fd < 0) { printf("%s init: %s\\n", name, strerror(errno)); return; }' \
             '  int rc = fanotify_mark(fd, FAN_MARK_ADD | FAN_MARK_FILESYSTEM, mask, AT_FDCWD, "/");' \
             '  printf("%s mark: %s\\n", name, rc == 0 ? "OK" : strerror(errno));' \
