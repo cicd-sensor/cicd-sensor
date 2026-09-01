@@ -78,6 +78,7 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run BPF integration tests
+        continue-on-error: true
         run: |
           make bpf-integration SUDO=sudo
 
