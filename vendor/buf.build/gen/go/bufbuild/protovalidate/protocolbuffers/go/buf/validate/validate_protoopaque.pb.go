@@ -44,7 +44,7 @@
 // [Go](https://github.com/bufbuild/protovalidate-go),
 // [JavaScript/TypeScript](https://github.com/bufbuild/protovalidate-es),
 // [Java](https://github.com/bufbuild/protovalidate-java),
-// [Python](https://github.com/bufbuild/protovalidate-python),
+// [Python](https://github.com/bufbuild/protovalidate-py),
 // or [C++](https://github.com/bufbuild/protovalidate-cc).
 
 //go:build protoopaque
@@ -248,7 +248,7 @@ func (x KnownRegex) Number() protoreflect.EnumNumber {
 // `Rule` represents a validation rule written in the Common Expression
 // Language (CEL) syntax. Each Rule includes a unique identifier, an
 // optional error message, and the CEL expression to evaluate. For more
-// information, [see our documentation](https://buf.build/docs/protovalidate/schemas/custom-rules/).
+// information, [see our documentation](https://protovalidate.com/schemas/custom-rules/).
 //
 // ```proto
 //
@@ -499,7 +499,7 @@ type MessageRules_builder struct {
 	// simpler syntax when defining CEL Rules where `id` and `message` derived from the `expression`. `id` will
 	// be same as the `expression`.
 	//
-	// For more information, [see our documentation](https://buf.build/docs/protovalidate/schemas/custom-rules/).
+	// For more information, [see our documentation](https://protovalidate.com/schemas/custom-rules/).
 	//
 	// ```proto
 	//
@@ -515,7 +515,7 @@ type MessageRules_builder struct {
 	CelExpression []string
 	// `cel` is a repeated field of type Rule. Each Rule specifies a validation rule to be applied to this message.
 	// These rules are written in Common Expression Language (CEL) syntax. For more information,
-	// [see our documentation](https://buf.build/docs/protovalidate/schemas/custom-rules/).
+	// [see our documentation](https://protovalidate.com/schemas/custom-rules/).
 	//
 	// ```proto
 	//
@@ -1663,7 +1663,7 @@ type FieldRules_builder struct {
 	// simpler syntax when defining CEL Rules where `id` and `message` derived from the `expression`. `id` will
 	// be same as the `expression`.
 	//
-	// For more information, [see our documentation](https://buf.build/docs/protovalidate/schemas/custom-rules/).
+	// For more information, [see our documentation](https://protovalidate.com/schemas/custom-rules/).
 	//
 	// ```proto
 	//
@@ -1676,7 +1676,7 @@ type FieldRules_builder struct {
 	CelExpression []string
 	// `cel` is a repeated field used to represent a textual expression
 	// in the Common Expression Language (CEL) syntax. For more information,
-	// [see our documentation](https://buf.build/docs/protovalidate/schemas/custom-rules/).
+	// [see our documentation](https://protovalidate.com/schemas/custom-rules/).
 	//
 	// ```proto
 	//
@@ -2078,7 +2078,7 @@ type PredefinedRules_builder struct {
 
 	// `cel` is a repeated field used to represent a textual expression
 	// in the Common Expression Language (CEL) syntax. For more information,
-	// [see our documentation](https://buf.build/docs/protovalidate/schemas/predefined-rules/).
+	// [see our documentation](https://protovalidate.com/schemas/predefined-rules/).
 	//
 	// ```proto
 	//

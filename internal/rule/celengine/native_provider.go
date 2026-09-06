@@ -31,8 +31,8 @@ package celengine
 import (
 	"fmt"
 
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/ref"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/ref"
 )
 
 // Type names exposed to CEL. They appear in `cel.ObjectType(...)`

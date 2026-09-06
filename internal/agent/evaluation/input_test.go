@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/traits"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule/celengine"
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/traits"
 )
 
 func TestCELInputEventFromRecordNormalizesProcessAndPayload(t *testing.T) {
