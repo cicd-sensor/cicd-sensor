@@ -3,30 +3,30 @@ module github.com/cicd-sensor/cicd-sensor
 go 1.26.1
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.3.0
-	cloud.google.com/go/pubsub/v2 v2.6.1
-	cloud.google.com/go/storage v1.64.0
+	cloud.google.com/go/pubsub/v2 v2.7.0
+	cloud.google.com/go/storage v1.66.0
 	connectrpc.com/authn v0.2.0
 	connectrpc.com/connect v1.20.0
-	github.com/aws/aws-sdk-go-v2 v1.43.6
-	github.com/aws/aws-sdk-go-v2/config v1.32.37
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.2
-	github.com/aws/smithy-go v1.27.8
+	github.com/aws/aws-sdk-go-v2 v1.45.1
+	github.com/aws/aws-sdk-go-v2/config v1.33.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.109.1
+	github.com/aws/smithy-go v1.28.1
 	github.com/cilium/ebpf v0.22.0
-	github.com/containerd/nri v0.12.1
-	github.com/google/cel-go v0.31.0
-	github.com/google/go-containerregistry v0.21.9
+	github.com/containerd/nri v0.12.2
+	github.com/google/cel-go v0.32.0
+	github.com/google/go-containerregistry v0.22.0
 	github.com/google/uuid v1.6.0
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/sigstore/cosign/v3 v3.1.3
 	github.com/sigstore/sigstore-go v1.3.0
-	go.opentelemetry.io/ebpf-profiler v0.0.202632
+	go.opentelemetry.io/ebpf-profiler v0.0.202633
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 	golang.org/x/net v0.58.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.41.0
-	google.golang.org/api v0.293.0
+	google.golang.org/api v0.295.0
 	google.golang.org/protobuf v1.36.12
 )
 
