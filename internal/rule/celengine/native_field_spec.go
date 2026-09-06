@@ -11,8 +11,8 @@
 package celengine
 
 import (
-	"cel.dev/cel-go/common/types"
-	"cel.dev/cel-go/common/types/ref"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 )
 
 // fieldSpec declares one CEL-accessible field on an owned struct.

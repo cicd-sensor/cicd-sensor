@@ -45,7 +45,6 @@ func init() {
 	storageinternal.WithZonalBucketAPIs = withZonalBucketAPIs
 	storageinternal.WithDirectConnectivityEnforced = withDirectConnectivityEnforced
 	storageinternal.WithOtelMetrics = withOtelMetrics
-	storageinternal.WithOtelDebugMetrics = withOtelDebugMetrics
 }
 
 // getDynamicReadReqIncreaseRateFromEnv returns the value set in the env variable.
@@ -84,7 +83,6 @@ type storageConfig struct {
 	readAPIWasSet          bool
 	disableClientMetrics   bool
 	enableOtelMetrics      bool
-	enableOtelDebugMetrics bool
 	metricExporter         *metric.Exporter
 	metricInterval         time.Duration
 	meterProvider          *metric.MeterProvider
@@ -315,16 +313,4 @@ type withOtelMetricsConfig struct {
 
 func (w *withOtelMetricsConfig) ApplyStorageOpt(c *storageConfig) {
 	c.enableOtelMetrics = true
-}
-
-func withOtelDebugMetrics() option.ClientOption {
-	return &withOtelDebugMetricsConfig{}
-}
-
-type withOtelDebugMetricsConfig struct {
-	internaloption.EmbeddableAdapter
-}
-
-func (w *withOtelDebugMetricsConfig) ApplyStorageOpt(c *storageConfig) {
-	c.enableOtelDebugMetrics = true
 }

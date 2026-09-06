@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -62,13 +63,13 @@ func fieldPathElement(field protoreflect.FieldDescriptor) *validate.FieldPathEle
 		return nil
 	}
 	element := validate.FieldPathElement_builder{
-		FieldNumber: new(int32(field.Number())),
+		FieldNumber: proto.Int32(int32(field.Number())),
 		FieldType:   descriptorpb.FieldDescriptorProto_Type(field.Kind()).Enum(),
 	}
 	if field.IsExtension() {
-		element.FieldName = new(field.TextName())
+		element.FieldName = proto.String(field.TextName())
 	} else {
-		element.FieldName = new(string(field.Name()))
+		element.FieldName = proto.String(string(field.Name()))
 	}
 	return element.Build()
 }
@@ -98,7 +99,8 @@ func updateViolationPaths(err error, fieldSuffix *validate.FieldPathElement, rul
 	if err == nil || (fieldSuffix == nil && len(rulePrefix) == 0) {
 		return
 	}
-	if valErr, ok := errors.AsType[*ValidationError](err); ok {
+	var valErr *ValidationError
+	if errors.As(err, &valErr) {
 		for _, violation := range valErr.Violations {
 			if fieldSuffix != nil {
 				if violation.Proto.GetField() == nil {
@@ -123,7 +125,8 @@ func finalizeViolationPaths(err error) {
 	if err == nil {
 		return
 	}
-	if valErr, ok := errors.AsType[*ValidationError](err); ok {
+	var valErr *ValidationError
+	if errors.As(err, &valErr) {
 		for _, violation := range valErr.Violations {
 			if violation.Proto.GetField() != nil {
 				slices.Reverse(violation.Proto.GetField().GetElements())
@@ -166,7 +169,11 @@ func FieldPathString(path *validate.FieldPath) string {
 // markViolationForKey marks the provided error as being for a map key, by
 // setting the `for_key` flag on each violation within the validation error.
 func markViolationForKey(err error) {
-	if valErr, ok := errors.AsType[*ValidationError](err); ok {
+	if err == nil {
+		return
+	}
+	var valErr *ValidationError
+	if errors.As(err, &valErr) {
 		for _, violation := range valErr.Violations {
 			violation.Proto.SetForKey(true)
 		}

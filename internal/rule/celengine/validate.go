@@ -32,10 +32,10 @@ import (
 	"net"
 	"strings"
 
-	"cel.dev/cel-go/cel"
-	celast "cel.dev/cel-go/common/ast"
-	"cel.dev/cel-go/common/operators"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
+	"github.com/google/cel-go/cel"
+	celast "github.com/google/cel-go/common/ast"
+	"github.com/google/cel-go/common/operators"
 )
 
 // denyCallValidator rejects calls whose function name is in `forbidden`.

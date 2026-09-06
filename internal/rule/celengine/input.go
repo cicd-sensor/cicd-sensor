@@ -1,10 +1,10 @@
 package celengine
 
 import (
-	"cel.dev/cel-go/cel"
-	"cel.dev/cel-go/common/types"
-	"cel.dev/cel-go/common/types/ref"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 )
 
 // Primitive payload fields are pre-boxed to ref.Val on first access and

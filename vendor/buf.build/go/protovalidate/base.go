@@ -86,11 +86,11 @@ type ruleSite struct {
 func makeRuleSite(ruleDesc, desc protoreflect.FieldDescriptor, ruleID string, message string) ruleSite {
 	var ruleIDPtr *string
 	if ruleID != "" {
-		ruleIDPtr = new(ruleID)
+		ruleIDPtr = proto.String(ruleID)
 	}
 	var messagePtr *string
 	if message != "" {
-		messagePtr = new(message)
+		messagePtr = proto.String(message)
 	}
 	return ruleSite{
 		pathElements: []*validate.FieldPathElement{
@@ -117,11 +117,11 @@ func (b *base) newViolation(
 ) *Violation {
 	ruleIDPtr := site.ruleID
 	if ruleIDPtr == nil {
-		ruleIDPtr = new(ruleID)
+		ruleIDPtr = proto.String(ruleID)
 	}
 	messagePtr := site.message
 	if messagePtr == nil {
-		messagePtr = new(message)
+		messagePtr = proto.String(message)
 	}
 	return &Violation{
 		Proto: validate.Violation_builder{

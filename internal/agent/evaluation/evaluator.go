@@ -6,13 +6,13 @@ import (
 	"os"
 	"syscall"
 
-	"cel.dev/cel-go/cel"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobscope"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/observations"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule/celengine"
+	"github.com/google/cel-go/cel"
 	"github.com/google/uuid"
 )
 

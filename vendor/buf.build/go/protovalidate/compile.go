@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	"cel.dev/cel-go/cel"
+	"github.com/google/cel-go/cel"
 )
 
 // An expressions instance is a container for the information needed to compile

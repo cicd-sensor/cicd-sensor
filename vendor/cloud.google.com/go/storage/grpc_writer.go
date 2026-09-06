@@ -339,11 +339,6 @@ func (w *gRPCWriter) sendBufferToTarget(cs gRPCWriterCommandHandleChans, buf []b
 		if flushAt-sent < w.writeQuantum {
 			q = flushAt - sent
 		}
-
-		if w.chunkRetryDeadline > 0 && w.abandonRetriesTime.IsZero() {
-			w.abandonRetriesTime = time.Now().Add(w.chunkRetryDeadline)
-		}
-
 		req := gRPCBidiWriteRequest{
 			buf:    buf[:q],
 			offset: baseOffset + int64(sent),
@@ -356,16 +351,6 @@ func (w *gRPCWriter) sendBufferToTarget(cs gRPCWriterCommandHandleChans, buf []b
 		sent += q
 	}
 	return baseOffset + int64(sent), true
-}
-
-func (w *gRPCWriter) isActive() bool {
-	hasUnackedData := w.bufUnsentIdx > 0 && w.bufUnsentIdx > w.bufFlushedIdx
-	unsentBytes := len(w.buf) - w.bufUnsentIdx
-	if unsentBytes < 0 {
-		unsentBytes = 0
-	}
-	hasReadyData := unsentBytes >= w.writeQuantum
-	return w.currentCommand != nil || hasUnackedData || hasReadyData || len(w.writesChan) > 0
 }
 
 func (w *gRPCWriter) handleCompletion(c gRPCBidiWriteCompletion) {
@@ -386,18 +371,17 @@ func (w *gRPCWriter) handleCompletion(c gRPCBidiWriteCompletion) {
 		w.bufFlushedIdx = 0
 		w.buf = w.buf[:0]
 	}
-
-	// We made forward progress on the network! Reset the retry stopwatch.
-	w.abandonRetriesTime = time.Time{}
-	w.attempts = 0
-
 	w.setSize(c.flushOffset)
 	w.progress(c.flushOffset)
+}
 
-	// Restart the stopwatch if there is still more data waiting to be sent.
-	if w.chunkRetryDeadline > 0 && w.isActive() {
-		w.abandonRetriesTime = time.Now().Add(w.chunkRetryDeadline)
+func (w *gRPCWriter) withCommandRetryDeadline(f func() error) error {
+	w.abandonRetriesTime = time.Now().Add(w.chunkRetryDeadline)
+	err := f()
+	if err == nil {
+		w.abandonRetriesTime = time.Time{}
 	}
+	return err
 }
 
 // Gather write commands before starting the actual write. Returns nil if the
@@ -451,18 +435,9 @@ func (w *gRPCWriter) gatherFirstBuffer() error {
 
 func (w *gRPCWriter) writeLoop(ctx context.Context) error {
 	w.attempts++
-	if w.chunkRetryDeadline > 0 {
-		if w.isActive() {
-			if w.abandonRetriesTime.IsZero() {
-				w.abandonRetriesTime = time.Now().Add(w.chunkRetryDeadline)
-			}
-			// Return an error if we've been waiting for a single operation for too long.
-			if time.Now().After(w.abandonRetriesTime) {
-				return fmt.Errorf("storage: retry deadline of %s reached after %v attempts; last error: %v", w.chunkRetryDeadline, w.attempts, w.lastErr)
-			}
-		} else {
-			w.abandonRetriesTime = time.Time{}
-		}
+	// Return an error if we've been waiting for a single operation for too long.
+	if !w.abandonRetriesTime.IsZero() && time.Now().After(w.abandonRetriesTime) {
+		return fmt.Errorf("storage: retry deadline of %s reached after %v attempts; last error: %w", w.chunkRetryDeadline, w.attempts, w.lastErr)
 	}
 	// Allow each request in w.buf to be sent and result in a completion without
 	// blocking.
@@ -502,30 +477,33 @@ Loop:
 	}
 
 	// Send any full quantum in w.buf, possibly including a flush
-	sentOffset, ok := w.sendBufferToTarget(chcs, w.buf, w.bufBaseOffset, cap(w.buf),
-		w.handleCompletion)
-	if !ok {
-		return w.streamSender.err()
-	}
-	w.bufUnsentIdx = int(sentOffset - w.bufBaseOffset)
-	// We may have observed a completion that is after all of w.buf if we also
-	// have a write command in w.currentCommand which sent a flush, but failed
-	// before the completion could be delivered.
-	if w.bufUnsentIdx < 0 {
-		w.bufUnsentIdx = 0
+	if err := w.withCommandRetryDeadline(func() error {
+		sentOffset, ok := w.sendBufferToTarget(chcs, w.buf, w.bufBaseOffset, cap(w.buf),
+			w.handleCompletion)
+		if !ok {
+			return w.streamSender.err()
+		}
+		w.bufUnsentIdx = int(sentOffset - w.bufBaseOffset)
+		// We may have observed a completion that is after all of w.buf if we also
+		// have a write command in w.currentCommand which sent a flush, but failed
+		// before the completion could be delivered.
+		if w.bufUnsentIdx < 0 {
+			w.bufUnsentIdx = 0
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	err := func() error {
 		for {
 			if w.currentCommand != nil {
-				if err := w.currentCommand.handle(w, chcs); err != nil {
+				if err := w.withCommandRetryDeadline(func() error {
+					return w.currentCommand.handle(w, chcs)
+				}); err != nil {
 					return err
 				}
 				w.currentCommand = nil
-				// Pause the stopwatch if we are completely idle and waiting for the user's next Write() call.
-				if w.chunkRetryDeadline > 0 && !w.isActive() {
-					w.abandonRetriesTime = time.Time{}
-				}
 			}
 			select {
 			case c, ok := <-completions:
@@ -553,18 +531,19 @@ Loop:
 
 	if closeErr.err == nil {
 		// Clean shutdown. Send any remaining tail.
-		if w.chunkRetryDeadline > 0 && w.abandonRetriesTime.IsZero() {
-			w.abandonRetriesTime = time.Now().Add(w.chunkRetryDeadline)
-		}
-
 		req := gRPCBidiWriteRequest{
 			buf:         w.buf[w.bufUnsentIdx:],
 			offset:      w.bufBaseOffset + int64(w.bufUnsentIdx),
 			flush:       true,
 			finishWrite: true,
 		}
-		if !chcs.deliverRequestUnlessCompleted(req, w.handleCompletion) {
-			return w.streamSender.err()
+		if err := w.withCommandRetryDeadline(func() error {
+			if !chcs.deliverRequestUnlessCompleted(req, w.handleCompletion) {
+				return w.streamSender.err()
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	} else {
 		// Unclean shutdown. Cancel the context so we clean up expeditiously.
@@ -855,10 +834,6 @@ func (c *gRPCWriterCommandFlush) handle(w *gRPCWriter, cs gRPCWriterCommandHandl
 	// We know that there are at most w.writeQuantum bytes in
 	// w.buf[w.bufUnsentIdx:], because we send anything more inline when handling
 	// a write.
-	if w.chunkRetryDeadline > 0 && w.abandonRetriesTime.IsZero() {
-		w.abandonRetriesTime = time.Now().Add(w.chunkRetryDeadline)
-	}
-
 	req := gRPCBidiWriteRequest{
 		buf:         w.buf[w.bufUnsentIdx:],
 		offset:      w.bufBaseOffset + int64(w.bufUnsentIdx),

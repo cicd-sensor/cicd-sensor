@@ -58,10 +58,6 @@ var RequiredSignedHeaders = Rules{
 			"X-Amz-Tagging":                                               struct{}{},
 		},
 	},
-	InclusiveRules{
-		Patterns{"X-Amz-Checksum-"},
-		ExcludeList{Patterns{"X-Amz-Checksum-Mode"}},
-	},
 	Patterns{"X-Amz-Object-Lock-"},
 	Patterns{"X-Amz-Meta-"},
 }

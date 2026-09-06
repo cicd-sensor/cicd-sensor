@@ -132,8 +132,11 @@ func (i *ipv4) decOctet() bool {
 		// bad leading 0
 		return false
 	}
-	value, err := strconv.ParseUint(str, 10, 8)
+	value, err := strconv.ParseInt(str, 10, 32)
 	if err != nil {
+		return false
+	}
+	if value > 255 {
 		return false
 	}
 	i.octets = append(i.octets, byte(value))

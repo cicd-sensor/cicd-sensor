@@ -28,12 +28,15 @@ type celPrograms struct {
 
 func (c celPrograms) Evaluate(_ protoreflect.Message, val protoreflect.Value, cfg *validationConfig) error {
 	err := c.Eval(val, c.Descriptor, cfg)
-	if valErr, ok := errors.AsType[*ValidationError](err); ok {
-		for _, violation := range valErr.Violations {
-			violation.Proto.SetField(c.fieldPath())
-			violation.Proto.SetRule(c.rulePath(violation.Proto.GetRule()))
-			violation.FieldValue = val
-			violation.FieldDescriptor = c.Descriptor
+	if err != nil {
+		var valErr *ValidationError
+		if errors.As(err, &valErr) {
+			for _, violation := range valErr.Violations {
+				violation.Proto.SetField(c.fieldPath())
+				violation.Proto.SetRule(c.rulePath(violation.Proto.GetRule()))
+				violation.FieldValue = val
+				violation.FieldDescriptor = c.Descriptor
+			}
 		}
 	}
 	return err

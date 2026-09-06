@@ -16,6 +16,7 @@ package protovalidate
 
 import (
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -67,8 +68,8 @@ func (a anyPB) Evaluate(_ protoreflect.Message, val protoreflect.Value, cfg *val
 				Proto: validate.Violation_builder{
 					Field:   a.base.fieldPath(),
 					Rule:    a.base.rulePath(anyInRulePath),
-					RuleId:  new("any.in"),
-					Message: new("type URL must be in the allow list"),
+					RuleId:  proto.String("any.in"),
+					Message: proto.String("type URL must be in the allow list"),
 				}.Build(),
 				FieldValue:      val,
 				FieldDescriptor: a.base.Descriptor,
@@ -87,8 +88,8 @@ func (a anyPB) Evaluate(_ protoreflect.Message, val protoreflect.Value, cfg *val
 				Proto: validate.Violation_builder{
 					Field:   a.base.fieldPath(),
 					Rule:    a.base.rulePath(anyNotInRulePath),
-					RuleId:  new("any.not_in"),
-					Message: new("type URL must not be in the block list"),
+					RuleId:  proto.String("any.not_in"),
+					Message: proto.String("type URL must not be in the block list"),
 				}.Build(),
 				FieldValue:      val,
 				FieldDescriptor: a.base.Descriptor,

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"cel.dev/cel-go/common/types"
-	"cel.dev/cel-go/common/types/ref"
-	"cel.dev/cel-go/common/types/traits"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
+	"github.com/google/cel-go/common/types/traits"
 )
 
 // predefinedList is the Lister used for predefined-list activation values.

@@ -76,11 +76,7 @@ func (p *Puller) fetcher(ctx context.Context, target resource) (*fetcher, error)
 		o:      p.o,
 	})
 	rr := v.(*reader)
-	if err := rr.init(ctx); err != nil {
-		p.readers.CompareAndDelete(target, rr)
-		return nil, err
-	}
-	return rr.f, nil
+	return rr.f, rr.init(ctx)
 }
 
 // Head is like remote.Head, but avoids re-authenticating when possible.

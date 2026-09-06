@@ -250,6 +250,9 @@ func (c *Client) addOperationUpdateObjectEncryptionMiddlewares(stack *middleware
 		return err
 	}
 
+	if err = addComputeContentLength(stack); err != nil {
+		return err
+	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}

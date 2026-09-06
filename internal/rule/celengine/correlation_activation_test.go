@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"cel.dev/cel-go/common/types"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
+	"github.com/google/cel-go/common/types"
 )
 
 func TestCompiledCorrelationNewActivationResolvesRuleMap(t *testing.T) {

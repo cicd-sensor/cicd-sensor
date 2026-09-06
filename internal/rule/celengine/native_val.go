@@ -29,8 +29,8 @@ import (
 	"reflect"
 	"slices"
 
-	"cel.dev/cel-go/common/types"
-	"cel.dev/cel-go/common/types/ref"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 )
 
 // Stable reflect.Type identities for ConvertToNative. Package vars so we

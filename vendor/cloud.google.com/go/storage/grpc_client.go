@@ -26,12 +26,10 @@ import (
 	"strconv"
 	"strings"
 
-	"cloud.google.com/go/auth"
 	"cloud.google.com/go/iam/apiv1/iampb"
 	gapic "cloud.google.com/go/storage/internal/apiv2"
 	"cloud.google.com/go/storage/internal/apiv2/storagepb"
 	"github.com/googleapis/gax-go/v2"
-
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/api/option/internaloption"
@@ -180,14 +178,17 @@ func newGRPCStorageClient(ctx context.Context, opts ...storageOption) (client *g
 	var clientMetrics *clientMetrics
 	var metricsCleanup func()
 	if isOtelMetricsEnabled(&config) {
-		clientMetrics, metricsCleanup = initGRPCMetricsAndWrapCredentials(ctx, &config, s)
+		var project string
+		if c, err := transport.Creds(ctx, s.clientOption...); err == nil {
+			project = c.ProjectID
+		}
+		clientMetrics, metricsCleanup = initClientMetrics(ctx, project, &config)
 		if clientMetrics != nil {
 			unaryInt, streamInt := metricsInterceptors(clientMetrics)
 			s.clientOption = append(s.clientOption,
 				option.WithGRPCDialOption(grpc.WithChainUnaryInterceptor(unaryInt)),
 				option.WithGRPCDialOption(grpc.WithChainStreamInterceptor(streamInt)),
 			)
-			s.clientOption = append(s.clientOption, grpcNetworkMetricsDialOptions("storage.googleapis.com", clientMetrics)...)
 		}
 	}
 
@@ -219,28 +220,6 @@ func newGRPCStorageClient(ctx context.Context, opts ...storageOption) (client *g
 	configureStreamingTimeouts(g)
 	c.raw = g
 	return c, nil
-}
-
-func initGRPCMetricsAndWrapCredentials(ctx context.Context, config *storageConfig, s *settings) (*clientMetrics, func()) {
-	var project string
-	var authCreds *auth.Credentials
-
-	credsOpts := append([]option.ClientOption{option.WithScopes(gapic.DefaultAuthScopes()...)}, s.clientOption...)
-	if c, err := internaloption.AuthCreds(ctx, credsOpts); err == nil {
-		authCreds = c
-		project, _ = authCreds.ProjectID(ctx)
-	} else if c, err := transport.Creds(ctx, credsOpts...); err == nil {
-		project = c.ProjectID
-	}
-
-	clientMetrics, metricsCleanup := initClientMetrics(ctx, project, config)
-	if clientMetrics != nil {
-		if authCreds != nil {
-			authCreds = wrapAuthCredentials(authCreds, clientMetrics)
-			s.clientOption = append(s.clientOption, option.WithAuthCredentials(authCreds))
-		}
-	}
-	return clientMetrics, metricsCleanup
 }
 
 // configureStreamingTimeouts explicitly overrides default call timeouts to 0 (unbounded)
