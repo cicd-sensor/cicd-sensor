@@ -3,10 +3,10 @@ package rulevalidate
 import (
 	"strings"
 
+	"cel.dev/cel-go/checker"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule/celengine"
-	"github.com/google/cel-go/checker"
 )
 
 // CostWarnThreshold is an advisory rule-authoring threshold. It's

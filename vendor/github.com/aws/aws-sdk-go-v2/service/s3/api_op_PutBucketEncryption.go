@@ -226,9 +226,6 @@ func (c *Client) addOperationPutBucketEncryptionMiddlewares(stack *middleware.St
 		return err
 	}
 
-	if err = addComputeContentLength(stack); err != nil {
-		return err
-	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
@@ -269,6 +266,9 @@ func (c *Client) addOperationPutBucketEncryptionMiddlewares(stack *middleware.St
 		return err
 	}
 	if err = disableAcceptEncodingGzip(stack); err != nil {
+		return err
+	}
+	if err = s3cust.HandleResponseErrorWith200Status(stack); err != nil {
 		return err
 	}
 	if err = addRequestResponseLogging(stack, options); err != nil {

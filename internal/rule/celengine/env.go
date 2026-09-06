@@ -41,16 +41,16 @@ import (
 	"net"
 	"strings"
 
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common"
+	"cel.dev/cel-go/common/ast"
+	"cel.dev/cel-go/common/operators"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/ref"
+	"cel.dev/cel-go/common/types/traits"
+	"cel.dev/cel-go/parser"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common"
-	"github.com/google/cel-go/common/ast"
-	"github.com/google/cel-go/common/operators"
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/ref"
-	"github.com/google/cel-go/common/types/traits"
-	"github.com/google/cel-go/parser"
 )
 
 // Env is the entry point used by the agent evaluator and CLI tooling.
@@ -379,7 +379,7 @@ func (e *Env) EnvForType(eventType jobevent.Type) (*cel.Env, error) {
 // through to parser.MakeExists and behave exactly like the stdlib macro.
 // See expandSpecializedExists for the full set of guard conditions.
 //
-// Receiver macros are documented in github.com/google/cel-go/parser/macro.go.
+// Receiver macros are documented in cel.dev/cel-go/parser/macro.go.
 // arity 2 matches `target.exists(iterVar, body)`.
 func specializedExistsMacro() parser.Macro {
 	return parser.NewReceiverMacro(operators.Exists, 2, expandSpecializedExists)

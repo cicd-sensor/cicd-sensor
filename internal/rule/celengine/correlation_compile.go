@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"cel.dev/cel-go/cel"
+	celast "cel.dev/cel-go/common/ast"
+	"cel.dev/cel-go/common/operators"
+	"cel.dev/cel-go/common/types"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
-	"github.com/google/cel-go/cel"
-	celast "github.com/google/cel-go/common/ast"
-	"github.com/google/cel-go/common/operators"
-	"github.com/google/cel-go/common/types"
 )
 
 // CompileCorrelation compiles one correlation rule into a runnable

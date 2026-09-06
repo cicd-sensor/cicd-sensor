@@ -3,9 +3,9 @@ package celengine
 import (
 	"testing"
 
+	"cel.dev/cel-go/cel"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobevent"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule"
-	"github.com/google/cel-go/cel"
 )
 
 func TestCompileCorrelationRejectsInvalidReferences(t *testing.T) {
