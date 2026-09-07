@@ -86,7 +86,7 @@ func proxyHandlerGitHub(logger *slog.Logger, upstreamSocket, agentSocket string)
 		},
 	}
 
-	return rev
+	return withHTTPPreparation(rev, upstreamSocket, agentSocket, logger)
 }
 
 // postGitHubStaging submits one basename + peer_pid pair to the agent's

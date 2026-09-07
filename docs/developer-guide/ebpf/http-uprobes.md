@@ -62,6 +62,9 @@ flowchart LR
         WORKER -.->|"owns"| TARGETS
     end
 
+    PREP["Bounded file preparation<br/>machine / Docker exec / NRI Start"]
+    PREP -->|"exact file descriptors"| WORKER
+
     subgraph KT["KernelTracker"]
         CGROUPS["Job and cgroup state"]
         DECODE["event decode and attribution"]
@@ -80,10 +83,10 @@ userspace before closing the corresponding links. Transient work failure and a
 full worker queue also remove the entry so a later mapping can retry.
 
 The Job and cgroup state edge is reclaim input only: KernelTracker sends active
-cgroup IDs once per minute. Attach discovery starts when KernelIO reads an
-attach candidate from the ring buffer, not from Job state.
+cgroup IDs once per minute. Lifecycle adapters separately request preparation
+of a small predefined inventory. They own no classification or uprobe links.
 
-The worker serializes attach candidates and reconciliation requests on one
+The worker serializes preparation, attach candidates, and reconciliation on one
 goroutine. No other goroutine reads or mutates its attached-target state, so
 classification, attach, and close do not require a mutex.
 
@@ -91,7 +94,7 @@ classification, attach, and close do not require a mutex.
 
 | Type | State | Purpose and identity | Access | Bound and removal |
 | --- | --- | --- | --- | --- |
-| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by `mappedFileIdentity` (device, inode); stores the classification key, uprobe links, and consecutive complete-miss count for each attached file | HTTP uprobe worker only | 4,096 files; reclaim removes an entry after two complete misses |
+| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by backing `mappedFileIdentity` (device, inode); stores classification key, links, pin/grace retention, and complete-miss count | HTTP uprobe worker only | 4,096 files, including at most 128 pinned machine targets; eligible entries are reclaimed after two complete misses |
 | Shared BPF cache | `http_uprobe_discovery_cache` | Keyed by `fileClassificationKey` (device, inode, ctime); suppresses callbacks for files already queued, classified, or attached | BPF hook, KernelIO reader, and worker | 65,536-entry LRU; failed work and reclaim remove entries |
 
 The cache is notification suppression, not the link registry. Eviction can cause
@@ -115,19 +118,89 @@ self-hosted or Kubernetes runners, provided their cgroup is already tracked.
 ELF inspection and attachment still run asynchronously in userspace, so the
 selected function can run first and the initial request can be missed.
 
-Each candidate carries a `fileClassificationKey` made from device, inode, and
-ctime. This identifies one file version across BPF filtering and userspace
-identity verification.
+Each candidate carries a `fileClassificationKey` made from backing device,
+inode, and ctime. Ctime is a generation hint, not a guarantee against concurrent
+in-place modification. Overlay-visible `fstat` identities are not canonical.
 
-| Mechanism | Status | Purpose | Trade-off |
-| --- | --- | --- | --- |
-| executable mapping notification | Implemented; primary | Reacts to each new executable file mapping without scanning every process. | The first request can run before attachment and be missed. |
-| initial process scan | Not implemented | Could recover mappings that existed before tracking began. | A one-time snapshot cannot discover later processes or mappings. |
-| periodic process scan | Not implemented | Could provide a catch-up path for missed notifications. | Adds recurring scan cost and cannot guarantee the first request. |
+Bounded preparation improves the first-request window for known common files.
+All other files keep using mapping discovery. There is no open/write trigger,
+periodic attach scan, recursive workspace scan, or image/snapshot parser.
 
-The current implementation uses mapping notifications only. Initial and
-periodic process scans can be considered later if production measurements show
-that an additional catch-up path is necessary.
+### Bounded preparation
+
+| Target | Resolution | Inventory below the selected root |
+| --- | --- | --- |
+| `libssl.so`, `libssl.so.*` | Defined ELF function symbols | `/lib`, `/lib64`, `/usr/lib`, `/usr/lib64`, `/usr/local/lib`, `/usr/local/lib64`, and the host architecture's `/lib` and `/usr/lib` multiarch directories |
+| `libnghttp2.so`, `libnghttp2.so.*` | Defined ELF function symbols | Same library directories |
+| `gh`, `glab` | Go pclntab | `/bin`, `/usr/bin`, `/usr/local/bin`; bounded absolute executable/PATH directories supplied by container runtime context |
+
+Machine startup and successful Job-start requests refresh the fixed host
+inventory. The current machine start API carries no runner PATH/tool-cache
+inventory, so user-installed binaries elsewhere remain mapping-discovered.
+Docker proxy preparation runs before forwarding a later `/exec/{id}/start`.
+It uses exec/container inspect and the daemon's verified PID/procfs view.
+Container create/start remains the existing cgroup-staging boundary and provides
+no initial-entrypoint preparation guarantee. Containers bypassing the proxy
+remain mapping-discovered. Dind needs an accessible inner proxy/daemon and a
+verifiable PID view; existing systemd-cgroup requirements still apply.
+
+The NRI observer prepares known CI containers at `StartContainer`, using the
+waiting init PID's root. On the supported containerd CRI/runc path, this callback
+is between task creation and task start. It does not imply notifications for
+later exec operations. `Synchronize` offers bounded re-preparation for known
+containers with usable PIDs; it does not replay missed Job staging.
+
+Inventory uses `openat2(RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS)` so absolute
+container symlinks resolve inside the selected root. Limits are 32 directories,
+512 entries per library directory, 128 candidate open attempts, 32 returned
+FDs, and 256 MiB per classified file. Common ABI basenames are tried before
+bounded directory enumeration. No directory is traversed recursively.
+
+All producers call `PrepareHTTPFiles`; the API adopts every FD, including on
+rejection. NRI and Docker use an Agent-owned Unix packet socket at
+`<agent-socket>.http-preparation`, mode `0600`, with same-owner `SO_PEERCRED`
+validation and `SCM_RIGHTS` transfer. Keep this socket node-side, outside Job
+mounts. It is separate from the runner-facing HTTP routes.
+
+The 500 ms deadline covers inventory, transfer, queueing, classification, and
+attachment waiting. Workloads continue on timeout, queue saturation, missing
+files, or attach failure. A filesystem syscall or link close can outlive that
+wait; bounded producer slots and worker ownership retain responsibility for
+cleanup. Preparation has an eight-request queue and eight producer slots;
+normal mapping samples and event delivery keep their existing queues. Between
+prepared files the worker services pending mapping discovery. Reconciliation
+is serviced between batches and closes at most two targets per sweep.
+
+### Backing identity
+
+The optional control object is loaded separately from the base sensor. A
+worker-thread request makes the existing `uprobe_mmap` hook report the backing
+identity of a temporary read-only mapping. The existing ELF/Go resolvers read
+that same mapping. Attachment uses the exact FD and a file offset; a scoped
+`uprobe_register` hook verifies the registration inode and offset. No copied
+ELF or pathname key is treated as the attachment identity.
+
+The same worker/cache/registry handles proactive and mapping candidates. The
+cache distinguishes a completed negative classification from a notification
+still waiting in the queue. Inode replacement creates another target; a changed
+ctime on an already attached inode is conservatively rejected pending reclaim.
+Concurrent content changes are not made safe by this generation hint alone.
+
+For liveness, `show_map_vma` records the original VMA backing while the worker
+reads `/proc/<pid>/maps`. Reopening and remapping `map_files` after overlay
+copy-up would not reliably identify that original VMA. No visible-inode alias
+registry is used. Per-process results are capped at 256 mappings and 2 MiB of
+maps text; incomplete or overflowing scans keep links alive.
+
+These kernel-internal attach points are feature-probed, not a stable ABI. If
+they are unavailable, preparation is disabled and the original mapping path
+remains enabled, including its overlay identity limitation. Compatibility of
+preparation has been exercised on Linux 6.8 arm64; it is not yet established
+across every supported kernel or snapshotter.
+
+Primary lifecycle references: [Linux uprobes](https://github.com/torvalds/linux/blob/v6.8/kernel/events/uprobes.c),
+[Linux proc maps](https://github.com/torvalds/linux/blob/v6.8/fs/proc/task_mmu.c),
+and [containerd CRI start](https://github.com/containerd/containerd/blob/v2.2.0/internal/cri/server/container_start.go).
 
 Mapping notification is also not limited to dynamically linked libraries. A
 statically linked executable, including a Go binary, creates executable file
@@ -180,13 +253,13 @@ KernelTracker, Job attribution, or CEL evaluation.
 
 The worker handles each candidate serially:
 
-1. Open the mapped file through `/proc/<pid>/map_files` and verify its device,
-   inode, and ctime. A changed mapping is ignored and not cached.
+1. Open the mapped file through `/proc/<pid>/map_files`, normalize its backing
+   identity, and compare it with the sample. A changed backing is not cached.
 2. Look for selected C functions in `.symtab` and `.dynsym`. If none are
    defined, try the Go pclntab resolver described in
    [Go net/http Uprobes](go-http-uprobes.md).
-3. Attach selected symbols or resolved file offsets, store their links as one
-   attached target, and keep the discovery-cache entry.
+3. Attach resolved file offsets, verify the registration backing, store their
+   links as one attached target, and keep the discovery-cache entry.
 4. If neither resolver finds a supported function, keep the cache entry.
 5. On a transient failure or queue drop, remove the cache entry so a later
    mapping can retry.
@@ -271,8 +344,10 @@ Reconciliation observes liveness only. It does not classify or attach files.
 
 | Observation | Action |
 | --- | --- |
+| pinned fixed machine target | Keep until Agent shutdown, within the 128-target pin cap. |
+| proactively prepared runtime target within 30-second grace | Keep even before any mapping exists; do not advance the miss count. |
 | target mapped by any tracked process | Reset its complete-miss count to zero. |
-| target absent from a complete scan | Increment the count; after two consecutive complete misses, remove its `http_uprobe_discovery_cache` entry, then close its links and remove it from `attachedTargets`. |
+| eligible target absent from a complete scan | Increment the count; after two complete misses, remove its cache entry, then close links and remove the target. Close at most two targets per sweep; recheck the rest on a later scan. |
 | discovery-cache deletion fails | Keep the links and registry entry so a later reconciliation can retry safely. |
 | any walk or read failure could hide a mapping | Keep the links and leave the count unchanged. |
 
@@ -305,7 +380,7 @@ x64 and arm64 unless noted otherwise.
 | curl and Node over HTTPS HTTP/2 | Verified | selected nghttp2 request API |
 | Git over HTTPS HTTP/2 | Verified | selected nghttp2 request API for default negotiation and explicit `http.version=HTTP/2` |
 | GitHub CLI (`gh api`) | Verified | `net/http.(*Transport).roundTrip` |
-| GitLab CLI (`glab`) | Not yet verified | Real-client E2E pending. |
+| GitLab CLI (`glab`) | Verified on Linux 6.8 arm64 with the preparation fixture | `net/http.(*Transport).roundTrip`; broader runner matrix pending. |
 | Java or rustls-based HTTPS | Not covered | Does not call a currently selected function. |
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
 
@@ -318,6 +393,12 @@ x64 and arm64 unless noted otherwise.
   classification and attachment are asynchronous. The function can run before
   its uprobe is attached, so the initial request can be missed. This remains a
   rollout gate.
+- Preparation improves common existing files only. Workspace downloads,
+  replacement after preparation, late execution after grace/reclaim, and Docker
+  initial entrypoints can still lose the first request. Fresh-inode overlay
+  fixtures captured 20/20 requests for each of OpenSSL, nghttp2, stripped `gh`,
+  and stripped `glab` through the product preparation API on Linux 6.8 arm64.
+  This is worker-level evidence, not an ARC/GitLab/dind deployment guarantee.
 - Discovery observes executable mappings created while the process is already in
   a tracked cgroup. Initial catch-up scanning, periodic attach backstop, moving an
   existing process into a tracked cgroup, and later `mprotect(PROT_EXEC)` are not

@@ -142,6 +142,14 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			},
 		)
 	}
+	if kernelIO.httpUprobeWorker != nil {
+		control, controlErr := newUprobeControl(kernelIO.objs.HttpUprobeControlRequests, kernelIO.objs.HttpUprobeControlResults)
+		if controlErr != nil {
+			kernelIO.logger.Warn("http_uprobe_preparation_unavailable", "error", controlErr)
+		} else {
+			kernelIO.httpUprobeWorker.control = control
+		}
+	}
 	for _, attach := range tracingPrograms {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})
 		if err != nil {

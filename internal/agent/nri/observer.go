@@ -13,6 +13,7 @@ import (
 	nriapi "github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
 
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
@@ -45,9 +46,10 @@ type Options struct {
 // Observer logs CreateContainer requests, stages known CI/CD containers, and
 // returns no runtime adjustments.
 type Observer struct {
-	logger   *slog.Logger
-	agent    *agentClient
-	provider jobcontext.Provider
+	preparation httpPreparer
+	logger      *slog.Logger
+	agent       *agentClient
+	provider    jobcontext.Provider
 }
 
 // Run registers the observer with containerd NRI and blocks until ctx ends.
@@ -66,9 +68,10 @@ func Run(ctx context.Context, opts Options) error {
 	logger = logger.With("component", "nri")
 
 	observer := &Observer{
-		logger:   logger,
-		agent:    newAgentClient(opts.AgentSocketPath, opts.Provider),
-		provider: opts.Provider,
+		logger:      logger,
+		preparation: httpprepare.NewRemote(opts.AgentSocketPath, logger),
+		agent:       newAgentClient(opts.AgentSocketPath, opts.Provider),
+		provider:    opts.Provider,
 	}
 	defer observer.agent.closeIdleConnections()
 

@@ -14,7 +14,8 @@ USER root
 # the version (and re-test bpf2go output) when upstream moves.
 # libbpf and vmlinux headers are vendored under internal/agent/bpf/include/,
 # so no libbpf-dev or kernel-headers package is needed in the image.
-RUN apk add --no-cache \
+# Keep the pinned base runtime compatible with packages from the live Wolfi repo.
+RUN apk upgrade --no-cache && apk add --no-cache \
     clang-22 \
     llvm-22
 WORKDIR /src

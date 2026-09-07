@@ -40,7 +40,7 @@ func definedSymbolTargets(
 	for _, candidate := range candidates {
 		wanted[candidate.symbol] = struct{}{}
 	}
-	found := make(map[string]struct{}, len(candidates))
+	found := make(map[string]uint64, len(candidates))
 	collect := func(symbols []elf.Symbol) {
 		for _, symbol := range symbols {
 			if _, ok := wanted[symbol.Name]; !ok ||
@@ -48,7 +48,15 @@ func definedSymbolTargets(
 				symbol.Section == elf.SHN_UNDEF || symbol.Value == 0 {
 				continue
 			}
-			found[symbol.Name] = struct{}{}
+			// st_value is a virtual address; UprobeOptions.Address needs a file offset.
+			for _, segment := range file.Progs {
+				if segment.Type == elf.PT_LOAD && segment.Flags&elf.PF_X != 0 &&
+					symbol.Value >= segment.Vaddr && symbol.Value-segment.Vaddr < segment.Filesz &&
+					symbol.Value-segment.Vaddr <= ^uint64(0)-segment.Off {
+					found[symbol.Name] = segment.Off + symbol.Value - segment.Vaddr
+					break
+				}
+			}
 		}
 	}
 	for _, readSymbols := range []func() ([]elf.Symbol, error){file.Symbols, file.DynamicSymbols} {
@@ -64,7 +72,8 @@ func definedSymbolTargets(
 	}
 
 	for _, candidate := range candidates {
-		if _, ok := found[candidate.symbol]; ok {
+		if offset, ok := found[candidate.symbol]; ok {
+			candidate.offset = offset
 			selected = append(selected, candidate)
 		}
 	}

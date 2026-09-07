@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobregistry"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/listener"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -116,8 +118,13 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	jobRegistry.BindKernelTracker(kernelTracker)
 
+	var preparation *httpprepare.Preparation
+	if a.enableHTTPRequest {
+		preparation = httpprepare.NewLocal(kernelTracker, a.logger)
+	}
 	l := listener.New(listener.Config{
 		Logger:                a.logger,
+		HTTPPreparation:       preparation,
 		JobRegistry:           jobRegistry,
 		SocketPath:            a.socketPath,
 		HostManagerConnection: a.hostManagerConn,
@@ -150,6 +157,25 @@ func (a *Agent) Run(ctx context.Context) error {
 		engineDone <- kernelTracker.Run(engineCtx)
 	}()
 
+	// The socket belongs to Agent, while descriptors and links belong to KernelIO.
+	// Shutdown joins socket handlers before closing the kernel worker.
+	preparationCtx, cancelPreparation := context.WithCancel(ctx)
+	var preparationDone chan struct{}
+	if preparation != nil {
+		preparationDone = make(chan struct{})
+		go func() {
+			defer close(preparationDone)
+			if err := httpprepare.Serve(preparationCtx, httpprepare.SocketPath(a.socketPath), kernelTracker.PrepareHTTPFiles, a.logger); err != nil {
+				a.logger.WarnContext(ctx, "http_preparation_socket_unavailable", "error", err)
+			}
+		}()
+		if a.runnerType == "machine" {
+			if err := preparation.Prepare(ctx, "/", nil, kernelio.HTTPPreparationOptions{Source: "host-start", Pin: true}); err != nil {
+				a.logger.WarnContext(ctx, "http_preparation_startup_incomplete", "error", err)
+			}
+		}
+	}
+	defer cancelPreparation()
 	a.logger.InfoContext(ctx, "agent_started",
 		"socket", a.socketPath,
 		"github_k8s_runner_socket", a.githubK8sRunnerSocketPath,
@@ -163,6 +189,10 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	// Tear down subsystems in reverse order: FinalizeAll, KernelTracker close, engine cancel.
 	a.logger.InfoContext(ctx, "agent_stopping")
+	cancelPreparation()
+	if preparationDone != nil {
+		<-preparationDone
+	}
 	a.shutdown(ctx)
 
 	if err != nil {

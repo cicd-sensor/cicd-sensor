@@ -147,7 +147,7 @@ func proxyHandlerGitLab(logger *slog.Logger, upstreamSocket, agentSocket string)
 			http.Error(w, "upstream dockerd unavailable", http.StatusBadGateway)
 		},
 	}
-	return rev
+	return withHTTPPreparation(rev, upstreamSocket, agentSocket, logger)
 }
 
 func postGitLabStaging(ctx context.Context, agentSocket, basename string, peerPID int32, identity *jobcontext.JobIdentity, metadata jobcontext.JobMetadata) error {

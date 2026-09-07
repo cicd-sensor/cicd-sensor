@@ -5,41 +5,7 @@
 // ordinary data mappings and already-known files out of userspace.
 #define HTTP_UPROBE_VM_EXEC 0x4
 
-// CO-RE flavor structs expose inode ctime layouts used before Linux 6.12.
-struct inode___http_uprobe_legacy {
-    struct timespec64 i_ctime;
-} __attribute__((preserve_access_index));
-
-struct inode___http_uprobe_middle {
-    struct timespec64 __i_ctime;
-} __attribute__((preserve_access_index));
-
-static __always_inline void http_uprobe_inode_ctime(
-    struct inode *inode,
-    struct file_classification_key *key)
-{
-    if (bpf_core_field_exists(inode->i_ctime_sec)) {
-        key->ctime_sec = BPF_CORE_READ(inode, i_ctime_sec);
-        // Newer kernels reserve bit 31 as I_CTIME_QUERIED. stat(2) masks it,
-        // so remove the kernel-only flag before userspace verifies this key.
-        key->ctime_nsec = BPF_CORE_READ(inode, i_ctime_nsec) & 0x7fffffffU;
-        return;
-    }
-
-    if (bpf_core_field_exists(((struct inode___http_uprobe_middle *)0)->__i_ctime)) {
-        struct inode___http_uprobe_middle *middle =
-            (struct inode___http_uprobe_middle *)inode;
-
-        key->ctime_sec = BPF_CORE_READ(middle, __i_ctime.tv_sec);
-        key->ctime_nsec = BPF_CORE_READ(middle, __i_ctime.tv_nsec);
-        return;
-    }
-
-    struct inode___http_uprobe_legacy *legacy =
-        (struct inode___http_uprobe_legacy *)inode;
-    key->ctime_sec = BPF_CORE_READ(legacy, i_ctime.tv_sec);
-    key->ctime_nsec = BPF_CORE_READ(legacy, i_ctime.tv_nsec);
-}
+#include "http_uprobe_identity_helpers.bpf.h"
 
 static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_struct *vma)
 {
@@ -102,5 +68,26 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
 SEC("fentry/uprobe_mmap")
 int BPF_PROG(handle_uprobe_mmap, struct vm_area_struct *vma)
 {
+    // A worker-owned request identifies its own temporary PROT_READ mapping.
+    // This branch must precede VM_EXEC/cgroup gates, and emits no event.
+    __u64 tid = bpf_get_current_pid_tgid();
+    struct http_uprobe_control_request *request =
+        bpf_map_lookup_elem(&http_uprobe_control_requests, &tid);
+    if (request && request->operation == HTTP_UPROBE_CONTROL_NORMALIZE) {
+        struct file *file = BPF_CORE_READ(vma, vm_file);
+        struct inode *inode = file ? BPF_CORE_READ(file, f_inode) : 0;
+        if (inode) {
+            __u64 zero = 0;
+            struct http_uprobe_control_result result = {
+                .nonce = request->nonce,
+                .start = BPF_CORE_READ(vma, vm_start),
+                .end = BPF_CORE_READ(vma, vm_end),
+            };
+            http_uprobe_inode_key(inode, &result.file);
+            if (!bpf_map_update_elem(&http_uprobe_control_results, &zero, &result, BPF_ANY))
+                bpf_map_delete_elem(&http_uprobe_control_requests, &tid);
+        }
+        return 0;
+    }
     return emit_http_uprobe_attach_candidate(vma);
 }

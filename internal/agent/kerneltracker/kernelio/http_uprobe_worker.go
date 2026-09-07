@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -28,6 +30,7 @@ import (
 
 type symbolUprobeTarget struct {
 	symbol  string
+	offset  uint64
 	program *ebpf.Program
 }
 
@@ -81,15 +84,27 @@ type attachedUprobeTarget struct {
 	classificationKey fileClassificationKey
 	links             []link.Link
 	missingScanCount  uint8
+	pinned            bool
+	protectedUntil    time.Time
 }
 
 type httpUprobeWorker struct {
 	symbolTargets  []symbolUprobeTarget // OpenSSL/nghttp2, attached by ELF symbol
-	goTarget       goUprobeTarget       // Go net/http, attached by resolved file offset
+	control        *uprobeControl
+	goTarget       goUprobeTarget // Go net/http, attached by resolved file offset
 	logger         *slog.Logger
 	cgroupRootPath string
 
-	// Worker inputs. run consumes both serially.
+	// Submission is synchronized only against shutdown; classification stays loop-local.
+	submissionMu        sync.Mutex
+	stopped             bool
+	preparationRequests chan *httpPreparationRequest
+	pinnedTargets       int
+	preparationDrops    uint64 // submissionMu-owned
+	// Cumulative worker-owned diagnostics shared by proactive and mapping paths.
+	normalizedFiles, parsedFiles, newlyAttachedFiles, deduplicatedFiles uint64
+
+	// Worker inputs. run consumes serially.
 	attachCandidates  chan httpUprobeAttachCandidate // candidates emitted by BPF and decoded by KernelIO
 	reconcileRequests chan []uint64                  // immutable active cgroup IDs from KernelTracker
 
@@ -115,14 +130,15 @@ func newHTTPUprobeWorker(
 	goTarget goUprobeTarget,
 ) *httpUprobeWorker {
 	return &httpUprobeWorker{
-		symbolTargets:     symbolTargets,
-		goTarget:          goTarget,
-		logger:            logger,
-		cgroupRootPath:    cgroupRootPath,
-		attachCandidates:  make(chan httpUprobeAttachCandidate, attachCandidateQueueSize),
-		reconcileRequests: make(chan []uint64, 1),
-		attachedTargets:   make(map[mappedFileIdentity]*attachedUprobeTarget),
-		discoveryCache:    discoveryCache,
+		symbolTargets:       symbolTargets,
+		goTarget:            goTarget,
+		logger:              logger,
+		cgroupRootPath:      cgroupRootPath,
+		attachCandidates:    make(chan httpUprobeAttachCandidate, attachCandidateQueueSize),
+		reconcileRequests:   make(chan []uint64, 1),
+		attachedTargets:     make(map[mappedFileIdentity]*attachedUprobeTarget),
+		preparationRequests: make(chan *httpPreparationRequest, 8),
+		discoveryCache:      discoveryCache,
 	}
 }
 
@@ -164,6 +180,7 @@ func (w *httpUprobeWorker) queueAttachCandidate(candidate httpUprobeAttachCandid
 // attachedTargets and link lifecycle; there is no separate closer goroutine.
 func (w *httpUprobeWorker) run(ctx context.Context) {
 	defer w.closeAll()
+	defer w.shutdownPreparation()
 	for {
 		select {
 		case <-ctx.Done():
@@ -172,6 +189,8 @@ func (w *httpUprobeWorker) run(ctx context.Context) {
 			w.reconcileTargets(activeCgroupIDs)
 		case candidate := <-w.attachCandidates:
 			w.classifyAndAttach(candidate)
+		case request := <-w.preparationRequests:
+			w.prepareRequest(ctx, request)
 		}
 	}
 }
@@ -180,6 +199,9 @@ func (w *httpUprobeWorker) run(ctx context.Context) {
 // false if an error could have hidden a live mapping; mappings read before the
 // error are still returned as positive observations.
 func (w *httpUprobeWorker) scanProcessMappings(pid int32) ([]processMapping, bool) {
+	if w.control != nil {
+		return w.control.scan(pid)
+	}
 	f, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 	if err != nil {
 		// Only a gone pid (ENOENT) is the benign race; anything else could hide
@@ -222,6 +244,10 @@ func (w *httpUprobeWorker) scanProcessMappings(pid int32) ([]processMapping, boo
 // using the mapped file. An identity mismatch is an ordinary mapping race and
 // must not create either an attach or a discovery-cache entry.
 func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate) {
+	if w.control != nil {
+		w.prepareMappedCandidate(candidate)
+		return
+	}
 	retainCacheEntry := false
 	defer func() {
 		if retainCacheEntry {
@@ -437,6 +463,8 @@ func (w *httpUprobeWorker) closeAll() {
 	for _, entry := range w.attachedTargets {
 		closeLinks(entry.links)
 	}
+	clear(w.attachedTargets)
+	w.pinnedTargets = 0
 }
 
 // reconcileTargets is the reclaim sweep. It resolves the immutable active-ID
@@ -448,6 +476,7 @@ func (w *httpUprobeWorker) closeAll() {
 // reset to zero. We do not retain the prior scan result; each attached target
 // only records how many complete scans have omitted it.
 func (w *httpUprobeWorker) reconcileTargets(activeCgroupIDs []uint64) {
+	scanStarted := time.Now()
 	observedMappedFiles := make(map[mappedFileIdentity]struct{})
 	activeCgroupPaths, complete := resolveActiveCgroupPaths(w.cgroupRootPath, activeCgroupIDs)
 	pids := make(map[int32]struct{})
@@ -468,6 +497,10 @@ func (w *httpUprobeWorker) reconcileTargets(activeCgroupIDs []uint64) {
 
 	closed := 0
 	for mappedID, entry := range w.attachedTargets {
+		if entry.pinned || scanStarted.Before(entry.protectedUntil) {
+			entry.missingScanCount = 0
+			continue
+		}
 		if _, observed := observedMappedFiles[mappedID]; observed {
 			entry.missingScanCount = 0
 			continue
@@ -475,15 +508,19 @@ func (w *httpUprobeWorker) reconcileTargets(activeCgroupIDs []uint64) {
 		if !complete {
 			continue
 		}
-		entry.missingScanCount++
-		if entry.missingScanCount >= missingScanLimit {
+		if entry.missingScanCount < missingScanLimit {
+			entry.missingScanCount++
+		}
+		if entry.missingScanCount >= missingScanLimit && closed < 2 {
 			// Delete the discovery-cache entry first. If that fails, keep the link;
 			// closing it would prevent a later mapping from requesting re-attach.
 			if err := w.deleteDiscoveryCacheEntry(entry.classificationKey); err != nil {
 				w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
 				continue
 			}
+			closeStarted := time.Now()
 			closeLinks(entry.links)
+			w.logInfo("http_uprobe_target_closed", "elapsed", time.Since(closeStarted))
 			delete(w.attachedTargets, mappedID)
 			closed++
 		}

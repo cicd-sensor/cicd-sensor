@@ -7,7 +7,7 @@ Runner modes are install recipes; the runtime implementation uses NRI and hooks 
 
 | Mechanism | Used by | Responsibility |
 | --- | --- | --- |
-| NRI | GitHub ARC Kubernetes mode, GitLab Runner Kubernetes executor | Receives containerd `CreateContainer` events and stages Kubernetes-created container cgroups when job identity is available. |
+| NRI | GitHub ARC Kubernetes mode, GitLab Runner Kubernetes executor | Stages cgroups at `CreateContainer`. When HTTP capture is enabled, requests bounded file preparation at `StartContainer` before user code on the supported CRI/runc path. |
 | Job hook | GitHub ARC default, dind, Kubernetes mode | Runs after GitHub job assignment and calls the GitHub Kubernetes runner socket so cicd-sensor can bind the runner cgroup. |
 | Container customization hook wrapper | GitHub ARC Kubernetes mode | Wraps `ACTIONS_RUNNER_CONTAINER_HOOKS` and injects GitHub identity into workflow Pod annotations before ARC creates Kubernetes workflow containers. |
 
@@ -53,6 +53,14 @@ Host start and K8s staging paths build host scope from that memory cache.
 This keeps containerd NRI callbacks local and bounded; manager unavailability after a successful fetch leaves the last known-good config in use.
 
 ### Cgroup staging
+
+HTTP preparation reuses the existing KernelIO worker through a separate,
+node-owned FD-transfer socket. It does not change cgroup staging or Job
+ownership. The observer needs the node PID view to open the waiting init's
+root, but does not require a containerd client socket. Preparation waits at most
+500 ms and fails open; later exec and Docker initial-entrypoint coverage are
+not implied by NRI Start. See [HTTP Uprobe Runtime](ebpf/http-uprobes.md) for
+target bounds, exact backing identity, retention, and compatibility limits.
 
 Kubernetes support initially requires containerd, runc, and systemd cgroups.
 NRI exposes OCI `linux.cgroupsPath` in systemd form, for example:
@@ -300,3 +308,18 @@ flowchart TB
     classDef cicd fill:#ecfdf5,stroke:#0f766e,color:#134e4a,stroke-width:1.5px;
     class NRI,AGENT,KT,SENSOR cicd
 ```
+
+### HTTP preparation permissions
+
+The node-side NRI observer needs `CAP_SYS_PTRACE` in addition to its normal
+root container capabilities to open another container's `/proc/<initPID>/root`.
+`hostPID: true` alone does not grant this access. The Kubernetes-mode ARC and
+GitLab examples add this capability to the observer; the job Pods receive no
+additional capability or host mount. Without it, preparation fails open and
+logs `permission denied`, while existing NRI staging continues.
+
+AppArmor must also permit the observer's ptrace read of the waiting runc init.
+GKE COS's `cri-containerd.apparmor.d` profile denied that access even with
+`SYS_PTRACE`; the node-owned observer examples therefore use an Unconfined
+AppArmor profile. Operators may instead supply a profile allowing that read.
+This exception is limited to the observer container, not CI job containers.

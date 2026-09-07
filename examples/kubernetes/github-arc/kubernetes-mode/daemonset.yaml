@@ -74,6 +74,12 @@ spec:
             runAsUser: 0
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
+            # NRI Start opens /proc/<initPID>/root before user code begins.
+            capabilities:
+              add: [SYS_PTRACE]
+            # RuntimeDefault can deny ptrace reads of the waiting runc init.
+            appArmorProfile:
+              type: Unconfined
           volumeMounts:
             - name: run
               mountPath: /run/cicd-sensor
