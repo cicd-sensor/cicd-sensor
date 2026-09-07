@@ -3,6 +3,7 @@
 package kernelio
 
 import (
+	"context"
 	"maps"
 	"os"
 	"path/filepath"
@@ -18,11 +19,12 @@ import (
 // Reconcile requests contain no active cgroup IDs, so every target is absent.
 type reclaimHarness struct {
 	worker *httpUprobeWorker
+	ctx    context.Context
 }
 
 func newReclaimHarness(t *testing.T) *reclaimHarness {
 	t.Helper()
-	return &reclaimHarness{worker: newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})}
+	return &reclaimHarness{ctx: t.Context(), worker: newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})}
 }
 
 func (h *reclaimHarness) attached(id mappedFileIdentity) *attachedUprobeTarget {
@@ -33,7 +35,7 @@ func (h *reclaimHarness) attached(id mappedFileIdentity) *attachedUprobeTarget {
 
 // An empty active-ID snapshot makes every target absent.
 func (h *reclaimHarness) sweep() {
-	h.worker.reconcileTargets(nil)
+	h.worker.reconcileTargets(h.ctx, nil)
 }
 
 func TestHTTPUprobeReclaim(t *testing.T) {
@@ -66,7 +68,7 @@ func TestHTTPUprobeReclaim(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(cgroupPath, "cgroup.procs"), 0o755); err != nil {
 			t.Fatalf("create invalid cgroup.procs: %v", err)
 		}
-		h.worker.reconcileTargets([]uint64{testPathInode(t, cgroupPath)})
+		h.worker.reconcileTargets(t.Context(), []uint64{testPathInode(t, cgroupPath)})
 		if e.missingScanCount != 1 {
 			t.Fatalf("empty incomplete scan changed missingScanCount to %d, want 1", e.missingScanCount)
 		}

@@ -3,6 +3,7 @@
 package kernelio
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -75,7 +76,7 @@ func newReclaimTestWorker(t *testing.T) *httpUprobeWorker {
 }
 
 func reconcileAndCount(worker *httpUprobeWorker, activeCgroupIDs []uint64) int {
-	worker.reconcileTargets(activeCgroupIDs)
+	worker.reconcileTargets(context.Background(), activeCgroupIDs)
 	return len(worker.attachedTargets)
 }
 

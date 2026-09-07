@@ -323,3 +323,7 @@ GKE COS's `cri-containerd.apparmor.d` profile denied that access even with
 `SYS_PTRACE`; the node-owned observer examples therefore use an Unconfined
 AppArmor profile. Operators may instead supply a profile allowing that read.
 This exception is limited to the observer container, not CI job containers.
+
+The examples use the `securityContext.appArmorProfile` field (stable since
+Kubernetes 1.31; older clusters require the corresponding version-specific
+configuration). See the [Kubernetes AppArmor documentation](https://kubernetes.io/docs/tutorials/security/apparmor/).

@@ -41,7 +41,7 @@ func prepareDockerExec(ctx context.Context, upstreamSocket, id string, preparati
 		})
 		if err != nil || credentialErr != nil || credential == nil || credential.Pid <= 0 {
 			_ = c.Close()
-			return nil, errors.New("Docker daemon PID unavailable")
+			return nil, errors.New("docker daemon PID unavailable")
 		}
 		daemonPID.Store(credential.Pid)
 		return c, nil
@@ -59,7 +59,7 @@ func prepareDockerExec(ctx context.Context, upstreamSocket, id string, preparati
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("Docker inspect returned %d", resp.StatusCode)
+			return fmt.Errorf("docker inspect returned %d", resp.StatusCode)
 		}
 		return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
 	}
@@ -87,7 +87,7 @@ func prepareDockerExec(ctx context.Context, upstreamSocket, id string, preparati
 		return err
 	}
 	if container.ID != exec.ContainerID || !container.State.Running || container.State.Pid <= 0 {
-		return errors.New("Docker container is not running")
+		return errors.New("docker container is not running")
 	}
 	root, err := dockerProcessRoot(daemonPID.Load(), container.State.Pid)
 	if err != nil {
@@ -114,7 +114,7 @@ func dockerProcessRoot(daemonPID, containerPID int32) (string, error) {
 		return "", err
 	}
 	if !os.SameFile(namespace, procNamespace) {
-		return "", errors.New("Docker daemon procfs PID namespace mismatch")
+		return "", errors.New("docker daemon procfs PID namespace mismatch")
 	}
 	return fmt.Sprintf("%s/proc/%d/root", daemonRoot, containerPID), nil
 }

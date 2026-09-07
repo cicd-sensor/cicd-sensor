@@ -8,7 +8,16 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/cilium/ebpf/link"
 )
+
+type notifyCloseLink struct {
+	link.Link
+	notify func()
+}
+
+func (l notifyCloseLink) Close() error { l.notify(); return nil }
 
 func preparationTestFile(t *testing.T) *os.File {
 	t.Helper()
@@ -126,19 +135,77 @@ func TestPreparedTargetRetention(t *testing.T) {
 			}
 		})
 	}
-	t.Run("reconcile closes at most two targets per sweep", func(t *testing.T) {
-		h := newReclaimHarness(t)
-		for i := range 5 {
-			h.attached(mappedFileIdentity{inode: uint64(i + 1)})
-		}
-		h.sweep()
-		h.sweep()
-		if len(h.worker.attachedTargets) != 3 {
-			t.Fatal(len(h.worker.attachedTargets))
-		}
-		h.sweep()
-		if len(h.worker.attachedTargets) != 1 {
-			t.Fatal(len(h.worker.attachedTargets))
-		}
-	})
+	for _, tc := range []struct {
+		name     string
+		queue    string
+		canceled bool
+		remain   int
+	}{
+		{"idle sweep drains a burst of expired targets", "", false, 0},
+		{"pending preparation defers close until a fresh sweep", "preparation", false, 512},
+		{"pending mapping defers close until a fresh sweep", "mapping", false, 512},
+		{"canceled worker keeps links for shutdown", "", true, 512},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newReclaimHarness(t)
+			for i := range 512 {
+				h.attached(mappedFileIdentity{inode: uint64(i + 1)})
+			}
+			h.sweep()
+			switch tc.queue {
+			case "preparation":
+				h.worker.preparationRequests <- &httpPreparationRequest{}
+			case "mapping":
+				h.worker.attachCandidates <- httpUprobeAttachCandidate{}
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.canceled {
+				cancel()
+			}
+			h.worker.reconcileTargets(ctx, nil)
+			if got := len(h.worker.attachedTargets); got != tc.remain {
+				t.Fatalf("targets=%d want=%d", got, tc.remain)
+			}
+			switch tc.queue {
+			case "preparation":
+				<-h.worker.preparationRequests
+			case "mapping":
+				<-h.worker.attachCandidates
+			}
+			h.sweep()
+			if len(h.worker.attachedTargets) != 0 {
+				t.Fatal("idle sweep left expired targets")
+			}
+		})
+	}
+	for _, arrival := range []string{"preparation", "mapping", "cancellation"} {
+		t.Run(arrival+" arriving during close yields before next target", func(t *testing.T) {
+			t.Parallel()
+			h := newReclaimHarness(t)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			closed := 0
+			for i := range 5 {
+				e := h.attached(mappedFileIdentity{inode: uint64(i + 1)})
+				e.links = []link.Link{notifyCloseLink{notify: func() {
+					closed++
+					switch arrival {
+					case "preparation":
+						h.worker.preparationRequests <- &httpPreparationRequest{}
+					case "mapping":
+						h.worker.attachCandidates <- httpUprobeAttachCandidate{}
+					case "cancellation":
+						cancel()
+					}
+				}}}
+			}
+			h.sweep()
+			h.worker.reconcileTargets(ctx, nil)
+			if closed != 1 || len(h.worker.attachedTargets) != 4 {
+				t.Fatalf("closed=%d retained=%d", closed, len(h.worker.attachedTargets))
+			}
+		})
+	}
 }

@@ -169,7 +169,9 @@ wait; bounded producer slots and worker ownership retain responsibility for
 cleanup. Preparation has an eight-request queue and eight producer slots;
 normal mapping samples and event delivery keep their existing queues. Between
 prepared files the worker services pending mapping discovery. Reconciliation
-is serviced between batches and closes at most two targets per sweep.
+is serviced between batches. Between target closes it yields to pending
+preparation or mapping work; an idle sweep drains eligible targets. Individual
+close latency is measured because kernel unregister cannot be preempted.
 
 ### Backing identity
 
@@ -347,7 +349,7 @@ Reconciliation observes liveness only. It does not classify or attach files.
 | pinned fixed machine target | Keep until Agent shutdown, within the 128-target pin cap. |
 | proactively prepared runtime target within 30-second grace | Keep even before any mapping exists; do not advance the miss count. |
 | target mapped by any tracked process | Reset its complete-miss count to zero. |
-| eligible target absent from a complete scan | Increment the count; after two complete misses, remove its cache entry, then close links and remove the target. Close at most two targets per sweep; recheck the rest on a later scan. |
+| eligible target absent from a complete scan | Increment the count; after two complete misses, remove its cache entry, then close links and remove the target. Yield between closes when preparation or mapping work is queued; recheck deferred targets on a later scan. |
 | discovery-cache deletion fails | Keep the links and registry entry so a later reconciliation can retry safely. |
 | any walk or read failure could hide a mapping | Keep the links and leave the count unchanged. |
 

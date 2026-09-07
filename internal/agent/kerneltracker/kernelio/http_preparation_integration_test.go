@@ -185,8 +185,8 @@ func TestHTTPPreparationOverlayOriginalVMA(t *testing.T) {
 		a.protectedUntil = time.Time{}
 	}
 	ids := cgroupIDsForPIDs(t, w, int32(cmd.Process.Pid))
-	w.reconcileTargets(ids)
-	w.reconcileTargets(ids)
+	w.reconcileTargets(t.Context(), ids)
+	w.reconcileTargets(t.Context(), ids)
 	if w.attachedTargets[old.mappedFile] == nil || w.attachedTargets[newKey.mappedFile] != nil {
 		t.Fatal("reclaim confused original lower and copied-up upper")
 	}

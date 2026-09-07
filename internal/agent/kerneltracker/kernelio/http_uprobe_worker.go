@@ -186,7 +186,7 @@ func (w *httpUprobeWorker) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case activeCgroupIDs := <-w.reconcileRequests:
-			w.reconcileTargets(activeCgroupIDs)
+			w.reconcileTargets(ctx, activeCgroupIDs)
 		case candidate := <-w.attachCandidates:
 			w.classifyAndAttach(candidate)
 		case request := <-w.preparationRequests:
@@ -475,7 +475,10 @@ func (w *httpUprobeWorker) closeAll() {
 // count or closes links, though a target positively observed before an error is
 // reset to zero. We do not retain the prior scan result; each attached target
 // only records how many complete scans have omitted it.
-func (w *httpUprobeWorker) reconcileTargets(activeCgroupIDs []uint64) {
+func (w *httpUprobeWorker) reconcileTargets(ctx context.Context, activeCgroupIDs []uint64) {
+	if ctx.Err() != nil {
+		return
+	}
 	scanStarted := time.Now()
 	observedMappedFiles := make(map[mappedFileIdentity]struct{})
 	activeCgroupPaths, complete := resolveActiveCgroupPaths(w.cgroupRootPath, activeCgroupIDs)
@@ -511,7 +514,13 @@ func (w *httpUprobeWorker) reconcileTargets(activeCgroupIDs []uint64) {
 		if entry.missingScanCount < missingScanLimit {
 			entry.missingScanCount++
 		}
-		if entry.missingScanCount >= missingScanLimit && closed < 2 {
+		if entry.missingScanCount >= missingScanLimit {
+			// Yield between targets when attachment work arrives. A fixed close
+			// count per minute cannot drain short-lived container targets; an
+			// idle worker can safely finish this sweep without another owner.
+			if ctx.Err() != nil || len(w.preparationRequests) > 0 || len(w.attachCandidates) > 0 {
+				continue
+			}
 			// Delete the discovery-cache entry first. If that fails, keep the link;
 			// closing it would prevent a later mapping from requesting re-attach.
 			if err := w.deleteDiscoveryCacheEntry(entry.classificationKey); err != nil {
