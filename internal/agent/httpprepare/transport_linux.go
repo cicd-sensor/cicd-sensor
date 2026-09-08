@@ -31,7 +31,7 @@ type preparationResponse struct {
 }
 
 func validRemoteSource(source string) bool {
-	return source == "nri-start" || source == "nri-synchronize" || source == "docker-exec"
+	return source == "nri-start" || source == "nri-synchronize" || source == "docker-exec" || source == "docker-start"
 }
 
 func prepareRemote(ctx context.Context, socket, root string, extra []string, source string) error {
@@ -127,7 +127,7 @@ func Serve(ctx context.Context, socket string, handler FileHandler, logger *slog
 	}
 	stop := context.AfterFunc(ctx, func() { _ = listener.Close() })
 	defer stop()
-	slots := make(chan struct{}, 8)
+	slots := make(chan struct{}, MaxConcurrent)
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	for {

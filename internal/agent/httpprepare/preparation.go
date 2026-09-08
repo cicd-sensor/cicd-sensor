@@ -26,12 +26,12 @@ type Preparation struct {
 
 // NewLocal connects inventory directly to the Agent-owned worker.
 func NewLocal(preparer kernelio.HTTPFilePreparer, logger *slog.Logger) *Preparation {
-	return &Preparation{slots: make(chan struct{}, 8), local: preparer, logger: logger}
+	return &Preparation{slots: make(chan struct{}, MaxConcurrent), local: preparer, logger: logger}
 }
 
 // NewRemote connects a node-side producer to the descriptor-transfer socket.
 func NewRemote(agentSocket string, logger *slog.Logger) *Preparation {
-	return &Preparation{slots: make(chan struct{}, 8), socket: SocketPath(agentSocket), logger: logger}
+	return &Preparation{slots: make(chan struct{}, MaxConcurrent), socket: SocketPath(agentSocket), logger: logger}
 }
 
 // Prepare runs bounded inventory and waits only until the common deadline.

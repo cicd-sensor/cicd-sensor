@@ -8,6 +8,6 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 )
 
-func prepareDockerExec(context.Context, string, string, *httpprepare.Preparation) error {
+func prepareDockerTarget(context.Context, string, string, bool, *httpprepare.Preparation) error {
 	return errors.New("HTTP preparation requires Linux")
 }

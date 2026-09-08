@@ -5,6 +5,13 @@ import (
 	"os"
 )
 
+const (
+	// MaxHTTPPreparationFiles bounds descriptors adopted by one worker request.
+	MaxHTTPPreparationFiles = 32
+	// HTTPPreparationQueueSize bounds queued batches behind the single attach worker.
+	HTTPPreparationQueueSize = 8
+)
+
 // HTTPPreparationOptions describes a bounded preparation request. Pin is reserved
 // for the machine's fixed inventory; runtime/context targets use a short grace.
 type HTTPPreparationOptions struct {

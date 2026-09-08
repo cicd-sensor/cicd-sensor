@@ -62,7 +62,7 @@ flowchart LR
         WORKER -.->|"owns"| TARGETS
     end
 
-    PREP["Bounded file preparation<br/>machine / Docker exec / NRI Start"]
+    PREP["Bounded file preparation<br/>machine / Docker start+exec / NRI Start"]
     PREP -->|"exact file descriptors"| WORKER
 
     subgraph KT["KernelTracker"]
@@ -137,12 +137,24 @@ periodic attach scan, recursive workspace scan, or image/snapshot parser.
 Machine startup and successful Job-start requests refresh the fixed host
 inventory. The current machine start API carries no runner PATH/tool-cache
 inventory, so user-installed binaries elsewhere remain mapping-discovered.
-Docker proxy preparation runs before forwarding a later `/exec/{id}/start`.
-It uses exec/container inspect and the daemon's verified PID/procfs view.
-Container create/start remains the existing cgroup-staging boundary and provides
-no initial-entrypoint preparation guarantee. Containers bypassing the proxy
+Docker proxy preparation runs before forwarding a later `/exec/{id}/start`,
+and after a successful `/containers/{id}/start` response arrives from dockerd,
+before returning that response to the caller. At the latter point the container
+is already running and its PID/root can be inspected. GitLab Runner's ordinary
+Docker executor sends shell stdin only after `ContainerStart` returns, so this
+prepares known files before that script. It does not stop an entrypoint that
+runs independently of stdin. Existing container-create cgroup staging is unchanged.
+GitHub job-container steps normally use Docker exec; Docker container actions
+and service entrypoints do not wait for an exec gate.
+Both paths share container inspect, the daemon's verified PID/procfs view, and
+the same FD preparation API. No script/stream parsing or buffering is added. Containers bypassing the proxy
 remain mapping-discovered. Dind needs an accessible inner proxy/daemon and a
-verifiable PID view; existing systemd-cgroup requirements still apply.
+verifiable PID view. Docker cgroup v2 with systemd or cgroupfs is supported;
+`GET /info` selects the existing staging basename (`docker-ID.scope` or `ID`).
+The inner daemon must be local to the node-side proxy; TCP-only remote Docker
+endpoints do not expose a verifiable process root. In ARC dind deployment,
+normal inner cgroup propagation provides attribution and mmap discovery; adding
+this optional node-side inner proxy is a separate deployment step.
 
 The NRI observer prepares known CI containers at `StartContainer`, using the
 waiting init PID's root. On the supported containerd CRI/runc path, this callback
@@ -166,8 +178,18 @@ The 500 ms deadline covers inventory, transfer, queueing, classification, and
 attachment waiting. Workloads continue on timeout, queue saturation, missing
 files, or attach failure. A filesystem syscall or link close can outlive that
 wait; bounded producer slots and worker ownership retain responsibility for
-cleanup. Preparation has an eight-request queue and eight producer slots;
-normal mapping samples and event delivery keep their existing queues. Between
+cleanup. Preparation has an eight-request queue and eight producer slots per
+Preparation instance, plus eight receiver connections per Agent. Docker also
+bounds inspect/root acquisition to eight operations per proxy. These are
+resource budgets, not measured optimal concurrency or a node-wide eight-job
+limit. Each 32-FD batch gives at most 256 queued target FDs and 32 active target
+FDs at the worker; producer/SCM_RIGHTS copies and link FDs are additional.
+Canceled callers cannot free admission while their actual work is still blocked.
+The 500 ms budget is a best-effort headroom choice (prior GKE worker p99 about
+152 ms), not an I/O cancellation guarantee. Saturation fails open instead of
+adding workers or an unbounded wait queue. Existing mapping cap 4096 remains.
+
+Normal mapping samples and event delivery keep their existing queues. Between
 prepared files the worker services pending mapping discovery. Reconciliation
 is serviced between batches. Between target closes it yields to pending
 preparation or mapping work; an idle sweep drains eligible targets. Individual
@@ -202,6 +224,7 @@ across every supported kernel or snapshotter.
 
 Primary lifecycle references: [Linux uprobes](https://github.com/torvalds/linux/blob/v6.8/kernel/events/uprobes.c),
 [Linux proc maps](https://github.com/torvalds/linux/blob/v6.8/fs/proc/task_mmu.c),
+[GitLab Runner start/STDIN ordering](https://gitlab.com/gitlab-org/gitlab-runner/-/blob/v18.10.1/executors/docker/internal/exec/exec.go),
 and [containerd CRI start](https://github.com/containerd/containerd/blob/v2.2.0/internal/cri/server/container_start.go).
 
 Mapping notification is also not limited to dynamically linked libraries. A
@@ -343,6 +366,11 @@ flowchart LR
 ```
 
 Reconciliation observes liveness only. It does not classify or attach files.
+For a threaded cgroup whose `cgroup.procs` read returns `EOPNOTSUPP`, it verifies
+the threaded topology and reads the enclosing threaded domain within the
+configured cgroup mount. Linux reports all subtree process IDs there. This
+conservative liveness scan does not change Job attribution; other failures
+remain fail-keep.
 
 | Observation | Action |
 | --- | --- |
@@ -401,6 +429,12 @@ x64 and arm64 unless noted otherwise.
   fixtures captured 20/20 requests for each of OpenSSL, nghttp2, stripped `gh`,
   and stripped `glab` through the product preparation API on Linux 6.8 arm64.
   This is worker-level evidence, not an ARC/GitLab/dind deployment guarantee.
+  A separate product Agent/CLI proxy fixture on Linux 6.8 arm64 with Docker
+  28.5.2 dind (VFS, cgroupfs v2) captured 20/20 fresh first requests per client
+  through inner exec preparation. Independent immediate-entrypoint mappings
+  captured OpenSSL 11/20, nghttp2 18/20, gh 20/20, and glab 19/20. These are
+  local fixture results with synthetic GitLab Job attribution, not real
+  GitLab.com Runner delivery or ARC dind deployment verification.
 - Discovery observes executable mappings created while the process is already in
   a tracked cgroup. Initial catch-up scanning, periodic attach backstop, moving an
   existing process into a tracked cgroup, and later `mprotect(PROT_EXEC)` are not

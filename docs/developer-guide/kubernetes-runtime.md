@@ -163,6 +163,13 @@ cicd-sensor uses the job hook as the identity point.
 At start time, the hook calls the GitHub Kubernetes runner socket.
 The agent reads the hook peer PID's cgroup path, finds the kubelet-created Pod cgroup ancestor, and binds the Pod cgroup tree so the dind sidecar is tracked as part of the job.
 Once the dind sidecar cgroup is tracked, inner Docker cgroups created below it are picked up by the existing cgroup propagation path.
+This provides HTTP executable-mapping discovery without an inner proxy. Optional
+HTTP pre-attachment requires routing the inner Docker API through a node-owned
+proxy with access to the inner daemon's Unix socket and PID view. The proxy
+supports Docker cgroup v2 with either systemd or cgroupfs; this does not change
+the node's systemd kubelet layout requirement. Initial entrypoint traffic still
+has no pre-attachment guarantee. The ARC dind example does not install this
+optional inner proxy automatically.
 
 ```mermaid
 flowchart TB
@@ -311,8 +318,15 @@ flowchart TB
 
 ### HTTP preparation permissions
 
-The node-side NRI observer needs `CAP_SYS_PTRACE` in addition to its normal
-root container capabilities to open another container's `/proc/<initPID>/root`.
+Opening another container's `/proc/<initPID>/root` is subject to
+`PTRACE_MODE_READ_FSCREDS`. The node-side NRI observer uses `CAP_SYS_PTRACE`
+for different-UID or nondumpable targets. The examples drop default capabilities
+and add `SYS_PTRACE` only; ordinary readable target files need no DAC override.
+A private/unreadable target directory can still fail inventory and use fallback.
+`DAC_READ_SEARCH`, `CHECKPOINT_RESTORE`, and `SYS_ADMIN` do not replace this
+ptrace access check. See [Linux ptrace access checks](https://github.com/torvalds/linux/blob/v6.12/kernel/ptrace.c).
+The capability itself also authorizes more than read-only proc access; the
+observer remains a trusted node component.
 `hostPID: true` alone does not grant this access. The Kubernetes-mode ARC and
 GitLab examples add this capability to the observer; the job Pods receive no
 additional capability or host mount. Without it, preparation fails open and

@@ -229,3 +229,56 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 		}
 	})
 }
+
+func TestThreadedDomainPath(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                  string
+		parent, child         string
+		nested, outside, want bool
+	}{
+		{"threaded child uses its domain", "domain threaded", "threaded", false, false, true},
+		{"nested threaded child uses the same domain", "domain threaded", "threaded", true, false, true},
+		{"ordinary domain is not silently accepted", "domain", "threaded", false, false, false},
+		{"invalid child remains incomplete", "domain threaded", "domain invalid", false, false, false},
+		{"missing type remains incomplete", "domain threaded", "", false, false, false},
+		{"domain outside configured root is not scanned", "domain threaded", "threaded", false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			child := filepath.Join(root, "child")
+			if err := os.Mkdir(child, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "cgroup.type"), []byte(tc.parent), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tc.child != "" {
+				if err := os.WriteFile(filepath.Join(child, "cgroup.type"), []byte(tc.child), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.nested {
+				child = filepath.Join(child, "nested")
+				if err := os.Mkdir(child, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(child, "cgroup.type"), []byte("threaded"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			boundary := root
+			if tc.outside {
+				boundary = child
+			}
+			want := ""
+			if tc.want {
+				want = root
+			}
+			if got := threadedDomainPath(child, boundary); got != want {
+				t.Fatalf("domain = %q, want %q", got, want)
+			}
+		})
+	}
+}

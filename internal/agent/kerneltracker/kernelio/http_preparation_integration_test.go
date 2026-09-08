@@ -191,3 +191,20 @@ func TestHTTPPreparationOverlayOriginalVMA(t *testing.T) {
 		t.Fatal("reclaim confused original lower and copied-up upper")
 	}
 }
+
+// The path is a disposable dind threaded cgroup, supplied by the live harness.
+func TestDindThreadedReclaimPIDs(t *testing.T) {
+	path := os.Getenv("CICD_DIND_THREADED_CGROUP")
+	if path == "" {
+		t.Skip("set CICD_DIND_THREADED_CGROUP for live dind")
+	}
+	w := newHTTPUprobeWorker(nil, nil, "/sys/fs/cgroup", nil, goUprobeTarget{})
+	pids := make(map[int32]struct{})
+	if !w.collectCgroupPIDs(path, pids) {
+		t.Fatal("threaded subtree left reclaim incomplete")
+	}
+	if len(pids) == 0 {
+		t.Fatal("live dind domain returned no PIDs")
+	}
+	t.Logf("collected %d live process IDs", len(pids))
+}

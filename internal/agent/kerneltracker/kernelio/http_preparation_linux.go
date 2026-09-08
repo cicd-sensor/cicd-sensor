@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	maxPreparedFiles     = 32
+	maxPreparedFiles     = MaxHTTPPreparationFiles
 	maxPreparedFileBytes = 256 << 20
 	maxPinnedHTTPTargets = 128
 	httpPreparationGrace = 30 * time.Second

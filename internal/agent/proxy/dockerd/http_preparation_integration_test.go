@@ -143,7 +143,7 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proxy := &http.Server{Handler: proxyHandlerGitHub(slog.Default(), "/var/run/docker.sock", agentSocket), ReadHeaderTimeout: time.Second}
+	proxy := &http.Server{Handler: proxyHandlerGitHub(slog.Default(), "/var/run/docker.sock", agentSocket, "systemd"), ReadHeaderTimeout: time.Second}
 	go func() { _ = proxy.Serve(listener) }()
 	defer proxy.Close()
 	for _, tc := range []struct {

@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func prepareDockerExec(ctx context.Context, upstreamSocket, id string, preparation *httpprepare.Preparation) error {
+func prepareDockerTarget(ctx context.Context, upstreamSocket, id string, isExec bool, preparation *httpprepare.Preparation) error {
 	if err := preparation.Available(ctx); err != nil {
 		return err
 	}
@@ -63,16 +63,18 @@ func prepareDockerExec(ctx context.Context, upstreamSocket, id string, preparati
 		}
 		return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
 	}
-	var exec struct {
-		ContainerID   string
-		ProcessConfig struct {
-			Entrypoint string
+	containerID, command, source := id, "", "docker-start"
+	if isExec {
+		var exec struct {
+			ContainerID   string
+			ProcessConfig struct{ Entrypoint string }
 		}
+		if err := inspect("/exec/"+id+"/json", &exec); err != nil {
+			return err
+		}
+		containerID, command, source = exec.ContainerID, exec.ProcessConfig.Entrypoint, "docker-exec"
 	}
-	if err := inspect("/exec/"+id+"/json", &exec); err != nil {
-		return err
-	}
-	if !fullDockerID(exec.ContainerID) {
+	if !fullDockerID(containerID) {
 		return errors.New("invalid Docker container identity")
 	}
 	var container struct {
@@ -81,20 +83,23 @@ func prepareDockerExec(ctx context.Context, upstreamSocket, id string, preparati
 			Pid     int32
 			Running bool
 		}
-		Config struct{ Env []string }
+		Config struct{ Env, Entrypoint, Cmd []string }
 	}
-	if err := inspect("/containers/"+exec.ContainerID+"/json", &container); err != nil {
+	if err := inspect("/containers/"+containerID+"/json", &container); err != nil {
 		return err
 	}
-	if container.ID != exec.ContainerID || !container.State.Running || container.State.Pid <= 0 {
+	if container.ID != containerID || !container.State.Running || container.State.Pid <= 0 {
 		return errors.New("docker container is not running")
 	}
 	root, err := dockerProcessRoot(daemonPID.Load(), container.State.Pid)
 	if err != nil {
 		return err
 	}
-	args := []string{exec.ProcessConfig.Entrypoint}
-	return preparation.Prepare(ctx, root, httpprepare.BinDirectories(args, container.Config.Env), kernelio.HTTPPreparationOptions{Source: "docker-exec"})
+	args := []string{command}
+	if !isExec {
+		args = append(container.Config.Entrypoint, container.Config.Cmd...)
+	}
+	return preparation.Prepare(ctx, root, httpprepare.BinDirectories(args, container.Config.Env), kernelio.HTTPPreparationOptions{Source: source})
 }
 
 // Docker inspect PID is relative to the daemon's PID namespace. Use that

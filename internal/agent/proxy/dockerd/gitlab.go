@@ -40,9 +40,9 @@ type gitlabRequestState struct {
 	metadata jobcontext.JobMetadata
 }
 
-// proxyHandlerGitLab stages docker-<cid>.scope with peer PID and optional
+// proxyHandlerGitLab stages the daemon's cgroup basename with peer PID and optional
 // GitLab runner label identity; the agent chooses which evidence to use.
-func proxyHandlerGitLab(logger *slog.Logger, upstreamSocket, agentSocket string) http.Handler {
+func proxyHandlerGitLab(logger *slog.Logger, upstreamSocket, agentSocket, driver string) http.Handler {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
@@ -125,7 +125,7 @@ func proxyHandlerGitLab(logger *slog.Logger, upstreamSocket, agentSocket string)
 				identityPtr = &state.identity
 			}
 
-			basename := fmt.Sprintf("docker-%s.scope", parsed.ID)
+			basename := dockerCgroupBasename(driver, parsed.ID)
 			ctx, cancel := context.WithTimeout(resp.Request.Context(), agentGitLabStagingTimeout)
 			defer cancel()
 			if err := postGitLabStaging(ctx, agentSocket, basename, peerPID, identityPtr, state.metadata); err != nil {

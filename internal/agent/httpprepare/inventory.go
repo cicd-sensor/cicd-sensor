@@ -5,12 +5,18 @@ package httpprepare
 import (
 	"os"
 	"time"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 const (
 	// Budget covers root acquisition, inventory, transfer, queueing and attachment.
+	// MaxConcurrent bounds retained producers/connections, not parallel attach workers.
+	// Eight admits a small burst while limiting each stage to 8 * 32 target FDs.
+	// This is a resource budget, not a measured optimal concurrency.
+	MaxConcurrent        = 8
 	Budget               = 500 * time.Millisecond
-	MaxFiles             = 32
+	MaxFiles             = kernelio.MaxHTTPPreparationFiles
 	maxDirectories       = 32
 	maxDirectoryEntries  = 512
 	maxCandidateAttempts = 128

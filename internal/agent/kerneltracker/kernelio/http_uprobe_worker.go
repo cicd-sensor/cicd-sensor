@@ -137,7 +137,7 @@ func newHTTPUprobeWorker(
 		attachCandidates:    make(chan httpUprobeAttachCandidate, attachCandidateQueueSize),
 		reconcileRequests:   make(chan []uint64, 1),
 		attachedTargets:     make(map[mappedFileIdentity]*attachedUprobeTarget),
-		preparationRequests: make(chan *httpPreparationRequest, 8),
+		preparationRequests: make(chan *httpPreparationRequest, HTTPPreparationQueueSize),
 		discoveryCache:      discoveryCache,
 	}
 }
@@ -622,10 +622,42 @@ func (w *httpUprobeWorker) collectCgroupPIDs(cgroupPath string, pids map[int32]s
 		pids[int32(pid)] = struct{}{}
 	}
 	if err := scanner.Err(); err != nil {
+		// Threaded children deliberately reject cgroup.procs reads. Their
+		// process IDs live in the threaded domain, including sibling threads.
+		// Scanning that superset is conservative for link liveness only.
+		if errors.Is(err, unix.EOPNOTSUPP) {
+			if domain := threadedDomainPath(cgroupPath, w.cgroupRootPath); domain != "" {
+				return w.collectCgroupPIDs(domain, pids)
+			}
+		}
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "read_cgroup_procs", "error", err)
 		return false
 	}
 	return complete
+}
+
+// threadedDomainPath follows the kernel's threaded topology, never escaping
+// the configured cgroup mount. Unknown or changing topology remains fail-keep.
+// https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html#threads
+func threadedDomainPath(path, root string) string {
+	path, root = filepath.Clean(path), filepath.Clean(root)
+	for first := true; ; first = false {
+		rel, err := filepath.Rel(root, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return ""
+		}
+		kind, err := os.ReadFile(filepath.Join(path, "cgroup.type"))
+		if err != nil {
+			return ""
+		}
+		if !first && strings.TrimSpace(string(kind)) == "domain threaded" {
+			return path
+		}
+		if strings.TrimSpace(string(kind)) != "threaded" || path == root {
+			return ""
+		}
+		path = filepath.Dir(path)
+	}
 }
 
 func (w *httpUprobeWorker) logInfo(msg string, args ...any) {
