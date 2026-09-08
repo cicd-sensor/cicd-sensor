@@ -18,4 +18,9 @@ USER root
 RUN apk upgrade --no-cache && apk add --no-cache \
     clang-22 \
     llvm-22
+# LLVM's BTF forward-declaration fixups iterate pointer-keyed std::map entries.
+# Keep glibc allocations on the heap to avoid mmap address ordering changing
+# BTF type IDs between identical builds. This affects the builder only.
+# https://github.com/llvm/llvm-project/blob/release/22.x/llvm/lib/Target/BPF/BTFDebug.h
+ENV MALLOC_MMAP_MAX_=0
 WORKDIR /src
