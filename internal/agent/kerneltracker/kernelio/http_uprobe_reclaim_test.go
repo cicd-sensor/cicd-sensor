@@ -237,12 +237,12 @@ func TestThreadedDomainPath(t *testing.T) {
 		parent, child         string
 		nested, outside, want bool
 	}{
-		{"threaded child uses its domain", "domain threaded", "threaded", false, false, true},
-		{"nested threaded child uses the same domain", "domain threaded", "threaded", true, false, true},
-		{"ordinary domain is not silently accepted", "domain", "threaded", false, false, false},
-		{"invalid child remains incomplete", "domain threaded", "domain invalid", false, false, false},
-		{"missing type remains incomplete", "domain threaded", "", false, false, false},
-		{"domain outside configured root is not scanned", "domain threaded", "threaded", false, true, false},
+		{name: "threaded child uses its domain", parent: "domain threaded", child: "threaded", nested: false, outside: false, want: true},
+		{name: "nested threaded child uses the same domain", parent: "domain threaded", child: "threaded", nested: true, outside: false, want: true},
+		{name: "ordinary domain is not silently accepted", parent: "domain", child: "threaded", nested: false, outside: false, want: false},
+		{name: "invalid child remains incomplete", parent: "domain threaded", child: "domain invalid", nested: false, outside: false, want: false},
+		{name: "missing type remains incomplete", parent: "domain threaded", child: "", nested: false, outside: false, want: false},
+		{name: "domain outside configured root is not scanned", parent: "domain threaded", child: "threaded", nested: false, outside: true, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
