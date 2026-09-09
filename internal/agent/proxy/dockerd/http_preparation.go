@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
-	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 func dockerStartID(req *http.Request, resource string) string {
@@ -24,6 +24,7 @@ func dockerStartID(req *http.Request, resource string) string {
 	}
 	return parts[1]
 }
+
 func fullDockerID(id string) bool {
 	if len(id) != 64 {
 		return false
@@ -44,34 +45,15 @@ func withHTTPPreparation(next *httputil.ReverseProxy, upstreamSocket, agentSocke
 		logger = slog.Default()
 	}
 	preparation := httpprepare.NewRemote(agentSocket, logger)
-	// Inspect and process-root lookup can block before inventory starts. Keep
-	// this admission slot until the real operation ends, even after timeout.
-	slots := make(chan struct{}, httpprepare.MaxConcurrent)
 	prepare := func(ctx context.Context, id string, isExec bool) {
-		ctx, cancel := context.WithTimeout(ctx, httpprepare.Budget)
-		defer cancel()
 		source := "docker-start"
 		if isExec {
 			source = "docker-exec"
 		}
-		started := time.Now()
-		select {
-		case slots <- struct{}{}:
-			done := make(chan error, 1)
-			go func() {
-				defer func() { <-slots }()
-				done <- prepareDockerTarget(ctx, upstreamSocket, id, isExec, preparation)
-			}()
-			var err error
-			select {
-			case err = <-done:
-			case <-ctx.Done():
-				err = ctx.Err()
-			}
-			logger.InfoContext(ctx, "docker_http_preparation", "source", source, "elapsed", time.Since(started), "error", err)
-		default:
-			logger.DebugContext(ctx, "docker_http_preparation_dropped", "source", source)
-		}
+		// Preparation logs failures and bounds the entire inspect/scan/attach wait.
+		_ = preparation.PrepareResolved(ctx, func(ctx context.Context) (string, []string, error) {
+			return resolveDockerTarget(ctx, upstreamSocket, id, isExec)
+		}, kernelio.HTTPPreparationOptions{Source: source})
 	}
 	previous := next.ModifyResponse
 	next.ModifyResponse = func(resp *http.Response) error {

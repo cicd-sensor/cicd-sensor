@@ -41,12 +41,13 @@ func TestServeConnection(t *testing.T) {
 		source                       string
 		count                        int
 		expired, large, handlerError bool
+		pin                          bool
 		called                       bool
 	}{
 		{name: "exact unlinked FD is transferred with CLOEXEC", source: "docker-exec", count: 1, called: true},
 		{name: "handler failure still releases its adopted FD", source: "nri-start", count: 1, handlerError: true, called: true},
 		{name: "mismatched count rejects and closes received FD", source: "docker-exec", count: 2},
-		{name: "invalid source rejects and closes received FD", source: "host-start", count: 1},
+		{name: "wire metadata cannot request machine pin", source: "host-start", count: 1, pin: true, called: true},
 		{name: "expired deadline skips handler", source: "nri-start", count: 1, expired: true},
 		{name: "truncated packet skips handler", source: "nri-start", count: 1, large: true},
 	} {
@@ -95,7 +96,10 @@ func TestServeConnection(t *testing.T) {
 			if tc.expired {
 				deadline = time.Now().Add(-time.Second)
 			}
-			data, _ := json.Marshal(preparationMessage{Source: tc.source, Deadline: deadline.UnixNano(), Files: tc.count})
+			data, _ := json.Marshal(struct {
+				preparationMessage
+				Pin bool
+			}{preparationMessage: preparationMessage{Source: tc.source, Deadline: deadline.UnixNano(), Files: tc.count}, Pin: tc.pin})
 			if tc.large {
 				data = make([]byte, maxMessageBytes+1)
 			}

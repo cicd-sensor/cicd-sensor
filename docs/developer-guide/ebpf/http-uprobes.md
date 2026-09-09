@@ -133,9 +133,9 @@ preparation method forwards to KernelIO without entering the event reactor.
 | `internal/agent/kerneltracker/kernelio/http_uprobe_control_linux.go` | Confirm backing identities during mapping, registration, and maps-liveness reads |
 | `internal/agent/kerneltracker/kernelio/http_uprobe_worker.go` | Serialize work and reclaim targets |
 
-The existing mapping-only attach path remains for kernels where the optional
-control hooks cannot attach. Both paths use the existing ELF and Go resolvers;
-the compatibility path is not another discovery service or registry.
+The same classification and attachment pipeline serves kernels where optional
+control hooks cannot attach. That compatibility mode uses visible file identity
+and retains its overlay limitation; preparation requires backing-identity hooks.
 
 ### Retained runtime state
 
@@ -195,8 +195,7 @@ GitHub job-container steps normally use Docker exec; Docker container actions
 and service entrypoints do not wait for an exec gate.
 Both paths share container inspect, the daemon's verified PID/procfs view, and
 the same FD preparation API. No script/stream parsing or buffering is added. Containers bypassing the proxy
-remain mapping-discovered. Docker cgroup v2 with systemd or cgroupfs is supported;
-`GET /info` selects the existing staging basename (`docker-ID.scope` or `ID`).
+remain mapping-discovered. The proxy requires the existing systemd cgroup driver and stages `docker-ID.scope`.
 The daemon must be local to the proxy; TCP-only remote Docker endpoints do not
 expose a verifiable process root. For Day 1, dind inner workloads use existing
 cgroup propagation and mmap discovery only. The host Docker proxy does not see
@@ -222,19 +221,18 @@ rejection. NRI and Docker use an Agent-owned Unix packet socket at
 validation and `SCM_RIGHTS` transfer. Keep this socket node-side, outside Job
 mounts. It is separate from the runner-facing HTTP routes.
 
-The 500 ms deadline covers inventory, transfer, queueing, classification, and
+The 500 ms deadline covers root resolution, inventory, transfer, queueing, classification, and
 attachment waiting. Workloads continue on timeout, queue saturation, missing
 files, or attach failure. A filesystem syscall or link close can outlive that
 wait; bounded producer slots and worker ownership retain responsibility for
 cleanup. Preparation has an eight-request queue and eight producer slots per
-Preparation instance, plus eight receiver connections per Agent. Docker also
-bounds inspect/root acquisition to eight operations per proxy. These are
+Preparation instance, plus eight receiver connections per Agent. Docker inspect
+and root acquisition run inside the same producer slot as inventory. These are
 resource budgets, not measured optimal concurrency or a node-wide eight-job
 limit. Each 32-FD batch gives at most 256 queued target FDs and 32 active target
 FDs at the worker; producer/SCM_RIGHTS copies and link FDs are additional.
 Canceled callers cannot free admission while their actual work is still blocked.
-The 500 ms budget is a best-effort headroom choice (prior GKE worker p99 about
-152 ms), not an I/O cancellation guarantee. Saturation fails open instead of
+The 500 ms budget bounds waiting; it is not an I/O cancellation guarantee. Saturation fails open instead of
 adding workers or an unbounded wait queue. Existing mapping cap 4096 remains.
 
 Normal mapping samples and event delivery keep their existing queues. Between
@@ -245,7 +243,10 @@ close latency is measured because kernel unregister cannot be preempted.
 
 ### Backing identity
 
-The optional control object is loaded separately from the base sensor. A
+The optional control object is loaded separately so missing kernel attach points
+or verifier/attach failures disable preparation without preventing base sensor
+startup. Its programs require both registration and original-VMA observation;
+using backing keys with a visible-inode reclaim scan would be incorrect. A
 worker-thread request makes the existing `uprobe_mmap` hook report the backing
 identity of a temporary read-only mapping. The existing ELF/Go resolvers read
 that same mapping. Attachment uses the exact FD and a file offset; a scoped

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"time"
@@ -15,7 +16,9 @@ import (
 )
 
 const (
+	// Classification I/O cap; independent of the number of adopted descriptors.
 	maxPreparedFileBytes = 256 << 20
+	// Lifetime limits: fixed machine inventory versus runtime preparation grace.
 	maxPinnedHTTPTargets = 128
 	httpPreparationGrace = 30 * time.Second
 	// The existing discovery map also distinguishes completed negative results
@@ -31,6 +34,7 @@ type httpPreparationReply struct {
 	result HTTPPreparationResult
 	err    error
 }
+
 type httpPreparationRequest struct {
 	ctx       context.Context
 	files     []*os.File
@@ -56,6 +60,7 @@ func (k *LinuxKernelIO) PrepareHTTPFiles(ctx context.Context, files []*os.File, 
 	}
 	return k.httpUprobeWorker.submitPreparation(ctx, files, options)
 }
+
 func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.File, options HTTPPreparationOptions) (HTTPPreparationResult, error) {
 	if len(files) > MaxHTTPPreparationFiles {
 		closePreparationFiles(files)
@@ -103,6 +108,7 @@ func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.Fi
 		return HTTPPreparationResult{}, ctx.Err()
 	}
 }
+
 func (w *httpUprobeWorker) shutdownPreparation() {
 	w.submissionMu.Lock()
 	if w.stopped {
@@ -121,6 +127,7 @@ func (w *httpUprobeWorker) shutdownPreparation() {
 		}
 	}
 }
+
 func (w *httpUprobeWorker) prepareRequest(workerCtx context.Context, r *httpPreparationRequest) {
 	start := time.Now()
 	var result HTTPPreparationResult
@@ -157,16 +164,28 @@ func (w *httpUprobeWorker) prepareRequest(workerCtx context.Context, r *httpPrep
 		default:
 		}
 	}
-	w.logInfo("http_uprobe_preparation", "source", r.options.Source, "files", len(r.files), "prepared", result.Prepared, "skipped", result.Skipped, "failed", result.Failed, "queue_wait", start.Sub(r.submitted), "elapsed", time.Since(r.submitted), "error", firstErr)
-	w.logInfo("http_uprobe_preparation_state", "targets", len(w.attachedTargets), "pinned", w.pinnedTargets, "queue_depth", len(w.preparationRequests), "normalized_total", w.normalizedFiles, "parsed_total", w.parsedFiles, "attached_total", w.newlyAttachedFiles, "deduplicated_total", w.deduplicatedFiles)
+	if w.logger != nil {
+		w.logger.Debug("http_uprobe_preparation", "source", r.options.Source, "files", len(r.files), "prepared", result.Prepared, "skipped", result.Skipped, "failed", result.Failed, "queue_wait", start.Sub(r.submitted), "elapsed", time.Since(r.submitted), "error", firstErr,
+			"targets", len(w.attachedTargets), "pinned", w.pinnedTargets, "queue_depth", len(w.preparationRequests), "normalized_total", w.normalizedFiles, "parsed_total", w.parsedFiles, "attached_total", w.newlyAttachedFiles, "deduplicated_total", w.deduplicatedFiles)
+	}
 	r.done <- httpPreparationReply{result: result, err: firstErr}
 }
-func (w *httpUprobeWorker) prepareMappedCandidate(candidate httpUprobeAttachCandidate) {
-	// Registry/cache fast path is safe only for the same generation hint.
-	if a := w.attachedTargets[candidate.file.mappedFile]; a != nil && a.classificationKey == candidate.file {
-		w.deduplicatedFiles++
-		w.cacheDiscoveryFile(candidate.file)
-		return
+
+func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate) {
+	if a := w.attachedTargets[candidate.file.mappedFile]; a != nil {
+		if w.control == nil && a.classificationKey != candidate.file {
+			// Preserve the compatibility path's existing inode links while old
+			// mappings remain live; only refresh their discovery generation hint.
+			if err := w.deleteDiscoveryCacheEntry(a.classificationKey); err != nil {
+				w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+			}
+			a.classificationKey = candidate.file
+		}
+		if a.classificationKey == candidate.file {
+			w.deduplicatedFiles++
+			w.cacheDiscoveryFile(candidate.file)
+			return
+		}
 	}
 	f, err := w.openMappedFile(candidate)
 	if err == nil {
@@ -204,12 +223,23 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxPreparedFileBytes {
 		return false, errors.New("HTTP preparation file type or size unsupported")
 	}
-	data, id, err := w.control.mapFile(f, int(info.Size()))
-	if err != nil {
-		return false, fmt.Errorf("normalize HTTP target: %w", err)
+	var reader io.ReaderAt = f
+	var id fileClassificationKey
+	if w.control != nil {
+		var data []byte
+		data, id, err = w.control.mapFile(f, int(info.Size()))
+		if err != nil {
+			return false, fmt.Errorf("normalize HTTP target: %w", err)
+		}
+		defer unix.Munmap(data)
+		reader = mappedFileReader{data: data}
+		w.normalizedFiles++
+	} else {
+		id, err = classificationKeyFromFile(f)
+		if err != nil {
+			return false, err
+		}
 	}
-	defer unix.Munmap(data)
-	w.normalizedFiles++
 	if expected != nil && *expected != id {
 		return false, errHTTPMappedBackingChanged
 	}
@@ -232,12 +262,12 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 		return false, nil
 	}
 	if len(w.attachedTargets) >= maxAttachedUprobeTargets {
+		w.warnThrottled(&w.capReached, "http_uprobe_target_cap_reached", "targets", len(w.attachedTargets))
 		return false, errors.New("HTTP attached target cap")
 	}
 	if pin && w.pinnedTargets >= maxPinnedHTTPTargets {
 		return false, errors.New("HTTP pinned target cap")
 	}
-	reader := mappedFileReader{data: data}
 	w.parsedFiles++
 	selected, definitive, err := definedSymbolTargets(reader, w.symbolTargets)
 	if err != nil {
@@ -248,7 +278,7 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 	}
 	if len(selected) == 0 {
 		offset, found, err := resolveGoFunctionOffset(reader, w.goTarget.function)
-		if err != nil {
+		if err != nil && !errors.Is(err, errUnsupportedGoPclntab) {
 			return false, err
 		}
 		if found {
@@ -281,7 +311,12 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
-		l, err := w.control.attach(ex, target.program, target.offset, id)
+		var l link.Link
+		if w.control != nil {
+			l, err = w.control.attach(ex, target.program, target.offset, id)
+		} else {
+			l, err = ex.Uprobe("", target.program, &link.UprobeOptions{Address: target.offset})
+		}
 		if err != nil {
 			return false, err
 		}
@@ -300,6 +335,7 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 	committed = true
 	return true, nil
 }
+
 func (w *httpUprobeWorker) retainPreparedTarget(a *attachedUprobeTarget, pin, proactive bool) error {
 	if pin && !a.pinned {
 		if w.pinnedTargets >= maxPinnedHTTPTargets {

@@ -240,107 +240,6 @@ func (w *httpUprobeWorker) scanProcessMappings(pid int32) ([]processMapping, boo
 	return mappings, true
 }
 
-// classifyAndAttach verifies the kernel-provided file identity before
-// using the mapped file. An identity mismatch is an ordinary mapping race and
-// must not create either an attach or a discovery-cache entry.
-func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate) {
-	if w.control != nil {
-		w.prepareMappedCandidate(candidate)
-		return
-	}
-	retainCacheEntry := false
-	defer func() {
-		if retainCacheEntry {
-			return
-		}
-		if err := w.deleteDiscoveryCacheEntry(candidate.file); err != nil {
-			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
-		}
-	}()
-
-	if attached, ok := w.attachedTargets[candidate.file.mappedFile]; ok {
-		if attached.classificationKey != candidate.file {
-			// An older process may still use this inode's existing mapping. Keep
-			// its links, replace only the discovery-cache key with the new ctime,
-			// and let reclaim close the links after every mapping is gone.
-			if err := w.deleteDiscoveryCacheEntry(attached.classificationKey); err != nil {
-				w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
-			}
-			attached.classificationKey = candidate.file
-		}
-		retainCacheEntry = true
-		w.cacheDiscoveryFile(candidate.file)
-		return
-	}
-	if len(w.attachedTargets) >= maxAttachedUprobeTargets {
-		w.warnThrottled(&w.capReached, "http_uprobe_target_cap_reached", "targets", len(w.attachedTargets))
-		return
-	}
-
-	f, err := w.openMappedFile(candidate)
-	if err != nil {
-		if processIsGone(err) {
-			return
-		}
-		if errors.Is(err, os.ErrPermission) {
-			w.warnThrottled(&w.permDenied, "http_uprobe_discovery_permission_denied", "op", "open_map_files")
-		} else {
-			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_map_files", "error", err)
-		}
-		return
-	}
-	defer f.Close()
-
-	actual, err := classificationKeyFromFile(f)
-	if err != nil {
-		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "fstat", "error", err)
-		return
-	}
-	if actual != candidate.file {
-		w.warnThrottled(&w.identityMismatch, "http_uprobe_discovery_identity_mismatch")
-		return
-	}
-	selected, definitive, err := definedSymbolTargets(f, w.symbolTargets)
-	if err != nil {
-		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "classify_elf_symbols", "error", err)
-		return
-	}
-	if len(selected) > 0 {
-		ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
-		if err != nil {
-			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
-			return
-		}
-		retainCacheEntry = w.attachSymbolTargets(candidate.file, ex, selected)
-		return
-	}
-	if !definitive {
-		return
-	}
-
-	goFunctionOffset, found, err := resolveGoFunctionOffset(f, w.goTarget.function)
-	if err != nil {
-		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "resolve_go_http_function", "error", err)
-		if errors.Is(err, errUnsupportedGoPclntab) {
-			retainCacheEntry = true
-			w.cacheDiscoveryFile(candidate.file)
-		}
-		return
-	}
-	if !found {
-		retainCacheEntry = true
-		w.cacheDiscoveryFile(candidate.file)
-		return
-	}
-
-	ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
-	if err != nil {
-		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "open_executable", "error", err)
-		return
-	}
-	retainCacheEntry = w.attachGoNetHTTPTarget(candidate.file, ex, goFunctionOffset)
-}
-
 func processIsGone(err error) bool {
 	return errors.Is(err, os.ErrNotExist) || errors.Is(err, unix.ESRCH)
 }
@@ -404,59 +303,6 @@ func (w *httpUprobeWorker) cacheDiscoveryFile(key fileClassificationKey) {
 	if err := w.discoveryCache.Put(key, uint8(1)); err != nil {
 		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "discovery_cache_update", "error", err)
 	}
-}
-
-// attachSymbolTargets attaches programs by ELF symbol name and records the
-// outcome. Only a definitive absence is cached; attach failures remain retryable.
-func (w *httpUprobeWorker) attachSymbolTargets(
-	id fileClassificationKey,
-	ex *link.Executable,
-	targets []symbolUprobeTarget,
-) (retainCacheEntry bool) {
-	var got []link.Link
-	for _, target := range targets {
-		l, err := ex.Uprobe(target.symbol, target.program, nil)
-		switch {
-		case err == nil:
-			got = append(got, l)
-		case errors.Is(err, link.ErrNoSymbol):
-			// Only a missing symbol is a definitive non-target. ErrNotSupported
-			// can also report an attach-backend failure and must remain retryable.
-		default:
-			// Inconclusive: do not cache. Undo partial attaches and retry later.
-			// Unlike a plain "symbol absent", an unexpected attach failure is a
-			// real signal, so surface it (throttled).
-			w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", target.symbol, "error", err)
-			closeLinks(got)
-			return false
-		}
-	}
-	if len(got) > 0 {
-		w.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: got}
-		w.cacheDiscoveryFile(id)
-		return true
-	}
-	// Every target symbol was definitively absent: keep it in the cache.
-	w.cacheDiscoveryFile(id)
-	return true
-}
-
-// attachGoNetHTTPTarget attaches by absolute ELF file offset because stripped
-// Go binaries do not expose the selected function through ELF symbols. The
-// caller resolves fileOffset from Go metadata before reaching this function.
-func (w *httpUprobeWorker) attachGoNetHTTPTarget(
-	id fileClassificationKey,
-	ex *link.Executable,
-	fileOffset uint64,
-) bool {
-	attached, err := ex.Uprobe("", w.goTarget.program, &link.UprobeOptions{Address: fileOffset})
-	if err != nil {
-		w.warnThrottled(&w.opErrors, "http_uprobe_discovery_unexpected_error", "op", "uprobe_attach", "symbol", w.goTarget.function, "error", err)
-		return false
-	}
-	w.attachedTargets[id.mappedFile] = &attachedUprobeTarget{classificationKey: id, links: []link.Link{attached}}
-	w.cacheDiscoveryFile(id)
-	return true
 }
 
 func (w *httpUprobeWorker) closeAll() {
@@ -529,7 +375,9 @@ func (w *httpUprobeWorker) reconcileTargets(ctx context.Context, activeCgroupIDs
 			}
 			closeStarted := time.Now()
 			closeLinks(entry.links)
-			w.logInfo("http_uprobe_target_closed", "elapsed", time.Since(closeStarted))
+			if w.logger != nil {
+				w.logger.Debug("http_uprobe_target_closed", "elapsed", time.Since(closeStarted))
+			}
 			delete(w.attachedTargets, mappedID)
 			closed++
 		}

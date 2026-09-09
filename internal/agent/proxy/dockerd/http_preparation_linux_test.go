@@ -78,15 +78,19 @@ func TestStartResponsePreparation(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			available := httpprepare.NewRemote(agentSocket, nil)
 			deadline := time.Now().Add(time.Second)
-			for available.Available(ctx) != nil {
+			for {
+				connection, dialErr := net.Dial("unixpacket", httpprepare.SocketPath(agentSocket))
+				if dialErr == nil {
+					_ = connection.Close()
+					break
+				}
 				if time.Now().After(deadline) {
 					t.Fatal("receiver not ready")
 				}
 				time.Sleep(time.Millisecond)
 			}
-			handler := proxyHandlerGitHub(slog.Default(), upstreamSocket, agentSocket, "systemd")
+			handler := proxyHandlerGitHub(slog.Default(), upstreamSocket, agentSocket)
 			response := httptest.NewRecorder()
 			done := make(chan struct{})
 			go func() {

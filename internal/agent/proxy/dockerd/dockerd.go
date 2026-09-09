@@ -46,21 +46,20 @@ func Run(ctx context.Context, logger *slog.Logger, opts Options) error {
 	if sameUnixSocketPath(opts.DockerDaemonSocket, opts.DockerProxySocket) {
 		return fmt.Errorf("upstream-socket and listen-socket must be different: %q", opts.DockerProxySocket)
 	}
-	if opts.Provider != jobcontext.ProviderGitHub && opts.Provider != jobcontext.ProviderGitLab {
-		return fmt.Errorf("provider must be github or gitlab, got %q", opts.Provider)
-	}
-	driver, err := checkDriver(ctx, opts.DockerDaemonSocket)
-	if err != nil {
-		return fmt.Errorf("driver check: %w", err)
-	}
-	logger.InfoContext(ctx, "driver_check_ok", "driver", driver)
 	var handler http.Handler
 	switch opts.Provider {
 	case jobcontext.ProviderGitHub:
-		handler = proxyHandlerGitHub(logger, opts.DockerDaemonSocket, opts.AgentSocket, driver)
+		handler = proxyHandlerGitHub(logger, opts.DockerDaemonSocket, opts.AgentSocket)
 	case jobcontext.ProviderGitLab:
-		handler = proxyHandlerGitLab(logger, opts.DockerDaemonSocket, opts.AgentSocket, driver)
+		handler = proxyHandlerGitLab(logger, opts.DockerDaemonSocket, opts.AgentSocket)
+	default:
+		return fmt.Errorf("provider must be github or gitlab, got %q", opts.Provider)
 	}
+
+	if err := checkDriver(ctx, opts.DockerDaemonSocket); err != nil {
+		return fmt.Errorf("driver check: %w", err)
+	}
+	logger.InfoContext(ctx, "driver_check_ok", "driver", "systemd")
 
 	if err := os.Remove(opts.DockerProxySocket); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove existing docker proxy socket %q: %w", opts.DockerProxySocket, err)
@@ -126,8 +125,7 @@ func canonicalUnixSocketPath(path string) string {
 
 // driverInfo is the slice of GET /info this proxy needs.
 type driverInfo struct {
-	CgroupDriver  string `json:"CgroupDriver"`
-	CgroupVersion string `json:"CgroupVersion"`
+	CgroupDriver string `json:"CgroupDriver"`
 }
 
 // containerCreateResponse is the slice of the response the proxy peeks to
@@ -151,43 +149,33 @@ func unixDialClient(socketPath string) *http.Client {
 	}
 }
 
-// checkDriver identifies the daemon naming rule used by existing basename staging.
-func checkDriver(ctx context.Context, upstreamSocket string) (string, error) {
+// checkDriver requires systemd cgroups because staging keys are docker-<cid>.scope basenames.
+func checkDriver(ctx context.Context, upstreamSocket string) error {
 	client := unixDialClient(upstreamSocket)
 	client.Timeout = driverCheckTimeout
-	defer client.CloseIdleConnections()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/info", nil)
 	if err != nil {
-		return "", fmt.Errorf("build /info request: %w", err)
+		return fmt.Errorf("build /info request: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("dockerd /info: %w", err)
+		return fmt.Errorf("dockerd /info: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("dockerd /info returned status %d", resp.StatusCode)
+		return fmt.Errorf("dockerd /info returned status %d", resp.StatusCode)
 	}
 
 	var info driverInfo
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return "", fmt.Errorf("decode /info: %w", err)
+		return fmt.Errorf("decode /info: %w", err)
 	}
-	if info.CgroupVersion != "2" || (info.CgroupDriver != "systemd" && info.CgroupDriver != "cgroupfs") {
-		return "", fmt.Errorf("dockerd cgroup driver %q version %q is not supported (cgroup v2 with systemd or cgroupfs required)", info.CgroupDriver, info.CgroupVersion)
+	if info.CgroupDriver != "systemd" {
+		return fmt.Errorf("dockerd cgroup driver %q is not supported (systemd cgroup driver is required)", info.CgroupDriver)
 	}
-	return info.CgroupDriver, nil
-}
-
-// Docker's cgroupfs driver uses the full container ID as the leaf name;
-// systemd expands its OCI parent:docker:ID path into docker-ID.scope.
-func dockerCgroupBasename(driver, id string) string {
-	if driver == "cgroupfs" {
-		return id
-	}
-	return "docker-" + id + ".scope"
+	return nil
 }
 
 // isContainerCreate matches both versioned (/v1.43/containers/create) and

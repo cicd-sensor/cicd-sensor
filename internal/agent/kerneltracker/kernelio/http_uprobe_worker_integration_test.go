@@ -148,35 +148,51 @@ func unreadableCgroupIDs(t *testing.T, worker *httpUprobeWorker) []uint64 {
 // TestLinuxHTTPUprobeReclaimSharedInode verifies that an inode mapped by two
 // tracked processes remains attached while either process maps it.
 func TestLinuxHTTPUprobeReclaimSharedInode(t *testing.T) {
-	worker := newReclaimTestWorker(t)
-	a := startLibsslMapper(t)
-	b := startLibsslMapper(t)
+	for _, tc := range []struct {
+		name    string
+		control bool
+	}{
+		{name: "normalized backing identity", control: true},
+		{name: "legacy fstat identity"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 
-	if got := discoverAndCount(t, worker, a, b); got != 1 {
-		t.Fatalf("shared libssl inode target count = %d, want 1", got)
-	}
-	var target *attachedUprobeTarget
-	for _, target = range worker.attachedTargets {
-		break
-	}
-	if target == nil || !discoveryCacheContains(t, worker, target.classificationKey) {
-		t.Fatal("attached target has no BPF discovery-cache key")
-	}
-	reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, a, b))
-	if got := reconcileAndCount(worker, nil); got != 1 {
-		t.Fatalf("closed after a single miss: count = %d, want 1", got)
-	}
-	if got := reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, b)); got != 1 {
-		t.Fatalf("target closed while still mapped by b: count = %d, want 1", got)
-	}
-	if got := reconcileAndCount(worker, nil); got != 1 {
-		t.Fatalf("closed after a miss following reappearance: count = %d, want 1", got)
-	}
-	if got := reconcileAndCount(worker, nil); got != 0 {
-		t.Fatalf("target count after second complete miss = %d, want 0", got)
-	}
-	if discoveryCacheContains(t, worker, target.classificationKey) {
-		t.Fatal("reclaimed target remained in the BPF discovery cache")
+			worker := newReclaimTestWorker(t)
+			if !tc.control {
+				control := worker.control
+				worker.control = nil
+				t.Cleanup(func() { worker.control = control })
+			}
+			a := startLibsslMapper(t)
+			b := startLibsslMapper(t)
+
+			if got := discoverAndCount(t, worker, a, b); got != 1 {
+				t.Fatalf("shared libssl inode target count = %d, want 1", got)
+			}
+			var target *attachedUprobeTarget
+			for _, target = range worker.attachedTargets {
+				break
+			}
+			if target == nil || !discoveryCacheContains(t, worker, target.classificationKey) {
+				t.Fatal("attached target has no BPF discovery-cache key")
+			}
+			reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, a, b))
+			if got := reconcileAndCount(worker, nil); got != 1 {
+				t.Fatalf("closed after a single miss: count = %d, want 1", got)
+			}
+			if got := reconcileAndCount(worker, cgroupIDsForPIDs(t, worker, b)); got != 1 {
+				t.Fatalf("target closed while still mapped by b: count = %d, want 1", got)
+			}
+			if got := reconcileAndCount(worker, nil); got != 1 {
+				t.Fatalf("closed after a miss following reappearance: count = %d, want 1", got)
+			}
+			if got := reconcileAndCount(worker, nil); got != 0 {
+				t.Fatalf("target count after second complete miss = %d, want 0", got)
+			}
+			if discoveryCacheContains(t, worker, target.classificationKey) {
+				t.Fatal("reclaimed target remained in the BPF discovery cache")
+			}
+		})
 	}
 }
 

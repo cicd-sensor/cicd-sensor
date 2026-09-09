@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net"
 	"os"
 	"slices"
 	"time"
@@ -39,6 +38,21 @@ func NewRemote(agentSocket string, logger *slog.Logger) *Preparation {
 // extraBinDirectories contains selected absolute directories, never a workspace
 // walk. The caller's source is a fixed diagnostic label, not arbitrary metadata.
 func (p *Preparation) Prepare(ctx context.Context, root string, extraBinDirectories []string, options kernelio.HTTPPreparationOptions) error {
+	// The bounded metadata copy can outlive the caller after cancellation.
+	extra := slices.Clone(extraBinDirectories[:min(len(extraBinDirectories), maxDirectories)])
+	return p.PrepareResolved(ctx, func(context.Context) (string, []string, error) {
+		return root, extra, nil
+	}, options)
+}
+
+// RootResolver selects the process root and bounded extra directories. It runs
+// within Preparation's admission slot and may outlive the caller's deadline.
+type RootResolver func(context.Context) (string, []string, error)
+
+// PrepareResolved includes runtime inspection in the same budget and retained
+// slot as inventory. Remote preparation connects before invoking resolve so
+// disabled HTTP capture performs no runtime inspection or filesystem scan.
+func (p *Preparation) PrepareResolved(ctx context.Context, resolve RootResolver, options kernelio.HTTPPreparationOptions) error {
 	ctx, cancel := context.WithTimeout(ctx, Budget)
 	defer cancel()
 	select {
@@ -48,12 +62,18 @@ func (p *Preparation) Prepare(ctx context.Context, root string, extraBinDirector
 	}
 	done := make(chan error, 1)
 	started := time.Now()
-	// Copy small caller-owned metadata because this operation can outlive caller.
-	extra := slices.Clone(extraBinDirectories[:min(len(extraBinDirectories), maxDirectories)])
 	go func() {
-		defer func() { <-p.slots }()
 		var err error
+		defer func() {
+			<-p.slots
+			done <- err
+		}()
 		if p.local != nil {
+			root, extra, resolveErr := resolve(ctx)
+			if resolveErr != nil || ctx.Err() != nil {
+				err = errors.Join(resolveErr, ctx.Err())
+				return
+			}
 			files, stats, scanErr := OpenFiles(ctx, root, extra)
 			_, prepareErr := p.local.PrepareHTTPFiles(ctx, files, options)
 			err = errors.Join(scanErr, prepareErr)
@@ -61,9 +81,8 @@ func (p *Preparation) Prepare(ctx context.Context, root string, extraBinDirector
 				p.logger.DebugContext(ctx, "http_preparation_inventory", "source", options.Source, "directories", stats.Directories, "entries", stats.Entries, "opened", stats.Opened, "truncated", stats.Truncated)
 			}
 		} else {
-			err = prepareRemote(ctx, p.socket, root, extra, options.Source)
+			err = prepareRemote(ctx, p.socket, resolve, options.Source)
 		}
-		done <- err
 	}()
 	var err error
 	select {
@@ -79,17 +98,3 @@ func (p *Preparation) Prepare(ctx context.Context, root string, extraBinDirector
 
 // FileHandler adopts every received descriptor, including on an error.
 type FileHandler func(context.Context, []*os.File, kernelio.HTTPPreparationOptions) (kernelio.HTTPPreparationResult, error)
-
-// Available avoids Docker inspect work when the Agent has HTTP capture disabled.
-// It is a best-effort local socket check; preparation still handles later failure.
-func (p *Preparation) Available(ctx context.Context) error {
-	if p.local != nil {
-		return nil
-	}
-	var d net.Dialer
-	c, err := d.DialContext(ctx, "unixpacket", p.socket)
-	if err == nil {
-		_ = c.Close()
-	}
-	return err
-}

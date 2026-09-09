@@ -31,6 +31,7 @@ type uprobeControlRequest struct {
 	Nonce                           uint64
 	Operation, PID, Count, Overflow uint32
 }
+
 type uprobeControlResult struct {
 	Nonce, Start, End        uint64
 	DeviceMajor, DeviceMinor uint32
@@ -74,6 +75,7 @@ func newUprobeControl(requests, results *ebpf.Map) (*uprobeControl, error) {
 	}
 	return c, nil
 }
+
 func (c *uprobeControl) close() {
 	if c != nil {
 		closeLinks(c.links)
@@ -93,7 +95,11 @@ func (c *uprobeControl) begin(operation uint32, pid int32) (tid, nonce uint64, e
 	err = c.requests.Put(tid, uprobeControlRequest{Nonce: nonce, Operation: operation, PID: uint32(pid)})
 	return
 }
-func (c *uprobeControl) end(tid uint64) { _ = c.requests.Delete(tid); _ = c.clearResults() }
+
+// Results are bounded and nonce-checked. Clear them once, before the next
+// request, rather than walking the same map again after every operation.
+func (c *uprobeControl) end(tid uint64) { _ = c.requests.Delete(tid) }
+
 func (c *uprobeControl) clearResults() error {
 	for range maxControlMappings {
 		var key uint64
@@ -114,6 +120,7 @@ func (c *uprobeControl) clearResults() error {
 	}
 	return errors.New("HTTP uprobe control result overflow")
 }
+
 func (c *uprobeControl) result(nonce uint64) (uprobeControlResult, error) {
 	var r uprobeControlResult
 	if err := c.results.Lookup(uint64(0), &r); err != nil {
@@ -147,6 +154,7 @@ func (c *uprobeControl) mapFile(f *os.File, size int) ([]byte, fileClassificatio
 	}
 	return data, r.key(), nil
 }
+
 func (c *uprobeControl) attach(ex *link.Executable, program *ebpf.Program, offset uint64, expected fileClassificationKey) (link.Link, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

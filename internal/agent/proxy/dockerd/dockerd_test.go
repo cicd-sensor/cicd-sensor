@@ -23,36 +23,30 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
-func TestCheckDriver(t *testing.T) {
+func TestCheckDriver_Systemd(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name, driver, version string
-		valid                 bool
-	}{
-		{"systemd v2", "systemd", "2", true},
-		{"dind cgroupfs v2", "cgroupfs", "2", true},
-		{"cgroup v1 unsupported", "cgroupfs", "1", false},
-		{"unknown driver unsupported", "unknown", "2", false},
-		{"missing version fails closed", "systemd", "", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			socket := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(t, w, 200, driverInfo{CgroupDriver: tc.driver, CgroupVersion: tc.version})
-			}))
-			got, err := checkDriver(t.Context(), socket)
-			if (err == nil) != tc.valid || (tc.valid && got != tc.driver) {
-				t.Fatalf("driver=%q err=%v", got, err)
-			}
-		})
+
+	socket := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/info" {
+			t.Errorf("unexpected path: %q", r.URL.Path)
+		}
+		writeJSON(t, w, http.StatusOK, driverInfo{CgroupDriver: "systemd"})
+	}))
+
+	if err := checkDriver(context.Background(), socket); err != nil {
+		t.Fatalf("checkDriver: %v", err)
 	}
 }
-func TestDockerCgroupBasename(t *testing.T) {
-	for _, tc := range []struct{ driver, want string }{{"systemd", "docker-abc.scope"}, {"cgroupfs", "abc"}} {
-		t.Run(tc.driver, func(t *testing.T) {
-			if got := dockerCgroupBasename(tc.driver, "abc"); got != tc.want {
-				t.Fatal(got)
-			}
-		})
+
+func TestCheckDriver_RejectsCgroupfs(t *testing.T) {
+	t.Parallel()
+
+	socket := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, http.StatusOK, driverInfo{CgroupDriver: "cgroupfs"})
+	}))
+
+	if err := checkDriver(context.Background(), socket); err == nil {
+		t.Fatalf("checkDriver returned nil for cgroupfs")
 	}
 }
 
@@ -93,7 +87,7 @@ func TestCheckDriver_Errors(t *testing.T) {
 			if socket == "" {
 				socket = startUnixServer(t, tc.handler)
 			}
-			_, err := checkDriver(context.Background(), socket)
+			err := checkDriver(context.Background(), socket)
 			if err == nil {
 				t.Fatalf("checkDriver returned nil")
 			}
@@ -167,7 +161,7 @@ func TestRunStopsOnContextCancelAndRemovesProxySocket(t *testing.T) {
 		if r.URL.Path != "/info" {
 			t.Errorf("unexpected path: %q", r.URL.Path)
 		}
-		writeJSON(t, w, http.StatusOK, driverInfo{CgroupDriver: "systemd", CgroupVersion: "2"})
+		writeJSON(t, w, http.StatusOK, driverInfo{CgroupDriver: "systemd"})
 	}))
 	agentSocket := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, http.StatusOK, map[string]string{"status": "staged"})
@@ -1011,13 +1005,13 @@ func TestPostStagingErrorsIncludeResponseBody(t *testing.T) {
 // GitHub-mode handler.
 func startProxy(t *testing.T, upstreamSocket, agentSocket string) *http.Client {
 	t.Helper()
-	return startProxyWithHandler(t, proxyHandlerGitHub(slog.New(slog.NewTextHandler(io.Discard, nil)), upstreamSocket, agentSocket, "systemd"))
+	return startProxyWithHandler(t, proxyHandlerGitHub(slog.New(slog.NewTextHandler(io.Discard, nil)), upstreamSocket, agentSocket))
 }
 
 // startProxyGitLab is the GitLab-mode counterpart to startProxy.
 func startProxyGitLab(t *testing.T, upstreamSocket, agentSocket string) *http.Client {
 	t.Helper()
-	return startProxyWithHandler(t, proxyHandlerGitLab(slog.New(slog.NewTextHandler(io.Discard, nil)), upstreamSocket, agentSocket, "systemd"))
+	return startProxyWithHandler(t, proxyHandlerGitLab(slog.New(slog.NewTextHandler(io.Discard, nil)), upstreamSocket, agentSocket))
 }
 
 func startProxyWithHandler(t *testing.T, handler http.Handler) *http.Client {
@@ -1164,48 +1158,4 @@ func waitForSocketOrRunExit(t *testing.T, path string, errCh <-chan error) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("socket %q was not created", path)
-}
-
-func TestCgroupfsStaging(t *testing.T) {
-	for _, provider := range []string{"github", "gitlab"} {
-		t.Run(provider, func(t *testing.T) {
-			id := strings.Repeat("a", 64)
-			upstream := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(t, w, http.StatusCreated, containerCreateResponse{ID: id})
-			}))
-			staged := make(chan string, 1)
-			agent := startUnixServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var v struct{ Basename string }
-				if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
-					t.Error(err)
-				}
-				staged <- v.Basename
-				w.WriteHeader(200)
-			}))
-			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-			var handler http.Handler
-			if provider == "github" {
-				handler = proxyHandlerGitHub(logger, upstream, agent, "cgroupfs")
-			} else {
-				handler = proxyHandlerGitLab(logger, upstream, agent, "cgroupfs")
-			}
-			client := startProxyWithHandler(t, handler)
-			resp, err := client.Post("http://docker/containers/create", "application/json", strings.NewReader("{}"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusCreated {
-				t.Fatal(resp.StatusCode)
-			}
-			select {
-			case got := <-staged:
-				if got != id {
-					t.Fatalf("staged %q instead of cgroupfs leaf", got)
-				}
-			case <-time.After(time.Second):
-				t.Fatal("missing staging")
-			}
-		})
-	}
 }

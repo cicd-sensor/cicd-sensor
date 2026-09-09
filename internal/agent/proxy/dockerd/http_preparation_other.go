@@ -5,9 +5,8 @@ package dockerd
 import (
 	"context"
 	"errors"
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 )
 
-func prepareDockerTarget(context.Context, string, string, bool, *httpprepare.Preparation) error {
-	return errors.New("HTTP preparation requires Linux")
+func resolveDockerTarget(context.Context, string, string, bool) (string, []string, error) {
+	return "", nil, errors.New("HTTP preparation requires Linux")
 }

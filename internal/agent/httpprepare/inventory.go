@@ -16,7 +16,11 @@ const (
 	// Budget bounds caller waiting, including root acquisition through attachment.
 	Budget = 500 * time.Millisecond
 	// MaxFiles is the worker's per-request descriptor limit.
-	MaxFiles             = kernelio.MaxHTTPPreparationFiles
+	MaxFiles = kernelio.MaxHTTPPreparationFiles
+)
+
+// Inventory work limits bound directory enumeration independently of returned FDs.
+const (
 	maxDirectories       = 32
 	maxDirectoryEntries  = 512
 	maxCandidateAttempts = 128

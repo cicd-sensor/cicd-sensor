@@ -169,11 +169,9 @@ the inner daemon's API requests, and host NRI does not prepare the inner
 container's files. First-request capture is therefore best-effort.
 
 Deploying an inner Docker proxy and pre-attaching inner workload files are
-outside the Day 1 scope. A separate inner-proxy experiment demonstrated later
-exec preparation, but it is not part of the ARC dind deployment. The shared
-Docker proxy's cgroup v2 systemd/cgroupfs support and the worker's threaded-cgroup
-liveness handling remain; neither requires adding a proxy to dind. The node's
-systemd kubelet layout requirement is unchanged.
+outside the Day 1 scope. The worker's threaded-cgroup liveness handling covers
+mmap-discovered inner files. The node's systemd kubelet layout requirement is
+unchanged.
 
 ```mermaid
 flowchart TB

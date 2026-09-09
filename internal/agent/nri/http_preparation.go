@@ -17,11 +17,10 @@ type httpPreparer interface {
 // It changes no cgroup attribution and never fails workload startup. The NRI
 // observer must run in the node PID/mount view used by the existing deployment.
 func (o *Observer) StartContainer(ctx context.Context, pod *nriapi.PodSandbox, container *nriapi.Container) error {
-	ctx, cancel := context.WithTimeout(ctx, httpprepare.Budget)
-	defer cancel()
 	o.prepareContainerHTTP(ctx, pod, container, "nri-start")
 	return nil
 }
+
 func (o *Observer) prepareContainerHTTP(ctx context.Context, pod *nriapi.PodSandbox, container *nriapi.Container, source string) {
 	if container == nil || container.GetPid() == 0 || o.preparation == nil {
 		return

@@ -31,14 +31,7 @@ type preparationResponse struct {
 	Error  string
 }
 
-func validRemoteSource(source string) bool {
-	return source == "nri-start" || source == "nri-synchronize" || source == "docker-exec" || source == "docker-start"
-}
-
-func prepareRemote(ctx context.Context, socket, root string, extra []string, source string) error {
-	if !validRemoteSource(source) {
-		return errors.New("invalid HTTP preparation source")
-	}
+func prepareRemote(ctx context.Context, socket string, resolve RootResolver, source string) error {
 	var dialer net.Dialer
 	c, err := dialer.DialContext(ctx, "unixpacket", socket)
 	if err != nil {
@@ -52,7 +45,14 @@ func prepareRemote(ctx context.Context, socket, root string, extra []string, sou
 	}
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
-	// Dial first: disabled/unavailable preparation performs no root scan.
+	// Dial first: unavailable preparation does not inspect the runtime or root.
+	root, extra, err := resolve(ctx)
+	if err != nil {
+		return err
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
 	files, _, scanErr := OpenFiles(ctx, root, extra)
 	defer CloseFiles(files)
 	if err = ctx.Err(); err != nil {
@@ -198,7 +198,7 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	if err = json.Unmarshal(data[:n], &message); err != nil {
 		return err
 	}
-	if !validRemoteSource(message.Source) || message.Files != len(files) || len(files) == 0 || len(files) > MaxFiles {
+	if message.Files != len(files) || len(files) == 0 || len(files) > MaxFiles {
 		return errors.New("invalid HTTP preparation metadata")
 	}
 	deadline := time.Unix(0, message.Deadline)

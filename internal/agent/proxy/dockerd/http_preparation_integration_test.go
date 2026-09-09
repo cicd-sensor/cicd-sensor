@@ -130,9 +130,13 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	ready := httpprepare.NewRemote(agentSocket, nil)
 	deadline := time.Now().Add(time.Second)
-	for ready.Available(ctx) != nil {
+	for {
+		connection, dialErr := net.Dial("unixpacket", httpprepare.SocketPath(agentSocket))
+		if dialErr == nil {
+			_ = connection.Close()
+			break
+		}
 		if time.Now().After(deadline) {
 			t.Fatal("preparation socket not ready")
 		}
@@ -143,7 +147,7 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proxy := &http.Server{Handler: proxyHandlerGitHub(slog.Default(), "/var/run/docker.sock", agentSocket, "systemd"), ReadHeaderTimeout: time.Second}
+	proxy := &http.Server{Handler: proxyHandlerGitHub(slog.Default(), "/var/run/docker.sock", agentSocket), ReadHeaderTimeout: time.Second}
 	go func() { _ = proxy.Serve(listener) }()
 	defer proxy.Close()
 	for _, tc := range []struct {
