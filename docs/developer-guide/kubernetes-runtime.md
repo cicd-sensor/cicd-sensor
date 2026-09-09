@@ -163,13 +163,17 @@ cicd-sensor uses the job hook as the identity point.
 At start time, the hook calls the GitHub Kubernetes runner socket.
 The agent reads the hook peer PID's cgroup path, finds the kubelet-created Pod cgroup ancestor, and binds the Pod cgroup tree so the dind sidecar is tracked as part of the job.
 Once the dind sidecar cgroup is tracked, inner Docker cgroups created below it are picked up by the existing cgroup propagation path.
-This provides HTTP executable-mapping discovery without an inner proxy. Optional
-HTTP pre-attachment requires routing the inner Docker API through a node-owned
-proxy with access to the inner daemon's Unix socket and PID view. The proxy
-supports Docker cgroup v2 with either systemd or cgroupfs; this does not change
-the node's systemd kubelet layout requirement. Initial entrypoint traffic still
-has no pre-attachment guarantee. The ARC dind example does not install this
-optional inner proxy automatically.
+For Day 1, inner Docker workloads use this cgroup tracking and HTTP
+executable-mapping discovery. The normal host Docker proxy does not receive
+the inner daemon's API requests, and host NRI does not prepare the inner
+container's files. First-request capture is therefore best-effort.
+
+Deploying an inner Docker proxy and pre-attaching inner workload files are
+outside the Day 1 scope. A separate inner-proxy experiment demonstrated later
+exec preparation, but it is not part of the ARC dind deployment. The shared
+Docker proxy's cgroup v2 systemd/cgroupfs support and the worker's threaded-cgroup
+liveness handling remain; neither requires adding a proxy to dind. The node's
+systemd kubelet layout requirement is unchanged.
 
 ```mermaid
 flowchart TB

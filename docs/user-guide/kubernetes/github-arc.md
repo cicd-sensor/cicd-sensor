@@ -111,6 +111,12 @@ helm upgrade --install RUNNER_SCALE_SET_NAME \
 Use this when workflows need Docker compatibility, such as `docker build` or Docker Compose.
 This mode uses ARC `containerMode.type: dind`.
 
+Inner Docker workloads inherit the Pod's cgroup tracking. With HTTP capture
+enabled, Day 1 discovers their HTTP target files through executable mappings;
+it does not deploy an inner Docker proxy or prepare inner files before startup.
+The first request can therefore precede attachment. The ordinary host Docker
+proxy does not receive requests made to the dind daemon.
+
 Copy these files:
 
 | Local file | Copy from |

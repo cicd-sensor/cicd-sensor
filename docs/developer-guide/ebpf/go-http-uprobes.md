@@ -42,8 +42,9 @@ merge.
 ```mermaid
 flowchart LR
     MAP["Executable mapping"] --> WORKER["HTTP uprobe worker"]
+    PREP["Bounded preparation<br/>existing gh / glab files"] --> WORKER
     WORKER --> C{"selected C symbol?"}
-    C -->|"yes"| SYMBOL["attach by symbol"]
+    C -->|"yes"| SYMBOL["resolve ELF symbol and attach"]
     C -->|"no"| PCLN["read Go pclntab"]
     PCLN --> OFFSET["function VA → PT_LOAD file offset"]
     OFFSET --> ATTACH["attach by absolute offset"]

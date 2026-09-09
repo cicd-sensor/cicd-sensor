@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/cilium/ebpf/link"
@@ -14,7 +15,6 @@ import (
 )
 
 const (
-	maxPreparedFiles     = MaxHTTPPreparationFiles
 	maxPreparedFileBytes = 256 << 20
 	maxPinnedHTTPTargets = 128
 	httpPreparationGrace = 30 * time.Second
@@ -57,7 +57,7 @@ func (k *LinuxKernelIO) PrepareHTTPFiles(ctx context.Context, files []*os.File, 
 	return k.httpUprobeWorker.submitPreparation(ctx, files, options)
 }
 func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.File, options HTTPPreparationOptions) (HTTPPreparationResult, error) {
-	if len(files) > maxPreparedFiles {
+	if len(files) > MaxHTTPPreparationFiles {
 		closePreparationFiles(files)
 		return HTTPPreparationResult{}, errors.New("HTTP preparation file cap")
 	}
@@ -67,7 +67,13 @@ func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.Fi
 	}
 	// The descriptors are adopted, but the caller may reuse its slice after a
 	// timeout. Keep our own bounded slice until the worker finishes cleanup.
-	r := &httpPreparationRequest{ctx: ctx, files: append([]*os.File(nil), files...), options: options, submitted: time.Now(), done: make(chan httpPreparationReply, 1)}
+	r := &httpPreparationRequest{
+		ctx:       ctx,
+		files:     slices.Clone(files),
+		options:   options,
+		submitted: time.Now(),
+		done:      make(chan httpPreparationReply, 1),
+	}
 	w.submissionMu.Lock()
 	var err error
 	var dropped uint64
@@ -182,7 +188,7 @@ func (w *httpUprobeWorker) prepareMappedCandidate(candidate httpUprobeAttachCand
 	}
 }
 
-// prepareFile is the only new attachment path for normalized proactive and
+// prepareFile is the shared attachment path for normalized proactive and
 // mapped FDs. It owns the temporary mapping/links; its caller owns the input FD.
 func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected *fileClassificationKey, pin bool) (bool, error) {
 	if err := ctx.Err(); err != nil {

@@ -173,6 +173,7 @@ KernelIO sizes it from node CPU count, so larger runner nodes get a larger kerne
 | `internal/agent/bpf` | Hand-written eBPF C source, headers, and bpf2go-generated bindings / objects |
 | `internal/agent/kerneltracker` | KernelTracker reactor, decoded sample domain, cgroup / process tracking |
 | `internal/agent/kerneltracker/kernelio` | BPF object load, attach, ringbuf read, and map operations |
-| `internal/agent/proxy/dockerd` | Registers staging basenames from Docker API responses |
+| `internal/agent/httpprepare` | Bounded HTTP target inventory and node-side FD transfer; no classifier or link state |
+| `internal/agent/proxy/dockerd` | Registers staging basenames and requests HTTP preparation at supported Docker lifecycle windows |
 
 `internal/agent/bpf` owns the eBPF assets, and `internal/agent/kerneltracker` owns the userspace reactor. Generated artifacts (`bpf2go` output) are not edited by hand — fix the C source or generator input.

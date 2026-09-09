@@ -10,12 +10,12 @@ import (
 )
 
 const (
-	// Budget covers root acquisition, inventory, transfer, queueing and attachment.
 	// MaxConcurrent bounds retained producers/connections, not parallel attach workers.
-	// Eight admits a small burst while limiting each stage to 8 * 32 target FDs.
 	// This is a resource budget, not a measured optimal concurrency.
-	MaxConcurrent        = 8
-	Budget               = 500 * time.Millisecond
+	MaxConcurrent = 8
+	// Budget bounds caller waiting, including root acquisition through attachment.
+	Budget = 500 * time.Millisecond
+	// MaxFiles is the worker's per-request descriptor limit.
 	MaxFiles             = kernelio.MaxHTTPPreparationFiles
 	maxDirectories       = 32
 	maxDirectoryEntries  = 512

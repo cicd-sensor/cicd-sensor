@@ -90,6 +90,53 @@ The worker serializes preparation, attach candidates, and reconciliation on one
 goroutine. No other goroutine reads or mutates its attached-target state, so
 classification, attach, and close do not require a mutex.
 
+### Preparation entry points and ownership
+
+Preparation registers probes on existing files before a later function call.
+It does not require the target program to be running, but it does require access
+to the actual file that the workload will map. A host copy of an image library
+is not a substitute for the container's file.
+
+| Environment | Preparation window | Files available at that window | Remaining gap |
+| --- | --- | --- | --- |
+| Machine | Agent startup and successful Job start | Fixed host inventory | Files installed later or outside that inventory |
+| Host Docker through the proxy | Before forwarding a later exec start | Files in the already-running container's root | Initial entrypoint; files created by the exec itself |
+| GitLab Docker executor through the proxy | After dockerd starts the container, before returning success to Runner | Files in the running container's root | Entrypoint code already runs; only scripts sent after the response benefit |
+| containerd CRI/runc with NRI | `StartContainer`, before task start | Waiting init process's root | Later exec has no NRI preparation callback |
+| dind inner workloads | No Day 1 preparation | Discovered through tracked executable mappings | Initial calls may precede attachment; host proxy/NRI cannot see inner lifecycle requests |
+
+```mermaid
+flowchart TB
+    MACHINE["Agent / machine Job start"] --> INVENTORY["httpprepare<br/>bounded named-file inventory"]
+    DOCKER["Host Docker proxy<br/>exec request / start response"] --> INVENTORY
+    NRI["NRI observer<br/>StartContainer"] --> INVENTORY
+    INVENTORY -->|"machine: direct call"| API["KernelIO PrepareHTTPFiles<br/>adopts every FD"]
+    INVENTORY -->|"Docker / NRI: SCM_RIGHTS"| SOCKET["Agent-owned FD socket<br/>same-owner UID only"]
+    SOCKET --> API
+    API --> QUEUE["bounded preparation queue"]
+    QUEUE --> WORKER["one HTTP uprobe worker<br/>classify / attach / reclaim / close"]
+    DIND["dind: inherited cgroup tracking"] --> MMAP["executable mmap discovery"]
+    MMAP -->|"existing candidate queue"| WORKER
+    WORKER --> STATE["shared cache and attached-target registry"]
+```
+
+The inventory opens files; the worker interprets them. Runtime adapters select
+the root and timing but do not parse ELF, store links, or create Job state.
+The FD socket is owned by Agent and is never mounted into Jobs. KernelTracker's
+preparation method forwards to KernelIO without entering the event reactor.
+
+| Read in this order | Responsibility |
+| --- | --- |
+| `internal/agent/httpprepare/preparation.go`, `inventory_linux.go` | Bound filesystem work; open only known names below the selected root |
+| `internal/agent/httpprepare/transport_linux.go` | Authenticate node-side producers; transfer and release exact FDs |
+| `internal/agent/kerneltracker/kernelio/http_preparation_linux.go` | Adopt requests; share classification, cache, and attachment with mapping discovery |
+| `internal/agent/kerneltracker/kernelio/http_uprobe_control_linux.go` | Confirm backing identities during mapping, registration, and maps-liveness reads |
+| `internal/agent/kerneltracker/kernelio/http_uprobe_worker.go` | Serialize work and reclaim targets |
+
+The existing mapping-only attach path remains for kernels where the optional
+control hooks cannot attach. Both paths use the existing ELF and Go resolvers;
+the compatibility path is not another discovery service or registry.
+
 ### Retained runtime state
 
 | Type | State | Purpose and identity | Access | Bound and removal |
@@ -148,13 +195,14 @@ GitHub job-container steps normally use Docker exec; Docker container actions
 and service entrypoints do not wait for an exec gate.
 Both paths share container inspect, the daemon's verified PID/procfs view, and
 the same FD preparation API. No script/stream parsing or buffering is added. Containers bypassing the proxy
-remain mapping-discovered. Dind needs an accessible inner proxy/daemon and a
-verifiable PID view. Docker cgroup v2 with systemd or cgroupfs is supported;
+remain mapping-discovered. Docker cgroup v2 with systemd or cgroupfs is supported;
 `GET /info` selects the existing staging basename (`docker-ID.scope` or `ID`).
-The inner daemon must be local to the node-side proxy; TCP-only remote Docker
-endpoints do not expose a verifiable process root. In ARC dind deployment,
-normal inner cgroup propagation provides attribution and mmap discovery; adding
-this optional node-side inner proxy is a separate deployment step.
+The daemon must be local to the proxy; TCP-only remote Docker endpoints do not
+expose a verifiable process root. For Day 1, dind inner workloads use existing
+cgroup propagation and mmap discovery only. The host Docker proxy does not see
+inner daemon API requests. Inner-proxy deployment and inner-workload
+pre-attachment are out of scope; the separate inner-proxy experiment below is
+feasibility evidence, not a Day 1 deployment or first-request guarantee.
 
 The NRI observer prepares known CI containers at `StartContainer`, using the
 waiting init PID's root. On the supported containerd CRI/runc path, this callback
@@ -219,8 +267,21 @@ maps text; incomplete or overflowing scans keep links alive.
 These kernel-internal attach points are feature-probed, not a stable ABI. If
 they are unavailable, preparation is disabled and the original mapping path
 remains enabled, including its overlay identity limitation. Compatibility of
-preparation has been exercised on Linux 6.8 arm64; it is not yet established
-across every supported kernel or snapshotter.
+preparation has been exercised on Linux 6.8 arm64 and GKE COS 6.12 amd64.
+The existing cross-kernel HTTP/Go suite also passed on the validation branch;
+that does not establish NRI preparation on every kernel or snapshotter.
+
+| Temporary control operation | Observation point | Why userspace metadata alone is insufficient |
+| --- | --- | --- |
+| Normalize the opened file | Existing `uprobe_mmap` hook during a worker-owned read-only mapping | Overlay `fstat` can report a different identity from the backing file |
+| Verify registration | Optional `uprobe_register` hook | The registered inode and offset must match the file that was classified |
+| Check liveness | Optional `show_map_vma` hook during `/proc/PID/maps` reads | Copy-up can change what a reopened file resolves to while an old VMA remains live |
+
+These operations use one PID/TID-scoped request with a nonce, fixed-size CO-RE
+results, and bounded maps. They do not emit security events, export kernel
+pointers, or need kfuncs or unbounded BPF loops. The worker locks its OS thread
+only for each control operation. Keeping these checks avoids a second registry
+for overlay-visible aliases.
 
 Primary lifecycle references: [Linux uprobes](https://github.com/torvalds/linux/blob/v6.8/kernel/events/uprobes.c),
 [Linux proc maps](https://github.com/torvalds/linux/blob/v6.8/fs/proc/task_mmu.c),
@@ -410,11 +471,30 @@ x64 and arm64 unless noted otherwise.
 | curl and Node over HTTPS HTTP/2 | Verified | selected nghttp2 request API |
 | Git over HTTPS HTTP/2 | Verified | selected nghttp2 request API for default negotiation and explicit `http.version=HTTP/2` |
 | GitHub CLI (`gh api`) | Verified | `net/http.(*Transport).roundTrip` |
-| GitLab CLI (`glab`) | Verified on Linux 6.8 arm64 with the preparation fixture | `net/http.(*Transport).roundTrip`; broader runner matrix pending. |
+| GitLab CLI (`glab`) | Verified in the Linux 6.8 arm64 fixture, real GitLab Docker jobs, and GKE COS amd64 runtime fixture | `net/http.(*Transport).roundTrip`; full ARC/GitLab Kubernetes deployment matrix pending. |
 | Java or rustls-based HTTPS | Not covered | Does not call a currently selected function. |
 | Python `h2` / httpx HTTP/2 | Not covered | Does not use nghttp2 for request submission. |
 
 ## Operational status and known limits
+
+Validation on 2026-09-08 used commit `b038f523`:
+
+| Execution environment | First-request result | What this establishes |
+| --- | --- | --- |
+| [Real GitLab Docker executor](https://gitlab.com/rung/cicd-sensor-demo/-/pipelines/2827925544), Runner 18.10.1 / Docker 29.1.3 / Linux 6.8 arm64 | OpenSSL, nghttp2, gh, glab: each 20/20 Jobs | Product Agent/proxy and real Job attribution; four clients run sequentially per Job, so later clients can benefit from warm libraries |
+| GKE Standard 1.35.7 / COS 6.12.94+ / containerd 2.1.9 / amd64 | Each client 20/20 independent Pods, concurrency two | Actual NRI/Agent preparation with fresh target inodes; synthetic GitLab annotations, not an installed GitLab Kubernetes executor or ARC controller |
+
+On GKE, the NRI container used `drop: [ALL]`, `add: [SYS_PTRACE]`, and
+AppArmor `Unconfined`; unused targets were reclaimed to zero. The observed
+worker preparation p99 was 182.546 ms, not the entire NRI callback duration.
+These small matrices do not establish a general capture probability or an
+optimal concurrency limit. Additional Go events were observed in both matrices;
+their cause was not established as duplicate links.
+
+[Ordinary CI](https://github.com/cicd-sensor/cicd-sensor/actions/runs/34179828215)
+and the existing [cross-kernel HTTP/Go suite](https://github.com/cicd-sensor/cicd-sensor/actions/runs/34179830370)
+passed for that commit. Runtime evidence and these regression checks have
+different coverage and should not be combined into a universal deployment claim.
 
 - `http_request` capture is disabled by default during rollout. The
   `--enable-http-request` switch controls both the cleartext tap and the HTTP
@@ -434,7 +514,8 @@ x64 and arm64 unless noted otherwise.
   through inner exec preparation. Independent immediate-entrypoint mappings
   captured OpenSSL 11/20, nghttp2 18/20, gh 20/20, and glab 19/20. These are
   local fixture results with synthetic GitLab Job attribution, not real
-  GitLab.com Runner delivery or ARC dind deployment verification.
+  GitLab.com Runner delivery or ARC dind deployment verification. The inner-proxy
+  configuration is outside Day 1; its success rate does not describe normal dind.
 - Discovery observes executable mappings created while the process is already in
   a tracked cgroup. Initial catch-up scanning, periodic attach backstop, moving an
   existing process into a tracked cgroup, and later `mprotect(PROT_EXEC)` are not

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
@@ -48,7 +49,7 @@ func (p *Preparation) Prepare(ctx context.Context, root string, extraBinDirector
 	done := make(chan error, 1)
 	started := time.Now()
 	// Copy small caller-owned metadata because this operation can outlive caller.
-	extra := append([]string(nil), extraBinDirectories[:min(len(extraBinDirectories), maxDirectories)]...)
+	extra := slices.Clone(extraBinDirectories[:min(len(extraBinDirectories), maxDirectories)])
 	go func() {
 		defer func() { <-p.slots }()
 		var err error

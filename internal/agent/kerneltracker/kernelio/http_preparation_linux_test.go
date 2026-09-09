@@ -51,7 +51,7 @@ func TestSubmitPreparation(t *testing.T) {
 		}, false, 1, errHTTPPreparationQueueFull},
 		{"stopped worker closes adopted files", func(w *httpUprobeWorker) { w.shutdownPreparation() }, false, 1, errHTTPPreparationStopped},
 		{"canceled caller closes adopted files", func(*httpUprobeWorker) {}, true, 1, context.Canceled},
-		{"file cap closes whole batch", func(*httpUprobeWorker) {}, false, maxPreparedFiles + 1, nil},
+		{"file cap closes whole batch", func(*httpUprobeWorker) {}, false, MaxHTTPPreparationFiles + 1, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
