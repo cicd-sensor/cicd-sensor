@@ -5,7 +5,7 @@
 
 FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0@sha256:3a108c4ceee9e0346a61fc0fc7085017945c664be4eaa2925855b8dd2467227b AS lambda-adapter
 
-FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:b6739aa73803ae4a9e11e6bb4e201c6c6caeaccbbcb251cc9426c47b240055b1 AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:6be282d9e6dcc55712b6efc2f2b2b5fa692e34e2e93148cc708940bd3332c687 AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
         -o /out/cicd-sensor-manager \
         ./cmd/cicd-sensor-manager
 
-FROM cgr.dev/chainguard/static:latest@sha256:96d02f455d5a73b817c0602910748609cf8471b1cc9522f78c75cedb1f67d072
+FROM cgr.dev/chainguard/static:latest@sha256:f51c2493951313c3ad4069080b2814ffb6ed6fe3909dabeb84a9482f42d5600b
 
 # Lambda adapter
 COPY --from=lambda-adapter /lambda-adapter /opt/extensions/lambda-adapter
