@@ -17,10 +17,13 @@ import (
 
 // LinuxKernelIO owns BPF program, map, and ring buffer I/O.
 type LinuxKernelIO struct {
-	logger          *slog.Logger
-	objs            bpfprog.BPFProgramObjects
-	links           []link.Link
-	reader          *ringbuf.Reader
+	logger *slog.Logger
+	objs   bpfprog.BPFProgramObjects
+	links  []link.Link
+	reader *ringbuf.Reader
+	// Serialize loop startup with teardown, including WaitGroup registration.
+	lifecycleMu     sync.Mutex
+	closed          bool
 	cancelLoop      context.CancelFunc
 	closeReaderOnce sync.Once
 	// loopWG tracks goroutines spawned by StartKernelSampleLoop. Close
