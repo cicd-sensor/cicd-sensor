@@ -227,3 +227,56 @@ func TestScanProcessMappingsCompleteness(t *testing.T) {
 		}
 	})
 }
+
+func TestThreadedDomainPath(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                  string
+		parent, child         string
+		nested, outside, want bool
+	}{
+		{name: "threaded child uses its domain", parent: "domain threaded", child: "threaded", nested: false, outside: false, want: true},
+		{name: "nested threaded child uses the same domain", parent: "domain threaded", child: "threaded", nested: true, outside: false, want: true},
+		{name: "ordinary domain is not silently accepted", parent: "domain", child: "threaded", nested: false, outside: false, want: false},
+		{name: "invalid child remains incomplete", parent: "domain threaded", child: "domain invalid", nested: false, outside: false, want: false},
+		{name: "missing type remains incomplete", parent: "domain threaded", child: "", nested: false, outside: false, want: false},
+		{name: "domain outside configured root is not scanned", parent: "domain threaded", child: "threaded", nested: false, outside: true, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			child := filepath.Join(root, "child")
+			if err := os.Mkdir(child, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "cgroup.type"), []byte(tc.parent), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tc.child != "" {
+				if err := os.WriteFile(filepath.Join(child, "cgroup.type"), []byte(tc.child), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.nested {
+				child = filepath.Join(child, "nested")
+				if err := os.Mkdir(child, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(child, "cgroup.type"), []byte("threaded"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			boundary := root
+			if tc.outside {
+				boundary = child
+			}
+			want := ""
+			if tc.want {
+				want = root
+			}
+			if got := threadedDomainPath(child, boundary); got != want {
+				t.Fatalf("domain = %q, want %q", got, want)
+			}
+		})
+	}
+}
