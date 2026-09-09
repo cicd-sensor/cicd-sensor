@@ -14,13 +14,12 @@ USER root
 # the version (and re-test bpf2go output) when upstream moves.
 # libbpf and vmlinux headers are vendored under internal/agent/bpf/include/,
 # so no libbpf-dev or kernel-headers package is needed in the image.
-# Keep the pinned base runtime compatible with packages from the live Wolfi repo.
-RUN apk upgrade --no-cache && apk add --no-cache \
-    clang-22 \
-    llvm-22
-# LLVM's BTF forward-declaration fixups iterate pointer-keyed std::map entries.
-# Keep glibc allocations on the heap to avoid mmap address ordering changing
-# BTF type IDs between identical builds. This affects the builder only.
+RUN apk add --no-cache \
+    clang-22=22.1.8-r3 \
+    llvm-22=22.1.8-r3
+# LLVM orders BTF forward declarations by allocated metadata addresses.
+# Keep allocations in one heap without per-thread caches; mmap_max alone is
+# insufficient. This affects compilation only, never the Agent runtime.
 # https://github.com/llvm/llvm-project/blob/release/22.x/llvm/lib/Target/BPF/BTFDebug.h
-ENV MALLOC_MMAP_MAX_=0
+ENV GLIBC_TUNABLES=glibc.malloc.mmap_max=0:glibc.malloc.arena_max=1:glibc.malloc.tcache_count=0
 WORKDIR /src
