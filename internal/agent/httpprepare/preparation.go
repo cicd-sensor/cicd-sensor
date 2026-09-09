@@ -75,7 +75,7 @@ func (p *Preparation) PrepareResolved(ctx context.Context, resolve RootResolver,
 				return
 			}
 			files, stats, scanErr := OpenFiles(ctx, root, extra)
-			_, prepareErr := p.local.PrepareHTTPFiles(ctx, files, options)
+			prepareErr := p.local.PrepareHTTPFiles(ctx, files, options)
 			err = errors.Join(scanErr, prepareErr)
 			if p.logger != nil {
 				p.logger.DebugContext(ctx, "http_preparation_inventory", "source", options.Source, "directories", stats.Directories, "entries", stats.Entries, "opened", stats.Opened, "truncated", stats.Truncated)
@@ -97,4 +97,4 @@ func (p *Preparation) PrepareResolved(ctx context.Context, resolve RootResolver,
 }
 
 // FileHandler adopts every received descriptor, including on an error.
-type FileHandler func(context.Context, []*os.File, kernelio.HTTPPreparationOptions) (kernelio.HTTPPreparationResult, error)
+type FileHandler func(context.Context, []*os.File, kernelio.HTTPPreparationOptions) error

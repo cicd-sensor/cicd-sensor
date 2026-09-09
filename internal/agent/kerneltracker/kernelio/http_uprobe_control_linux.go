@@ -155,6 +155,8 @@ func (c *uprobeControl) mapFile(f *os.File, size int) ([]byte, fileClassificatio
 	return data, r.key(), nil
 }
 
+// Verify registration against the parsed mapping: a link on another backing
+// would make the registry suppress discovery for a file that has no link.
 func (c *uprobeControl) attach(ex *link.Executable, program *ebpf.Program, offset uint64, expected fileClassificationKey) (link.Link, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -179,7 +181,9 @@ func (c *uprobeControl) attach(ex *link.Executable, program *ebpf.Program, offse
 }
 
 // scan decorates the existing /proc/maps read with the original VMA's backing.
-// Reopening map_files and remapping it is not equivalent after overlay copy-up.
+// On kernels using file_user_inode (including Linux 6.8), maps text shows the
+// overlay inode while discovery uses vm_file->f_inode. Read the original VMA:
+// reopening map_files and remapping can select another backing after copy-up.
 func (c *uprobeControl) scan(pid int32) ([]processMapping, bool) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

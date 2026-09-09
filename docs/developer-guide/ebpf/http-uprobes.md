@@ -88,7 +88,9 @@ of a small predefined inventory. They own no classification or uprobe links.
 
 The worker serializes preparation, attach candidates, and reconciliation on one
 goroutine. No other goroutine reads or mutates its attached-target state, so
-classification, attach, and close do not require a mutex.
+classification, attach, and close do not require a mutex. KernelIO separately
+serializes loop startup and teardown so closing the Agent cannot race goroutine
+registration. Starts after close and duplicate starts are rejected.
 
 ### Preparation entry points and ownership
 
@@ -216,10 +218,14 @@ FDs, and 256 MiB per classified file. Common ABI basenames are tried before
 bounded directory enumeration. No directory is traversed recursively.
 
 All producers call `PrepareHTTPFiles`; the API adopts every FD, including on
-rejection. NRI and Docker use an Agent-owned Unix packet socket at
+rejection, and returns only an error; per-batch counts remain worker diagnostics.
+NRI and Docker use an Agent-owned Unix packet socket at
 `<agent-socket>.http-preparation`, mode `0600`, with same-owner `SO_PEERCRED`
 validation and `SCM_RIGHTS` transfer. Keep this socket node-side, outside Job
-mounts. It is separate from the runner-facing HTTP routes.
+mounts. It is separate from the runner-facing HTTP routes. Received ancillary
+data determines the FD count; empty or truncated transfers are rejected. The
+sender deadline preserves time already spent on inspection and inventory, while
+the receiver also enforces its own maximum wait.
 
 The 500 ms deadline covers root resolution, inventory, transfer, queueing, classification, and
 attachment waiting. Workloads continue on timeout, queue saturation, missing
@@ -249,8 +255,11 @@ startup. Its programs require both registration and original-VMA observation;
 using backing keys with a visible-inode reclaim scan would be incorrect. A
 worker-thread request makes the existing `uprobe_mmap` hook report the backing
 identity of a temporary read-only mapping. The existing ELF/Go resolvers read
-that same mapping. Attachment uses the exact FD and a file offset; a scoped
-`uprobe_register` hook verifies the registration inode and offset. No copied
+that same mapping: reading the overlay FD again can switch to copied-up contents
+and cache a negative result under the original backing identity. Attachment uses the exact FD and a file offset; a scoped
+`uprobe_register` hook verifies the registration inode and offset. Otherwise a
+link on another backing could make the registry suppress discovery for an
+unattached file. No copied
 ELF or pathname key is treated as the attachment identity.
 
 The same worker/cache/registry handles proactive and mapping candidates. The
@@ -260,7 +269,8 @@ ctime on an already attached inode is conservatively rejected pending reclaim.
 Concurrent content changes are not made safe by this generation hint alone.
 
 For liveness, `show_map_vma` records the original VMA backing while the worker
-reads `/proc/<pid>/maps`. Reopening and remapping `map_files` after overlay
+reads `/proc/<pid>/maps`. Kernels using `file_user_inode`, including Linux 6.8,
+show the overlay inode in maps text while discovery sees `vm_file->f_inode`. Reopening and remapping `map_files` after overlay
 copy-up would not reliably identify that original VMA. No visible-inode alias
 registry is used. Per-process results are capped at 256 mappings and 2 MiB of
 maps text; incomplete or overflowing scans keep links alive.

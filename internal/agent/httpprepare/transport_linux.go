@@ -23,12 +23,10 @@ const maxMessageBytes = 1024
 type preparationMessage struct {
 	Source   string
 	Deadline int64
-	Files    int
 }
 
 type preparationResponse struct {
-	Result kernelio.HTTPPreparationResult
-	Error  string
+	Error string
 }
 
 func prepareRemote(ctx context.Context, socket string, resolve RootResolver, source string) error {
@@ -65,7 +63,7 @@ func prepareRemote(ctx context.Context, socket string, resolve RootResolver, sou
 	for i, f := range files {
 		fds[i] = int(f.Fd())
 	}
-	data, err := json.Marshal(preparationMessage{Source: source, Deadline: deadline.UnixNano(), Files: len(files)})
+	data, err := json.Marshal(preparationMessage{Source: source, Deadline: deadline.UnixNano()})
 	if err != nil {
 		return err
 	}
@@ -198,9 +196,11 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	if err = json.Unmarshal(data[:n], &message); err != nil {
 		return err
 	}
-	if message.Files != len(files) || len(files) == 0 || len(files) > MaxFiles {
+	if len(files) == 0 || len(files) > MaxFiles {
 		return errors.New("invalid HTTP preparation metadata")
 	}
+	// Preserve time already spent on root resolution and inventory; the receiver
+	// also caps a sender that asks for more than one preparation budget.
 	deadline := time.Unix(0, message.Deadline)
 	if deadline.After(accepted.Add(Budget)) {
 		deadline = accepted.Add(Budget)
@@ -212,8 +212,8 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	}
 	owned := files
 	files = nil // handler adopts descriptors even on timeout/rejection
-	result, prepareErr := handler(requestCtx, owned, kernelio.HTTPPreparationOptions{Source: message.Source})
-	reply := preparationResponse{Result: result}
+	prepareErr := handler(requestCtx, owned, kernelio.HTTPPreparationOptions{Source: message.Source})
+	reply := preparationResponse{}
 	if prepareErr != nil {
 		reply.Error = "target preparation incomplete"
 	}

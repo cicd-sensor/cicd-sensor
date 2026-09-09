@@ -9,7 +9,7 @@ import (
 
 // PrepareHTTPFiles forwards directly to KernelIO, bypassing the tracking reactor.
 // It adopts the files even on unsupported platforms; no Job/scope state is read.
-func (engine *KernelTracker) PrepareHTTPFiles(ctx context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) (kernelio.HTTPPreparationResult, error) {
+func (engine *KernelTracker) PrepareHTTPFiles(ctx context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) error {
 	if preparer, ok := engine.kernelIO.(kernelio.HTTPFilePreparer); ok {
 		return preparer.PrepareHTTPFiles(ctx, files, options)
 	}
@@ -18,5 +18,5 @@ func (engine *KernelTracker) PrepareHTTPFiles(ctx context.Context, files []*os.F
 			_ = f.Close()
 		}
 	}
-	return kernelio.HTTPPreparationResult{}, kernelio.ErrNotSupported
+	return kernelio.ErrNotSupported
 }

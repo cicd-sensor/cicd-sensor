@@ -179,11 +179,11 @@ func TestHTTPPreparationClients(t *testing.T) {
 				}
 				ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 				start := time.Now()
-				result, err := ki.PrepareHTTPFiles(ctx, []*os.File{f}, HTTPPreparationOptions{Source: "test-client"})
+				err = ki.PrepareHTTPFiles(ctx, []*os.File{f}, HTTPPreparationOptions{Source: "test-client"})
 				latency = append(latency, time.Since(start))
 				cancel()
-				if err != nil || result.Prepared != 1 {
-					t.Fatalf("prepare run %d: %+v %v", i, result, err)
+				if err != nil {
+					t.Fatalf("prepare run %d: %v", i, err)
 				}
 				binaryPath := curl
 				if tc.source == 3 {

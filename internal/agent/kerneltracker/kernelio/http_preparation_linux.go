@@ -30,17 +30,12 @@ var errHTTPPreparationQueueFull = errors.New("HTTP preparation queue full")
 var errHTTPPreparationStopped = errors.New("HTTP preparation worker stopped")
 var errHTTPMappedBackingChanged = errors.New("HTTP mapped backing changed")
 
-type httpPreparationReply struct {
-	result HTTPPreparationResult
-	err    error
-}
-
 type httpPreparationRequest struct {
 	ctx       context.Context
 	files     []*os.File
 	options   HTTPPreparationOptions
 	submitted time.Time
-	done      chan httpPreparationReply
+	done      chan error
 }
 
 func closePreparationFiles(files []*os.File) {
@@ -53,22 +48,22 @@ func closePreparationFiles(files []*os.File) {
 
 // PrepareHTTPFiles adopts the descriptors even when HTTP preparation is disabled.
 // The caller's deadline bounds waiting, not an in-flight filesystem syscall.
-func (k *LinuxKernelIO) PrepareHTTPFiles(ctx context.Context, files []*os.File, options HTTPPreparationOptions) (HTTPPreparationResult, error) {
+func (k *LinuxKernelIO) PrepareHTTPFiles(ctx context.Context, files []*os.File, options HTTPPreparationOptions) error {
 	if k.httpUprobeWorker == nil || k.httpUprobeWorker.control == nil {
 		closePreparationFiles(files)
-		return HTTPPreparationResult{}, ErrNotSupported
+		return ErrNotSupported
 	}
 	return k.httpUprobeWorker.submitPreparation(ctx, files, options)
 }
 
-func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.File, options HTTPPreparationOptions) (HTTPPreparationResult, error) {
+func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.File, options HTTPPreparationOptions) error {
 	if len(files) > MaxHTTPPreparationFiles {
 		closePreparationFiles(files)
-		return HTTPPreparationResult{}, errors.New("HTTP preparation file cap")
+		return errors.New("HTTP preparation file cap")
 	}
 	if err := ctx.Err(); err != nil {
 		closePreparationFiles(files)
-		return HTTPPreparationResult{}, err
+		return err
 	}
 	// The descriptors are adopted, but the caller may reuse its slice after a
 	// timeout. Keep our own bounded slice until the worker finishes cleanup.
@@ -77,7 +72,7 @@ func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.Fi
 		files:     slices.Clone(files),
 		options:   options,
 		submitted: time.Now(),
-		done:      make(chan httpPreparationReply, 1),
+		done:      make(chan error, 1),
 	}
 	w.submissionMu.Lock()
 	var err error
@@ -99,13 +94,13 @@ func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.Fi
 	}
 	if err != nil {
 		closePreparationFiles(files)
-		return HTTPPreparationResult{}, err
+		return err
 	}
 	select {
 	case reply := <-r.done:
-		return reply.result, reply.err
+		return reply
 	case <-ctx.Done():
-		return HTTPPreparationResult{}, ctx.Err()
+		return ctx.Err()
 	}
 }
 
@@ -121,7 +116,7 @@ func (w *httpUprobeWorker) shutdownPreparation() {
 		select {
 		case r := <-w.preparationRequests:
 			closePreparationFiles(r.files)
-			r.done <- httpPreparationReply{err: errHTTPPreparationStopped}
+			r.done <- errHTTPPreparationStopped
 		default:
 			return
 		}
@@ -130,7 +125,7 @@ func (w *httpUprobeWorker) shutdownPreparation() {
 
 func (w *httpUprobeWorker) prepareRequest(workerCtx context.Context, r *httpPreparationRequest) {
 	start := time.Now()
-	var result HTTPPreparationResult
+	var preparedCount, skippedCount, failedCount int
 	var firstErr error
 	for i, f := range r.files {
 		if err := r.ctx.Err(); err != nil {
@@ -148,14 +143,14 @@ func (w *httpUprobeWorker) prepareRequest(workerCtx context.Context, r *httpPrep
 			_ = f.Close()
 		}
 		if err != nil {
-			result.Failed++
+			failedCount++
 			if firstErr == nil {
 				firstErr = err
 			}
 		} else if prepared {
-			result.Prepared++
+			preparedCount++
 		} else {
-			result.Skipped++
+			skippedCount++
 		}
 		// A preparation batch cannot starve already-queued mapping discovery.
 		select {
@@ -165,10 +160,10 @@ func (w *httpUprobeWorker) prepareRequest(workerCtx context.Context, r *httpPrep
 		}
 	}
 	if w.logger != nil {
-		w.logger.Debug("http_uprobe_preparation", "source", r.options.Source, "files", len(r.files), "prepared", result.Prepared, "skipped", result.Skipped, "failed", result.Failed, "queue_wait", start.Sub(r.submitted), "elapsed", time.Since(r.submitted), "error", firstErr,
+		w.logger.Debug("http_uprobe_preparation", "source", r.options.Source, "files", len(r.files), "prepared", preparedCount, "skipped", skippedCount, "failed", failedCount, "queue_wait", start.Sub(r.submitted), "elapsed", time.Since(r.submitted), "error", firstErr,
 			"targets", len(w.attachedTargets), "pinned", w.pinnedTargets, "queue_depth", len(w.preparationRequests), "normalized_total", w.normalizedFiles, "parsed_total", w.parsedFiles, "attached_total", w.newlyAttachedFiles, "deduplicated_total", w.deduplicatedFiles)
 	}
-	r.done <- httpPreparationReply{result: result, err: firstErr}
+	r.done <- firstErr
 }
 
 func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate) {
@@ -232,6 +227,8 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 			return false, fmt.Errorf("normalize HTTP target: %w", err)
 		}
 		defer unix.Munmap(data)
+		// Overlay pread can switch to a copied-up file. Classify the normalized
+		// mapping, including negative results that never reach register verification.
 		reader = mappedFileReader{data: data}
 		w.normalizedFiles++
 	} else {

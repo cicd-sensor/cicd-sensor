@@ -40,13 +40,17 @@ func TestServeConnection(t *testing.T) {
 		name                         string
 		source                       string
 		count                        int
+		remaining                    time.Duration
 		expired, large, handlerError bool
 		pin                          bool
 		called                       bool
 	}{
 		{name: "exact unlinked FD is transferred with CLOEXEC", source: "docker-exec", count: 1, called: true},
 		{name: "handler failure still releases its adopted FD", source: "nri-start", count: 1, handlerError: true, called: true},
-		{name: "mismatched count rejects and closes received FD", source: "docker-exec", count: 2},
+		{name: "empty FD packet skips handler", source: "docker-exec"},
+		{name: "truncated FD packet closes received descriptors", source: "docker-exec", count: MaxFiles + 1},
+		{name: "sender remaining deadline is preserved", source: "docker-exec", count: 1, remaining: Budget / 2, called: true},
+		{name: "distant sender deadline is clamped", source: "docker-exec", count: 1, remaining: 2 * Budget, called: true},
 		{name: "wire metadata cannot request machine pin", source: "host-start", count: 1, pin: true, called: true},
 		{name: "expired deadline skips handler", source: "nri-start", count: 1, expired: true},
 		{name: "truncated packet skips handler", source: "nri-start", count: 1, large: true},
@@ -69,41 +73,60 @@ func TestServeConnection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			called := false
-			done := make(chan error, 1)
-			go func() {
-				done <- serveConnection(t.Context(), server, func(ctx context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) (kernelio.HTTPPreparationResult, error) {
-					called = true
-					defer CloseFiles(files)
-					if len(files) != 1 || options.Pin {
-						return kernelio.HTTPPreparationResult{}, errors.New("invalid handler input")
-					}
-					got, e := files[0].Stat()
-					if e != nil || !os.SameFile(info, got) {
-						return kernelio.HTTPPreparationResult{}, errors.New("transferred another inode")
-					}
-					flags, e := unix.FcntlInt(files[0].Fd(), unix.F_GETFD, 0)
-					if e != nil || flags&unix.FD_CLOEXEC == 0 {
-						return kernelio.HTTPPreparationResult{}, errors.New("missing CLOEXEC")
-					}
-					if tc.handlerError {
-						return kernelio.HTTPPreparationResult{}, context.DeadlineExceeded
-					}
-					return kernelio.HTTPPreparationResult{Prepared: 1}, nil
-				})
-			}()
-			deadline := time.Now().Add(Budget)
+			remaining := Budget
+			if tc.remaining != 0 {
+				remaining = tc.remaining
+			}
+			deadline := time.Now().Add(remaining)
 			if tc.expired {
 				deadline = time.Now().Add(-time.Second)
 			}
+			called := false
+			done := make(chan error, 1)
+			go func() {
+				done <- serveConnection(t.Context(), server, func(ctx context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) error {
+					called = true
+					defer CloseFiles(files)
+					gotDeadline, ok := ctx.Deadline()
+					if !ok || gotDeadline.After(deadline) || time.Until(gotDeadline) > Budget {
+						return errors.New("handler exceeded preparation deadline")
+					}
+					if tc.remaining == Budget/2 && !gotDeadline.Equal(deadline) {
+						return errors.New("sender remaining deadline changed")
+					}
+					if len(files) != 1 || options.Pin {
+						return errors.New("invalid handler input")
+					}
+					got, e := files[0].Stat()
+					if e != nil || !os.SameFile(info, got) {
+						return errors.New("transferred another inode")
+					}
+					flags, e := unix.FcntlInt(files[0].Fd(), unix.F_GETFD, 0)
+					if e != nil || flags&unix.FD_CLOEXEC == 0 {
+						return errors.New("missing CLOEXEC")
+					}
+					if tc.handlerError {
+						return context.DeadlineExceeded
+					}
+					return nil
+				})
+			}()
 			data, _ := json.Marshal(struct {
 				preparationMessage
 				Pin bool
-			}{preparationMessage: preparationMessage{Source: tc.source, Deadline: deadline.UnixNano(), Files: tc.count}, Pin: tc.pin})
+			}{preparationMessage: preparationMessage{Source: tc.source, Deadline: deadline.UnixNano()}, Pin: tc.pin})
 			if tc.large {
 				data = make([]byte, maxMessageBytes+1)
 			}
-			if _, _, err := client.WriteMsgUnix(data, unix.UnixRights(int(f.Fd())), nil); err != nil {
+			fds := make([]int, tc.count)
+			for i := range fds {
+				fds[i] = int(f.Fd())
+			}
+			var rights []byte
+			if len(fds) > 0 {
+				rights = unix.UnixRights(fds...)
+			}
+			if _, _, err := client.WriteMsgUnix(data, rights, nil); err != nil {
 				t.Fatal(err)
 			}
 			if tc.called {
@@ -123,7 +146,7 @@ func TestServeConnection(t *testing.T) {
 					if reply.Error == "" {
 						t.Fatal("missing error reply")
 					}
-				} else if reply.Error != "" || reply.Result.Prepared != 1 {
+				} else if reply.Error != "" {
 					t.Fatalf("reply=%+v", reply)
 				}
 			}

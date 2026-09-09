@@ -66,7 +66,7 @@ func TestSubmitPreparation(t *testing.T) {
 			for i := range files {
 				files[i] = preparationTestFile(t)
 			}
-			_, err := w.submitPreparation(ctx, files, HTTPPreparationOptions{})
+			err := w.submitPreparation(ctx, files, HTTPPreparationOptions{})
 			if err == nil || tc.want != nil && !errors.Is(err, tc.want) {
 				t.Fatalf("error=%v want=%v", err, tc.want)
 			}
@@ -81,7 +81,7 @@ func TestSubmitPreparation(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		files := []*os.File{f}
 		done := make(chan error, 1)
-		go func() { _, err := w.submitPreparation(ctx, files, HTTPPreparationOptions{}); done <- err }()
+		go func() { err := w.submitPreparation(ctx, files, HTTPPreparationOptions{}); done <- err }()
 		r := <-w.preparationRequests
 		cancel()
 		if err := <-done; !errors.Is(err, context.Canceled) {
@@ -98,13 +98,13 @@ func TestSubmitPreparation(t *testing.T) {
 	t.Run("shutdown drains queued descriptors and is idempotent", func(t *testing.T) {
 		w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
 		f := preparationTestFile(t)
-		r := &httpPreparationRequest{files: []*os.File{f}, done: make(chan httpPreparationReply, 1)}
+		r := &httpPreparationRequest{files: []*os.File{f}, done: make(chan error, 1)}
 		w.preparationRequests <- r
 		w.shutdownPreparation()
 		w.shutdownPreparation()
 		requirePreparationFileClosed(t, f)
-		if reply := <-r.done; !errors.Is(reply.err, errHTTPPreparationStopped) {
-			t.Fatal(reply.err)
+		if reply := <-r.done; !errors.Is(reply, errHTTPPreparationStopped) {
+			t.Fatal(reply)
 		}
 	})
 }

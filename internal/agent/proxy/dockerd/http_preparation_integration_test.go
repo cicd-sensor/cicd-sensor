@@ -116,12 +116,12 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	served := make(chan error, 1)
-	prepared := make(chan kernelio.HTTPPreparationResult, 8)
+	prepared := make(chan error, 8)
 	go func() {
-		served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(ctx context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) (kernelio.HTTPPreparationResult, error) {
-			result, err := ki.PrepareHTTPFiles(ctx, files, options)
-			prepared <- result
-			return result, err
+		served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(ctx context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) error {
+			err := ki.PrepareHTTPFiles(ctx, files, options)
+			prepared <- err
+			return err
 		}, nil)
 	}()
 	defer func() {
@@ -170,9 +170,9 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 				t.Fatalf("streamed Docker exec response lost: %s", out)
 			}
 			select {
-			case result := <-prepared:
-				if result.Prepared == 0 {
-					t.Fatalf("no exact files prepared: %+v", result)
+			case err := <-prepared:
+				if err != nil {
+					t.Fatalf("preparation failed: %v", err)
 				}
 			case <-time.After(time.Second):
 				t.Fatal("proxy did not request preparation")

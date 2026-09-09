@@ -19,12 +19,9 @@ type HTTPPreparationOptions struct {
 	Pin    bool
 }
 
-// HTTPPreparationResult counts target files, not individual uprobe links.
-type HTTPPreparationResult struct{ Prepared, Skipped, Failed int }
-
 // HTTPFilePreparer is implemented by the Linux HTTP worker boundary. It takes
 // ownership of every file on entry, including rejection/cancellation. Callers
 // must not use or close these descriptors after calling PrepareHTTPFiles.
 type HTTPFilePreparer interface {
-	PrepareHTTPFiles(context.Context, []*os.File, HTTPPreparationOptions) (HTTPPreparationResult, error)
+	PrepareHTTPFiles(context.Context, []*os.File, HTTPPreparationOptions) error
 }

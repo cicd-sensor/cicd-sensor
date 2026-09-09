@@ -18,11 +18,11 @@ type stalledPreparer struct {
 	release chan struct{}
 }
 
-func (p *stalledPreparer) PrepareHTTPFiles(_ context.Context, files []*os.File, _ kernelio.HTTPPreparationOptions) (kernelio.HTTPPreparationResult, error) {
+func (p *stalledPreparer) PrepareHTTPFiles(_ context.Context, files []*os.File, _ kernelio.HTTPPreparationOptions) error {
 	defer CloseFiles(files)
 	p.entered <- struct{}{}
 	<-p.release
-	return kernelio.HTTPPreparationResult{}, nil
+	return nil
 }
 
 func TestPreparationRetainsSlots(t *testing.T) {

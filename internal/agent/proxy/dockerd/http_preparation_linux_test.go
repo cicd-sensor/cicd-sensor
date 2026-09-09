@@ -65,11 +65,11 @@ func TestStartResponsePreparation(t *testing.T) {
 			release := make(chan struct{})
 			served := make(chan error, 1)
 			go func() {
-				served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(_ context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) (kernelio.HTTPPreparationResult, error) {
+				served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(_ context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) error {
 					defer httpprepare.CloseFiles(files)
 					entered <- options.Source
 					<-release
-					return kernelio.HTTPPreparationResult{Prepared: len(files)}, nil
+					return nil
 				}, nil)
 			}()
 			defer func() {

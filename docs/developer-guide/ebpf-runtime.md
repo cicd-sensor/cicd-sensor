@@ -114,7 +114,7 @@ those remain in the KernelTracker/KernelIO userspace owners.
 | `staging_map` | Docker cgroup basename | Lets the `cgroup_mkdir` hook detect cgroup creation staged by the Docker proxy |
 | `http_uprobe_discovery_cache` | device, inode, ctime | Suppresses mapping notifications for files already queued, classified, or attached; eviction only causes reclassification |
 | `http_uprobe_control_requests` | worker PID/TID | One temporary request for backing normalization, registration verification, or original-VMA liveness; no Job or link state |
-| `http_uprobe_control_results` | zero or VMA start address | At most 256 temporary backing-identity results, checked by nonce and cleared after the worker operation |
+| `http_uprobe_control_results` | zero or VMA start address | At most 256 temporary backing-identity results, checked by nonce and cleared before the next worker operation |
 
 `staging_map` does not contain JobIdentity. The kernel side only matches the basename; userspace mirror state knows which job it belongs to.
 
