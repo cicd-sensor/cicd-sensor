@@ -18,6 +18,14 @@ const ringbufDropPollInterval = 5 * time.Second
 
 // StartKernelSampleLoop reads kernel ringbuf samples and delivers raw samples.
 func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error {
+	kernelIO.lifecycleMu.Lock()
+	defer kernelIO.lifecycleMu.Unlock()
+	if kernelIO.closed {
+		return os.ErrClosed
+	}
+	if kernelIO.cancelLoop != nil {
+		return errors.New("kernel sample loop already started")
+	}
 	if kernelIO.reader == nil {
 		return errors.New("ringbuf reader is not initialized")
 	}
@@ -164,6 +172,12 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	if kernelIO == nil {
 		return nil
 	}
+	kernelIO.lifecycleMu.Lock()
+	defer kernelIO.lifecycleMu.Unlock()
+	if kernelIO.closed {
+		return nil
+	}
+	kernelIO.closed = true
 
 	var firstErr error
 
