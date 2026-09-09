@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	// Classification I/O cap; independent of the number of adopted descriptors.
-	maxPreparedFileBytes = 256 << 20
-	httpPreparationGrace = 30 * time.Second
+	httpPreparationQueueSize = 8
+	httpPreparationGrace     = 30 * time.Second
 	// The existing discovery map also distinguishes completed negative results
 	// from value 1, which can mean a mapping notification is still queued.
 	httpDiscoveryNegative = uint8(2)
@@ -30,7 +29,7 @@ var errHTTPMappedBackingChanged = errors.New("HTTP mapped backing changed")
 type httpPreparationRequest struct {
 	ctx       context.Context
 	files     []*os.File
-	options   HTTPPreparationOptions
+	source    string
 	submitted time.Time
 	done      chan error
 }
@@ -45,15 +44,15 @@ func closePreparationFiles(files []*os.File) {
 
 // PrepareHTTPFiles adopts the descriptors even when HTTP preparation is disabled.
 // The caller's deadline bounds waiting, not an in-flight filesystem syscall.
-func (k *LinuxKernelIO) PrepareHTTPFiles(ctx context.Context, files []*os.File, options HTTPPreparationOptions) error {
+func (k *LinuxKernelIO) PrepareHTTPFiles(ctx context.Context, files []*os.File, source string) error {
 	if k.httpUprobeWorker == nil || k.httpUprobeWorker.control == nil {
 		closePreparationFiles(files)
 		return ErrNotSupported
 	}
-	return k.httpUprobeWorker.submitPreparation(ctx, files, options)
+	return k.httpUprobeWorker.submitPreparation(ctx, files, source)
 }
 
-func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.File, options HTTPPreparationOptions) error {
+func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.File, source string) error {
 	if len(files) > MaxHTTPPreparationFiles {
 		closePreparationFiles(files)
 		return errors.New("HTTP preparation file cap")
@@ -67,7 +66,7 @@ func (w *httpUprobeWorker) submitPreparation(ctx context.Context, files []*os.Fi
 	r := &httpPreparationRequest{
 		ctx:       ctx,
 		files:     slices.Clone(files),
-		options:   options,
+		source:    source,
 		submitted: time.Now(),
 		done:      make(chan error, 1),
 	}
@@ -151,7 +150,7 @@ func (w *httpUprobeWorker) prepareRequest(workerCtx context.Context, r *httpPrep
 		}
 	}
 	if w.logger != nil {
-		w.logger.Debug("http_uprobe_preparation", "source", r.options.Source, "files", len(r.files), "prepared", preparedCount, "skipped", skippedCount, "failed", failedCount, "queue_wait", start.Sub(r.submitted), "elapsed", time.Since(r.submitted), "error", firstErr,
+		w.logger.Debug("http_uprobe_preparation", "source", r.source, "files", len(r.files), "prepared", preparedCount, "skipped", skippedCount, "failed", failedCount, "queue_wait", start.Sub(r.submitted), "elapsed", time.Since(r.submitted), "error", firstErr,
 			"targets", len(w.attachedTargets), "queue_depth", len(w.preparationRequests))
 	}
 	r.done <- firstErr
@@ -205,7 +204,7 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 	if err != nil {
 		return false, err
 	}
-	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxPreparedFileBytes {
+	if !info.Mode().IsRegular() || info.Size() <= 0 {
 		return false, errors.New("HTTP preparation file type or size unsupported")
 	}
 	var id fileClassificationKey
@@ -264,9 +263,33 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
+	var links []link.Link
+	committed := false
+	defer func() {
+		if !committed {
+			closeLinks(links)
+		}
+	}()
+	if len(selected) > 0 {
+		ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
+		if err != nil {
+			return false, err
+		}
+		for _, target := range selected {
+			if err := ctx.Err(); err != nil {
+				return false, err
+			}
+			l, err := ex.Uprobe("", target.program, &link.UprobeOptions{Address: target.offset})
+			if err != nil {
+				return false, err
+			}
+			links = append(links, l)
+		}
+	}
 	if w.control != nil {
-		// Overlay mmap retains the opened backing while pread may switch after
-		// copy-up. Reopen the FD before rechecking, including negative results.
+		// Reopen after parsing and registration: overlay pread and uprobe lookup
+		// can switch backing after copy-up, while mmap on the original FD cannot.
+		// Reject before publishing either cache outcome; deferred close rolls back links.
 		currentFile, err := os.Open(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
 		if err != nil {
 			return false, err
@@ -281,6 +304,9 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 			return false, errHTTPMappedBackingChanged
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	if len(selected) == 0 {
 		if w.discoveryCache != nil {
 			if err := w.discoveryCache.Put(id, httpDiscoveryNegative); err != nil {
@@ -288,35 +314,6 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 			}
 		}
 		return false, nil
-	}
-	ex, err := link.OpenExecutable(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
-	if err != nil {
-		return false, err
-	}
-	var links []link.Link
-	committed := false
-	defer func() {
-		if !committed {
-			closeLinks(links)
-		}
-	}()
-	for _, target := range selected {
-		if err := ctx.Err(); err != nil {
-			return false, err
-		}
-		var l link.Link
-		if w.control != nil {
-			l, err = w.control.attach(ex, target.program, target.offset, id)
-		} else {
-			l, err = ex.Uprobe("", target.program, &link.UprobeOptions{Address: target.offset})
-		}
-		if err != nil {
-			return false, err
-		}
-		links = append(links, l)
-	}
-	if err := ctx.Err(); err != nil {
-		return false, err
 	}
 	a := &attachedUprobeTarget{classificationKey: id, links: links}
 	retainPreparedTarget(a, expected == nil)

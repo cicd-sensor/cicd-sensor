@@ -8,7 +8,7 @@ import (
 	"log/slog"
 )
 
-func prepareRemote(context.Context, string, RootResolver, string) error {
+func prepareRemote(context.Context, string, RootResolver) error {
 	return errors.New("HTTP preparation requires Linux")
 }
 

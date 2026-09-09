@@ -9,32 +9,13 @@
 #include "http_uprobe_control_maps.bpf.h"
 #include "http_uprobe_identity_helpers.bpf.h"
 
-// Optional internal hooks are loaded separately: an absent attach point must
+// This optional internal hook is loaded separately: an absent attach point must
 // not break the base sensor. Maps are replacements from the primary object.
-// Linux references (these internal attach points are feature-probed):
-// https://github.com/torvalds/linux/blob/v6.8/kernel/events/uprobes.c#L1117
+// Linux reference (the internal attach point is feature-probed):
 // https://github.com/torvalds/linux/blob/v6.8/fs/proc/task_mmu.c#L246
 // No kernel pointers leave these maps. VMA backing is necessary after copy-up;
 // reopening map_files would observe the currently selected backing instead.
 // Fixed-size results and bounded maps use 5.15 helpers/CO-RE, no kfunc/loops.
-SEC("fentry/uprobe_register")
-int BPF_PROG(handle_http_uprobe_register, struct inode *inode, loff_t offset,
-             struct uprobe_consumer *consumer)
-{
-    (void)consumer;
-    __u64 tid = bpf_get_current_pid_tgid();
-    struct http_uprobe_control_request *request =
-        bpf_map_lookup_elem(&http_uprobe_control_requests, &tid);
-    if (!request || request->operation != HTTP_UPROBE_CONTROL_REGISTER || !inode)
-        return 0;
-    __u64 zero = 0;
-    struct http_uprobe_control_result result = {.nonce = request->nonce, .start = offset};
-    http_uprobe_inode_key(inode, &result.file);
-    if (!bpf_map_update_elem(&http_uprobe_control_results, &zero, &result, BPF_ANY))
-        bpf_map_delete_elem(&http_uprobe_control_requests, &tid);
-    return 0;
-}
-
 SEC("fentry/show_map_vma")
 int BPF_PROG(handle_http_uprobe_map_vma, struct seq_file *seq, struct vm_area_struct *vma)
 {

@@ -48,7 +48,6 @@ const (
 	HTTPUprobeControlMapHttpUprobeControlRequests             = "http_uprobe_control_requests"
 	HTTPUprobeControlMapHttpUprobeControlResults              = "http_uprobe_control_results"
 	HTTPUprobeControlProgHandleHttpUprobeMapVma               = "handle_http_uprobe_map_vma"
-	HTTPUprobeControlProgHandleHttpUprobeRegister             = "handle_http_uprobe_register"
 	HTTPUprobeControlVarUnusedCgroupAttachSample              = "unused_cgroup_attach_sample"
 	HTTPUprobeControlVarUnusedCgroupMkdirSample               = "unused_cgroup_mkdir_sample"
 	HTTPUprobeControlVarUnusedCgroupRmdirSample               = "unused_cgroup_rmdir_sample"
@@ -109,8 +108,7 @@ type HTTPUprobeControlSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type HTTPUprobeControlProgramSpecs struct {
-	HandleHttpUprobeMapVma   *ebpf.ProgramSpec `ebpf:"handle_http_uprobe_map_vma"`
-	HandleHttpUprobeRegister *ebpf.ProgramSpec `ebpf:"handle_http_uprobe_register"`
+	HandleHttpUprobeMapVma *ebpf.ProgramSpec `ebpf:"handle_http_uprobe_map_vma"`
 }
 
 // HTTPUprobeControlMapSpecs contains maps before they are loaded into the kernel.
@@ -200,14 +198,12 @@ type HTTPUprobeControlVariables struct {
 //
 // It can be passed to LoadHTTPUprobeControlObjects or ebpf.CollectionSpec.LoadAndAssign.
 type HTTPUprobeControlPrograms struct {
-	HandleHttpUprobeMapVma   *ebpf.Program `ebpf:"handle_http_uprobe_map_vma"`
-	HandleHttpUprobeRegister *ebpf.Program `ebpf:"handle_http_uprobe_register"`
+	HandleHttpUprobeMapVma *ebpf.Program `ebpf:"handle_http_uprobe_map_vma"`
 }
 
 func (p *HTTPUprobeControlPrograms) Close() error {
 	return _HTTPUprobeControlClose(
 		p.HandleHttpUprobeMapVma,
-		p.HandleHttpUprobeRegister,
 	)
 }
 

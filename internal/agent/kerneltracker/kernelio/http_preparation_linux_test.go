@@ -66,7 +66,7 @@ func TestSubmitPreparation(t *testing.T) {
 			for i := range files {
 				files[i] = preparationTestFile(t)
 			}
-			err := w.submitPreparation(ctx, files, HTTPPreparationOptions{})
+			err := w.submitPreparation(ctx, files, "")
 			if err == nil || tc.want != nil && !errors.Is(err, tc.want) {
 				t.Fatalf("error=%v want=%v", err, tc.want)
 			}
@@ -81,7 +81,7 @@ func TestSubmitPreparation(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		files := []*os.File{f}
 		done := make(chan error, 1)
-		go func() { err := w.submitPreparation(ctx, files, HTTPPreparationOptions{}); done <- err }()
+		go func() { err := w.submitPreparation(ctx, files, ""); done <- err }()
 		r := <-w.preparationRequests
 		cancel()
 		if err := <-done; !errors.Is(err, context.Canceled) {

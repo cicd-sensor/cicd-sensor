@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
@@ -54,7 +53,7 @@ func withHTTPPreparation(next *httputil.ReverseProxy, upstreamSocket, agentSocke
 		// Preparation logs failures and bounds the entire inspect/scan/attach wait.
 		_ = preparation.PrepareResolved(ctx, func(ctx context.Context) (string, error) {
 			return resolveDockerTarget(ctx, upstreamSocket, id, isExec)
-		}, kernelio.HTTPPreparationOptions{Source: source})
+		}, source)
 	}
 	previous := next.ModifyResponse
 	next.ModifyResponse = func(resp *http.Response) error {

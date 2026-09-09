@@ -118,8 +118,8 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 	served := make(chan error, 1)
 	prepared := make(chan error, 8)
 	go func() {
-		served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(ctx context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) error {
-			err := ki.PrepareHTTPFiles(ctx, files, options)
+		served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(ctx context.Context, files []*os.File, source string) error {
+			err := ki.PrepareHTTPFiles(ctx, files, source)
 			prepared <- err
 			return err
 		}, nil)

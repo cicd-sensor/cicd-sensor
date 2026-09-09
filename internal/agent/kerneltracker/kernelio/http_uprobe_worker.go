@@ -133,7 +133,7 @@ func newHTTPUprobeWorker(
 		attachCandidates:    make(chan httpUprobeAttachCandidate, attachCandidateQueueSize),
 		reconcileRequests:   make(chan []uint64, 1),
 		attachedTargets:     make(map[mappedFileIdentity]*attachedUprobeTarget),
-		preparationRequests: make(chan *httpPreparationRequest, HTTPPreparationQueueSize),
+		preparationRequests: make(chan *httpPreparationRequest, httpPreparationQueueSize),
 		discoveryCache:      discoveryCache,
 	}
 }

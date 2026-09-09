@@ -9,8 +9,6 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
-
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 type stalledPreparer struct {
@@ -18,7 +16,7 @@ type stalledPreparer struct {
 	release chan struct{}
 }
 
-func (p *stalledPreparer) PrepareHTTPFiles(_ context.Context, files []*os.File, _ kernelio.HTTPPreparationOptions) error {
+func (p *stalledPreparer) PrepareHTTPFiles(_ context.Context, files []*os.File, _ string) error {
 	defer CloseFiles(files)
 	p.entered <- struct{}{}
 	<-p.release
@@ -43,13 +41,13 @@ func TestPreparationRetainsSlots(t *testing.T) {
 				p := NewLocal(worker, nil)
 				prepare := func(ctx context.Context) error {
 					if !tc.resolve {
-						return p.Prepare(ctx, root, kernelio.HTTPPreparationOptions{})
+						return p.Prepare(ctx, root, "")
 					}
 					return p.PrepareResolved(ctx, func(context.Context) (string, error) {
 						worker.entered <- struct{}{}
 						<-worker.release
 						return root, nil
-					}, kernelio.HTTPPreparationOptions{})
+					}, "")
 				}
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
@@ -108,7 +106,7 @@ func TestPreparationResolverFailure(t *testing.T) {
 			err := p.PrepareResolved(t.Context(), func(context.Context) (string, error) {
 				called = true
 				return "", want
-			}, kernelio.HTTPPreparationOptions{Source: "docker-start"})
+			}, "docker-start")
 			if tc.remote {
 				if err == nil || called {
 					t.Fatalf("called=%v err=%v", called, err)

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	nriapi "github.com/containerd/nri/pkg/api"
 )
@@ -17,10 +16,10 @@ type recordingHTTPPreparation struct {
 	err    error
 }
 
-func (p *recordingHTTPPreparation) Prepare(ctx context.Context, root string, options kernelio.HTTPPreparationOptions) error {
+func (p *recordingHTTPPreparation) Prepare(ctx context.Context, root string, source string) error {
 	p.calls++
 	p.root = root
-	p.source = options.Source
+	p.source = source
 	return p.err
 }
 

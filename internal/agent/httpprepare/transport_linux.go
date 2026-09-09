@@ -4,7 +4,6 @@ package httpprepare
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,21 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 	"golang.org/x/sys/unix"
 )
 
-const maxMessageBytes = 1024
-
-type preparationMessage struct {
-	Source string
-}
-
-type preparationResponse struct {
-	Error string
-}
-
-func prepareRemote(ctx context.Context, socket string, resolve RootResolver, source string) error {
+// The node-only packet protocol carries FDs with byte 0; replies are 0 (done)
+// or 1 (incomplete). Lifecycle source labels stay in the producer log.
+func prepareRemote(ctx context.Context, socket string, resolve RootResolver) error {
 	var dialer net.Dialer
 	c, err := dialer.DialContext(ctx, "unixpacket", socket)
 	if err != nil {
@@ -62,28 +52,23 @@ func prepareRemote(ctx context.Context, socket string, resolve RootResolver, sou
 	for i, f := range files {
 		fds[i] = int(f.Fd())
 	}
-	data, err := json.Marshal(preparationMessage{Source: source})
+	n, _, err := conn.WriteMsgUnix([]byte{0}, unix.UnixRights(fds...), nil)
 	if err != nil {
 		return err
 	}
-	n, _, err := conn.WriteMsgUnix(data, unix.UnixRights(fds...), nil)
-	if err != nil {
-		return err
-	}
-	if n != len(data) {
+	if n != 1 {
 		return errors.New("short HTTP preparation message")
 	}
-	response := make([]byte, maxMessageBytes)
-	n, err = conn.Read(response)
+	var response [1]byte
+	n, _, flags, _, err := conn.ReadMsgUnix(response[:], nil)
 	if err != nil {
 		return err
 	}
-	var reply preparationResponse
-	if err = json.Unmarshal(response[:n], &reply); err != nil {
-		return err
+	if n != 1 || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || response[0] > 1 {
+		return errors.New("invalid HTTP preparation reply")
 	}
-	if reply.Error != "" {
-		return fmt.Errorf("HTTP preparation: %s", reply.Error)
+	if response[0] != 0 {
+		return errors.New("HTTP target preparation incomplete")
 	}
 	return scanErr
 }
@@ -176,7 +161,7 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	if credential == nil || credential.Uid != uint32(os.Geteuid()) {
 		return errors.New("HTTP preparation peer UID mismatch")
 	}
-	data := make([]byte, maxMessageBytes)
+	data := make([]byte, 1)
 	oob := make([]byte, unix.CmsgSpace(MaxFiles*4))
 	// On Linux ReadMsgUnix receives all descriptors with atomic CLOEXEC.
 	n, oobn, flags, _, err := conn.ReadMsgUnix(data, oob)
@@ -191,12 +176,8 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 {
 		return errors.New("truncated HTTP preparation message")
 	}
-	var message preparationMessage
-	if err = json.Unmarshal(data[:n], &message); err != nil {
-		return err
-	}
-	if len(files) == 0 || len(files) > MaxFiles {
-		return errors.New("invalid HTTP preparation metadata")
+	if n != 1 || data[0] != 0 || len(files) == 0 || len(files) > MaxFiles {
+		return errors.New("invalid HTTP preparation packet")
 	}
 	requestCtx, cancel := context.WithDeadline(ctx, accepted.Add(Budget))
 	defer cancel()
@@ -205,16 +186,12 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	}
 	owned := files
 	files = nil // handler adopts descriptors even on timeout/rejection
-	prepareErr := handler(requestCtx, owned, kernelio.HTTPPreparationOptions{Source: message.Source})
-	reply := preparationResponse{}
+	prepareErr := handler(requestCtx, owned, "remote")
+	reply := byte(0)
 	if prepareErr != nil {
-		reply.Error = "target preparation incomplete"
+		reply = 1
 	}
-	payload, err := json.Marshal(reply)
-	if err != nil {
-		return err
-	}
-	_, err = conn.Write(payload)
+	_, err = conn.Write([]byte{reply})
 	return err
 }
 

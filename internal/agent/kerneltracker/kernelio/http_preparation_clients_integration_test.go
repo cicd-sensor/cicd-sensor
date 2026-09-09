@@ -179,7 +179,7 @@ func TestHTTPPreparationClients(t *testing.T) {
 				}
 				ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 				start := time.Now()
-				err = ki.PrepareHTTPFiles(ctx, []*os.File{f}, HTTPPreparationOptions{Source: "test-client"})
+				err = ki.PrepareHTTPFiles(ctx, []*os.File{f}, "test-client")
 				latency = append(latency, time.Since(start))
 				cancel()
 				if err != nil {

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 func TestStartResponsePreparation(t *testing.T) {
@@ -67,9 +66,9 @@ func TestStartResponsePreparation(t *testing.T) {
 			release := make(chan struct{})
 			served := make(chan error, 1)
 			go func() {
-				served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(_ context.Context, files []*os.File, options kernelio.HTTPPreparationOptions) error {
+				served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(_ context.Context, files []*os.File, source string) error {
 					defer httpprepare.CloseFiles(files)
-					entered <- options.Source
+					entered <- source
 					<-release
 					return nil
 				}, nil)
@@ -105,7 +104,7 @@ func TestStartResponsePreparation(t *testing.T) {
 			if tc.prepare {
 				select {
 				case source := <-entered:
-					if source != "docker-start" {
+					if source != "remote" {
 						t.Error(source)
 					}
 				case <-time.After(2 * time.Second):

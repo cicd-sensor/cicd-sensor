@@ -19,7 +19,6 @@ import (
 
 const (
 	controlNormalize    = 1
-	controlRegister     = 2
 	controlScan         = 3
 	maxControlMappings  = 256
 	maxProcessMapsBytes = 2 << 20
@@ -65,14 +64,12 @@ func newUprobeControl(requests, results *ebpf.Map) (*uprobeControl, error) {
 		return nil, err
 	}
 	c := &uprobeControl{objects: objects, requests: requests, results: results}
-	for _, name := range []string{"handle_http_uprobe_register", "handle_http_uprobe_map_vma"} {
-		l, err := link.AttachTracing(link.TracingOptions{Program: objects.Programs[name]})
-		if err != nil {
-			c.close()
-			return nil, fmt.Errorf("attach %s: %w", name, err)
-		}
-		c.links = append(c.links, l)
+	l, err := link.AttachTracing(link.TracingOptions{Program: objects.Programs["handle_http_uprobe_map_vma"]})
+	if err != nil {
+		c.close()
+		return nil, fmt.Errorf("attach show_map_vma: %w", err)
 	}
+	c.links = append(c.links, l)
 	return c, nil
 }
 
@@ -153,31 +150,6 @@ func (c *uprobeControl) mapFile(f *os.File, size int) ([]byte, fileClassificatio
 		return nil, fileClassificationKey{}, err
 	}
 	return data, r.key(), nil
-}
-
-// Verify registration against the parsed file: a link on another backing
-// would make the registry suppress discovery for a file that has no link.
-func (c *uprobeControl) attach(ex *link.Executable, program *ebpf.Program, offset uint64, expected fileClassificationKey) (link.Link, error) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	tid, nonce, err := c.begin(controlRegister, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer c.end(tid)
-	l, err := ex.Uprobe("", program, &link.UprobeOptions{Address: offset})
-	if err != nil {
-		return nil, err
-	}
-	r, err := c.result(nonce)
-	if err == nil && (r.key() != expected || r.Start != offset) {
-		err = errors.New("HTTP uprobe registered backing or offset changed")
-	}
-	if err != nil {
-		_ = l.Close()
-		return nil, err
-	}
-	return l, nil
 }
 
 // scan decorates the existing /proc/maps read with the original VMA's backing.

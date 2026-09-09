@@ -216,7 +216,7 @@ Inventory uses `openat2(RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS)` so absolute
 container symlinks resolve inside the selected root. The fixed inventory makes
 at most 54 path probes on supported architectures: two executable names in
 three bin directories and six library names in eight library directories.
-It retains at most 32 FDs, with 256 MiB per classified file. No directory
+It retains at most 32 FDs. No directory
 contents are read. Other sonames, custom paths and late-installed files use
 mapping discovery. All prepared files receive the same 30-second grace, then
 normal maps-liveness reclaim applies. First use after an unused target has
@@ -229,7 +229,9 @@ NRI and Docker use an Agent-owned Unix packet socket at
 validation and `SCM_RIGHTS` transfer. Keep this socket node-side, outside Job
 mounts. It is separate from the runner-facing HTTP routes. Received ancillary
 data determines the FD count; empty or truncated transfers are rejected. The
-wire contains only a source label. The receiver uses its own 500 ms deadline
+wire uses byte 0 with FDs and a one-byte reply (0: complete, 1: incomplete);
+source labels remain in producer logs. Agent and node-side producers use the
+same protocol version. A mismatched packet fails open. The receiver uses its own 500 ms deadline
 from connection acceptance, including the time waiting for descriptors. The
 caller has its own 500 ms total wait; an earlier caller cancellation need not
 immediately cancel already-adopted work.
@@ -257,18 +259,19 @@ close latency is measured because kernel unregister cannot be preempted.
 
 The optional control object is loaded separately so missing kernel attach points
 or verifier/attach failures disable preparation without preventing base sensor
-startup. Its programs require both registration and original-VMA observation;
+startup. It requires original-VMA observation;
 using backing keys with a visible-inode reclaim scan would be incorrect. A
 worker-thread request makes the existing `uprobe_mmap` hook report the backing
 identity of a temporary one-page mapping. ELF/Go resolvers read the FD normally;
 reopening `/proc/self/fd/<fd>` and mapping one page again checks that its backing
-and generation stayed the same before caching a classification. Remapping the
+and generation stayed the same after attaching all selected offsets and before
+caching either a positive or negative classification. Remapping the
 original overlay FD would keep its old backing and miss a copy-up. Userspace never reads the mapping, so
 truncation produces ordinary read errors rather than a mapped-memory fault.
-Attachment uses the exact FD and a file offset; a scoped
-`uprobe_register` hook verifies the registration inode and offset. Otherwise a
-link on another backing could make the registry suppress discovery for an
-unattached file in another container sharing the lower layer. No copied
+Attachment uses the exact FD and a file offset. If the final reopened mapping
+differs, the worker closes all new links without publishing a cache or registry
+entry. This also handles copy-up between registrations, which could otherwise
+suppress discovery for another container still using the shared lower layer. No copied
 ELF or pathname key is treated as the attachment identity.
 
 The same worker/cache/registry handles proactive and mapping candidates. The
@@ -294,7 +297,6 @@ that does not establish NRI preparation on every kernel or snapshotter.
 | Temporary control operation | Observation point | Why userspace metadata alone is insufficient |
 | --- | --- | --- |
 | Normalize the opened file | Existing `uprobe_mmap` hook during a worker-owned read-only mapping | Overlay `fstat` can report a different identity from the backing file |
-| Verify registration | Optional `uprobe_register` hook | The registered inode and offset must match the file that was classified |
 | Check liveness | Optional `show_map_vma` hook during `/proc/PID/maps` reads | Copy-up can change what a reopened file resolves to while an old VMA remains live |
 
 These operations use one PID/TID-scoped request with a nonce, fixed-size CO-RE
