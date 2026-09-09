@@ -477,25 +477,6 @@ x64 and arm64 unless noted otherwise.
 
 ## Operational status and known limits
 
-Validation on 2026-09-08 used commit `b038f523`:
-
-| Execution environment | First-request result | What this establishes |
-| --- | --- | --- |
-| [Real GitLab Docker executor](https://gitlab.com/rung/cicd-sensor-demo/-/pipelines/2827925544), Runner 18.10.1 / Docker 29.1.3 / Linux 6.8 arm64 | OpenSSL, nghttp2, gh, glab: each 20/20 Jobs | Product Agent/proxy and real Job attribution; four clients run sequentially per Job, so later clients can benefit from warm libraries |
-| GKE Standard 1.35.7 / COS 6.12.94+ / containerd 2.1.9 / amd64 | Each client 20/20 independent Pods, concurrency two | Actual NRI/Agent preparation with fresh target inodes; synthetic GitLab annotations, not an installed GitLab Kubernetes executor or ARC controller |
-
-On GKE, the NRI container used `drop: [ALL]`, `add: [SYS_PTRACE]`, and
-AppArmor `Unconfined`; unused targets were reclaimed to zero. The observed
-worker preparation p99 was 182.546 ms, not the entire NRI callback duration.
-These small matrices do not establish a general capture probability or an
-optimal concurrency limit. Additional Go events were observed in both matrices;
-their cause was not established as duplicate links.
-
-[Ordinary CI](https://github.com/cicd-sensor/cicd-sensor/actions/runs/34179828215)
-and the existing [cross-kernel HTTP/Go suite](https://github.com/cicd-sensor/cicd-sensor/actions/runs/34179830370)
-passed for that commit. Runtime evidence and these regression checks have
-different coverage and should not be combined into a universal deployment claim.
-
 - `http_request` capture is disabled by default during rollout. The
   `--enable-http-request` switch controls both the cleartext tap and the HTTP
   uprobe runtime, and remains the disable path after default enablement.
@@ -505,17 +486,8 @@ different coverage and should not be combined into a universal deployment claim.
   rollout gate.
 - Preparation improves common existing files only. Workspace downloads,
   replacement after preparation, late execution after grace/reclaim, and Docker
-  initial entrypoints can still lose the first request. Fresh-inode overlay
-  fixtures captured 20/20 requests for each of OpenSSL, nghttp2, stripped `gh`,
-  and stripped `glab` through the product preparation API on Linux 6.8 arm64.
-  This is worker-level evidence, not an ARC/GitLab/dind deployment guarantee.
-  A separate product Agent/CLI proxy fixture on Linux 6.8 arm64 with Docker
-  28.5.2 dind (VFS, cgroupfs v2) captured 20/20 fresh first requests per client
-  through inner exec preparation. Independent immediate-entrypoint mappings
-  captured OpenSSL 11/20, nghttp2 18/20, gh 20/20, and glab 19/20. These are
-  local fixture results with synthetic GitLab Job attribution, not real
-  GitLab.com Runner delivery or ARC dind deployment verification. The inner-proxy
-  configuration is outside Day 1; its success rate does not describe normal dind.
+  initial entrypoints can still lose the first request. Dind inner workloads
+  use mapping discovery only; inner-proxy preparation is outside Day 1.
 - Discovery observes executable mappings created while the process is already in
   a tracked cgroup. Initial catch-up scanning, periodic attach backstop, moving an
   existing process into a tracked cgroup, and later `mprotect(PROT_EXEC)` are not

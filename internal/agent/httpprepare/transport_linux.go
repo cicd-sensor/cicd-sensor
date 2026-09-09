@@ -25,6 +25,7 @@ type preparationMessage struct {
 	Deadline int64
 	Files    int
 }
+
 type preparationResponse struct {
 	Result kernelio.HTTPPreparationResult
 	Error  string
@@ -145,13 +146,17 @@ func Serve(ctx context.Context, socket string, handler FileHandler, logger *slog
 			continue
 		}
 		wg.Go(func() {
-			defer func() { <-slots; _ = conn.Close() }()
+			defer func() {
+				<-slots
+				_ = conn.Close()
+			}()
 			if err := serveConnection(ctx, conn, handler); err != nil && logger != nil {
 				logger.DebugContext(ctx, "http_preparation_request_failed", "error", err)
 			}
 		})
 	}
 }
+
 func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandler) error {
 	accepted := time.Now()
 	if err := conn.SetDeadline(accepted.Add(Budget)); err != nil {
@@ -176,17 +181,10 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	}
 	data := make([]byte, maxMessageBytes)
 	oob := make([]byte, unix.CmsgSpace(MaxFiles*4))
-	var n, oobn, flags int
-	// Receive CLOEXEC atomically, including FDs attached to invalid messages.
-	err = raw.Read(func(fd uintptr) bool {
-		n, oobn, flags, _, socketErr = unix.Recvmsg(int(fd), data, oob, unix.MSG_CMSG_CLOEXEC)
-		return !errors.Is(socketErr, unix.EAGAIN) && !errors.Is(socketErr, unix.EWOULDBLOCK)
-	})
+	// On Linux ReadMsgUnix receives all descriptors with atomic CLOEXEC.
+	n, oobn, flags, _, err := conn.ReadMsgUnix(data, oob)
 	if err != nil {
 		return err
-	}
-	if socketErr != nil {
-		return socketErr
 	}
 	files, err := receivedFiles(oob[:oobn])
 	defer func() { CloseFiles(files) }()
@@ -226,6 +224,7 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	_, err = conn.Write(payload)
 	return err
 }
+
 func receivedFiles(oob []byte) (files []*os.File, err error) {
 	messages, err := unix.ParseSocketControlMessage(oob)
 	if err != nil {

@@ -43,12 +43,12 @@ func TestServeConnection(t *testing.T) {
 		expired, large, handlerError bool
 		called                       bool
 	}{
-		{"exact unlinked FD is transferred with CLOEXEC", "docker-exec", 1, false, false, false, true},
-		{"handler failure still releases its adopted FD", "nri-start", 1, false, false, true, true},
-		{"mismatched count rejects and closes received FD", "docker-exec", 2, false, false, false, false},
-		{"remote cannot request machine pin", "host-start", 1, false, false, false, false},
-		{"expired deadline skips handler", "nri-start", 1, true, false, false, false},
-		{"truncated packet skips handler", "nri-start", 1, false, true, false, false},
+		{name: "exact unlinked FD is transferred with CLOEXEC", source: "docker-exec", count: 1, called: true},
+		{name: "handler failure still releases its adopted FD", source: "nri-start", count: 1, handlerError: true, called: true},
+		{name: "mismatched count rejects and closes received FD", source: "docker-exec", count: 2},
+		{name: "invalid source rejects and closes received FD", source: "host-start", count: 1},
+		{name: "expired deadline skips handler", source: "nri-start", count: 1, expired: true},
+		{name: "truncated packet skips handler", source: "nri-start", count: 1, large: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server, client := packetPair(t)
