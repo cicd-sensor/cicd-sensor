@@ -19,19 +19,6 @@ const (
 	MaxFiles = kernelio.MaxHTTPPreparationFiles
 )
 
-// Inventory work limits bound directory enumeration independently of returned FDs.
-const (
-	maxDirectories       = 32
-	maxDirectoryEntries  = 512
-	maxCandidateAttempts = 128
-)
-
-// InventoryStats measures work even when enumeration stops at a resource limit.
-type InventoryStats struct {
-	Directories, Entries, Candidates, Opened, Missing, Failed int
-	Truncated                                                 bool
-}
-
 // CloseFiles releases files not transferred to the preparation API.
 func CloseFiles(files []*os.File) {
 	for _, f := range files {

@@ -101,7 +101,7 @@ is not a substitute for the container's file.
 
 | Environment | Preparation window | Files available at that window | Remaining gap |
 | --- | --- | --- | --- |
-| Machine | Agent startup and successful Job start | Fixed host inventory | Files installed later or outside that inventory |
+| Machine | Successful Job start | Fixed host inventory | Files installed later or outside that inventory |
 | Host Docker through the proxy | Before forwarding a later exec start | Files in the already-running container's root | Initial entrypoint; files created by the exec itself |
 | GitLab Docker executor through the proxy | After dockerd starts the container, before returning success to Runner | Files in the running container's root | Entrypoint code already runs; only scripts sent after the response benefit |
 | containerd CRI/runc with NRI | `StartContainer`, before task start | Waiting init process's root | Later exec has no NRI preparation callback |
@@ -143,7 +143,7 @@ and retains its overlay limitation; preparation requires backing-identity hooks.
 
 | Type | State | Purpose and identity | Access | Bound and removal |
 | --- | --- | --- | --- | --- |
-| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by backing `mappedFileIdentity` (device, inode); stores classification key, links, pin/grace retention, and complete-miss count | HTTP uprobe worker only | 4,096 files, including at most 128 pinned machine targets; eligible entries are reclaimed after two complete misses |
+| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by backing `mappedFileIdentity` (device, inode); stores classification key, links, preparation grace, and complete-miss count | HTTP uprobe worker only | 4,096 files; eligible entries are reclaimed after two complete misses |
 | Shared BPF cache | `http_uprobe_discovery_cache` | Keyed by `fileClassificationKey` (device, inode, ctime); suppresses callbacks for files already queued, classified, or attached | BPF hook, KernelIO reader, and worker | 65,536-entry LRU; failed work and reclaim remove entries |
 
 The cache is notification suppression, not the link registry. Eviction can cause
@@ -179,15 +179,15 @@ periodic attach scan, recursive workspace scan, or image/snapshot parser.
 
 | Target | Resolution | Inventory below the selected root |
 | --- | --- | --- |
-| `libssl.so`, `libssl.so.*` | Defined ELF function symbols | `/lib`, `/lib64`, `/usr/lib`, `/usr/lib64`, `/usr/local/lib`, `/usr/local/lib64`, and the host architecture's `/lib` and `/usr/lib` multiarch directories |
-| `libnghttp2.so`, `libnghttp2.so.*` | Defined ELF function symbols | Same library directories |
-| `gh`, `glab` | Go pclntab | `/bin`, `/usr/bin`, `/usr/local/bin`; bounded absolute executable/PATH directories supplied by container runtime context |
+| `libssl.so`, `libssl.so.3`, `libssl.so.1.1`, `libssl.so.10` | Defined ELF function symbols | `/lib`, `/lib64`, `/usr/lib`, `/usr/lib64`, `/usr/local/lib`, `/usr/local/lib64`, and the host architecture's `/lib` and `/usr/lib` multiarch directories |
+| `libnghttp2.so`, `libnghttp2.so.14` | Defined ELF function symbols | Same library directories |
+| `gh`, `glab` | Go pclntab | `/bin`, `/usr/bin`, `/usr/local/bin` |
 
-Machine startup and successful Job-start requests refresh the fixed host
-inventory. The current machine start API carries no runner PATH/tool-cache
-inventory, so user-installed binaries elsewhere remain mapping-discovered.
+Successful machine Job-start requests refresh the fixed host inventory.
+Agent startup does not scan. Runtime PATH, command and tool-cache metadata are
+not inspected; binaries elsewhere remain mapping-discovered.
 Docker proxy preparation runs before forwarding a later `/exec/{id}/start`,
-and after a successful `/containers/{id}/start` response arrives from dockerd,
+and, for GitLab only, after a successful `/containers/{id}/start` response arrives from dockerd,
 before returning that response to the caller. At the latter point the container
 is already running and its PID/root can be inspected. GitLab Runner's ordinary
 Docker executor sends shell stdin only after `ContainerStart` returns, so this
@@ -208,14 +208,19 @@ feasibility evidence, not a Day 1 deployment or first-request guarantee.
 The NRI observer prepares known CI containers at `StartContainer`, using the
 waiting init PID's root. On the supported containerd CRI/runc path, this callback
 is between task creation and task start. It does not imply notifications for
-later exec operations. `Synchronize` offers bounded re-preparation for known
-containers with usable PIDs; it does not replay missed Job staging.
+later exec operations. Reconnect does not prepare existing containers or replay
+missed Job staging. Mapping discovery observes future executable mappings; it
+does not replay files already mapped before an Agent restart.
 
 Inventory uses `openat2(RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS)` so absolute
-container symlinks resolve inside the selected root. Limits are 32 directories,
-512 entries per library directory, 128 candidate open attempts, 32 returned
-FDs, and 256 MiB per classified file. Common ABI basenames are tried before
-bounded directory enumeration. No directory is traversed recursively.
+container symlinks resolve inside the selected root. The fixed inventory makes
+at most 54 path probes on supported architectures: two executable names in
+three bin directories and six library names in eight library directories.
+It retains at most 32 FDs, with 256 MiB per classified file. No directory
+contents are read. Other sonames, custom paths and late-installed files use
+mapping discovery. All prepared files receive the same 30-second grace, then
+normal maps-liveness reclaim applies. First use after an unused target has
+been reclaimed can miss the first request, even within the same Job.
 
 All producers call `PrepareHTTPFiles`; the API adopts every FD, including on
 rejection, and returns only an error; per-batch counts remain worker diagnostics.
@@ -224,8 +229,10 @@ NRI and Docker use an Agent-owned Unix packet socket at
 validation and `SCM_RIGHTS` transfer. Keep this socket node-side, outside Job
 mounts. It is separate from the runner-facing HTTP routes. Received ancillary
 data determines the FD count; empty or truncated transfers are rejected. The
-sender deadline preserves time already spent on inspection and inventory, while
-the receiver also enforces its own maximum wait.
+wire contains only a source label. The receiver uses its own 500 ms deadline
+from connection acceptance, including the time waiting for descriptors. The
+caller has its own 500 ms total wait; an earlier caller cancellation need not
+immediately cancel already-adopted work.
 
 The 500 ms deadline covers root resolution, inventory, transfer, queueing, classification, and
 attachment waiting. Workloads continue on timeout, queue saturation, missing
@@ -241,9 +248,8 @@ Canceled callers cannot free admission while their actual work is still blocked.
 The 500 ms budget bounds waiting; it is not an I/O cancellation guarantee. Saturation fails open instead of
 adding workers or an unbounded wait queue. Existing mapping cap 4096 remains.
 
-Normal mapping samples and event delivery keep their existing queues. Between
-prepared files the worker services pending mapping discovery. Reconciliation
-is serviced between batches. Between target closes it yields to pending
+Normal mapping samples and event delivery keep their existing queues. Mapping
+discovery and reconciliation are serviced between preparation batches. Between target closes it yields to pending
 preparation or mapping work; an idle sweep drains eligible targets. Individual
 close latency is measured because kernel unregister cannot be preempted.
 
@@ -254,12 +260,15 @@ or verifier/attach failures disable preparation without preventing base sensor
 startup. Its programs require both registration and original-VMA observation;
 using backing keys with a visible-inode reclaim scan would be incorrect. A
 worker-thread request makes the existing `uprobe_mmap` hook report the backing
-identity of a temporary read-only mapping. The existing ELF/Go resolvers read
-that same mapping: reading the overlay FD again can switch to copied-up contents
-and cache a negative result under the original backing identity. Attachment uses the exact FD and a file offset; a scoped
+identity of a temporary one-page mapping. ELF/Go resolvers read the FD normally;
+reopening `/proc/self/fd/<fd>` and mapping one page again checks that its backing
+and generation stayed the same before caching a classification. Remapping the
+original overlay FD would keep its old backing and miss a copy-up. Userspace never reads the mapping, so
+truncation produces ordinary read errors rather than a mapped-memory fault.
+Attachment uses the exact FD and a file offset; a scoped
 `uprobe_register` hook verifies the registration inode and offset. Otherwise a
 link on another backing could make the registry suppress discovery for an
-unattached file. No copied
+unattached file in another container sharing the lower layer. No copied
 ELF or pathname key is treated as the attachment identity.
 
 The same worker/cache/registry handles proactive and mapping candidates. The
@@ -446,8 +455,7 @@ remain fail-keep.
 
 | Observation | Action |
 | --- | --- |
-| pinned fixed machine target | Keep until Agent shutdown, within the 128-target pin cap. |
-| proactively prepared runtime target within 30-second grace | Keep even before any mapping exists; do not advance the miss count. |
+| proactively prepared target within 30-second grace | Keep even before any mapping exists; do not advance the miss count. |
 | target mapped by any tracked process | Reset its complete-miss count to zero. |
 | eligible target absent from a complete scan | Increment the count; after two complete misses, remove its cache entry, then close links and remove the target. Yield between closes when preparation or mapping work is queued; recheck deferred targets on a later scan. |
 | discovery-cache deletion fails | Keep the links and registry entry so a later reconciliation can retry safely. |

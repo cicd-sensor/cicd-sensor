@@ -7,6 +7,6 @@ import (
 	"errors"
 )
 
-func resolveDockerTarget(context.Context, string, string, bool) (string, []string, error) {
-	return "", nil, errors.New("HTTP preparation requires Linux")
+func resolveDockerTarget(context.Context, string, string, bool) (string, error) {
+	return "", errors.New("HTTP preparation requires Linux")
 }

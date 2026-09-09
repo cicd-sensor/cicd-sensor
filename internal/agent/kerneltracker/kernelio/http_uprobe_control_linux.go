@@ -155,7 +155,7 @@ func (c *uprobeControl) mapFile(f *os.File, size int) ([]byte, fileClassificatio
 	return data, r.key(), nil
 }
 
-// Verify registration against the parsed mapping: a link on another backing
+// Verify registration against the parsed file: a link on another backing
 // would make the registry suppress discovery for a file that has no link.
 func (c *uprobeControl) attach(ex *link.Executable, program *ebpf.Program, offset uint64, expected fileClassificationKey) (link.Link, error) {
 	runtime.LockOSThread()

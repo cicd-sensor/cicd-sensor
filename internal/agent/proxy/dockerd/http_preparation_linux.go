@@ -13,11 +13,10 @@ import (
 	"os"
 	"sync/atomic"
 
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"golang.org/x/sys/unix"
 )
 
-func resolveDockerTarget(ctx context.Context, upstreamSocket, id string, isExec bool) (string, []string, error) {
+func resolveDockerTarget(ctx context.Context, upstreamSocket, id string, isExec bool) (string, error) {
 	var daemonPID atomic.Int32
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		var dialer net.Dialer
@@ -59,19 +58,18 @@ func resolveDockerTarget(ctx context.Context, upstreamSocket, id string, isExec 
 		}
 		return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
 	}
-	containerID, command := id, ""
+	containerID := id
 	if isExec {
 		var exec struct {
-			ContainerID   string
-			ProcessConfig struct{ Entrypoint string }
+			ContainerID string
 		}
 		if err := inspect("/exec/"+id+"/json", &exec); err != nil {
-			return "", nil, err
+			return "", err
 		}
-		containerID, command = exec.ContainerID, exec.ProcessConfig.Entrypoint
+		containerID = exec.ContainerID
 	}
 	if !fullDockerID(containerID) {
-		return "", nil, errors.New("invalid Docker container identity")
+		return "", errors.New("invalid Docker container identity")
 	}
 	var container struct {
 		ID    string
@@ -79,23 +77,18 @@ func resolveDockerTarget(ctx context.Context, upstreamSocket, id string, isExec 
 			Pid     int32
 			Running bool
 		}
-		Config struct{ Env, Entrypoint, Cmd []string }
 	}
 	if err := inspect("/containers/"+containerID+"/json", &container); err != nil {
-		return "", nil, err
+		return "", err
 	}
 	if container.ID != containerID || !container.State.Running || container.State.Pid <= 0 {
-		return "", nil, errors.New("docker container is not running")
+		return "", errors.New("docker container is not running")
 	}
 	root, err := dockerProcessRoot(daemonPID.Load(), container.State.Pid)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
-	args := []string{command}
-	if !isExec {
-		args = append(container.Config.Entrypoint, container.Config.Cmd...)
-	}
-	return root, httpprepare.BinDirectories(args, container.Config.Env), nil
+	return root, nil
 }
 
 // Docker inspect PID is relative to the daemon's PID namespace. Use that

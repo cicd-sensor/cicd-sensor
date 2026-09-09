@@ -5,7 +5,6 @@ package httpprepare
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,18 +26,18 @@ func targetFixture(t *testing.T, root, name string) {
 func TestOpenFiles(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name              string
-		setup             func(*testing.T, string)
-		want              int
-		failed, truncated bool
+		name   string
+		setup  func(*testing.T, string)
+		want   int
+		failed bool
 	}{
-		{"absent targets are normal", func(*testing.T, string) {}, 0, false, false},
-		{"only named files without recursion", func(t *testing.T, r string) {
-			for _, n := range []string{"usr/bin/gh", "usr/bin/glab", "usr/bin/curl", "usr/bin/nested/gh", "usr/lib/libssl.so.3", "usr/lib/libnghttp2.so.14", "usr/lib/libcrypto.so.3"} {
+		{name: "absent targets are normal", setup: func(*testing.T, string) {}},
+		{name: "only fixed names without recursion", want: 5, setup: func(t *testing.T, r string) {
+			for _, n := range []string{"usr/bin/gh", "usr/bin/glab", "usr/bin/curl", "usr/bin/nested/gh", "usr/lib/libssl.so.3", "usr/lib/libssl.so.10", "usr/lib/libnghttp2.so.14", "usr/lib/libcrypto.so.3", "usr/lib/libssl.so.99", "opt/bin/gh"} {
 				targetFixture(t, r, n)
 			}
-		}, 4, false, false},
-		{"absolute symlink resolves in target root", func(t *testing.T, r string) {
+		}},
+		{name: "absolute symlink resolves in target root", want: 1, setup: func(t *testing.T, r string) {
 			targetFixture(t, r, "opt/real-gh")
 			if err := os.MkdirAll(filepath.Join(r, "usr/bin"), 0o755); err != nil {
 				t.Fatal(err)
@@ -46,47 +45,47 @@ func TestOpenFiles(t *testing.T) {
 			if err := os.Symlink("/opt/real-gh", filepath.Join(r, "usr/bin/gh")); err != nil {
 				t.Fatal(err)
 			}
-		}, 1, false, false},
-		{"directory and FIFO cannot block preparation", func(t *testing.T, r string) {
+		}},
+		{name: "directory and FIFO cannot block preparation", failed: true, setup: func(t *testing.T, r string) {
 			if err := os.MkdirAll(filepath.Join(r, "usr/bin/gh"), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			if err := unix.Mkfifo(filepath.Join(r, "usr/bin/glab"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-		}, 0, true, false},
-		{"returned descriptors have a strict cap", func(t *testing.T, r string) {
-			for i := range 60 {
-				targetFixture(t, r, fmt.Sprintf("usr/lib/libssl.so.%03d", i))
+		}},
+		{name: "returned descriptors have a strict cap", want: MaxFiles, failed: true, setup: func(t *testing.T, r string) {
+			for _, dir := range []string{"lib", "lib64", "usr/lib", "usr/lib64", "usr/local/lib", "usr/local/lib64"} {
+				for _, name := range []string{"libssl.so", "libssl.so.3", "libssl.so.1.1", "libssl.so.10", "libnghttp2.so", "libnghttp2.so.14"} {
+					targetFixture(t, r, dir+"/"+name)
+				}
 			}
-		}, MaxFiles, false, true},
-		{"common ABI survives directory entry cap", func(t *testing.T, r string) {
-			for i := range maxDirectoryEntries + 10 {
-				targetFixture(t, r, fmt.Sprintf("usr/lib/other-%04d", i))
-			}
-			targetFixture(t, r, "usr/lib/libssl.so.3")
-		}, 1, false, true},
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			r := t.TempDir()
-			tc.setup(t, r)
-			files, stats, err := OpenFiles(t.Context(), r, nil)
+			root := t.TempDir()
+			tc.setup(t, root)
+			files, err := OpenFiles(t.Context(), root)
 			defer CloseFiles(files)
-			if (err != nil) != tc.failed || len(files) != tc.want || stats.Truncated != tc.truncated {
-				t.Fatalf("files=%d stats=%+v err=%v", len(files), stats, err)
-			}
-			if stats.Candidates > maxCandidateAttempts || stats.Directories > maxDirectories || stats.Entries > maxDirectories*maxDirectoryEntries {
-				t.Fatalf("unbounded inventory: %+v", stats)
+			if (err != nil) != tc.failed || len(files) != tc.want {
+				t.Fatalf("files=%d err=%v", len(files), err)
 			}
 		})
 	}
 	t.Run("cancel before root acquisition", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		files, _, err := OpenFiles(ctx, "/does-not-exist", nil)
+		files, err := OpenFiles(ctx, "/does-not-exist")
 		defer CloseFiles(files)
 		if !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+	})
+	t.Run("missing root is an error", func(t *testing.T) {
+		files, err := OpenFiles(t.Context(), filepath.Join(t.TempDir(), "absent"))
+		defer CloseFiles(files)
+		if !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
 		}
 	})

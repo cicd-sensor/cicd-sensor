@@ -1,6 +1,7 @@
 package dockerd
 
 import (
+	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -44,7 +45,7 @@ func TestHTTPPreparationUnavailablePassesRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := withHTTPPreparation(httputil.NewSingleHostReverseProxy(target), filepath.Join(dir, "docker.sock"), filepath.Join(dir, "agent.sock"), nil)
+	h := withHTTPPreparation(httputil.NewSingleHostReverseProxy(target), filepath.Join(dir, "docker.sock"), filepath.Join(dir, "agent.sock"), jobcontext.ProviderGitLab, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/exec/"+strings.Repeat("a", 64)+"/start", nil))
 	if !called || w.Code != http.StatusAccepted {
@@ -58,7 +59,7 @@ func TestPreparationPreservesResponseHook(t *testing.T) {
 			called := false
 			proxy := &httputil.ReverseProxy{ModifyResponse: func(resp *http.Response) error { called = true; return nil }}
 			dir := t.TempDir()
-			_ = withHTTPPreparation(proxy, filepath.Join(dir, "docker.sock"), filepath.Join(dir, "agent.sock"), nil)
+			_ = withHTTPPreparation(proxy, filepath.Join(dir, "docker.sock"), filepath.Join(dir, "agent.sock"), jobcontext.ProviderGitLab, nil)
 			resp := &http.Response{StatusCode: status, Request: httptest.NewRequest(http.MethodPost, "/containers/"+strings.Repeat("a", 64)+"/start", nil)}
 			if err := proxy.ModifyResponse(resp); err != nil {
 				t.Fatal(err)

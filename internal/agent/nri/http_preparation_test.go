@@ -3,7 +3,6 @@ package nri
 import (
 	"context"
 	"errors"
-	"slices"
 	"testing"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
@@ -14,15 +13,13 @@ import (
 type recordingHTTPPreparation struct {
 	calls  int
 	root   string
-	dirs   []string
 	source string
 	err    error
 }
 
-func (p *recordingHTTPPreparation) Prepare(ctx context.Context, root string, dirs []string, options kernelio.HTTPPreparationOptions) error {
+func (p *recordingHTTPPreparation) Prepare(ctx context.Context, root string, options kernelio.HTTPPreparationOptions) error {
 	p.calls++
 	p.root = root
-	p.dirs = dirs
 	p.source = options.Source
 	return p.err
 }
@@ -56,43 +53,8 @@ func TestStartContainerHTTPPreparation(t *testing.T) {
 			if p.calls != tc.calls {
 				t.Fatalf("calls=%d", p.calls)
 			}
-			if p.calls > 0 && (p.root != "/proc/123/root" || p.source != "nri-start" || !slices.Equal(p.dirs, []string{"/tools", "/tools/bin"})) {
+			if p.calls > 0 && (p.root != "/proc/123/root" || p.source != "nri-start") {
 				t.Fatalf("preparation=%+v", p)
-			}
-		})
-	}
-}
-
-func TestSynchronizeHTTPPreparation(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		canceled bool
-		want     int
-	}{
-		{"reconnect preparation stops at container cap", false, 32},
-		{"canceled reconnect performs no preparation", true, 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			p := &recordingHTTPPreparation{}
-			o := &Observer{provider: jobcontext.ProviderGitLab, preparation: p}
-			pod := &nriapi.PodSandbox{Id: "pod", Annotations: map[string]string{gitlabJobIDAnnotation: "123", gitlabJobURLAnnotation: "https://gitlab.com/group/project/-/jobs/123"}}
-			containers := make([]*nriapi.Container, 40)
-			for i := range containers {
-				containers[i] = &nriapi.Container{Id: "container", PodSandboxId: "pod", Name: "build", Pid: 123, Linux: &nriapi.LinuxContainer{CgroupsPath: "kubepods.slice:cri-containerd:container"}}
-			}
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			if tc.canceled {
-				cancel()
-			}
-			updates, err := o.Synchronize(ctx, []*nriapi.PodSandbox{pod}, containers)
-			if err != nil || len(updates) != 0 || p.calls != tc.want {
-				t.Fatalf("calls=%d updates=%v err=%v", p.calls, updates, err)
-			}
-			if p.calls > 0 && p.source != "nri-synchronize" {
-				t.Fatal(p.source)
 			}
 		})
 	}

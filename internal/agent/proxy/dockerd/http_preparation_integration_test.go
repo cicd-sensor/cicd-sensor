@@ -26,7 +26,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Requires a preloaded test image with curl, /opt/gh and /opt/glab. It uses only
+// Requires a preloaded test image with curl, /usr/local/bin/gh and /usr/local/bin/glab. It uses only
 // its own disposable container, node sockets and a local TLS endpoint.
 func TestDockerExecHTTPPreparation(t *testing.T) {
 	image := os.Getenv("CICD_DOCKER_PREPARATION_IMAGE")
@@ -157,8 +157,8 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 	}{
 		{"openssl", []string{"curl", "--http1.1", "--cacert", "/cicd-test/cert.pem", "-sS", srv.URL + "/docker-ssl"}, 1},
 		{"nghttp2", []string{"curl", "--http2", "--cacert", "/cicd-test/cert.pem", "-sS", srv.URL + "/docker-h2"}, 2},
-		{"gh", []string{"/opt/gh", "api", srv.URL + "/docker-gh"}, 3},
-		{"glab", []string{"/opt/glab", "api", "user"}, 3},
+		{"gh", []string{"/usr/local/bin/gh", "api", srv.URL + "/docker-gh"}, 3},
+		{"glab", []string{"/usr/local/bin/glab", "api", "user"}, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for len(events) > 0 {

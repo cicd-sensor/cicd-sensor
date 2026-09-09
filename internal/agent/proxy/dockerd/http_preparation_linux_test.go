@@ -24,11 +24,13 @@ func TestStartResponsePreparation(t *testing.T) {
 		name             string
 		status           int
 		timeout, prepare bool
+		github           bool
 	}{
-		{"successful start waits for exact file preparation", 204, false, true},
-		{"timeout returns successful start while cleanup continues", 204, true, true},
-		{"already running is not a new start", 304, false, false},
-		{"failed start preserves daemon failure", 500, false, false},
+		{name: "successful start waits for exact file preparation", status: 204, prepare: true},
+		{name: "timeout returns successful start while cleanup continues", status: 204, timeout: true, prepare: true},
+		{name: "already running is not a new start", status: 304},
+		{name: "failed start preserves daemon failure", status: 500},
+		{name: "GitHub start does not inspect or prepare", status: 204, github: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, err := os.MkdirTemp("", "http-prep-")
@@ -37,9 +39,6 @@ func TestStartResponsePreparation(t *testing.T) {
 			}
 			t.Cleanup(func() { _ = os.RemoveAll(root) })
 			id := strings.Repeat("a", 64)
-			if err := os.WriteFile(filepath.Join(root, "gh"), []byte("fixture target"), 0o755); err != nil {
-				t.Fatal(err)
-			}
 			upstreamSocket := filepath.Join(root, "docker.sock")
 			agentSocket := filepath.Join(root, "agent.sock")
 			listener, err := net.Listen("unix", upstreamSocket)
@@ -51,7 +50,10 @@ func TestStartResponsePreparation(t *testing.T) {
 				case "/containers/" + id + "/start":
 					w.WriteHeader(tc.status)
 				case "/containers/" + id + "/json":
-					_ = json.NewEncoder(w).Encode(map[string]any{"Id": id, "State": map[string]any{"Running": true, "Pid": os.Getpid()}, "Config": map[string]any{"Env": []string{"PATH=" + root}}})
+					if tc.github {
+						t.Error("GitHub start inspected the runtime")
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": id, "State": map[string]any{"Running": true, "Pid": os.Getpid()}})
 				default:
 					t.Errorf("unexpected daemon request %s", r.URL.Path)
 					w.WriteHeader(404)
@@ -90,7 +92,10 @@ func TestStartResponsePreparation(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			handler := proxyHandlerGitHub(slog.Default(), upstreamSocket, agentSocket)
+			handler := proxyHandlerGitLab(slog.Default(), upstreamSocket, agentSocket)
+			if tc.github {
+				handler = proxyHandlerGitHub(slog.Default(), upstreamSocket, agentSocket)
+			}
 			response := httptest.NewRecorder()
 			done := make(chan struct{})
 			go func() {

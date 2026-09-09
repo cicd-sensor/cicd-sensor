@@ -84,7 +84,6 @@ type attachedUprobeTarget struct {
 	classificationKey fileClassificationKey
 	links             []link.Link
 	missingScanCount  uint8
-	pinned            bool
 	protectedUntil    time.Time
 }
 
@@ -99,10 +98,7 @@ type httpUprobeWorker struct {
 	submissionMu        sync.Mutex
 	stopped             bool
 	preparationRequests chan *httpPreparationRequest
-	pinnedTargets       int
 	preparationDrops    uint64 // submissionMu-owned
-	// Cumulative worker-owned diagnostics shared by proactive and mapping paths.
-	normalizedFiles, parsedFiles, newlyAttachedFiles, deduplicatedFiles uint64
 
 	// Worker inputs. run consumes serially.
 	attachCandidates  chan httpUprobeAttachCandidate // candidates emitted by BPF and decoded by KernelIO
@@ -310,7 +306,6 @@ func (w *httpUprobeWorker) closeAll() {
 		closeLinks(entry.links)
 	}
 	clear(w.attachedTargets)
-	w.pinnedTargets = 0
 }
 
 // reconcileTargets is the reclaim sweep. It resolves the immutable active-ID
@@ -346,7 +341,7 @@ func (w *httpUprobeWorker) reconcileTargets(ctx context.Context, activeCgroupIDs
 
 	closed := 0
 	for mappedID, entry := range w.attachedTargets {
-		if entry.pinned || scanStarted.Before(entry.protectedUntil) {
+		if scanStarted.Before(entry.protectedUntil) {
 			entry.missingScanCount = 0
 			continue
 		}

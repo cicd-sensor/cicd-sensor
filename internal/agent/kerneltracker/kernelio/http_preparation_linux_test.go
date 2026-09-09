@@ -113,20 +113,17 @@ func TestPreparedTargetRetention(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
-		pinned bool
 		grace  time.Duration
 		remain bool
 	}{
-		{"machine pin survives missing maps", true, 0, true},
-		{"unused preparation survives grace", false, time.Minute, true},
-		{"expired unused preparation is reclaimed", false, -time.Minute, false},
+		{name: "unused preparation survives grace", grace: time.Minute, remain: true},
+		{name: "expired unused preparation is reclaimed", grace: -time.Minute},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			h := newReclaimHarness(t)
 			id := mappedFileIdentity{inode: 42}
 			e := h.attached(id)
-			e.pinned = tc.pinned
 			e.protectedUntil = time.Now().Add(tc.grace)
 			h.sweep()
 			h.sweep()

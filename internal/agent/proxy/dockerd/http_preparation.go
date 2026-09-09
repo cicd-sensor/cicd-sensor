@@ -9,6 +9,7 @@ import (
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
+	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
 )
 
 func dockerStartID(req *http.Request, resource string) string {
@@ -40,7 +41,7 @@ func fullDockerID(id string) bool {
 // Start responses are held only AFTER dockerd starts the container. GitLab
 // Runner sends shell stdin after this response, so preparation precedes scripts
 // without parsing or buffering them. Entrypoint code is already running.
-func withHTTPPreparation(next *httputil.ReverseProxy, upstreamSocket, agentSocket string, logger *slog.Logger) http.Handler {
+func withHTTPPreparation(next *httputil.ReverseProxy, upstreamSocket, agentSocket string, provider jobcontext.Provider, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -51,7 +52,7 @@ func withHTTPPreparation(next *httputil.ReverseProxy, upstreamSocket, agentSocke
 			source = "docker-exec"
 		}
 		// Preparation logs failures and bounds the entire inspect/scan/attach wait.
-		_ = preparation.PrepareResolved(ctx, func(ctx context.Context) (string, []string, error) {
+		_ = preparation.PrepareResolved(ctx, func(ctx context.Context) (string, error) {
 			return resolveDockerTarget(ctx, upstreamSocket, id, isExec)
 		}, kernelio.HTTPPreparationOptions{Source: source})
 	}
@@ -62,7 +63,7 @@ func withHTTPPreparation(next *httputil.ReverseProxy, upstreamSocket, agentSocke
 				return err
 			}
 		}
-		if resp.StatusCode == http.StatusNoContent {
+		if provider == jobcontext.ProviderGitLab && resp.StatusCode == http.StatusNoContent {
 			if id := dockerStartID(resp.Request, "containers"); id != "" {
 				prepare(resp.Request.Context(), id, false)
 			}

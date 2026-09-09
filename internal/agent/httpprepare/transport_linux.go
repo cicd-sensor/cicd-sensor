@@ -21,8 +21,7 @@ import (
 const maxMessageBytes = 1024
 
 type preparationMessage struct {
-	Source   string
-	Deadline int64
+	Source string
 }
 
 type preparationResponse struct {
@@ -44,14 +43,14 @@ func prepareRemote(ctx context.Context, socket string, resolve RootResolver, sou
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
 	// Dial first: unavailable preparation does not inspect the runtime or root.
-	root, extra, err := resolve(ctx)
+	root, err := resolve(ctx)
 	if err != nil {
 		return err
 	}
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	files, _, scanErr := OpenFiles(ctx, root, extra)
+	files, scanErr := OpenFiles(ctx, root)
 	defer CloseFiles(files)
 	if err = ctx.Err(); err != nil {
 		return err
@@ -63,7 +62,7 @@ func prepareRemote(ctx context.Context, socket string, resolve RootResolver, sou
 	for i, f := range files {
 		fds[i] = int(f.Fd())
 	}
-	data, err := json.Marshal(preparationMessage{Source: source, Deadline: deadline.UnixNano()})
+	data, err := json.Marshal(preparationMessage{Source: source})
 	if err != nil {
 		return err
 	}
@@ -199,13 +198,7 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	if len(files) == 0 || len(files) > MaxFiles {
 		return errors.New("invalid HTTP preparation metadata")
 	}
-	// Preserve time already spent on root resolution and inventory; the receiver
-	// also caps a sender that asks for more than one preparation budget.
-	deadline := time.Unix(0, message.Deadline)
-	if deadline.After(accepted.Add(Budget)) {
-		deadline = accepted.Add(Budget)
-	}
-	requestCtx, cancel := context.WithDeadline(ctx, deadline)
+	requestCtx, cancel := context.WithDeadline(ctx, accepted.Add(Budget))
 	defer cancel()
 	if err = requestCtx.Err(); err != nil {
 		return err

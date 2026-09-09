@@ -12,11 +12,9 @@ const (
 	HTTPPreparationQueueSize = 8
 )
 
-// HTTPPreparationOptions describes a bounded preparation request. Pin is reserved
-// for the machine's fixed inventory; runtime/context targets use a short grace.
+// HTTPPreparationOptions identifies the lifecycle requesting preparation.
 type HTTPPreparationOptions struct {
 	Source string
-	Pin    bool
 }
 
 // HTTPFilePreparer is implemented by the Linux HTTP worker boundary. It takes

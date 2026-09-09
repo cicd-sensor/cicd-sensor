@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"slices"
 	"time"
@@ -18,8 +17,6 @@ import (
 const (
 	// Classification I/O cap; independent of the number of adopted descriptors.
 	maxPreparedFileBytes = 256 << 20
-	// Lifetime limits: fixed machine inventory versus runtime preparation grace.
-	maxPinnedHTTPTargets = 128
 	httpPreparationGrace = 30 * time.Second
 	// The existing discovery map also distinguishes completed negative results
 	// from value 1, which can mean a mapping notification is still queued.
@@ -138,7 +135,7 @@ func (w *httpUprobeWorker) prepareRequest(workerCtx context.Context, r *httpPrep
 			closePreparationFiles(r.files[i:])
 			break
 		}
-		prepared, err := w.prepareFile(r.ctx, f, nil, r.options.Pin)
+		prepared, err := w.prepareFile(r.ctx, f, nil)
 		if f != nil {
 			_ = f.Close()
 		}
@@ -152,16 +149,10 @@ func (w *httpUprobeWorker) prepareRequest(workerCtx context.Context, r *httpPrep
 		} else {
 			skippedCount++
 		}
-		// A preparation batch cannot starve already-queued mapping discovery.
-		select {
-		case candidate := <-w.attachCandidates:
-			w.classifyAndAttach(candidate)
-		default:
-		}
 	}
 	if w.logger != nil {
 		w.logger.Debug("http_uprobe_preparation", "source", r.options.Source, "files", len(r.files), "prepared", preparedCount, "skipped", skippedCount, "failed", failedCount, "queue_wait", start.Sub(r.submitted), "elapsed", time.Since(r.submitted), "error", firstErr,
-			"targets", len(w.attachedTargets), "pinned", w.pinnedTargets, "queue_depth", len(w.preparationRequests), "normalized_total", w.normalizedFiles, "parsed_total", w.parsedFiles, "attached_total", w.newlyAttachedFiles, "deduplicated_total", w.deduplicatedFiles)
+			"targets", len(w.attachedTargets), "queue_depth", len(w.preparationRequests))
 	}
 	r.done <- firstErr
 }
@@ -177,14 +168,13 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 			a.classificationKey = candidate.file
 		}
 		if a.classificationKey == candidate.file {
-			w.deduplicatedFiles++
 			w.cacheDiscoveryFile(candidate.file)
 			return
 		}
 	}
 	f, err := w.openMappedFile(candidate)
 	if err == nil {
-		_, err = w.prepareFile(context.Background(), f, &candidate.file, false)
+		_, err = w.prepareFile(context.Background(), f, &candidate.file)
 		_ = f.Close()
 	}
 	if err != nil {
@@ -204,7 +194,7 @@ func (w *httpUprobeWorker) classifyAndAttach(candidate httpUprobeAttachCandidate
 
 // prepareFile is the shared attachment path for normalized proactive and
 // mapped FDs. It owns the temporary mapping/links; its caller owns the input FD.
-func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected *fileClassificationKey, pin bool) (bool, error) {
+func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected *fileClassificationKey) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -218,19 +208,14 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxPreparedFileBytes {
 		return false, errors.New("HTTP preparation file type or size unsupported")
 	}
-	var reader io.ReaderAt = f
 	var id fileClassificationKey
 	if w.control != nil {
 		var data []byte
-		data, id, err = w.control.mapFile(f, int(info.Size()))
+		data, id, err = w.control.mapFile(f, os.Getpagesize())
 		if err != nil {
 			return false, fmt.Errorf("normalize HTTP target: %w", err)
 		}
 		defer unix.Munmap(data)
-		// Overlay pread can switch to a copied-up file. Classify the normalized
-		// mapping, including negative results that never reach register verification.
-		reader = mappedFileReader{data: data}
-		w.normalizedFiles++
 	} else {
 		id, err = classificationKeyFromFile(f)
 		if err != nil {
@@ -247,11 +232,8 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 		if a.classificationKey != id {
 			return false, errors.New("HTTP live target generation changed")
 		}
-		if err = w.retainPreparedTarget(a, pin, expected == nil); err != nil {
-			return false, err
-		}
+		retainPreparedTarget(a, expected == nil)
 		w.cacheDiscoveryFile(id)
-		w.deduplicatedFiles++
 		return true, nil
 	}
 	var cached uint8
@@ -262,11 +244,8 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 		w.warnThrottled(&w.capReached, "http_uprobe_target_cap_reached", "targets", len(w.attachedTargets))
 		return false, errors.New("HTTP attached target cap")
 	}
-	if pin && w.pinnedTargets >= maxPinnedHTTPTargets {
-		return false, errors.New("HTTP pinned target cap")
-	}
-	w.parsedFiles++
-	selected, definitive, err := definedSymbolTargets(reader, w.symbolTargets)
+
+	selected, definitive, err := definedSymbolTargets(f, w.symbolTargets)
 	if err != nil {
 		return false, err
 	}
@@ -274,7 +253,7 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 		return false, errors.New("inconclusive HTTP target ELF")
 	}
 	if len(selected) == 0 {
-		offset, found, err := resolveGoFunctionOffset(reader, w.goTarget.function)
+		offset, found, err := resolveGoFunctionOffset(f, w.goTarget.function)
 		if err != nil && !errors.Is(err, errUnsupportedGoPclntab) {
 			return false, err
 		}
@@ -284,6 +263,23 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 	}
 	if err := ctx.Err(); err != nil {
 		return false, err
+	}
+	if w.control != nil {
+		// Overlay mmap retains the opened backing while pread may switch after
+		// copy-up. Reopen the FD before rechecking, including negative results.
+		currentFile, err := os.Open(fmt.Sprintf("/proc/self/fd/%d", f.Fd()))
+		if err != nil {
+			return false, err
+		}
+		data, current, err := w.control.mapFile(currentFile, os.Getpagesize())
+		_ = currentFile.Close()
+		if err != nil {
+			return false, err
+		}
+		_ = unix.Munmap(data)
+		if current != id {
+			return false, errHTTPMappedBackingChanged
+		}
 	}
 	if len(selected) == 0 {
 		if w.discoveryCache != nil {
@@ -323,27 +319,16 @@ func (w *httpUprobeWorker) prepareFile(ctx context.Context, f *os.File, expected
 		return false, err
 	}
 	a := &attachedUprobeTarget{classificationKey: id, links: links}
-	if err = w.retainPreparedTarget(a, pin, expected == nil); err != nil {
-		return false, err
-	}
+	retainPreparedTarget(a, expected == nil)
 	w.attachedTargets[id.mappedFile] = a
-	w.newlyAttachedFiles++
 	w.cacheDiscoveryFile(id)
 	committed = true
 	return true, nil
 }
 
-func (w *httpUprobeWorker) retainPreparedTarget(a *attachedUprobeTarget, pin, proactive bool) error {
-	if pin && !a.pinned {
-		if w.pinnedTargets >= maxPinnedHTTPTargets {
-			return errors.New("HTTP pinned target cap")
-		}
-		a.pinned = true
-		w.pinnedTargets++
-	}
+func retainPreparedTarget(a *attachedUprobeTarget, proactive bool) {
 	if proactive {
 		a.protectedUntil = time.Now().Add(httpPreparationGrace)
 		a.missingScanCount = 0
 	}
-	return nil
 }

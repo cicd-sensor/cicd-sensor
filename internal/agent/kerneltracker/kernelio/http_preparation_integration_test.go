@@ -68,7 +68,7 @@ func TestHTTPPreparationBackingAndDedup(t *testing.T) {
 	}
 	_ = unix.Munmap(data)
 	for i := range 2 {
-		ok, err := w.prepareFile(t.Context(), f, nil, false)
+		ok, err := w.prepareFile(t.Context(), f, nil)
 		if err != nil || !ok {
 			t.Fatalf("prepare %d: %v %v", i, ok, err)
 		}
@@ -126,7 +126,7 @@ func TestHTTPPreparationOverlayOriginalVMA(t *testing.T) {
 			t.Fatal(err)
 		}
 		_ = unix.Munmap(data)
-		if ok, err := w.prepareFile(t.Context(), f, nil, false); err != nil || !ok {
+		if ok, err := w.prepareFile(t.Context(), f, nil); err != nil || !ok {
 			t.Fatalf("prepare: %v %v", ok, err)
 		}
 		return key

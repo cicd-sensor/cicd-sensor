@@ -43,12 +43,12 @@ func TestPreparationRetainsSlots(t *testing.T) {
 				p := NewLocal(worker, nil)
 				prepare := func(ctx context.Context) error {
 					if !tc.resolve {
-						return p.Prepare(ctx, root, nil, kernelio.HTTPPreparationOptions{})
+						return p.Prepare(ctx, root, kernelio.HTTPPreparationOptions{})
 					}
-					return p.PrepareResolved(ctx, func(context.Context) (string, []string, error) {
+					return p.PrepareResolved(ctx, func(context.Context) (string, error) {
 						worker.entered <- struct{}{}
 						<-worker.release
-						return root, nil, nil
+						return root, nil
 					}, kernelio.HTTPPreparationOptions{})
 				}
 				ctx, cancel := context.WithCancel(t.Context())
@@ -105,9 +105,9 @@ func TestPreparationResolverFailure(t *testing.T) {
 			if tc.remote {
 				p = NewRemote(t.TempDir()+"/absent.sock", nil)
 			}
-			err := p.PrepareResolved(t.Context(), func(context.Context) (string, []string, error) {
+			err := p.PrepareResolved(t.Context(), func(context.Context) (string, error) {
 				called = true
-				return "", nil, want
+				return "", want
 			}, kernelio.HTTPPreparationOptions{Source: "docker-start"})
 			if tc.remote {
 				if err == nil || called {

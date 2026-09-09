@@ -9,7 +9,6 @@ import (
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobregistry"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker"
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/listener"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -169,11 +168,6 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.logger.WarnContext(ctx, "http_preparation_socket_unavailable", "error", err)
 			}
 		}()
-		if a.runnerType == "machine" {
-			if err := preparation.Prepare(ctx, "/", nil, kernelio.HTTPPreparationOptions{Source: "host-start", Pin: true}); err != nil {
-				a.logger.WarnContext(ctx, "http_preparation_startup_incomplete", "error", err)
-			}
-		}
 	}
 	defer cancelPreparation()
 	a.logger.InfoContext(ctx, "agent_started",
