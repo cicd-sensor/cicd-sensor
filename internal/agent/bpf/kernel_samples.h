@@ -312,9 +312,16 @@ struct file_classification_key {
 };
 
 // Discovery metadata only. No HTTP bytes or file content cross this boundary.
+struct http_discovery_key {
+    __u64 owner;
+    struct file_classification_key file;
+};
+
 struct http_uprobe_attach_candidate_sample {
     __u32 kind;
     __s32 tgid;
+    __u64 cgroup_id;
+    __u64 owner;
     __u64 vm_start;
     __u64 vm_end;
     struct file_classification_key file;

@@ -42,25 +42,6 @@ func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 	})
 }
 
-func TestHTTPUprobeWorkerKeepsInodeTargetAcrossCTimeChange(t *testing.T) {
-	mapped := mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42}
-	oldKey := fileClassificationKey{mappedFile: mapped, ctimeSec: 1}
-	newKey := fileClassificationKey{mappedFile: mapped, ctimeSec: 2}
-	target := &attachedUprobeTarget{classificationKey: oldKey}
-	worker := &httpUprobeWorker{
-		attachedTargets: map[mappedFileIdentity]*attachedUprobeTarget{mapped: target},
-	}
-
-	worker.classifyAndAttach(httpUprobeAttachCandidate{file: newKey})
-
-	if got := worker.attachedTargets[mapped]; got != target {
-		t.Fatal("ctime change replaced the inode-owned target")
-	}
-	if target.classificationKey != newKey {
-		t.Fatalf("classification key = %+v, want %+v", target.classificationKey, newKey)
-	}
-}
-
 func TestParseExecMapping(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -110,36 +91,6 @@ func TestParseExecMapping(t *testing.T) {
 				t.Fatalf("mapping = %+v, want %+v", mapped, tt.wantMapping)
 			}
 		})
-	}
-}
-
-func TestClassificationKeyFromFile(t *testing.T) {
-	t.Parallel()
-	f, err := os.Open("/proc/self/exe")
-	if err != nil {
-		t.Fatalf("open self executable: %v", err)
-	}
-	defer f.Close()
-
-	got, err := classificationKeyFromFile(f)
-	if err != nil {
-		t.Fatalf("classificationKeyFromFile: %v", err)
-	}
-	var st unix.Stat_t
-	if err := unix.Fstat(int(f.Fd()), &st); err != nil {
-		t.Fatalf("fstat self executable: %v", err)
-	}
-	want := fileClassificationKey{
-		mappedFile: mappedFileIdentity{
-			deviceMajor: uint32(unix.Major(uint64(st.Dev))),
-			deviceMinor: uint32(unix.Minor(uint64(st.Dev))),
-			inode:       st.Ino,
-		},
-		ctimeSec:  st.Ctim.Sec,
-		ctimeNsec: uint32(st.Ctim.Nsec),
-	}
-	if got != want {
-		t.Fatalf("classification key = %+v, want %+v", got, want)
 	}
 }
 

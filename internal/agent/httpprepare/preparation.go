@@ -69,8 +69,13 @@ func (p *Preparation) PrepareResolved(ctx context.Context, resolve RootResolver,
 				err = errors.Join(resolveErr, ctx.Err())
 				return
 			}
+			membership, resolveErr := openProcessMembership(root)
+			if resolveErr != nil {
+				err = resolveErr
+				return
+			}
 			files, scanErr := OpenFiles(ctx, root)
-			prepareErr := p.local.PrepareHTTPFiles(ctx, files, source)
+			prepareErr := p.local.PrepareHTTPFiles(ctx, files, source, membership)
 			err = errors.Join(scanErr, prepareErr)
 		} else {
 			err = prepareRemote(ctx, p.socket, resolve)
@@ -89,4 +94,4 @@ func (p *Preparation) PrepareResolved(ctx context.Context, resolve RootResolver,
 }
 
 // FileHandler adopts every received descriptor, including on an error.
-type FileHandler func(context.Context, []*os.File, string) error
+type FileHandler func(context.Context, []*os.File, string, *os.File) error

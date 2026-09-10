@@ -37,9 +37,10 @@ func fullDockerID(id string) bool {
 	return true
 }
 
-// Start responses are held only AFTER dockerd starts the container. GitLab
-// Runner sends shell stdin after this response, so preparation precedes scripts
-// without parsing or buffering them. Entrypoint code is already running.
+// Both providers prepare before Docker exec starts an additional command.
+// GitLab Runner also sends its job script to the initial shell after the
+// container-start response, so holding that response can prepare before the
+// script. It cannot delay entrypoint code that is already running independently.
 func withHTTPPreparation(next *httputil.ReverseProxy, upstreamSocket, agentSocket string, provider jobcontext.Provider, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()

@@ -70,14 +70,15 @@ func TestServeConnection(t *testing.T) {
 			called := false
 			done := make(chan error, 1)
 			go func() {
-				done <- serveConnection(t.Context(), server, func(ctx context.Context, files []*os.File, source string) error {
+				done <- serveConnection(t.Context(), server, func(ctx context.Context, files []*os.File, source string, membership *os.File) error {
 					called = true
+					defer membership.Close()
 					defer CloseFiles(files)
 					gotDeadline, ok := ctx.Deadline()
 					if !ok || time.Until(gotDeadline) <= 0 || time.Until(gotDeadline) > Budget {
 						return errors.New("handler exceeded preparation deadline")
 					}
-					if len(files) != 1 || source != "remote" {
+					if len(files) != 1 || source != "remote" || membership == nil {
 						return errors.New("invalid handler input")
 					}
 					got, e := files[0].Stat()
@@ -94,14 +95,17 @@ func TestServeConnection(t *testing.T) {
 					return nil
 				})
 			}()
-			data := []byte{0}
+			data := []byte{1}
 			if tc.invalid {
-				data[0] = 2
+				data = []byte{2}
 			}
 			if tc.large {
 				data = make([]byte, 2)
 			}
 			fds := make([]int, tc.count)
+			if tc.count > 0 {
+				fds = make([]int, tc.count+1)
+			}
 			for i := range fds {
 				fds[i] = int(f.Fd())
 			}
@@ -157,7 +161,7 @@ func TestPrepareRemoteReply(t *testing.T) {
 		{name: "closed peer", wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
+			root := testProcessRoot(t)
 			if err := os.MkdirAll(filepath.Join(root, "usr/bin"), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -178,7 +182,7 @@ func TestPrepareRemoteReply(t *testing.T) {
 					return
 				}
 				defer conn.Close()
-				data, oob := make([]byte, 1), make([]byte, unix.CmsgSpace(MaxFiles*4))
+				data, oob := make([]byte, 1), make([]byte, unix.CmsgSpace((MaxFiles+1)*4))
 				_, n, _, _, err := conn.ReadMsgUnix(data, oob)
 				files, parseErr := receivedFiles(oob[:n])
 				CloseFiles(files)

@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// The node-only packet protocol carries FDs with byte 0; replies are 0 (done)
+// The node-only packet protocol carries version byte 1 and FDs (membership first); replies are 0 (done)
 // or 1 (incomplete). Lifecycle source labels stay in the producer log.
 func prepareRemote(ctx context.Context, socket string, resolve RootResolver) error {
 	var dialer net.Dialer
@@ -40,6 +40,11 @@ func prepareRemote(ctx context.Context, socket string, resolve RootResolver) err
 	if err = ctx.Err(); err != nil {
 		return err
 	}
+	membership, err := openProcessMembership(root)
+	if err != nil {
+		return err
+	}
+	defer membership.Close()
 	files, scanErr := OpenFiles(ctx, root)
 	defer CloseFiles(files)
 	if err = ctx.Err(); err != nil {
@@ -48,11 +53,14 @@ func prepareRemote(ctx context.Context, socket string, resolve RootResolver) err
 	if len(files) == 0 {
 		return scanErr
 	}
-	fds := make([]int, len(files))
+	fds := make([]int, len(files)+1)
+	fds[0] = int(membership.Fd())
 	for i, f := range files {
-		fds[i] = int(f.Fd())
+		fds[i+1] = int(f.Fd())
 	}
-	n, _, err := conn.WriteMsgUnix([]byte{0}, unix.UnixRights(fds...), nil)
+	// SCM_RIGHTS gives the receiver its own FDs for the files already opened
+	// here. Sending just these numbers would not identify files in that process.
+	n, _, err := conn.WriteMsgUnix([]byte{1}, unix.UnixRights(fds...), nil)
 	if err != nil {
 		return err
 	}
@@ -162,7 +170,7 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 		return errors.New("HTTP preparation peer UID mismatch")
 	}
 	data := make([]byte, 1)
-	oob := make([]byte, unix.CmsgSpace(MaxFiles*4))
+	oob := make([]byte, unix.CmsgSpace((MaxFiles+1)*4))
 	// On Linux ReadMsgUnix receives all descriptors with atomic CLOEXEC.
 	n, oobn, flags, _, err := conn.ReadMsgUnix(data, oob)
 	if err != nil {
@@ -176,7 +184,7 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 	if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 {
 		return errors.New("truncated HTTP preparation message")
 	}
-	if n != 1 || data[0] != 0 || len(files) == 0 || len(files) > MaxFiles {
+	if n != 1 || data[0] != 1 || len(files) < 2 || len(files) > MaxFiles+1 {
 		return errors.New("invalid HTTP preparation packet")
 	}
 	requestCtx, cancel := context.WithDeadline(ctx, accepted.Add(Budget))
@@ -185,8 +193,8 @@ func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandle
 		return err
 	}
 	owned := files
-	files = nil // handler adopts descriptors even on timeout/rejection
-	prepareErr := handler(requestCtx, owned, "remote")
+	files = nil // handler now closes these FDs, even on timeout/rejection
+	prepareErr := handler(requestCtx, owned[1:], "remote", owned[0])
 	reply := byte(0)
 	if prepareErr != nil {
 		reply = 1

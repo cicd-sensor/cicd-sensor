@@ -18,8 +18,8 @@ const goNetHTTPRoundTripFunction = "net/http.(*Transport).roundTrip"
 var errUnsupportedGoPclntab = errors.New("unsupported Go pclntab")
 
 // resolveGoFunctionOffset delegates Go metadata layout handling to the
-// OpenTelemetry eBPF Profiler and only converts its virtual address to the
-// absolute ELF file offset expected by cilium/ebpf.
+// OpenTelemetry eBPF Profiler, then skips the Go stack guard. The resulting ELF
+// file offset is the capture point, before argument registers change.
 func resolveGoFunctionOffset(reader io.ReaderAt, name string) (
 	fileOffset uint64,
 	found bool,
@@ -67,7 +67,20 @@ func resolveGoFunctionOffset(reader io.ReaderAt, name string) (
 	if !ok {
 		return 0, false, fmt.Errorf("%w: Go function %q address %#x is outside executable file segments", errUnsupportedGoPclntab, name, address)
 	}
-	return fileOffset, true, nil
+	var entry [32]byte
+	n, readErr := reader.ReadAt(entry[:], int64(fileOffset))
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return 0, false, readErr
+	}
+	delta, ok := goHTTPBodyOffset(file.Machine, entry[:n])
+	if !ok {
+		return 0, false, fmt.Errorf("%w: unrecognized Go stack check for %q", errUnsupportedGoPclntab, name)
+	}
+	bodyOffset, ok := executableFileOffset(file, address+delta)
+	if !ok || address+delta < address {
+		return 0, false, fmt.Errorf("%w: Go body is outside executable file segments", errUnsupportedGoPclntab)
+	}
+	return bodyOffset, true, nil
 }
 
 // executableFileOffset converts the virtual address reported by Go metadata

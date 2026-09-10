@@ -16,7 +16,8 @@ type stalledPreparer struct {
 	release chan struct{}
 }
 
-func (p *stalledPreparer) PrepareHTTPFiles(_ context.Context, files []*os.File, _ string) error {
+func (p *stalledPreparer) PrepareHTTPFiles(_ context.Context, files []*os.File, _ string, membership *os.File) error {
+	defer membership.Close()
 	defer CloseFiles(files)
 	p.entered <- struct{}{}
 	<-p.release
@@ -35,7 +36,7 @@ func TestPreparationRetainsSlots(t *testing.T) {
 		{name: "caller deadline cannot multiply blocked resolver", timeout: true, resolve: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
+			root := testProcessRoot(t)
 			synctest.Test(t, func(t *testing.T) {
 				worker := &stalledPreparer{make(chan struct{}, MaxConcurrent+1), make(chan struct{})}
 				p := NewLocal(worker, nil)

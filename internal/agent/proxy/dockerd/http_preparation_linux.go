@@ -91,9 +91,10 @@ func resolveDockerTarget(ctx context.Context, upstreamSocket, id string, isExec 
 	return root, nil
 }
 
-// Docker inspect PID is relative to the daemon's PID namespace. Use that
-// daemon's procfs view, and verify its namespace before interpreting the PID.
-// No private overlay2/snapshot layout or remote-daemon filesystem is consulted.
+// /proc/PID/root exposes the files visible to that process. Docker inspect's
+// PID uses the daemon's numbering, which can differ from the proxy's. Resolve
+// it through the daemon's /proc and check that /proc uses the same numbering.
+// This finds the running container's root without inspecting Docker's storage.
 func dockerProcessRoot(daemonPID, containerPID int32) (string, error) {
 	if daemonPID <= 0 || containerPID <= 0 {
 		return "", errors.New("invalid Docker process PID")

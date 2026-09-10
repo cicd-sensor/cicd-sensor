@@ -66,7 +66,8 @@ func TestStartResponsePreparation(t *testing.T) {
 			release := make(chan struct{})
 			served := make(chan error, 1)
 			go func() {
-				served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(_ context.Context, files []*os.File, source string) error {
+				served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(_ context.Context, files []*os.File, source string, membership *os.File) error {
+					defer membership.Close()
 					defer httpprepare.CloseFiles(files)
 					entered <- source
 					<-release

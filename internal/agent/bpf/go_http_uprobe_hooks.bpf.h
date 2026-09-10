@@ -54,8 +54,7 @@ static __always_inline int go_http_is_https(const struct go_string_abi *scheme)
 SEC("uprobe/go_net_http_round_trip")
 int handle_go_net_http_round_trip(struct pt_regs *ctx)
 {
-    __u64 cgroup_id = current_cgroup_id();
-    if (!cgroup_is_tracked(cgroup_id))
+    if (!http_uprobe_is_owner(ctx))
         return 0;
 
     const void *request = go_http_request_argument(ctx);

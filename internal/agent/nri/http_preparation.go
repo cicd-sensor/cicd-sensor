@@ -23,6 +23,8 @@ func (o *Observer) StartContainer(ctx context.Context, pod *nriapi.PodSandbox, c
 	if !eligible {
 		return nil
 	}
+	// This root shows the container's files, including its mounted libraries,
+	// rather than the observer's own /usr/lib.
 	root := fmt.Sprintf("/proc/%d/root", container.GetPid())
 	if err := o.preparation.Prepare(ctx, root, "nri-start"); err != nil && o.logger != nil {
 		o.logger.WarnContext(ctx, "nri_http_preparation_incomplete", "container_id", container.GetId(), "error", err)

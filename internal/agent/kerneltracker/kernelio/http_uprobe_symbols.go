@@ -14,11 +14,10 @@ import (
 func definedSymbolTargets(
 	reader io.ReaderAt,
 	candidates []symbolUprobeTarget,
-) (selected []symbolUprobeTarget, definitive bool, err error) {
+) (selected []symbolUprobeTarget, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			selected = nil
-			definitive = false
 			err = fmt.Errorf("parse ELF symbols: %v", recovered)
 		}
 	}()
@@ -27,13 +26,13 @@ func definedSymbolTargets(
 	if err != nil {
 		var formatErr *elf.FormatError
 		if errors.As(err, &formatErr) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			return nil, true, nil
+			return nil, nil
 		}
-		return nil, false, err
+		return nil, err
 	}
 	defer file.Close()
 	if file.Type != elf.ET_EXEC && file.Type != elf.ET_DYN {
-		return nil, true, nil
+		return nil, nil
 	}
 
 	wanted := make(map[string]struct{}, len(candidates))
@@ -67,7 +66,7 @@ func definedSymbolTargets(
 		case errors.Is(readErr, elf.ErrNoSymbols):
 			continue
 		default:
-			return nil, false, readErr
+			return nil, readErr
 		}
 	}
 
@@ -77,5 +76,5 @@ func definedSymbolTargets(
 			selected = append(selected, candidate)
 		}
 	}
-	return selected, true, nil
+	return selected, nil
 }

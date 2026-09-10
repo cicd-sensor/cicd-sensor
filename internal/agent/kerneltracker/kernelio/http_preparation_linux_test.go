@@ -7,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/cilium/ebpf/link"
 )
@@ -28,6 +27,7 @@ func preparationTestFile(t *testing.T) *os.File {
 	t.Cleanup(func() { _ = f.Close() })
 	return f
 }
+
 func requirePreparationFileClosed(t *testing.T, f *os.File) {
 	t.Helper()
 	if _, err := f.Stat(); !errors.Is(err, os.ErrClosed) {
@@ -55,7 +55,8 @@ func TestSubmitPreparation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
+			w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
+			w.tracking = testTracking{members: map[uint64]uint64{1: 7}}
 			tc.setup(w)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -66,7 +67,7 @@ func TestSubmitPreparation(t *testing.T) {
 			for i := range files {
 				files[i] = preparationTestFile(t)
 			}
-			err := w.submitPreparation(ctx, files, "")
+			err := w.submitPreparation(ctx, files, "", 1)
 			if err == nil || tc.want != nil && !errors.Is(err, tc.want) {
 				t.Fatalf("error=%v want=%v", err, tc.want)
 			}
@@ -76,12 +77,13 @@ func TestSubmitPreparation(t *testing.T) {
 		})
 	}
 	t.Run("accepted request survives caller timeout until worker cleanup", func(t *testing.T) {
-		w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
+		w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
+		w.tracking = testTracking{members: map[uint64]uint64{1: 7}}
 		f := preparationTestFile(t)
 		ctx, cancel := context.WithCancel(t.Context())
 		files := []*os.File{f}
 		done := make(chan error, 1)
-		go func() { err := w.submitPreparation(ctx, files, ""); done <- err }()
+		go func() { err := w.submitPreparation(ctx, files, "", 1); done <- err }()
 		r := <-w.preparationRequests
 		cancel()
 		if err := <-done; !errors.Is(err, context.Canceled) {
@@ -96,7 +98,8 @@ func TestSubmitPreparation(t *testing.T) {
 		w.shutdownPreparation()
 	})
 	t.Run("shutdown drains queued descriptors and is idempotent", func(t *testing.T) {
-		w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
+		w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
+		w.tracking = testTracking{members: map[uint64]uint64{1: 7}}
 		f := preparationTestFile(t)
 		r := &httpPreparationRequest{files: []*os.File{f}, done: make(chan error, 1)}
 		w.preparationRequests <- r
@@ -109,99 +112,77 @@ func TestSubmitPreparation(t *testing.T) {
 	})
 }
 
-func TestPreparedTargetRetention(t *testing.T) {
+func TestPrepareHTTPFilesClosesRejectedDescriptors(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		missing, enabled bool
+	}{
+		{name: "missing membership closes targets", missing: true},
+		{name: "disabled capture closes both FD classes"},
+		{name: "invalid membership closes both FD classes", enabled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := preparationTestFile(t)
+			var membership *os.File
+			if !tc.missing {
+				membership = preparationTestFile(t)
+			}
+			ki := &LinuxKernelIO{}
+			if tc.enabled {
+				ki.httpUprobeWorker = newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
+				ki.httpUprobeWorker.control = &uprobeControl{}
+			}
+			if err := ki.PrepareHTTPFiles(t.Context(), []*os.File{target}, "test", membership); err == nil {
+				t.Fatal("invalid request accepted")
+			}
+			requirePreparationFileClosed(t, target)
+			if membership != nil {
+				requirePreparationFileClosed(t, membership)
+			}
+		})
+	}
+}
+
+// Cleanup belongs to the worker even when its caller has already stopped waiting.
+func TestPrepareRequestClosesBatchBeforeReply(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		grace  time.Duration
-		remain bool
+		name         string
+		cancelCaller bool
+		cancelWorker bool
+		want         error
 	}{
-		{name: "unused preparation survives grace", grace: time.Minute, remain: true},
-		{name: "expired unused preparation is reclaimed", grace: -time.Minute},
+		{name: "classification failure closes every file", want: ErrNotSupported},
+		{name: "caller cancellation closes unprocessed files", cancelCaller: true, want: context.Canceled},
+		{name: "worker cancellation closes unprocessed files", cancelWorker: true, want: context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			h := newReclaimHarness(t)
-			id := mappedFileIdentity{inode: 42}
-			e := h.attached(id)
-			e.protectedUntil = time.Now().Add(tc.grace)
-			h.sweep()
-			h.sweep()
-			if (h.worker.attachedTargets[id] != nil) != tc.remain {
-				t.Fatalf("retention mismatch")
+			w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
+			w.tracking = testTracking{members: map[uint64]uint64{1: 7}}
+			callerCtx, cancelCaller := context.WithCancel(t.Context())
+			defer cancelCaller()
+			workerCtx, cancelWorker := context.WithCancel(t.Context())
+			defer cancelWorker()
+			if tc.cancelCaller {
+				cancelCaller()
 			}
-		})
-	}
-	for _, tc := range []struct {
-		name     string
-		queue    string
-		canceled bool
-		remain   int
-	}{
-		{"idle sweep drains a burst of expired targets", "", false, 0},
-		{"pending preparation defers close until a fresh sweep", "preparation", false, 512},
-		{"pending mapping defers close until a fresh sweep", "mapping", false, 512},
-		{"canceled worker keeps links for shutdown", "", true, 512},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			h := newReclaimHarness(t)
-			for i := range 512 {
-				h.attached(mappedFileIdentity{inode: uint64(i + 1)})
+			if tc.cancelWorker {
+				cancelWorker()
 			}
-			h.sweep()
-			switch tc.queue {
-			case "preparation":
-				h.worker.preparationRequests <- &httpPreparationRequest{}
-			case "mapping":
-				h.worker.attachCandidates <- httpUprobeAttachCandidate{}
+			files := []*os.File{preparationTestFile(t), preparationTestFile(t)}
+			for _, f := range files {
+				if _, err := f.WriteString("target"); err != nil {
+					t.Fatal(err)
+				}
 			}
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			if tc.canceled {
-				cancel()
+			r := &httpPreparationRequest{cgroupID: 1, owner: 7, ctx: callerCtx, files: files, done: make(chan error, 1)}
+			go w.prepareRequest(workerCtx, r)
+			if err := <-r.done; !errors.Is(err, tc.want) {
+				t.Fatalf("reply=%v want=%v", err, tc.want)
 			}
-			h.worker.reconcileTargets(ctx, nil)
-			if got := len(h.worker.attachedTargets); got != tc.remain {
-				t.Fatalf("targets=%d want=%d", got, tc.remain)
-			}
-			switch tc.queue {
-			case "preparation":
-				<-h.worker.preparationRequests
-			case "mapping":
-				<-h.worker.attachCandidates
-			}
-			h.sweep()
-			if len(h.worker.attachedTargets) != 0 {
-				t.Fatal("idle sweep left expired targets")
-			}
-		})
-	}
-	for _, arrival := range []string{"preparation", "mapping", "cancellation"} {
-		t.Run(arrival+" arriving during close yields before next target", func(t *testing.T) {
-			t.Parallel()
-			h := newReclaimHarness(t)
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			closed := 0
-			for i := range 5 {
-				e := h.attached(mappedFileIdentity{inode: uint64(i + 1)})
-				e.links = []link.Link{notifyCloseLink{notify: func() {
-					closed++
-					switch arrival {
-					case "preparation":
-						h.worker.preparationRequests <- &httpPreparationRequest{}
-					case "mapping":
-						h.worker.attachCandidates <- httpUprobeAttachCandidate{}
-					case "cancellation":
-						cancel()
-					}
-				}}}
-			}
-			h.sweep()
-			h.worker.reconcileTargets(ctx, nil)
-			if closed != 1 || len(h.worker.attachedTargets) != 4 {
-				t.Fatalf("closed=%d retained=%d", closed, len(h.worker.attachedTargets))
+			for _, f := range files {
+				requirePreparationFileClosed(t, f)
 			}
 		})
 	}

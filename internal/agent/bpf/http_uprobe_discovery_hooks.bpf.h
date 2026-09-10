@@ -19,7 +19,8 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
         return 0;
 
     __u64 cgroup_id = current_cgroup_id();
-    if (!cgroup_is_tracked(cgroup_id))
+    __u64 owner = http_tracking_owner(cgroup_id);
+    if (!owner)
         return 0;
 
     struct inode *inode = BPF_CORE_READ(file, f_inode);
@@ -40,24 +41,27 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     };
     http_uprobe_inode_ctime(inode, &classification);
 
-    if (bpf_map_lookup_elem(&http_uprobe_discovery_cache, &classification))
+    struct http_discovery_key key = {.owner = owner, .file = classification};
+    if (bpf_map_lookup_elem(&http_uprobe_discovery_cache, &key))
         return 0;
 
     __u8 one = 1;
-    if (bpf_map_update_elem(&http_uprobe_discovery_cache, &classification, &one, BPF_NOEXIST) != 0)
+    if (bpf_map_update_elem(&http_uprobe_discovery_cache, &key, &one, BPF_NOEXIST) != 0)
         return 0;
 
     struct http_uprobe_attach_candidate_sample *sample =
         bpf_ringbuf_reserve(&events, sizeof(*sample), 0);
     if (!sample) {
         // A failed notification must not become a permanent file skip.
-        bpf_map_delete_elem(&http_uprobe_discovery_cache, &classification);
+        bpf_map_delete_elem(&http_uprobe_discovery_cache, &key);
         note_ringbuf_drop();
         return 0;
     }
 
     sample->kind = SAMPLE_KIND_HTTP_UPROBE_ATTACH_CANDIDATE;
     sample->tgid = current_tgid();
+    sample->cgroup_id = cgroup_id;
+    sample->owner = owner;
     sample->vm_start = BPF_CORE_READ(vma, vm_start);
     sample->vm_end = BPF_CORE_READ(vma, vm_end);
     sample->file = classification;
@@ -73,15 +77,13 @@ int BPF_PROG(handle_uprobe_mmap, struct vm_area_struct *vma)
     __u64 tid = bpf_get_current_pid_tgid();
     struct http_uprobe_control_request *request =
         bpf_map_lookup_elem(&http_uprobe_control_requests, &tid);
-    if (request && request->operation == HTTP_UPROBE_CONTROL_NORMALIZE) {
+    if (request) {
         struct file *file = BPF_CORE_READ(vma, vm_file);
         struct inode *inode = file ? BPF_CORE_READ(file, f_inode) : 0;
         if (inode) {
             __u64 zero = 0;
             struct http_uprobe_control_result result = {
                 .nonce = request->nonce,
-                .start = BPF_CORE_READ(vma, vm_start),
-                .end = BPF_CORE_READ(vma, vm_end),
             };
             http_uprobe_inode_key(inode, &result.file);
             if (!bpf_map_update_elem(&http_uprobe_control_results, &zero, &result, BPF_ANY))

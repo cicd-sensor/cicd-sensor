@@ -15,11 +15,6 @@ USER root
 # libbpf and vmlinux headers are vendored under internal/agent/bpf/include/,
 # so no libbpf-dev or kernel-headers package is needed in the image.
 RUN apk add --no-cache \
-    clang-22=22.1.8-r3 \
-    llvm-22=22.1.8-r3
-# LLVM orders BTF forward declarations by allocated metadata addresses.
-# Keep allocations in one heap without per-thread caches; mmap_max alone is
-# insufficient. This affects compilation only, never the Agent runtime.
-# https://github.com/llvm/llvm-project/blob/release/22.x/llvm/lib/Target/BPF/BTFDebug.h
-ENV GLIBC_TUNABLES=glibc.malloc.mmap_max=0:glibc.malloc.arena_max=1:glibc.malloc.tcache_count=0
+    clang-22 \
+    llvm-22
 WORKDIR /src

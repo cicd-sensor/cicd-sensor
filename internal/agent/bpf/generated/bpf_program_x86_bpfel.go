@@ -44,6 +44,12 @@ type BPFProgramCgroupRmdirSample struct {
 	TsNs     uint64
 }
 
+type BPFProgramCgroupTrackingStamp struct {
+	_        structs.HostLayout
+	Writers  uint64
+	Sequence uint64
+}
+
 type BPFProgramDnsSample struct {
 	_             structs.HostLayout
 	Kind          uint32
@@ -80,19 +86,6 @@ type BPFProgramExecSample struct {
 	ArgvBlobLen   uint32
 	ExecPath      [512]int8
 	ArgvBlob      [2048]int8
-}
-
-type BPFProgramFileClassificationKey struct {
-	_          structs.HostLayout
-	MappedFile struct {
-		_           structs.HostLayout
-		DeviceMajor uint32
-		DeviceMinor uint32
-		Inode       uint64
-	}
-	CtimeSec  int64
-	CtimeNsec uint32
-	Pad       uint32
 }
 
 type BPFProgramFileLinkSample struct {
@@ -173,6 +166,23 @@ type BPFProgramForkSample struct {
 	ParentTgid          int32
 }
 
+type BPFProgramHttpDiscoveryKey struct {
+	_     structs.HostLayout
+	Owner uint64
+	File  struct {
+		_          structs.HostLayout
+		MappedFile struct {
+			_           structs.HostLayout
+			DeviceMajor uint32
+			DeviceMinor uint32
+			Inode       uint64
+		}
+		CtimeSec  int64
+		CtimeNsec uint32
+		Pad       uint32
+	}
+}
+
 type BPFProgramHttpRequestSample struct {
 	_             structs.HostLayout
 	Kind          uint32
@@ -218,29 +228,47 @@ type BPFProgramHttpScratch struct {
 }
 
 type BPFProgramHttpUprobeAttachCandidateSample struct {
-	_       structs.HostLayout
-	Kind    uint32
-	Tgid    int32
-	VmStart uint64
-	VmEnd   uint64
-	File    BPFProgramFileClassificationKey
+	_        structs.HostLayout
+	Kind     uint32
+	Tgid     int32
+	CgroupId uint64
+	Owner    uint64
+	VmStart  uint64
+	VmEnd    uint64
+	File     struct {
+		_          structs.HostLayout
+		MappedFile struct {
+			_           structs.HostLayout
+			DeviceMajor uint32
+			DeviceMinor uint32
+			Inode       uint64
+		}
+		CtimeSec  int64
+		CtimeNsec uint32
+		Pad       uint32
+	}
 }
 
 type BPFProgramHttpUprobeControlRequest struct {
-	_         structs.HostLayout
-	Nonce     uint64
-	Operation uint32
-	Pid       uint32
-	Count     uint32
-	Overflow  uint32
+	_     structs.HostLayout
+	Nonce uint64
 }
 
 type BPFProgramHttpUprobeControlResult struct {
 	_     structs.HostLayout
 	Nonce uint64
-	Start uint64
-	End   uint64
-	File  BPFProgramFileClassificationKey
+	File  struct {
+		_          structs.HostLayout
+		MappedFile struct {
+			_           structs.HostLayout
+			DeviceMajor uint32
+			DeviceMinor uint32
+			Inode       uint64
+		}
+		CtimeSec  int64
+		CtimeNsec uint32
+		Pad       uint32
+	}
 }
 
 type BPFProgramMountSample struct {
@@ -300,9 +328,9 @@ type BPFProgramPathScratch struct {
 }
 
 type BPFProgramStagingValue struct {
-	_       structs.HostLayout
-	JobIdLo uint64
-	JobIdHi uint64
+	_         structs.HostLayout
+	HttpOwner uint64
+	Reserved  uint64
 }
 
 type BPFProgramUnixSocketConnectSample struct {
@@ -328,6 +356,7 @@ type BPFProgramUnixSocketConnectSample struct {
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
+	BPFProgramMapCgroupTrackingChanges                 = "cgroup_tracking_changes"
 	BPFProgramMapEvents                                = "events"
 	BPFProgramMapHttpScratch                           = "http_scratch"
 	BPFProgramMapHttpStages                            = "http_stages"
@@ -470,6 +499,7 @@ type BPFProgramProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BPFProgramMapSpecs struct {
+	CgroupTrackingChanges     *ebpf.MapSpec `ebpf:"cgroup_tracking_changes"`
 	Events                    *ebpf.MapSpec `ebpf:"events"`
 	HttpScratch               *ebpf.MapSpec `ebpf:"http_scratch"`
 	HttpStages                *ebpf.MapSpec `ebpf:"http_stages"`
@@ -526,6 +556,7 @@ func (o *BPFProgramObjects) Close() error {
 //
 // It can be passed to LoadBPFProgramObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BPFProgramMaps struct {
+	CgroupTrackingChanges     *ebpf.Map `ebpf:"cgroup_tracking_changes"`
 	Events                    *ebpf.Map `ebpf:"events"`
 	HttpScratch               *ebpf.Map `ebpf:"http_scratch"`
 	HttpStages                *ebpf.Map `ebpf:"http_stages"`
@@ -541,6 +572,7 @@ type BPFProgramMaps struct {
 
 func (m *BPFProgramMaps) Close() error {
 	return _BPFProgramClose(
+		m.CgroupTrackingChanges,
 		m.Events,
 		m.HttpScratch,
 		m.HttpStages,
