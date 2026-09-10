@@ -39,7 +39,7 @@ func TestPreparationRetainsSlots(t *testing.T) {
 			root := testProcessRoot(t)
 			synctest.Test(t, func(t *testing.T) {
 				worker := &stalledPreparer{make(chan struct{}, MaxConcurrent+1), make(chan struct{})}
-				p := NewLocal(worker, nil)
+				p := NewLocal(worker.PrepareHTTPFiles, nil)
 				prepare := func(ctx context.Context) error {
 					if !tc.resolve {
 						return p.Prepare(ctx, root, "")
@@ -100,7 +100,7 @@ func TestPreparationResolverFailure(t *testing.T) {
 			t.Parallel()
 			want := errors.New("root unavailable")
 			called := false
-			p := NewLocal(&stalledPreparer{}, nil)
+			p := NewLocal((&stalledPreparer{}).PrepareHTTPFiles, nil)
 			if tc.remote {
 				p = NewRemote(t.TempDir()+"/absent.sock", nil)
 			}

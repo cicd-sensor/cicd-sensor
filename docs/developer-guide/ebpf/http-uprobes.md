@@ -174,6 +174,8 @@ flowchart TB
 
 The inventory opens files; the worker interprets them. Runtime adapters select
 the root and timing but do not parse ELF, store links, or create Job state.
+Local inventory and the FD receiver use the same `FileHandler` contract: calling
+the handler transfers responsibility for every target and membership FD.
 The FD socket is owned by Agent and is never mounted into Jobs. KernelTracker's
 preparation method forwards to KernelIO without entering the event reactor.
 
@@ -506,6 +508,9 @@ Numbers are never intentionally reused during the loaded object's lifetime.
 There is no recursive cgroup walk or `/proc/maps` read for HTTP reclaim. A stale
 mapping notification can still use a bounded maps-text lookup to find its merged
 address range; the worker verifies the opened FD against the backing identity.
+That lookup reads addresses, not the overlay-visible device/inode fields.
+Discovery notifications and temporary normalization mappings use the same BPF
+inode-key helper, so userspace does not need a second identity parser.
 Long-running owners can retain more files than maps-liveness reclaim did; the
 4,096-target cap remains, and cap saturation can reduce coverage.
 

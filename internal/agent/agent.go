@@ -119,7 +119,7 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	var preparation *httpprepare.Preparation
 	if a.enableHTTPRequest {
-		preparation = httpprepare.NewLocal(kernelTracker, a.logger)
+		preparation = httpprepare.NewLocal(kernelTracker.PrepareHTTPFiles, a.logger)
 	}
 	l := listener.New(listener.Config{
 		Logger:                a.logger,

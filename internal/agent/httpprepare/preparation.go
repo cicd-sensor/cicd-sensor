@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"time"
-
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 // SocketPath keeps descriptor transfer separate from job-facing HTTP routes.
@@ -18,13 +16,13 @@ func SocketPath(agentSocket string) string { return agentSocket + ".http-prepara
 // Classification and links remain owned by the supplied KernelIO preparer.
 type Preparation struct {
 	slots  chan struct{}
-	local  kernelio.HTTPFilePreparer
+	local  FileHandler
 	socket string
 	logger *slog.Logger
 }
 
 // NewLocal connects inventory directly to the Agent-owned worker.
-func NewLocal(preparer kernelio.HTTPFilePreparer, logger *slog.Logger) *Preparation {
+func NewLocal(preparer FileHandler, logger *slog.Logger) *Preparation {
 	return &Preparation{slots: make(chan struct{}, MaxConcurrent), local: preparer, logger: logger}
 }
 
@@ -75,7 +73,7 @@ func (p *Preparation) PrepareResolved(ctx context.Context, resolve RootResolver,
 				return
 			}
 			files, scanErr := OpenFiles(ctx, root)
-			prepareErr := p.local.PrepareHTTPFiles(ctx, files, source, membership)
+			prepareErr := p.local(ctx, files, source, membership)
 			err = errors.Join(scanErr, prepareErr)
 		} else {
 			err = prepareRemote(ctx, p.socket, resolve)
@@ -93,5 +91,5 @@ func (p *Preparation) PrepareResolved(ctx context.Context, resolve RootResolver,
 	return err
 }
 
-// FileHandler adopts every received descriptor, including on an error.
+// FileHandler adopts all file and membership descriptors, including on an error.
 type FileHandler func(context.Context, []*os.File, string, *os.File) error

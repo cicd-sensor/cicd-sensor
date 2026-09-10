@@ -213,15 +213,12 @@ func (w *httpUprobeWorker) openMappedFile(candidate httpUprobeAttachCandidate) (
 	defer maps.Close()
 	scanner := bufio.NewScanner(io.LimitReader(maps, 2<<20))
 	for scanner.Scan() {
-		rng, _, ok := parseExecMapping(scanner.Text())
+		start, end, ok := parseExecMapping(scanner.Text())
 		if !ok {
 			continue
 		}
-		lo, hi, _ := strings.Cut(rng, "-")
-		start, _ := strconv.ParseUint(lo, 16, 64)
-		end, _ := strconv.ParseUint(hi, 16, 64)
 		if start <= candidate.vmStart && candidate.vmStart < end {
-			return os.Open(fmt.Sprintf("/proc/%d/map_files/%s", candidate.tgid, rng))
+			return os.Open(mappedFilePath(candidate.tgid, start, end))
 		}
 	}
 
@@ -343,61 +340,27 @@ func closeLinks(links []link.Link) {
 	}
 }
 
-// parseExecMapping returns the address range and device/inode identity for an
-// executable, file-backed mapping with a non-zero inode. Lines for anonymous or
-// special ([vdso], [heap], ...) mappings return ok=false.
-//
+// parseExecMapping extracts only the address range needed to open map_files.
+// Its FD is verified against the BPF backing identity by prepareFile; the
+// overlay-visible device/inode fields in /proc/maps are not identity inputs.
 // /proc/<pid>/maps line: "start-end perms offset dev inode pathname".
-func parseExecMapping(line string) (rng string, mapped mappedFileIdentity, ok bool) {
+func parseExecMapping(line string) (start, end uint64, ok bool) {
 	fields := strings.Fields(line)
-	if len(fields) < 6 { // needs a pathname field
-		return "", mappedFileIdentity{}, false
-	}
-	perms := fields[1]
-	if len(perms) < 3 || perms[2] != 'x' {
-		return "", mappedFileIdentity{}, false
-	}
-	if fields[4] == "0" { // inode 0 = anonymous
-		return "", mappedFileIdentity{}, false
-	}
-	if strings.HasPrefix(fields[5], "[") { // [vdso] etc.
-		return "", mappedFileIdentity{}, false
-	}
-	deviceMajorText, deviceMinorText, found := strings.Cut(fields[3], ":")
-	if !found {
-		return "", mappedFileIdentity{}, false
-	}
-	deviceMajor, err := strconv.ParseUint(deviceMajorText, 16, 32)
-	if err != nil {
-		return "", mappedFileIdentity{}, false
-	}
-	deviceMinor, err := strconv.ParseUint(deviceMinorText, 16, 32)
-	if err != nil {
-		return "", mappedFileIdentity{}, false
-	}
-	inode, err := strconv.ParseUint(fields[4], 10, 64)
-	if err != nil {
-		return "", mappedFileIdentity{}, false
+	if len(fields) < 6 || len(fields[1]) < 3 || fields[1][2] != 'x' ||
+		fields[4] == "0" || strings.HasPrefix(fields[5], "[") {
+		return 0, 0, false
 	}
 	startText, endText, found := strings.Cut(fields[0], "-")
 	if !found {
-		return "", mappedFileIdentity{}, false
+		return 0, 0, false
 	}
 	start, err := strconv.ParseUint(startText, 16, 64)
 	if err != nil {
-		return "", mappedFileIdentity{}, false
+		return 0, 0, false
 	}
-	end, err := strconv.ParseUint(endText, 16, 64)
+	end, err = strconv.ParseUint(endText, 16, 64)
 	if err != nil || end <= start {
-		return "", mappedFileIdentity{}, false
+		return 0, 0, false
 	}
-	// /proc/<pid>/map_files exposes each mapped ELF under its unpadded VMA range.
-	// Therefore maps "00400000-066a1000" becomes map_files "400000-66a1000".
-	// Parse numerically so the lookup opens the mapped ELF entry.
-	rng = fmt.Sprintf("%x-%x", start, end)
-	return rng, mappedFileIdentity{
-		deviceMajor: uint32(deviceMajor),
-		deviceMinor: uint32(deviceMinor),
-		inode:       inode,
-	}, true
+	return start, end, true
 }

@@ -30,16 +30,8 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     if (!super)
         return 0;
 
-    // Kernel dev_t stores the major above its 20-bit minor field.
-    __u32 device = BPF_CORE_READ(super, s_dev);
-    struct file_classification_key classification = {
-        .mapped_file = {
-            .device_major = device >> 20,
-            .device_minor = device & ((1U << 20) - 1),
-            .inode = BPF_CORE_READ(inode, i_ino),
-        },
-    };
-    http_uprobe_inode_ctime(inode, &classification);
+    struct file_classification_key classification = {};
+    http_uprobe_inode_key(inode, &classification);
 
     struct http_discovery_key key = {.owner = owner, .file = classification};
     if (bpf_map_lookup_elem(&http_uprobe_discovery_cache, &key))

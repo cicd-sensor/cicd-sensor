@@ -41,6 +41,7 @@ static __always_inline void http_uprobe_inode_ctime(
 static __always_inline void http_uprobe_inode_key(struct inode *inode,
                                                  struct file_classification_key *key)
 {
+    // Kernel dev_t stores the major above its 20-bit minor field.
     __u32 device = BPF_CORE_READ(inode, i_sb, s_dev);
     key->mapped_file.device_major = device >> 20;
     key->mapped_file.device_minor = device & ((1U << 20) - 1);
