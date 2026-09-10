@@ -42,104 +42,37 @@ func TestHTTPUprobeWorkerQueueAttachCandidate(t *testing.T) {
 	})
 }
 
-func TestHTTPUprobeWorkerKeepsInodeTargetAcrossCTimeChange(t *testing.T) {
-	mapped := mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 42}
-	oldKey := fileClassificationKey{mappedFile: mapped, ctimeSec: 1}
-	newKey := fileClassificationKey{mappedFile: mapped, ctimeSec: 2}
-	target := &attachedUprobeTarget{classificationKey: oldKey}
-	worker := &httpUprobeWorker{
-		attachedTargets: map[mappedFileIdentity]*attachedUprobeTarget{mapped: target},
-	}
-
-	worker.classifyAndAttach(httpUprobeAttachCandidate{file: newKey})
-
-	if got := worker.attachedTargets[mapped]; got != target {
-		t.Fatal("ctime change replaced the inode-owned target")
-	}
-	if target.classificationKey != newKey {
-		t.Fatalf("classification key = %+v, want %+v", target.classificationKey, newKey)
-	}
-}
-
 func TestParseExecMapping(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name        string
-		line        string
-		wantOK      bool
-		wantRange   string
-		wantMapping mappedFileIdentity
+		name               string
+		line               string
+		wantStart, wantEnd uint64
 	}{
-		{
-			name:        "executable file-backed mapping",
-			line:        "55a1b2c00000-55a1b2c21000 r-xp 00000000 fd:01 1443212 /usr/lib/x86_64-linux-gnu/libssl.so.3",
-			wantOK:      true,
-			wantRange:   "55a1b2c00000-55a1b2c21000",
-			wantMapping: mappedFileIdentity{deviceMajor: 0xfd, deviceMinor: 1, inode: 1443212},
-		},
-		{
-			name:        "low executable address is normalized for map_files",
-			line:        "00400000-066a1000 r-xp 00000000 08:01 1443212 /usr/bin/node",
-			wantOK:      true,
-			wantRange:   "400000-66a1000",
-			wantMapping: mappedFileIdentity{deviceMajor: 8, deviceMinor: 1, inode: 1443212},
-		},
-		{name: "non-executable mapping is skipped", line: "55a1b2c21000-55a1b2c25000 r--p 00021000 fd:01 1443212 /usr/lib/libssl.so.3"},
-		{name: "anonymous mapping is skipped", line: "7f0000000000-7f0000001000 r-xp 00000000 00:00 0 "},
-		{name: "special mapping is skipped", line: "7ffff7fce000-7ffff7fd0000 r-xp 00000000 00:00 1 [vdso]"},
-		{name: "no pathname field is skipped", line: "7ffff7fce000-7ffff7fd0000 r-xp 00000000 00:00 12345"},
-		{name: "invalid address range is skipped", line: "not-hex r-xp 00000000 08:01 1443212 /usr/bin/node"},
-		{name: "invalid device is skipped", line: "400000-401000 r-xp 00000000 invalid 1443212 /usr/bin/node"},
-		{name: "invalid inode is skipped", line: "400000-401000 r-xp 00000000 08:01 invalid /usr/bin/node"},
+		{name: "executable file-backed mapping", line: "55a1b2c00000-55a1b2c21000 r-xp 00000000 fd:01 1443212 /usr/lib/libssl.so.3", wantStart: 0x55a1b2c00000, wantEnd: 0x55a1b2c21000},
+		{name: "zero-padded address becomes numeric map_files range", line: "00400000-066a1000 r-xp 00000000 08:01 1443212 /usr/bin/node", wantStart: 0x400000, wantEnd: 0x66a1000},
+		{name: "deleted file still has a usable mapping", line: "400000-401000 r-xp 00000000 08:01 12 /tmp/client (deleted)", wantStart: 0x400000, wantEnd: 0x401000},
+		{name: "visible identity is not used to select a range", line: "400000-401000 r-xp 00000000 visible visible /usr/bin/node", wantStart: 0x400000, wantEnd: 0x401000},
+		{name: "non-executable mapping is skipped", line: "400000-401000 r--p 00000000 fd:01 12 /usr/lib/libssl.so.3"},
+		{name: "anonymous inode is skipped", line: "400000-401000 r-xp 00000000 00:00 0 /anon"},
+		{name: "special mapping is skipped", line: "400000-401000 r-xp 00000000 00:00 1 [vdso]"},
+		{name: "no pathname field is skipped", line: "400000-401000 r-xp 00000000 00:00 12345"},
+		{name: "empty line is skipped"},
+		{name: "short permissions are skipped", line: "400000-401000 r- 00000000 08:01 12 /bin/client"},
+		{name: "missing range separator is skipped", line: "400000 r-xp 00000000 08:01 12 /bin/client"},
+		{name: "invalid range start is skipped", line: "invalid-401000 r-xp 00000000 08:01 12 /bin/client"},
+		{name: "invalid range end is skipped", line: "400000-invalid r-xp 00000000 08:01 12 /bin/client"},
+		{name: "empty range is skipped", line: "400000-400000 r-xp 00000000 08:01 12 /bin/client"},
+		{name: "reversed range is skipped", line: "401000-400000 r-xp 00000000 08:01 12 /bin/client"},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			rng, mapped, ok := parseExecMapping(tt.line)
-			if ok != tt.wantOK {
-				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
-			}
-			if !ok {
-				return
-			}
-			if rng != tt.wantRange {
-				t.Fatalf("range = %q, want %q", rng, tt.wantRange)
-			}
-			if mapped != tt.wantMapping {
-				t.Fatalf("mapping = %+v, want %+v", mapped, tt.wantMapping)
+			start, end, ok := parseExecMapping(tt.line)
+			if start != tt.wantStart || end != tt.wantEnd || ok != (tt.wantEnd != 0) {
+				t.Fatalf("range = %x-%x, ok=%v; want %x-%x", start, end, ok, tt.wantStart, tt.wantEnd)
 			}
 		})
-	}
-}
-
-func TestClassificationKeyFromFile(t *testing.T) {
-	t.Parallel()
-	f, err := os.Open("/proc/self/exe")
-	if err != nil {
-		t.Fatalf("open self executable: %v", err)
-	}
-	defer f.Close()
-
-	got, err := classificationKeyFromFile(f)
-	if err != nil {
-		t.Fatalf("classificationKeyFromFile: %v", err)
-	}
-	var st unix.Stat_t
-	if err := unix.Fstat(int(f.Fd()), &st); err != nil {
-		t.Fatalf("fstat self executable: %v", err)
-	}
-	want := fileClassificationKey{
-		mappedFile: mappedFileIdentity{
-			deviceMajor: uint32(unix.Major(uint64(st.Dev))),
-			deviceMinor: uint32(unix.Minor(uint64(st.Dev))),
-			inode:       st.Ino,
-		},
-		ctimeSec:  st.Ctim.Sec,
-		ctimeNsec: uint32(st.Ctim.Nsec),
-	}
-	if got != want {
-		t.Fatalf("classification key = %+v, want %+v", got, want)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
 	"github.com/cilium/ebpf"
@@ -17,10 +18,16 @@ import (
 
 // LinuxKernelIO owns BPF program, map, and ring buffer I/O.
 type LinuxKernelIO struct {
-	logger          *slog.Logger
-	objs            bpfprog.BPFProgramObjects
-	links           []link.Link
-	reader          *ringbuf.Reader
+	trackingMu       sync.Mutex
+	trackingSequence atomic.Uint64
+	nextHTTPOwner    atomic.Uint64
+	logger           *slog.Logger
+	objs             bpfprog.BPFProgramObjects
+	links            []link.Link
+	reader           *ringbuf.Reader
+	// Serialize loop startup with teardown, including WaitGroup registration.
+	lifecycleMu     sync.Mutex
+	closed          bool
 	cancelLoop      context.CancelFunc
 	closeReaderOnce sync.Once
 	// loopWG tracks goroutines spawned by StartKernelSampleLoop. Close
@@ -136,11 +143,15 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			kernelIO.logger,
 			config.CgroupV2RootPath,
 			kernelIO.objs.HttpUprobeDiscoveryCache,
-			goUprobeTarget{
-				function: goNetHTTPRoundTripFunction,
-				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,
-			},
+			kernelIO.objs.HandleGoNetHttpRoundTrip,
 		)
+	}
+	if kernelIO.httpUprobeWorker != nil {
+		kernelIO.httpUprobeWorker.tracking = kernelIO
+		kernelIO.httpUprobeWorker.control = &uprobeControl{
+			requests: kernelIO.objs.HttpUprobeControlRequests,
+			results:  kernelIO.objs.HttpUprobeControlResults,
+		}
 	}
 	for _, attach := range tracingPrograms {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})

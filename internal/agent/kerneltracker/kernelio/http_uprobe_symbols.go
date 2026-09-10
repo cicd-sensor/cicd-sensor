@@ -14,11 +14,10 @@ import (
 func definedSymbolTargets(
 	reader io.ReaderAt,
 	candidates []symbolUprobeTarget,
-) (selected []symbolUprobeTarget, definitive bool, err error) {
+) (selected []symbolUprobeTarget, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			selected = nil
-			definitive = false
 			err = fmt.Errorf("parse ELF symbols: %v", recovered)
 		}
 	}()
@@ -27,20 +26,20 @@ func definedSymbolTargets(
 	if err != nil {
 		var formatErr *elf.FormatError
 		if errors.As(err, &formatErr) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			return nil, true, nil
+			return nil, nil
 		}
-		return nil, false, err
+		return nil, err
 	}
 	defer file.Close()
 	if file.Type != elf.ET_EXEC && file.Type != elf.ET_DYN {
-		return nil, true, nil
+		return nil, nil
 	}
 
 	wanted := make(map[string]struct{}, len(candidates))
 	for _, candidate := range candidates {
 		wanted[candidate.symbol] = struct{}{}
 	}
-	found := make(map[string]struct{}, len(candidates))
+	found := make(map[string]uint64, len(candidates))
 	collect := func(symbols []elf.Symbol) {
 		for _, symbol := range symbols {
 			if _, ok := wanted[symbol.Name]; !ok ||
@@ -48,7 +47,15 @@ func definedSymbolTargets(
 				symbol.Section == elf.SHN_UNDEF || symbol.Value == 0 {
 				continue
 			}
-			found[symbol.Name] = struct{}{}
+			// st_value is a virtual address; UprobeOptions.Address needs a file offset.
+			for _, segment := range file.Progs {
+				if segment.Type == elf.PT_LOAD && segment.Flags&elf.PF_X != 0 &&
+					symbol.Value >= segment.Vaddr && symbol.Value-segment.Vaddr < segment.Filesz &&
+					symbol.Value-segment.Vaddr <= ^uint64(0)-segment.Off {
+					found[symbol.Name] = segment.Off + symbol.Value - segment.Vaddr
+					break
+				}
+			}
 		}
 	}
 	for _, readSymbols := range []func() ([]elf.Symbol, error){file.Symbols, file.DynamicSymbols} {
@@ -59,14 +66,15 @@ func definedSymbolTargets(
 		case errors.Is(readErr, elf.ErrNoSymbols):
 			continue
 		default:
-			return nil, false, readErr
+			return nil, readErr
 		}
 	}
 
 	for _, candidate := range candidates {
-		if _, ok := found[candidate.symbol]; ok {
+		if offset, ok := found[candidate.symbol]; ok {
+			candidate.offset = offset
 			selected = append(selected, candidate)
 		}
 	}
-	return selected, true, nil
+	return selected, nil
 }

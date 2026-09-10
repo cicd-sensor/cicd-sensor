@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobregistry"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -46,11 +47,13 @@ type Listener struct {
 	runnerType        string
 	provider          jobcontext.Provider
 	server            *http.Server
+	httpPreparation   *httpprepare.Preparation
 }
 
 // Config is the process-wide listener configuration. Project manager inputs
 // remain request-local in project/start.
 type Config struct {
+	HTTPPreparation       *httpprepare.Preparation
 	Logger                *slog.Logger
 	JobRegistry           *jobregistry.JobRegistry
 	SocketPath            string
@@ -101,6 +104,7 @@ func newBase(cfg Config) *Listener {
 	}
 	return &Listener{
 		logger:            logger.With("component", "listener"),
+		httpPreparation:   cfg.HTTPPreparation,
 		jobRegistry:       cfg.JobRegistry,
 		socketPath:        cfg.SocketPath,
 		hostManagerConn:   cfg.HostManagerConnection,

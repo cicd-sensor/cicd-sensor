@@ -18,6 +18,14 @@ const ringbufDropPollInterval = 5 * time.Second
 
 // StartKernelSampleLoop reads kernel ringbuf samples and delivers raw samples.
 func (kernelIO *LinuxKernelIO) StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error {
+	kernelIO.lifecycleMu.Lock()
+	defer kernelIO.lifecycleMu.Unlock()
+	if kernelIO.closed {
+		return os.ErrClosed
+	}
+	if kernelIO.cancelLoop != nil {
+		return errors.New("kernel sample loop already started")
+	}
 	if kernelIO.reader == nil {
 		return errors.New("ringbuf reader is not initialized")
 	}
@@ -164,6 +172,12 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	if kernelIO == nil {
 		return nil
 	}
+	kernelIO.lifecycleMu.Lock()
+	defer kernelIO.lifecycleMu.Unlock()
+	if kernelIO.closed {
+		return nil
+	}
+	kernelIO.closed = true
 
 	var firstErr error
 
@@ -176,6 +190,11 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	}
 	// Drain goroutines before closing map FDs; the drop watcher may be in Map.Lookup.
 	kernelIO.loopWG.Wait()
+	if kernelIO.httpUprobeWorker != nil {
+		// Also drain submissions made before StartKernelSampleLoop was called.
+		kernelIO.httpUprobeWorker.shutdownPreparation()
+		kernelIO.httpUprobeWorker.closeAll()
+	}
 	for _, attachedLink := range slices.Backward(kernelIO.links) {
 		if err := attachedLink.Close(); err != nil {
 			if firstErr == nil {

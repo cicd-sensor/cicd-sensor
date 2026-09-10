@@ -36,6 +36,7 @@ func (l *Listener) handleGitLabHostStart(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	l.prepareMachineHTTP(r.Context())
 	l.logger.InfoContext(r.Context(), "gitlab_host_start_accepted",
 		"job_identity", identity,
 	)
@@ -209,6 +210,7 @@ func (l *Listener) stageGitLabBasename(w http.ResponseWriter, r *http.Request, b
 		l.writeStartError(w, r, "gitlab_staging_host_start_failed", err)
 		return "", false
 	}
+	l.prepareMachineHTTP(r.Context())
 	if err := l.jobRegistry.StageCgroupBasenameForJob(r.Context(), basename, identity); err != nil {
 		if errors.Is(err, jobregistry.ErrJobNotFound) {
 			l.writeError(w, r, http.StatusNotFound, "job_not_found")

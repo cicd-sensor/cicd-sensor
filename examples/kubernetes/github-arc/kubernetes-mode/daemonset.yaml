@@ -74,6 +74,14 @@ spec:
             runAsUser: 0
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
+            # /proc/<initPID>/root uses a ptrace access check, even for read-only open.
+            # DAC_READ_SEARCH / CHECKPOINT_RESTORE cannot replace SYS_PTRACE.
+            capabilities:
+              drop: [ALL]
+              add: [SYS_PTRACE]
+            # RuntimeDefault can deny ptrace reads of the waiting runc init.
+            appArmorProfile:
+              type: Unconfined
           volumeMounts:
             - name: run
               mountPath: /run/cicd-sensor

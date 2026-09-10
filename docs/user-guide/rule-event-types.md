@@ -495,6 +495,15 @@ Only the request line and the `Host` header are captured — no other headers an
 Capture is disabled by default during rollout. Enable the cleartext and
 uprobe-based sources together with `--enable-http-request=true`.
 
+When enabled, the agent prepares a small set of existing OpenSSL/nghttp2
+libraries and `gh`/`glab` binaries at supported runner lifecycle points. This
+improves first-request capture without requiring new rule configuration.
+Other files are discovered as they are mapped for execution. Files downloaded
+later, initial Docker entrypoints, and dind inner workloads can still send
+their first request before capture is ready. See
+[HTTP Uprobe Runtime](../developer-guide/ebpf/http-uprobes.md#preparation-entry-points-and-ownership)
+for the environment-specific boundaries.
+
 | field | Type | Example value | Meaning |
 | --- | --- | --- | --- |
 | `method` | string | `get`, `post` | Request method. Lowercase; write the condition in either case. |

@@ -108,7 +108,7 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 		case <-httpUprobeReconcileTicker.C:
 			// Copy only loop-owned tracking identities. KernelIO resolves paths and
 			// performs the full reclaim asynchronously in its single worker.
-			engine.kernelIO.QueueHTTPUprobeReconciliation(engine.jobTracking.activeCgroupIDs())
+			engine.kernelIO.QueueHTTPUprobeReconciliation()
 		}
 	}
 }
