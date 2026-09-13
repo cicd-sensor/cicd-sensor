@@ -63,8 +63,17 @@ test -S /var/run/nri/nri.sock
 ```
 
 GKE Standard with COS, containerd 2.x, and systemd cgroups has been verified.
+
+Community verified AKS node images (GitHub ARC Preview):
+
+| AKS node image | Runtime | Notes |
+| --- | --- | --- |
+| Ubuntu 24.04 | containerd 2.x, systemd | NRI present; default, kubernetes, and dind exercised |
+| Ubuntu 22.04 | containerd 1.7 | NRI off by default; default and dind OK; kubernetes-mode needs NRI enabled |
+| Azure Linux 3.0 | containerd 2.x, systemd | NRI present; default, kubernetes, and dind exercised |
+
 Managed Kubernetes environments that do not allow privileged node agents or required host mounts are not supported.
-This includes GKE Autopilot and managed container services outside Kubernetes, such as Amazon ECS.
+This includes GKE Autopilot, AKS Virtual Nodes / ACI, and managed container services outside Kubernetes, such as Amazon ECS.
 
 ## cicd-sensor components
 
