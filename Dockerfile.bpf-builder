@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.26
+# syntax=docker/dockerfile:1.27
 #
 # cicd-sensor BPF builder image.
 #
@@ -7,7 +7,7 @@
 # clang / llvm from Wolfi; libbpf and vmlinux headers are vendored under
 # internal/agent/bpf/include/ so no header packages are installed in the image.
 
-FROM cgr.dev/chainguard/go:latest-dev@sha256:87745a352b1d13ef5d36b894aa511eda59e93c1b2ddbfb48628c93637596c738
+FROM cgr.dev/chainguard/go:latest-dev@sha256:7e3e8aa5b9919be2acbc39725bb38e9e81ea4997df4173807586b1c801b05f2c
 
 USER root
 # clang-22 / llvm-22 matches the default pinned by cilium/ebpf upstream; bump
