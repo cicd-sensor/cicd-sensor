@@ -137,6 +137,21 @@ func TestParseAzureBlobURI(t *testing.T) {
 			uri:     "https://myaccount.blob.core.windows.net/cicd-sensor-logs/../escape/",
 			wantErr: "is invalid",
 		},
+		{
+			name:    "current dir segment is rejected",
+			uri:     "https://myaccount.blob.core.windows.net/cicd-sensor-logs/./x",
+			wantErr: "is invalid",
+		},
+		{
+			name:    "consecutive slashes produce empty segment and are rejected",
+			uri:     "https://myaccount.blob.core.windows.net/cicd-sensor-logs/logs//x",
+			wantErr: "is invalid",
+		},
+		{
+			name:    "invalid utf8 prefix is rejected",
+			uri:     "https://myaccount.blob.core.windows.net/cicd-sensor-logs/" + string([]byte{0xff, 0xfe}),
+			wantErr: "is invalid",
+		},
 	}
 
 	for _, tt := range tests {
