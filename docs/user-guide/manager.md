@@ -9,7 +9,7 @@ Agent-to-manager communication is carried over HTTP/1.1 or HTTP/2.
 flowchart LR
     AGENT["cicd-sensor Agent"]
     MANAGER["cicd-sensor-manager"]
-    CLOUD["Cloud Outputs<br/>S3 / GCS / Pub/Sub"]
+    CLOUD["Cloud Outputs<br/>S3 / GCS / Azure Blob / Pub/Sub"]
     SIEM["SIEM"]
 
     AGENT -->|"FetchConfig"| MANAGER
@@ -180,7 +180,7 @@ For richer routing (per-log-kind destinations, multiple sinks), see
 | `disable_baseline_rules` | Disable cicd-sensor baseline rule fetch/prepend when using the manager. Custom rule bundles from `--rules-file` are still served. | `false` | Manager restart |
 | `monitor_mode` | Treat `terminate` rules as `detect` rules. Use this for first rollout or collection-only operation without job stopping. | `false` | Manager restart |
 | `redact_process_args` | Redact credential-like values and shorten long process arguments before the Agent sends Detection and Runtime Event Logs to the manager. Set to `false` only when the manager sinks are approved to receive captured process arguments. Agent-direct outputs remain redacted. | `true` | Manager restart |
-| `sinks` | Physical cloud output destinations, such as S3, GCS, or Pub/Sub. | none | Manager restart |
+| `sinks` | Physical cloud output destinations, such as S3, GCS, Azure Blob, or Pub/Sub. | none | Manager restart |
 | `logs` | Mapping from each manager-ingested `log_type` to one configured sink. | none | Manager restart |
 
 The custom rule bundle is configured separately with `--rules-file` or
@@ -234,6 +234,7 @@ Use this mapping to choose patterns such as storing all logs in one GCS destinat
 | --- | --- | --- | --- |
 | `aws_s3` | `uri`, `region` | `use_path_style` | `uri` is an `s3://...` object-storage URI. Include any desired object key path in the URI. Set `use_path_style: true` to use path-style addressing (`endpoint/bucket`) instead of virtual-hosted-style (`bucket.endpoint`); see [AWS (S3)](#aws-s3) for targeting S3-compatible stores. |
 | `google_storage` | `uri` | | `uri` is a `gs://...` object-storage URI. Include any desired object key path in the URI. |
+| `azure_blob` | `uri` | | `uri` is an `https://<account>.blob.core.windows.net/<container>/...` blob URL. Include any desired object key path in the URI. |
 | `google_pubsub` | `project_id`, `topic` | | Publishes one plain JSON record per message. |
 
 Store logs in GCS:
@@ -251,6 +252,23 @@ logs:
     sink: gcs-prod
   runtime_event:
     sink: gcs-prod
+```
+
+Store logs in Azure Blob Storage:
+
+```yaml
+sinks:
+  azure-prod:
+    type: azure_blob
+    uri: https://mystorageaccount.blob.core.windows.net/cicd-sensor-logs/cicd-sensor/
+
+logs:
+  summary:
+    sink: azure-prod
+  detection:
+    sink: azure-prod
+  runtime_event:
+    sink: azure-prod
 ```
 
 Send logs to Pub/Sub:
@@ -289,3 +307,8 @@ The manager uses the [AWS default credentials provider chain](https://docs.aws.a
 On EKS / ECS / EC2, grant access with an IAM role attached to the workload (EKS Pod Identity / IRSA, ECS task role, or EC2 instance profile). In other environments, use the standard runtime mechanism such as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` environment variables or the shared credentials file (`~/.aws/credentials`).
 
 To send logs to an S3-compatible object store instead of AWS S3, set the standard `AWS_ENDPOINT_URL_S3` environment variable to the store's endpoint. Stores that require path-style requests (for example a self-hosted MinIO) also need `use_path_style: true` on the sink.
+
+#### Azure (Blob)
+
+The manager uses the [Azure default credential chain](https://learn.microsoft.com/azure/developer/go/azure-sdk-authentication).
+On AKS / Azure VMs, grant access with Workload Identity or a managed identity. In other environments, use the standard runtime mechanism such as `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET`.

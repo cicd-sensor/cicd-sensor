@@ -96,6 +96,8 @@ func buildNamedSink(ctx context.Context, logger *slog.Logger, sc SinkConfig) (si
 		return sink.NewGCS(ctx, sc.URI)
 	case "google_pubsub":
 		return sink.NewPubSub(ctx, logger, sc.ProjectID, sc.Topic)
+	case "azure_blob":
+		return sink.NewAzureBlob(ctx, sc.URI)
 	default:
 		return nil, fmt.Errorf("unknown sink type %q", sc.Type)
 	}

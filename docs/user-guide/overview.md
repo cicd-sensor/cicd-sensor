@@ -47,7 +47,7 @@ For GitHub Actions self-hosted runners on machines and GitLab Runner Docker exec
 flowchart LR
     AGENT["cicd-sensor Agent"]
     MANAGER["cicd-sensor-manager"]
-    CLOUD["Cloud Outputs<br/>S3 / GCS / Pub/Sub"]
+    CLOUD["Cloud Outputs<br/>S3 / GCS / Azure Blob / Pub/Sub"]
     SIEM["SIEM"]
 
     MANAGER -->|"Config / Rules"| AGENT
@@ -70,7 +70,7 @@ The manager relationship is the same as machine runner deployments: the manager 
 flowchart LR
     AGENT["cicd-sensor Agent"]
     MANAGER["cicd-sensor-manager"]
-    CLOUD["Cloud Outputs<br/>S3 / GCS / Pub/Sub"]
+    CLOUD["Cloud Outputs<br/>S3 / GCS / Azure Blob / Pub/Sub"]
     SIEM["SIEM"]
 
     MANAGER -->|"Config / Rules"| AGENT

@@ -18,12 +18,14 @@ flowchart LR
 
     S3["S3"]
     GCS["GCS"]
+    AZURE["Azure Blob"]
     PUBSUB["Pub/Sub"]
 
     AGENT -->|"Connect / Proto"| CONFIG
     AGENT -->|"Connect / Proto"| COLLECTOR
     COLLECTOR -->|"Store"| S3
     COLLECTOR -->|"Store"| GCS
+    COLLECTOR -->|"Store"| AZURE
     COLLECTOR -->|"Stream"| PUBSUB
 
     classDef cicdSensor fill:#ecfdf5,stroke:#0f766e,color:#134e4a,stroke-width:1.5px;
@@ -85,7 +87,7 @@ The Manager holds the rule bundle, but it does not evaluate runtime events.
 ## Log ingest and outputs
 
 Agents send Summary Logs, Detection Logs, and Runtime Event Logs to `CollectorService.IngestLog` as gzip-compressed JSONL batches.
-The Manager delivers them to sinks such as S3, GCS, or Pub/Sub according to the routing policy for each log type.
+The Manager delivers them to sinks such as S3, GCS, Azure Blob, or Pub/Sub according to the routing policy for each log type.
 
 The Manager treats the log batch as the delivery unit.
 It does not interpret runtime events or evaluate detections.
