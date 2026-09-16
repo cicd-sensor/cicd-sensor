@@ -310,9 +310,10 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 		// Consequently these symbols might be unavailable on a stripped binary.
 		var start, end libpf.SymbolValue
 		ef.VisitSymbols(func(sym libpf.Symbol) bool {
-			if sym.Name == "runtime.pclntab" {
+			switch sym.Name {
+			case "runtime.pclntab":
 				start = sym.Address
-			} else if sym.Name == "runtime.epclntab" {
+			case "runtime.epclntab":
 				end = sym.Address
 			}
 			return start == 0 || end == 0
@@ -652,6 +653,13 @@ func getSourceFileStrategyX86(sourceFile string) strategy {
 
 // getFunctionDelta determines the special unwind opcode if needed
 func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, useFP bool) *sdtypes.UnwindInfo {
+	unwindInfoFramePointerOrStop := &sdtypes.UnwindInfoStop
+	unwindInfoGoAsmcgocallOrStop := &sdtypes.UnwindInfoStop
+	if useFP {
+		unwindInfoFramePointerOrStop = &sdtypes.UnwindInfoFramePointer
+		unwindInfoGoAsmcgocallOrStop = &sdtypes.UnwindInfoGoAsmcgocall
+	}
+
 	switch sourceFile {
 	case "runtime.goexit", "runtime.mstart":
 		// goexit - return address in all goroutine stacks
@@ -660,18 +668,18 @@ func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, useFP bool) *sdt
 	case "runtime.mcall": // unsupported at this time
 		return &sdtypes.UnwindInfoStop
 	case "runtime.asmcgocall":
-		// asmcgocall FP is valid only on x86-64
-		if arch != elf.EM_X86_64 {
-			return &sdtypes.UnwindInfoStop
+		if arch == elf.EM_AARCH64 {
+			// On arm64 r29 is overwritten with g0's frame pointer, so the FP chain
+			// is broken across the stack switch. Recover the user goroutine's saved
+			// context and continue FP unwinding there.
+			return unwindInfoGoAsmcgocallOrStop
 		}
-		fallthrough
+		// asmcgocall FP is valid only on x86-64
+		return unwindInfoFramePointerOrStop
 	case "runtime.systemstack", "runtime.nanotime1", "time.now", "runtime.walltime":
 		// functions which preserve the frame pointer chain across the g0/user stack boundary
 		// so that the standard FP unwinding traverses it naturally.
-		if useFP {
-			return &sdtypes.UnwindInfoFramePointer
-		}
-		return &sdtypes.UnwindInfoStop
+		return unwindInfoFramePointerOrStop
 	case "runtime.sigreturn", "runtime.sigreturn__sigaction":
 		// signal frame restorers
 		return &sdtypes.UnwindInfoSignal
@@ -723,7 +731,6 @@ func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 
 func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
-
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 
