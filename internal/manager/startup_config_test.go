@@ -241,7 +241,7 @@ sinks:
   bad:
     type: stdout
 `,
-			wantErr: `sinks.bad.type "stdout" is not one of aws_s3/google_storage/google_pubsub`,
+			wantErr: `sinks.bad.type "stdout" is not one of aws_s3/google_storage/google_pubsub/azure_blob`,
 		},
 		{
 			name: "s3_sink_missing_uri",
@@ -409,6 +409,65 @@ sinks:
     uri: gs://bucket/logs
 `,
 			wantErr: "sinks.pubsub-detect: region and uri are not valid for google_pubsub",
+		},
+		{
+			name: "azure_blob_sink_happy",
+			body: `
+sinks:
+  azure-prod:
+    type: azure_blob
+    uri: https://mystorageaccount.blob.core.windows.net/cicd-sensor-logs/cicd-sensor/
+logs:
+  detection:
+    sink: azure-prod
+`,
+			assertCfg: func(t *testing.T, cfg StartupConfig) {
+				t.Helper()
+				if cfg.Sinks["azure-prod"].URI != "https://mystorageaccount.blob.core.windows.net/cicd-sensor-logs/cicd-sensor/" {
+					t.Fatalf("azure uri: got %q", cfg.Sinks["azure-prod"].URI)
+				}
+			},
+		},
+		{
+			name: "azure_blob_sink_missing_uri",
+			body: `
+sinks:
+  azure-prod:
+    type: azure_blob
+`,
+			wantErr: "sinks.azure-prod.uri is required",
+		},
+		{
+			name: "azure_blob_sink_uri_wrong_scheme",
+			body: `
+sinks:
+  azure-prod:
+    type: azure_blob
+    uri: azblob://cicd-sensor-logs/cicd-sensor
+`,
+			wantErr: "sinks.azure-prod.uri must start with https://",
+		},
+		{
+			name: "azure_blob_sink_with_foreign_fields",
+			body: `
+sinks:
+  azure-prod:
+    type: azure_blob
+    uri: https://mystorageaccount.blob.core.windows.net/cicd-sensor-logs/cicd-sensor/
+    region: us-east-1
+`,
+			wantErr: "sinks.azure-prod: region, project_id, and topic are not valid for azure_blob",
+		},
+		{
+			name: "azure_blob_sink_with_path_style",
+			body: `
+sinks:
+  azure-prod:
+    type: azure_blob
+    uri: https://mystorageaccount.blob.core.windows.net/cicd-sensor-logs/cicd-sensor/
+    use_path_style: true
+`,
+			wantErr: "sinks.azure-prod: use_path_style is only valid for aws_s3",
 		},
 		{
 			name: "sink_name_empty",

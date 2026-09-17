@@ -124,8 +124,12 @@ func validateSinks(sinks SinksConfig) error {
 			if err := validatePubSubSink(name, sc); err != nil {
 				return err
 			}
+		case "azure_blob":
+			if err := validateAzureBlobSink(name, sc); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("sinks.%s.type %q is not one of aws_s3/google_storage/google_pubsub", name, sc.Type)
+			return fmt.Errorf("sinks.%s.type %q is not one of aws_s3/google_storage/google_pubsub/azure_blob", name, sc.Type)
 		}
 	}
 	return nil
@@ -172,6 +176,22 @@ func validatePubSubSink(name string, sc SinkConfig) error {
 	}
 	if sc.Region != "" || sc.URI != "" {
 		return fmt.Errorf("sinks.%s: region and uri are not valid for google_pubsub", name)
+	}
+	if sc.UsePathStyle {
+		return fmt.Errorf("sinks.%s: use_path_style is only valid for aws_s3", name)
+	}
+	return nil
+}
+
+func validateAzureBlobSink(name string, sc SinkConfig) error {
+	if sc.URI == "" {
+		return fmt.Errorf("sinks.%s.uri is required", name)
+	}
+	if !strings.HasPrefix(sc.URI, "https://") {
+		return fmt.Errorf("sinks.%s.uri must start with https://", name)
+	}
+	if sc.Region != "" || sc.ProjectID != "" || sc.Topic != "" {
+		return fmt.Errorf("sinks.%s: region, project_id, and topic are not valid for azure_blob", name)
 	}
 	if sc.UsePathStyle {
 		return fmt.Errorf("sinks.%s: use_path_style is only valid for aws_s3", name)
