@@ -87,11 +87,10 @@ struct {
     __type(value, __u32);
 } http_uprobe_stages SEC(".maps");
 
-// The hook only checks staging_map lookup hits; this value is reserved for a
-// future kernel path that may surface JobIdentity without userspace lookup.
+// Staged cgroups receive a fresh HTTP tracking lifetime before creation.
 struct staging_value {
-    __u64 job_id_lo;
-    __u64 job_id_hi;
+    __u64 http_owner;
+    __u64 reserved;
 };
 
 const volatile struct staging_value *unused_staging_value;
@@ -107,7 +106,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 65536);
     __type(key, __u64);
-    __type(value, __u8);
+    __type(value, __u64);
 } tracked_cgroups SEC(".maps");
 
 // Per-CPU path workspace. FILE_PATH_LEN does not fit on the 512B BPF stack.
@@ -139,7 +138,7 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, 65536);
-    __type(key, struct file_classification_key);
+    __type(key, struct http_discovery_key);
     __type(value, __u8);
 } http_uprobe_discovery_cache SEC(".maps");
 
@@ -152,3 +151,12 @@ struct {
     __type(key, char[STAGING_KEY_LEN]);
     __type(value, struct staging_value);
 } staging_map SEC(".maps");
+
+// Reclaim accepts a tracked-map snapshot only with no overlapping BPF writers.
+struct cgroup_tracking_stamp { __u64 writers; __u64 sequence; };
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct cgroup_tracking_stamp);
+} cgroup_tracking_changes SEC(".maps");

@@ -134,6 +134,28 @@ func TestResolveGoFunctionOffset(t *testing.T) {
 			t.Fatalf("resolve malformed pclntab = found %v, error %v", found, err)
 		}
 	})
+
+	t.Run("unknown stack check does not attach at an unsafe offset", func(t *testing.T) {
+		binaryPath := buildGoHTTPTestClient(t, "exe")
+		data, err := os.ReadFile(binaryPath)
+		if err != nil {
+			t.Fatalf("read fixture: %v", err)
+		}
+		file, err := elf.NewFile(bytes.NewReader(data))
+		if err != nil {
+			t.Fatalf("parse fixture ELF: %v", err)
+		}
+		defer file.Close()
+		section := file.Section(".text")
+		if section == nil {
+			t.Fatal("fixture has no text section")
+		}
+		clear(data[section.Offset : section.Offset+section.Size])
+		_, found, err := resolveGoFunctionOffset(bytes.NewReader(data), goNetHTTPRoundTripFunction)
+		if found || !errors.Is(err, errUnsupportedGoPclntab) {
+			t.Fatalf("resolve unknown stack check = found %v, error %v", found, err)
+		}
+	})
 }
 
 func TestGoHTTPObjectOffsets(t *testing.T) {

@@ -66,7 +66,7 @@ struct user_pt_regs {
 SEC("uprobe/SSL_write")
 int BPF_UPROBE(handle_ssl_write, void *ssl, const void *buf, long num)
 {
-    if (!cgroup_is_tracked(current_cgroup_id()))
+    if (!http_uprobe_is_owner(ctx))
         return 0;
     if (num < HTTP_MIN_REQUEST_LINE)
         return 0;
@@ -253,8 +253,7 @@ SEC("uprobe/nghttp2_submit_request")
 int BPF_UPROBE(handle_nghttp2_submit_request, void *session, void *pri_spec,
                const struct nghttp2_nv_abi *nva, __u64 nvlen)
 {
-    __u64 cgroup_id = current_cgroup_id();
-    if (!cgroup_is_tracked(cgroup_id) || !nva || nvlen == 0)
+    if (!http_uprobe_is_owner(ctx) || !nva || nvlen == 0)
         return 0;
 
     const __u8 *method = NULL;

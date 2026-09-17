@@ -12,6 +12,7 @@ import (
 
 func TestDecodeHTTPUprobeAttachCandidate(t *testing.T) {
 	want := httpUprobeAttachCandidate{
+		cgroupID: 111, owner: 222,
 		tgid:    1234,
 		vmStart: 0x400000,
 		vmEnd:   0x401000,
@@ -42,7 +43,7 @@ func TestDecodeHTTPUprobeAttachCandidate(t *testing.T) {
 
 func TestFileClassificationKeyBPFMapABI(t *testing.T) {
 	got := binary.Size(fileClassificationKey{})
-	want := binary.Size(bpfprog.BPFProgramFileClassificationKey{})
+	want := binary.Size(bpfprog.BPFProgramHttpUprobeAttachCandidateSample{}.File)
 	if got != want {
 		t.Fatalf("file classification key size = %d, want BPF map key size %d", got, want)
 	}
@@ -87,11 +88,11 @@ func encodeHTTPUprobeAttachCandidate(t *testing.T, candidate httpUprobeAttachCan
 		Tgid:    candidate.tgid,
 		VmStart: candidate.vmStart,
 		VmEnd:   candidate.vmEnd,
-		File: bpfprog.BPFProgramFileClassificationKey{
-			CtimeSec:  candidate.file.ctimeSec,
-			CtimeNsec: candidate.file.ctimeNsec,
-		},
 	}
+	sample.Owner = candidate.owner
+	sample.CgroupId = candidate.cgroupID
+	sample.File.CtimeSec = candidate.file.ctimeSec
+	sample.File.CtimeNsec = candidate.file.ctimeNsec
 	sample.File.MappedFile.DeviceMajor = candidate.file.mappedFile.deviceMajor
 	sample.File.MappedFile.DeviceMinor = candidate.file.mappedFile.deviceMinor
 	sample.File.MappedFile.Inode = candidate.file.mappedFile.inode
@@ -100,4 +101,10 @@ func encodeHTTPUprobeAttachCandidate(t *testing.T, candidate httpUprobeAttachCan
 		t.Fatalf("encode HTTP uprobe attach candidate: %v", err)
 	}
 	return buf.Bytes()
+}
+
+func TestHTTPDiscoveryKeyBPFMapABI(t *testing.T) {
+	if got, want := binary.Size(httpDiscoveryKey{}), binary.Size(bpfprog.BPFProgramHttpDiscoveryKey{}); got != want {
+		t.Fatalf("key size=%d want=%d", got, want)
+	}
 }

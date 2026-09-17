@@ -3,227 +3,102 @@
 package kernelio
 
 import (
-	"maps"
-	"os"
-	"path/filepath"
-	"slices"
+	"context"
+	"errors"
 	"testing"
 
-	"golang.org/x/sys/unix"
+	"github.com/cilium/ebpf/link"
 )
 
-// reclaimHarness drives reconcile() against a worker whose registry is seeded
-// with link-less entries (closeLinks on an empty slice is a no-op), so the
-// tests exercise miss counting and fail-keep without real uprobe links. The
-// Reconcile requests contain no active cgroup IDs, so every target is absent.
-type reclaimHarness struct {
-	worker *httpUprobeWorker
+type testTracking struct {
+	members map[uint64]uint64
+	err     error
 }
 
-func newReclaimHarness(t *testing.T) *reclaimHarness {
-	t.Helper()
-	return &reclaimHarness{worker: newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})}
-}
-
-func (h *reclaimHarness) attached(id mappedFileIdentity) *attachedUprobeTarget {
-	e := &attachedUprobeTarget{}
-	h.worker.attachedTargets[id] = e
-	return e
-}
-
-// An empty active-ID snapshot makes every target absent.
-func (h *reclaimHarness) sweep() {
-	h.worker.reconcileTargets(nil)
+func (s testTracking) httpOwner(id uint64) uint64 { return s.members[id] }
+func (s testTracking) httpOwners() (map[uint64]struct{}, error) {
+	owners := make(map[uint64]struct{})
+	for _, owner := range s.members {
+		if owner != 0 {
+			owners[owner] = struct{}{}
+		}
+	}
+	return owners, s.err
 }
 
 func TestHTTPUprobeReclaim(t *testing.T) {
 	t.Parallel()
-	id := mappedFileIdentity{deviceMajor: 1, inode: 42}
-
-	t.Run("two complete missing observations close the target", func(t *testing.T) {
-		t.Parallel()
-		h := newReclaimHarness(t)
-		e := h.attached(id)
-		h.sweep()
-		if e.missingScanCount != 1 {
-			t.Fatalf("after 1st miss: missingScanCount = %d, want 1", e.missingScanCount)
-		}
-		if _, still := h.worker.attachedTargets[id]; !still {
-			t.Fatal("closed after a single miss; must survive the first")
-		}
-		h.sweep()
-		if _, still := h.worker.attachedTargets[id]; still {
-			t.Fatal("still attached after two complete misses; must be closed")
-		}
-	})
-
-	t.Run("incomplete scan without observations neither advances nor closes", func(t *testing.T) {
-		t.Parallel()
-		h := newReclaimHarness(t)
-		e := h.attached(id)
-		h.sweep() // miss 1
-		cgroupPath := filepath.Join(h.worker.cgroupRootPath, "unreadable")
-		if err := os.MkdirAll(filepath.Join(cgroupPath, "cgroup.procs"), 0o755); err != nil {
-			t.Fatalf("create invalid cgroup.procs: %v", err)
-		}
-		h.worker.reconcileTargets([]uint64{testPathInode(t, cgroupPath)})
-		if e.missingScanCount != 1 {
-			t.Fatalf("empty incomplete scan changed missingScanCount to %d, want 1", e.missingScanCount)
-		}
-		if _, still := h.worker.attachedTargets[id]; !still {
-			t.Fatal("incomplete scan must never close")
-		}
-		// complete-missing, incomplete, complete-missing => closes
-		h.sweep()
-		if _, still := h.worker.attachedTargets[id]; still {
-			t.Fatal("second complete miss across an incomplete scan must close")
-		}
-	})
-	t.Run("queueTargetReconciliation never blocks and keeps one pending sweep", func(t *testing.T) {
-		t.Parallel()
-		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
-		worker.queueTargetReconciliation([]uint64{1})
-		worker.queueTargetReconciliation([]uint64{2}) // must not block on a full buffer
-		select {
-		case got := <-worker.reconcileRequests:
-			if !slices.Equal(got, []uint64{1}) {
-				t.Fatalf("queued cgroup IDs = %v, want first pending snapshot [1]", got)
-			}
-		default:
-			t.Fatal("no reconciliation queued")
-		}
-	})
-}
-
-func TestResolveActiveCgroupPaths(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	tracked := filepath.Join(root, "tracked")
-	untracked := filepath.Join(root, "untracked")
-	if err := os.MkdirAll(tracked, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(untracked, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("resolves only active IDs", func(t *testing.T) {
-		paths, complete := resolveActiveCgroupPaths(root, []uint64{testPathInode(t, tracked)})
-		if !complete {
-			t.Fatal("complete = false, want true")
-		}
-		if !slices.Equal(paths, []string{tracked}) {
-			t.Fatalf("paths = %v, want [%s]", paths, tracked)
-		}
-	})
-
-	t.Run("empty IDs avoid filesystem dependency", func(t *testing.T) {
-		paths, complete := resolveActiveCgroupPaths("", nil)
-		if !complete || len(paths) != 0 {
-			t.Fatalf("paths = %v complete = %v, want empty true", paths, complete)
-		}
-	})
-
-	t.Run("missing root is incomplete", func(t *testing.T) {
-		paths, complete := resolveActiveCgroupPaths(filepath.Join(root, "missing"), []uint64{1})
-		if complete || len(paths) != 0 {
-			t.Fatalf("paths = %v complete = %v, want empty false", paths, complete)
-		}
-	})
-}
-
-func testPathInode(t *testing.T, path string) uint64 {
-	t.Helper()
-	var stat unix.Stat_t
-	if err := unix.Stat(path, &stat); err != nil {
-		t.Fatalf("stat %q: %v", path, err)
-	}
-	return stat.Ino
-}
-
-func TestCollectCgroupPIDs(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		contents string
-		missing  bool
-		complete bool
-		want     []int32
+	for _, tc := range []struct {
+		name              string
+		members           map[uint64]uint64
+		scanErr           error
+		pending, canceled bool
+		remain            int
 	}{
-		{name: "valid members are deduplicated", contents: "123\n456\n123\n", complete: true, want: []int32{123, 456}},
-		{name: "malformed member makes the scan incomplete", contents: "123\ninvalid\n0\n-1\n", complete: false, want: []int32{123}},
-		{name: "vanished cgroup is a complete teardown race", missing: true, complete: true},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+		{name: "active owner retains unused preparation", members: map[uint64]uint64{1: 7}, remain: 1},
+		{name: "child retains owner after root deletion", members: map[uint64]uint64{2: 7}, remain: 1},
+		{name: "removed child does not end its parent", members: map[uint64]uint64{1: 7, 2: 0}, remain: 1},
+		{name: "last member ending closes target"},
+		{name: "zero owner is removed", members: map[uint64]uint64{1: 0}},
+		{name: "new owner at reused cgroup does not retain old link", members: map[uint64]uint64{1: 8}},
+		{name: "changing snapshot keeps links", scanErr: errors.New("changing"), remain: 1},
+		{name: "pending preparation yields", pending: true, remain: 1},
+		{name: "cancellation leaves shutdown responsible", canceled: true, remain: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			path := filepath.Join(t.TempDir(), "tracked")
-			if !test.missing {
-				if err := os.Mkdir(path, 0o755); err != nil {
-					t.Fatalf("mkdir tracked cgroup: %v", err)
-				}
-				if err := os.WriteFile(filepath.Join(path, "cgroup.procs"), []byte(test.contents), 0o644); err != nil {
-					t.Fatalf("write cgroup.procs: %v", err)
-				}
+			w := newHTTPUprobeWorker(nil, nil, "", nil, nil)
+			w.tracking = testTracking{members: tc.members, err: tc.scanErr}
+			closed := 0
+			key := httpTargetKey{owner: 7, file: mappedFileIdentity{inode: 42}}
+			w.attachedTargets[key] = &attachedUprobeTarget{links: []link.Link{notifyCloseLink{notify: func() { closed++ }}}}
+			if tc.pending {
+				w.preparationRequests <- &httpPreparationRequest{}
 			}
-
-			worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
-			got := make(map[int32]struct{})
-			if complete := worker.collectCgroupPIDs(path, got); complete != test.complete {
-				t.Fatalf("complete = %v, want %v", complete, test.complete)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.canceled {
+				cancel()
 			}
-			gotPIDs := slices.Sorted(maps.Keys(got))
-			if !slices.Equal(gotPIDs, test.want) {
-				t.Fatalf("PIDs = %v, want %v", gotPIDs, test.want)
+			w.reconcileTargets(ctx)
+			if len(w.attachedTargets) != tc.remain || closed != 1-tc.remain {
+				t.Fatalf("remaining=%d closed=%d", len(w.attachedTargets), closed)
 			}
 		})
 	}
 }
 
-func TestScanProcessMappingsCompleteness(t *testing.T) {
-	t.Parallel()
+func TestHTTPUprobeOwnersHaveIndependentLinks(t *testing.T) {
+	w := newHTTPUprobeWorker(nil, nil, "", nil, nil)
+	w.tracking = testTracking{members: map[uint64]uint64{2: 8}}
+	closed := map[uint64]int{}
+	for _, owner := range []uint64{7, 8} {
+		w.attachedTargets[httpTargetKey{owner: owner, file: mappedFileIdentity{inode: 42}}] = &attachedUprobeTarget{links: []link.Link{notifyCloseLink{notify: func() { closed[owner]++ }}}}
+	}
+	w.reconcileTargets(t.Context())
+	if closed[7] != 1 || closed[8] != 0 || len(w.attachedTargets) != 1 {
+		t.Fatalf("close counts=%v targets=%d", closed, len(w.attachedTargets))
+	}
+	w.closeAll()
+	if closed[8] != 1 {
+		t.Fatal("shutdown did not close remaining owner")
+	}
+}
 
-	t.Run("gone pid (ENOENT) is the benign race: complete", func(t *testing.T) {
-		t.Parallel()
-		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
-		// PID 2^31-1 does not exist on any sane box.
-		mappings, complete := worker.scanProcessMappings(2147483647)
-		if !complete {
-			t.Fatal("ENOENT on /proc/<pid>/maps must be reported complete (benign race)")
-		}
-		if len(mappings) != 0 {
-			t.Fatalf("mappings = %d, want 0", len(mappings))
-		}
-	})
-
-	t.Run("own executable file mappings are returned", func(t *testing.T) {
-		t.Parallel()
-		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
-		mappings, complete := worker.scanProcessMappings(int32(os.Getpid()))
-		if !complete {
-			t.Fatal("scan of own maps reported incomplete")
-		}
-		if len(mappings) == 0 {
-			t.Fatal("own maps contained no executable file mapping")
-		}
-	})
-
-	t.Run("target cap does not affect mapping scan", func(t *testing.T) {
-		t.Parallel()
-		worker := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, goUprobeTarget{})
-		for i := 0; i < maxAttachedUprobeTargets; i++ { // fill the registry to the cap
-			mapped := mappedFileIdentity{inode: uint64(i + 1)}
-			worker.attachedTargets[mapped] = &attachedUprobeTarget{}
-		}
-		mappings, complete := worker.scanProcessMappings(int32(os.Getpid()))
-		if !complete {
-			t.Fatal("cap-reached scan reported incomplete; reclaim would be frozen at the cap forever")
-		}
-		if len(mappings) == 0 {
-			t.Fatal("cap-reached scan recorded no presence; liveness of attached targets would be invisible")
-		}
-	})
+func TestPreparationRejectsEndedOwner(t *testing.T) {
+	w := newHTTPUprobeWorker(nil, nil, "", nil, nil)
+	w.tracking = testTracking{members: map[uint64]uint64{1: 8}}
+	for _, tc := range []struct {
+		name  string
+		owner uint64
+	}{
+		{name: "zero owner rejected"},
+		{name: "old lifetime rejected after rebind", owner: 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := w.prepareFile(t.Context(), nil, nil, 1, tc.owner); !errors.Is(err, errHTTPTrackingEnded) {
+				t.Fatalf("late preparation: %v", err)
+			}
+		})
+	}
 }

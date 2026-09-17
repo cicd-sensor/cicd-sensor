@@ -22,10 +22,9 @@ type KernelIO interface {
 	DeleteCgroupIDsFromTrackedCgroupsMap(ctx context.Context, cgroupIDs []uint64) error
 	PutCgroupBasenameInStagingMap(ctx context.Context, basename string) error
 	DeleteCgroupBasenamesFromStagingMap(ctx context.Context, basenames []string) error
-	// QueueHTTPUprobeReconciliation takes ownership of an active userspace
-	// cgroup-ID snapshot and schedules a non-blocking maps-liveness sweep.
+	// QueueHTTPUprobeReconciliation schedules a non-blocking tracking-owner sweep.
 	// It is a no-op when HTTP uprobe capture is disabled.
-	QueueHTTPUprobeReconciliation(activeCgroupIDs []uint64)
+	QueueHTTPUprobeReconciliation()
 	StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error
 	Close() error
 }

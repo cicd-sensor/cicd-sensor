@@ -41,8 +41,7 @@ func (kernelIO *StubKernelIO) DeleteCgroupBasenamesFromStagingMap(ctx context.Co
 	return ErrNotSupported
 }
 
-func (kernelIO *StubKernelIO) QueueHTTPUprobeReconciliation(activeCgroupIDs []uint64) {
-	_ = activeCgroupIDs
+func (kernelIO *StubKernelIO) QueueHTTPUprobeReconciliation() {
 }
 
 func (kernelIO *StubKernelIO) StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error {

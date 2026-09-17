@@ -91,14 +91,14 @@ func TestLinuxOpenSSLUprobeDoubleAttachDuplicatesEvents(t *testing.T) {
 		}
 	}
 
-	single, err := ex.Uprobe("SSL_write", kernelIO.TestOnlyOpenSSLProgram(), nil)
+	single, err := ex.Uprobe("SSL_write", kernelIO.TestOnlyOpenSSLProgram(), &link.UprobeOptions{Cookie: kernelIO.TestOnlyHTTPOwner(cgroupID)})
 	if err != nil {
 		t.Fatalf("first Uprobe(SSL_write): %v", err)
 	}
 	defer single.Close()
 	singleCount := countFor("/single-attach")
 
-	double, err := ex.Uprobe("SSL_write", kernelIO.TestOnlyOpenSSLProgram(), nil)
+	double, err := ex.Uprobe("SSL_write", kernelIO.TestOnlyOpenSSLProgram(), &link.UprobeOptions{Cookie: kernelIO.TestOnlyHTTPOwner(cgroupID)})
 	if err != nil {
 		t.Fatalf("second Uprobe(SSL_write): %v", err)
 	}
