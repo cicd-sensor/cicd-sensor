@@ -1,0 +1,52 @@
+name: Issue 195 Blacksmith lifecycle inspection
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [verify/issue-195-blacksmith-lifecycle]
+    paths:
+      - .github/workflows/issue-195-blacksmith-lifecycle.yml
+      - .github/scripts/issue195-lifecycle.py
+      - .github/scripts/issue195-shutdown-probe.sh
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, blacksmith-2vcpu-ubuntu-2404]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    env:
+      PROBE_RUNNER: ${{ matrix.runner }}
+      PROBE_REP: '1'
+      PROBE_ORDER: lifecycle-inspection
+      PROBE_ENDPOINT: https://cicd-sensor-manager-c5bmuzncpq-an.a.run.app/__shutdown_probe
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Inspect runner lifecycle files without executing them
+        run: sudo python3 .github/scripts/issue195-lifecycle.py
+      - name: Install independent shutdown observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -m 0755 .github/scripts/issue195-shutdown-probe.sh /usr/local/bin/issue195-shutdown-probe
+          sudo systemd-run --quiet --collect --unit=issue195-shutdown-probe \
+            --setenv="PROBE_ENDPOINT=${PROBE_ENDPOINT}" \
+            --setenv="PROBE_RUNNER=${PROBE_RUNNER}" --setenv="PROBE_REP=${PROBE_REP}" \
+            --setenv="PROBE_ORDER=${PROBE_ORDER}" \
+            --setenv="GITHUB_RUN_ID=${GITHUB_RUN_ID}" --setenv="GITHUB_RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}" \
+            --setenv="GITHUB_JOB=${GITHUB_JOB}" --setenv="PROBE_TRACKING_ID=${RUNNER_TRACKING_ID}" \
+            --setenv=RUNNER_TRACKING_ID= \
+            --property=RefuseManualStop=yes --property=IgnoreOnIsolate=yes \
+            --property=KillMode=mixed --property=TimeoutStopSec=30s \
+            --property=ExecStopPost='/usr/local/bin/issue195-shutdown-probe stop_post' \
+            /usr/local/bin/issue195-shutdown-probe
+          systemctl is-active issue195-shutdown-probe.service
+          sleep 15
+          PROBE_TRACKING_ID="${RUNNER_TRACKING_ID}" /usr/local/bin/issue195-shutdown-probe last_step
