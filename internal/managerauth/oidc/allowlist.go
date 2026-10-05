@@ -8,6 +8,8 @@ type Claims struct {
 	RepositoryOwner   string
 	RepositoryID      string
 	RepositoryOwnerID string
+	Ref               string
+	EventName         string
 }
 
 // Match reports whether any allowlist entry exactly matches the claims.

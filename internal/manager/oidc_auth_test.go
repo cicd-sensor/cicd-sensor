@@ -150,6 +150,9 @@ func TestOIDCJobIdentityInterceptor(t *testing.T) {
 		if err := interceptor.check(ctx, msg); err != nil {
 			t.Fatalf("check: %v", err)
 		}
+		if got := msg.GetJobIdentity().GetProjectPath(); got != "acme-corp/api" {
+			t.Fatalf("project_path after bind: got %q, want verified repository claim", got)
+		}
 	})
 
 	t.Run("mismatch permission_denied", func(t *testing.T) {
@@ -368,6 +371,66 @@ auth:
 		_, err := LoadStartupConfig(path)
 		if err == nil || !strings.Contains(err.Error(), "must not contain '/'") {
 			t.Fatalf("got %v", err)
+		}
+	})
+
+	t.Run("omitted repository key accepted as unconstrained", func(t *testing.T) {
+		path := writeStartupConfig(t, `
+auth:
+  oidc:
+    enabled: true
+    issuer: https://token.actions.githubusercontent.com
+    audience: https://manager.example.com
+    jwks_url: https://token.actions.githubusercontent.com/.well-known/jwks
+    allow:
+      - repository_owner: acme-corp
+`)
+		cfg, err := LoadStartupConfig(path)
+		if err != nil {
+			t.Fatalf("LoadStartupConfig: %v", err)
+		}
+		oidcCfg, err := cfg.OIDCConfig()
+		if err != nil {
+			t.Fatalf("OIDCConfig: %v", err)
+		}
+		if got := oidcCfg.Allow[0].Repository; got != "" {
+			t.Fatalf("repository: got %q, want omitted/empty constraint", got)
+		}
+	})
+
+	t.Run("explicit empty repository rejected", func(t *testing.T) {
+		path := writeStartupConfig(t, `
+auth:
+  oidc:
+    enabled: true
+    issuer: https://token.actions.githubusercontent.com
+    audience: https://manager.example.com
+    jwks_url: https://token.actions.githubusercontent.com/.well-known/jwks
+    allow:
+      - repository_owner: acme-corp
+        repository: ""
+`)
+		_, err := LoadStartupConfig(path)
+		if err == nil || !strings.Contains(err.Error(), "repository must not be empty") {
+			t.Fatalf("got %v, want explicit empty rejection", err)
+		}
+	})
+
+	t.Run("explicit whitespace repository rejected", func(t *testing.T) {
+		path := writeStartupConfig(t, `
+auth:
+  oidc:
+    enabled: true
+    issuer: https://token.actions.githubusercontent.com
+    audience: https://manager.example.com
+    jwks_url: https://token.actions.githubusercontent.com/.well-known/jwks
+    allow:
+      - repository_owner: acme-corp
+        repository: "   "
+`)
+		_, err := LoadStartupConfig(path)
+		if err == nil || !strings.Contains(err.Error(), "repository must not be empty") {
+			t.Fatalf("got %v, want whitespace rejection", err)
 		}
 	})
 }

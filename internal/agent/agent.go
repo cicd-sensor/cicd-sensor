@@ -132,6 +132,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		RunnerType:             a.runnerType,
 		Provider:               a.provider,
 		IDTokenRequestURLHosts: a.idTokenRequestURLHosts,
+		IDTokenHTTPClient:      managerclient.NewIDTokenMintHTTPClient(),
 	})
 	listeners := []*listener.Listener{l}
 	if a.provider == jobcontext.ProviderGitHub && a.runnerType == "kubernetes" && a.githubK8sRunnerSocketPath != "" {
@@ -142,6 +143,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			HostManagerConnection:  a.hostManagerConn,
 			HostManagerClient:      hostManagerClient,
 			IDTokenRequestURLHosts: a.idTokenRequestURLHosts,
+			IDTokenHTTPClient:      managerclient.NewIDTokenMintHTTPClient(),
 		}))
 	}
 

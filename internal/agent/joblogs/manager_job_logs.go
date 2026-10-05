@@ -154,13 +154,21 @@ func (o *ManagerJobLogs) EmitAndCloseSummaryLog(ctx context.Context, payload []b
 	return o.summaryLog.EmitAndClose(ctx, payload)
 }
 
-// ForceRefreshIDToken remints and pins the OIDC JWT used by manager log
-// workers. No-op when the connection uses a static manager token.
+// ForceRefreshIDToken remints and seeds the OIDC reuse cache used by manager
+// log workers. No-op when the connection uses a static manager token.
 func (o *ManagerJobLogs) ForceRefreshIDToken(ctx context.Context) error {
 	if o == nil {
 		return nil
 	}
 	return o.connection.ForceRefreshIDToken(ctx)
+}
+
+// CloseOIDCCredential cancels shared OIDC mint work after summary delivery.
+func (o *ManagerJobLogs) CloseOIDCCredential() {
+	if o == nil {
+		return
+	}
+	o.connection.CloseOIDCCredential()
 }
 
 // HasSummaryLog reports whether a summary_log destination is configured.

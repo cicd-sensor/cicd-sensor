@@ -206,7 +206,261 @@ func TestCachedTokenSource_ForceRefreshForShutdownSummary(t *testing.T) {
 		t.Fatal("shutdown path must reuse forced JWT without reminting")
 	}
 	if calls.Load() != 1 {
-		t.Fatalf("mint calls after pin: got %d, want 1", calls.Load())
+		t.Fatalf("mint calls after force: got %d, want 1", calls.Load())
+	}
+}
+
+func TestCachedTokenSource_ExpiryAfterForceRefreshRemints(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := calls.Add(1)
+		exp := time.Now().Add(2 * time.Second)
+		if n > 1 {
+			exp = time.Now().Add(5 * time.Minute)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"value": mintJWT(t, exp) + "-n" + strconv.Itoa(int(n))})
+	}))
+	t.Cleanup(srv.Close)
+
+	inner := &managerclient.ActionsIDTokenSource{
+		RequestURL: srv.URL, RequestToken: "secret", Audience: "https://manager.example.com",
+		HTTPClient: srv.Client(),
+	}
+	cached := managerclient.NewCachedTokenSource(inner)
+	if err := cached.ForceRefresh(context.Background()); err != nil {
+		t.Fatalf("ForceRefresh: %v", err)
+	}
+	time.Sleep(2500 * time.Millisecond)
+	if _, err := cached.Token(); err != nil {
+		t.Fatalf("Token after expiry: %v", err)
+	}
+	if calls.Load() < 2 {
+		t.Fatalf("mint calls: got %d, want at least 2 after forced JWT expired", calls.Load())
+	}
+}
+
+func TestCachedTokenSource_ForceRefreshFailureRetainsReuse(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			_ = json.NewEncoder(w).Encode(map[string]string{"value": mintJWT(t, time.Now().Add(5*time.Minute))})
+			return
+		}
+		http.Error(w, "nope", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+
+	inner := &managerclient.ActionsIDTokenSource{
+		RequestURL: srv.URL, RequestToken: "secret", Audience: "https://manager.example.com",
+		HTTPClient: srv.Client(),
+	}
+	cached := managerclient.NewCachedTokenSource(inner)
+	if _, err := cached.Token(); err != nil {
+		t.Fatalf("initial Token: %v", err)
+	}
+	if err := cached.ForceRefresh(context.Background()); err != nil {
+		t.Fatalf("ForceRefresh should retain reuse cache: %v", err)
+	}
+	tok, err := cached.Token()
+	if err != nil {
+		t.Fatalf("Token after failed force: %v", err)
+	}
+	if tok.AccessToken == "" {
+		t.Fatal("expected cached JWT after failed force refresh")
+	}
+}
+
+func TestCachedTokenSource_ForceRefreshAlwaysMints(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := calls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"value": mintJWT(t, time.Now().Add(5*time.Minute)) + "-n" + strconv.Itoa(int(n)),
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	inner := &managerclient.ActionsIDTokenSource{
+		RequestURL: srv.URL, RequestToken: "secret", Audience: "https://manager.example.com",
+		HTTPClient: srv.Client(),
+	}
+	cached := managerclient.NewCachedTokenSource(inner)
+	if _, err := cached.Token(); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if err := cached.ForceRefresh(context.Background()); err != nil {
+		t.Fatalf("ForceRefresh: %v", err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("mint calls: got %d, want 2 (force must not join cache-hit only)", got)
+	}
+}
+
+func TestCachedTokenSource_MintStallTimesOut(t *testing.T) {
+	const stall = 2 * time.Second
+	const mintTimeout = 50 * time.Millisecond
+
+	var startedOnce sync.Once
+	started := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startedOnce.Do(func() { close(started) })
+		// Stall past the mint deadline; exit when the mint context cancels so
+		// Cleanup does not wait out the full stall.
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(stall):
+			_ = json.NewEncoder(w).Encode(map[string]string{"value": mintJWT(t, time.Now().Add(5*time.Minute))})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	inner := &managerclient.ActionsIDTokenSource{
+		RequestURL: srv.URL, RequestToken: "secret", Audience: "https://manager.example.com",
+		// Transport without a short client.Timeout so the acquisition
+		// context deadline is what fails (production sets both).
+		HTTPClient: srv.Client(),
+	}
+	cached := managerclient.NewCachedTokenSourceWithTimeout(inner, mintTimeout)
+
+	start := time.Now()
+	_, err := cached.TokenContext(context.Background())
+	elapsed := time.Since(start)
+
+	if err == nil || !errors.Is(err, managerclient.ErrMintUnavailable) {
+		t.Fatalf("TokenContext: got %v, want ErrMintUnavailable", err)
+	}
+	// Depending on cancel vs server close ordering, the transport may surface
+	// deadline exceeded, context canceled, or EOF — all are mint failures
+	// that aborted before the stall completed.
+	if elapsed >= stall {
+		t.Fatalf("acquisition waited %v, want fail near mint timeout %v (not full stall %v)", elapsed, mintTimeout, stall)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("acquisition took %v, want well under 500ms with injectable timeout", elapsed)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("mint handler never started")
+	}
+}
+
+func TestCachedTokenSource_ConcurrentWaitersShareTimedOutMint(t *testing.T) {
+	const mintTimeout = 80 * time.Millisecond
+	var calls atomic.Int32
+	releaseHandler := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		select {
+		case <-r.Context().Done():
+			return
+		case <-releaseHandler:
+			_ = json.NewEncoder(w).Encode(map[string]string{"value": mintJWT(t, time.Now().Add(5*time.Minute))})
+		case <-time.After(2 * time.Second):
+			_ = json.NewEncoder(w).Encode(map[string]string{"value": mintJWT(t, time.Now().Add(5*time.Minute))})
+		}
+	}))
+	t.Cleanup(func() {
+		close(releaseHandler)
+		srv.Close()
+	})
+
+	inner := &managerclient.ActionsIDTokenSource{
+		RequestURL: srv.URL, RequestToken: "secret", Audience: "https://manager.example.com",
+		HTTPClient: srv.Client(),
+	}
+	cached := managerclient.NewCachedTokenSourceWithTimeout(inner, mintTimeout)
+
+	const n = 6
+	begin := make(chan struct{})
+	var ready sync.WaitGroup
+	ready.Add(n)
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ready.Done()
+			<-begin
+			_, err := cached.TokenContext(context.Background())
+			errs <- err
+		}()
+	}
+	ready.Wait()
+	close(begin)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err == nil || !errors.Is(err, managerclient.ErrMintUnavailable) {
+			t.Fatalf("TokenContext: got %v, want ErrMintUnavailable", err)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("mint calls: got %d, want 1 (concurrent waiters share one stalled acquisition)", got)
+	}
+}
+
+func TestCachedTokenSource_CanceledWaiter(t *testing.T) {
+	started := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		time.Sleep(2 * time.Second)
+		_ = json.NewEncoder(w).Encode(map[string]string{"value": mintJWT(t, time.Now().Add(5*time.Minute))})
+	}))
+	t.Cleanup(srv.Close)
+
+	inner := &managerclient.ActionsIDTokenSource{
+		RequestURL: srv.URL, RequestToken: "secret", Audience: "https://manager.example.com",
+		HTTPClient: srv.Client(),
+	}
+	cached := managerclient.NewCachedTokenSource(inner)
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := cached.TokenContext(ctx)
+		errCh <- err
+	}()
+	<-started
+	cancel()
+	err := <-errCh
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("TokenContext: got %v, want context.Canceled", err)
+	}
+}
+
+func TestActionsIDTokenSource_RejectsRedirect(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"value": "evil"})
+	}))
+	t.Cleanup(target.Close)
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	t.Cleanup(redirect.Close)
+
+	mintClient := managerclient.NewIDTokenMintHTTPClient()
+	mintClient.Transport = redirect.Client().Transport
+	src := &managerclient.ActionsIDTokenSource{
+		RequestURL: redirect.URL, RequestToken: "secret", Audience: "https://manager.example.com",
+		HTTPClient: mintClient,
+	}
+	_, err := src.Token()
+	if err == nil || !errors.Is(err, managerclient.ErrMintUnavailable) {
+		t.Fatalf("Token: got %v, want ErrMintUnavailable for redirect", err)
+	}
+}
+
+func TestNewIDTokenMintHTTPClient_RejectsRedirect(t *testing.T) {
+	client := managerclient.NewIDTokenMintHTTPClient()
+	if client.Timeout != managerclient.DefaultMintHTTPTimeout {
+		t.Fatalf("timeout: got %v, want %v", client.Timeout, managerclient.DefaultMintHTTPTimeout)
+	}
+	if err := client.CheckRedirect(nil, nil); err != http.ErrUseLastResponse {
+		t.Fatalf("CheckRedirect: got %v", err)
 	}
 }
 

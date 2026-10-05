@@ -44,7 +44,9 @@ func (s *JobScopeState) EmitSummaryLog(ctx context.Context, in SummaryLogInputs,
 	if err != nil {
 		return err
 	}
-	return s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
+	err = s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
+	s.managerJobLogs.CloseOIDCCredential()
+	return err
 }
 
 // FlushManagerLogs sends buffered streaming logs now, keeping the Job

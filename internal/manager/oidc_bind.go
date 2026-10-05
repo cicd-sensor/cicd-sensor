@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -120,5 +121,22 @@ func (i oidcJobIdentityInterceptor) check(ctx context.Context, msg any) error {
 		}
 		return connect.NewError(connect.CodePermissionDenied, errors.New("permission denied"))
 	}
+	applyVerifiedRepositoryIdentity(msg, principal.Repository)
 	return nil
+}
+
+func applyVerifiedRepositoryIdentity(msg any, repository string) {
+	if strings.TrimSpace(repository) == "" {
+		return
+	}
+	switch m := msg.(type) {
+	case *managerv1beta1.FetchConfigRequest:
+		if m.GetJobIdentity() != nil {
+			m.JobIdentity.ProjectPath = repository
+		}
+	case *managerv1beta1.IngestLogRequest:
+		if m.GetBatch() != nil && m.GetBatch().GetJobIdentity() != nil {
+			m.Batch.JobIdentity.ProjectPath = repository
+		}
+	}
 }

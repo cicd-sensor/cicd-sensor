@@ -5,6 +5,57 @@ import (
 	"testing"
 )
 
+func TestAllowEntryFromOptional_OmitVsExplicitEmpty(t *testing.T) {
+	owner := "acme-corp"
+	empty := ""
+	ws := "   "
+	repo := "acme-corp/api"
+
+	t.Run("omitted repository unconstrained", func(t *testing.T) {
+		entry, err := AllowEntryFromOptional(&owner, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("AllowEntryFromOptional: %v", err)
+		}
+		if entry.RepositoryOwner != owner || entry.Repository != "" {
+			t.Fatalf("entry: %+v", entry)
+		}
+		if err := entry.Validate(); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+		claims := Claims{RepositoryOwner: "acme-corp", Repository: "acme-corp/other"}
+		if _, ok := Match([]AllowEntry{entry}, claims); !ok {
+			t.Fatal("omitted repository must not constrain match")
+		}
+	})
+
+	t.Run("explicit empty repository rejected", func(t *testing.T) {
+		_, err := AllowEntryFromOptional(&owner, &empty, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "repository must not be empty") {
+			t.Fatalf("got %v, want explicit empty rejection", err)
+		}
+	})
+
+	t.Run("explicit whitespace repository rejected", func(t *testing.T) {
+		_, err := AllowEntryFromOptional(&owner, &ws, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "repository must not be empty") {
+			t.Fatalf("got %v, want whitespace rejection", err)
+		}
+	})
+
+	t.Run("present repository constrains", func(t *testing.T) {
+		entry, err := AllowEntryFromOptional(&owner, &repo, nil, nil)
+		if err != nil {
+			t.Fatalf("AllowEntryFromOptional: %v", err)
+		}
+		if _, ok := Match([]AllowEntry{entry}, Claims{RepositoryOwner: owner, Repository: repo}); !ok {
+			t.Fatal("expected match")
+		}
+		if _, ok := Match([]AllowEntry{entry}, Claims{RepositoryOwner: owner, Repository: "acme-corp/other"}); ok {
+			t.Fatal("present repository must constrain match")
+		}
+	})
+}
+
 func TestAllowEntryValidate(t *testing.T) {
 	tests := []struct {
 		name    string

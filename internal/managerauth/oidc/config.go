@@ -33,12 +33,57 @@ type Config struct {
 }
 
 // AllowEntry is one exact-claim allowlist grant. Non-empty fields must all
-// match the corresponding JWT claims.
+// match the corresponding JWT claims. Empty string means the claim is
+// unconstrained (YAML key omitted). Explicit empty YAML values must be
+// rejected before constructing an AllowEntry (see AllowEntryFromOptional).
 type AllowEntry struct {
 	RepositoryOwner   string
 	Repository        string
 	RepositoryOwnerID string
 	RepositoryID      string
+}
+
+// AllowEntryFromOptional builds an AllowEntry from optional claim pointers.
+// A nil pointer means the YAML key was omitted (no constraint). A non-nil
+// pointer must carry a non-empty, non-whitespace claim value; explicit
+// empty or whitespace-only values are rejected.
+func AllowEntryFromOptional(repositoryOwner, repository, repositoryOwnerID, repositoryID *string) (AllowEntry, error) {
+	owner, err := optionalClaim(repositoryOwner, "repository_owner")
+	if err != nil {
+		return AllowEntry{}, err
+	}
+	repo, err := optionalClaim(repository, "repository")
+	if err != nil {
+		return AllowEntry{}, err
+	}
+	ownerID, err := optionalClaim(repositoryOwnerID, "repository_owner_id")
+	if err != nil {
+		return AllowEntry{}, err
+	}
+	repoID, err := optionalClaim(repositoryID, "repository_id")
+	if err != nil {
+		return AllowEntry{}, err
+	}
+	return AllowEntry{
+		RepositoryOwner:   owner,
+		Repository:        repo,
+		RepositoryOwnerID: ownerID,
+		RepositoryID:      repoID,
+	}, nil
+}
+
+func optionalClaim(p *string, name string) (string, error) {
+	if p == nil {
+		return "", nil
+	}
+	v := strings.TrimSpace(*p)
+	if v == "" {
+		return "", fmt.Errorf("%s must not be empty", name)
+	}
+	if v != *p {
+		return "", fmt.Errorf("%s must not be empty or whitespace-only", name)
+	}
+	return v, nil
 }
 
 // Validate reports whether cfg is complete enough to construct a verifier.

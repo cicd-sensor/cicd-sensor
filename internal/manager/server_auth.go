@@ -86,6 +86,8 @@ type authPrincipal struct {
 	RepositoryOwner   string
 	RepositoryID      string
 	RepositoryOwnerID string
+	Ref               string
+	EventName         string
 }
 
 func (p authPrincipal) isOIDC() bool {
@@ -136,6 +138,10 @@ func newAuthMiddleware(logger *slog.Logger, opts authMiddlewareOptions) *authn.M
 				)
 				return nil, bearerAuthError()
 			}
+			authLogger.InfoContext(ctx, "manager_auth_accepted",
+				"procedure", procedureFromRequest(r),
+				"auth_kind", oidcauth.AuthKindManagerToken,
+			)
 			return authPrincipal{Kind: oidcauth.AuthKindManagerToken}, nil
 
 		case oidcauth.TokenTypeIDToken:
@@ -170,6 +176,8 @@ func newAuthMiddleware(logger *slog.Logger, opts authMiddlewareOptions) *authn.M
 				"auth_kind", principal.Kind,
 				"repository", principal.Claims.Repository,
 				"repository_owner", principal.Claims.RepositoryOwner,
+				"ref", principal.Claims.Ref,
+				"event_name", principal.Claims.EventName,
 			)
 			return authPrincipal{
 				Kind:              principal.Kind,
@@ -177,6 +185,8 @@ func newAuthMiddleware(logger *slog.Logger, opts authMiddlewareOptions) *authn.M
 				RepositoryOwner:   principal.Claims.RepositoryOwner,
 				RepositoryID:      principal.Claims.RepositoryID,
 				RepositoryOwnerID: principal.Claims.RepositoryOwnerID,
+				Ref:               principal.Claims.Ref,
+				EventName:         principal.Claims.EventName,
 			}, nil
 
 		default:

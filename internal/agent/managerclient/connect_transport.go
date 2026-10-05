@@ -2,6 +2,7 @@ package managerclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -76,8 +77,14 @@ func withClientAuth(staticToken string, src oauth2.TokenSource, tokenType string
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			token := staticToken
 			if src != nil {
-				tok, err := src.Token()
+				tok, err := tokenFromSource(ctx, src)
 				if err != nil {
+					if errors.Is(err, context.Canceled) {
+						return nil, connect.NewError(connect.CodeCanceled, err)
+					}
+					if errors.Is(err, context.DeadlineExceeded) {
+						return nil, connect.NewError(connect.CodeDeadlineExceeded, err)
+					}
 					return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%w", err))
 				}
 				token = tok.AccessToken
@@ -90,4 +97,13 @@ func withClientAuth(staticToken string, src oauth2.TokenSource, tokenType string
 			return next(ctx, req)
 		}
 	}))
+}
+
+func tokenFromSource(ctx context.Context, src oauth2.TokenSource) (*oauth2.Token, error) {
+	if ctxSrc, ok := src.(interface {
+		TokenContext(context.Context) (*oauth2.Token, error)
+	}); ok {
+		return ctxSrc.TokenContext(ctx)
+	}
+	return src.Token()
 }

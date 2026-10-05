@@ -69,6 +69,8 @@ func (v *Verifier) Verify(ctx context.Context, rawJWT string) (Principal, error)
 		RepositoryOwner   string `json:"repository_owner"`
 		RepositoryID      string `json:"repository_id"`
 		RepositoryOwnerID string `json:"repository_owner_id"`
+		Ref               string `json:"ref"`
+		EventName         string `json:"event_name"`
 	}
 	if err := token.Claims(&claims); err != nil {
 		return Principal{}, fmt.Errorf("decode id token claims: %w", err)
@@ -79,6 +81,8 @@ func (v *Verifier) Verify(ctx context.Context, rawJWT string) (Principal, error)
 		RepositoryOwner:   claims.RepositoryOwner,
 		RepositoryID:      claims.RepositoryID,
 		RepositoryOwnerID: claims.RepositoryOwnerID,
+		Ref:               claims.Ref,
+		EventName:         claims.EventName,
 	}
 	matched, ok := Match(v.cfg.Allow, matchedClaims)
 	if !ok {

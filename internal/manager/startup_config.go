@@ -53,23 +53,31 @@ type OIDCAuthConfig struct {
 }
 
 // OIDCAllowlistEntry is one exact-claim allowlist grant from manager.yaml.
+// Pointer fields distinguish omitted keys (nil, no constraint) from
+// explicit empty strings (rejected at load).
 type OIDCAllowlistEntry struct {
-	RepositoryOwner   string `yaml:"repository_owner,omitempty"`
-	Repository        string `yaml:"repository,omitempty"`
-	RepositoryOwnerID string `yaml:"repository_owner_id,omitempty"`
-	RepositoryID      string `yaml:"repository_id,omitempty"`
+	RepositoryOwner   *string `yaml:"repository_owner,omitempty"`
+	Repository        *string `yaml:"repository,omitempty"`
+	RepositoryOwnerID *string `yaml:"repository_owner_id,omitempty"`
+	RepositoryID      *string `yaml:"repository_id,omitempty"`
 }
 
 // OIDCConfig converts YAML auth.oidc into the verifier config type.
-func (cfg StartupConfig) OIDCConfig() oidcauth.Config {
+// Explicit empty allowlist claim keys return an error (nil pointer =
+// omitted / unconstrained).
+func (cfg StartupConfig) OIDCConfig() (oidcauth.Config, error) {
 	allow := make([]oidcauth.AllowEntry, 0, len(cfg.Auth.OIDC.Allow))
-	for _, entry := range cfg.Auth.OIDC.Allow {
-		allow = append(allow, oidcauth.AllowEntry{
-			RepositoryOwner:   entry.RepositoryOwner,
-			Repository:        entry.Repository,
-			RepositoryOwnerID: entry.RepositoryOwnerID,
-			RepositoryID:      entry.RepositoryID,
-		})
+	for i, entry := range cfg.Auth.OIDC.Allow {
+		decoded, err := oidcauth.AllowEntryFromOptional(
+			entry.RepositoryOwner,
+			entry.Repository,
+			entry.RepositoryOwnerID,
+			entry.RepositoryID,
+		)
+		if err != nil {
+			return oidcauth.Config{}, fmt.Errorf("auth.oidc.allow[%d]: %w", i, err)
+		}
+		allow = append(allow, decoded)
 	}
 	return oidcauth.Config{
 		Enabled:  cfg.Auth.OIDC.Enabled,
@@ -77,7 +85,7 @@ func (cfg StartupConfig) OIDCConfig() oidcauth.Config {
 		Audience: cfg.Auth.OIDC.Audience,
 		JWKSURL:  cfg.Auth.OIDC.JWKSURL,
 		Allow:    allow,
-	}
+	}, nil
 }
 
 // SinksConfig maps an operator-defined sink name to its physical destination.
@@ -134,7 +142,11 @@ func LoadStartupConfig(path string) (StartupConfig, error) {
 	if err := validateLogs(cfg.Logs, cfg.Sinks); err != nil {
 		return StartupConfig{}, err
 	}
-	if err := cfg.OIDCConfig().Validate(); err != nil {
+	oidcCfg, err := cfg.OIDCConfig()
+	if err != nil {
+		return StartupConfig{}, err
+	}
+	if err := oidcCfg.Validate(); err != nil {
 		return StartupConfig{}, err
 	}
 	sum := sha256.Sum256(data)

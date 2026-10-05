@@ -60,13 +60,20 @@ func (c Connection) HasCredential() bool {
 	return auth.Token != "" || auth.TokenSource != nil
 }
 
-// ForceRefreshIDToken remints and pins the OIDC JWT when Cached is set.
+// ForceRefreshIDToken remints and seeds the OIDC reuse cache when Cached is set.
 // Manager-token connections are a no-op.
 func (c Connection) ForceRefreshIDToken(ctx context.Context) error {
 	if c.Cached == nil {
 		return nil
 	}
 	return c.Cached.ForceRefresh(ctx)
+}
+
+// CloseOIDCCredential stops shared OIDC mint work after the final Summary flush.
+func (c Connection) CloseOIDCCredential() {
+	if c.Cached != nil {
+		c.Cached.Close()
+	}
 }
 
 // NewConfigClient validates the manager endpoint and builds the config client.

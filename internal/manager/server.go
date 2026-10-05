@@ -49,8 +49,12 @@ func newServer(logger *slog.Logger, addr string, tokens []string, config *Served
 
 	authOpts := authMiddlewareOptions{tokens: s.tokens}
 	if startup != nil {
-		oidcCfg := startup.OIDCConfig()
-		if oidcCfg.Enabled {
+		oidcCfg, err := startup.OIDCConfig()
+		if err != nil {
+			// LoadStartupConfig already rejects this; log if NewServer is
+			// reached with a hand-built StartupConfig.
+			s.logger.Error("manager_oidc_config_invalid", "error", err)
+		} else if oidcCfg.Enabled {
 			verifier, err := oidcauth.NewVerifier(context.Background(), oidcCfg)
 			if err != nil {
 				// Construction failures are configuration bugs; panic is avoided
