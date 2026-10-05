@@ -94,6 +94,10 @@ jobs:
           enable-html-report: 'false'
           enable-attestation-artifact: 'false'
           enable-debug: 'false'
+      - name: Register another action with pre and post
+        uses: cicd-sensor/cicd-sensor/.github/actions/issue195-tail-pre@aead42fdeabe0ad0cbf45cf9820164730fbe98bf
+        env:
+          ISSUE195_TAIL_KIND: pre
       - name: Install hash-gated completion experiment
         run: |
           set -euo pipefail
