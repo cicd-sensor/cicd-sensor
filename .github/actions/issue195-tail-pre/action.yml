@@ -1,0 +1,7 @@
+name: Issue 195 pre-registered tail marker
+description: A different action whose post is registered in pre
+runs:
+  using: node24
+  pre: register.cjs
+  main: ../issue195-pre-stop/register.cjs
+  post: ../issue195-tail/index.cjs
