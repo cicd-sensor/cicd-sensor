@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [baseline, hook, post, pre-post, worker-exit]
+        options: [baseline, hook, post, pre-post, worker-exit, checkpoint]
         default: hook
       scenario:
         type: choice
