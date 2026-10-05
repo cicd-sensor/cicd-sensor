@@ -8,8 +8,9 @@ if (process.env.STATE_registered !== 'true') {
     // Observe a nonterminal snapshot in the durable job log; do not mislabel it
     // as a final Summary or inject a new schema into the Manager output sink.
     console.log(JSON.stringify({kind: 'issue195_checkpoint', terminal: false,
-      events_total: report.events_total, events_dropped: report.events_dropped,
-      finalize_reason: report.finalize_reason, end_time: report.end_time}));
+      result: report.result_summary.result, rule_count: report.rules_summary.rule_count,
+      hit_count: report.hits.reduce((sum, hit) => sum + hit.hit_count, 0),
+      finalize_reason: report.finalize_reason, generated_at: report.generated_at}));
   }
   const marker = `issue195-tail-${process.env.GITHUB_RUN_ID}-${process.env.ISSUE195_MODE}-${process.env.PROBE_REP}-${process.env.ISSUE195_TAIL_KIND || 'main'}`;
   const result = spawnSync('/usr/bin/touch', [`/tmp/${marker}`], { stdio: 'inherit' });
