@@ -1,0 +1,9 @@
+name: Issue 195 early post registration
+description: Register the finalizer in pre without changing the released sensor
+runs:
+  using: node24
+  pre: register.cjs
+  pre-if: env.ISSUE195_MODE == 'pre-post'
+  main: register.cjs
+  post: finalize.cjs
+  post-if: always() && env.ISSUE195_MODE == 'pre-post'

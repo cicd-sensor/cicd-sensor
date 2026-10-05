@@ -1,0 +1,6 @@
+name: Issue 195 ordinary post finalizer
+description: Stop after sensor post but before the earlier registered tail post
+runs:
+  using: node24
+  main: ../issue195-pre-stop/register.cjs
+  post: ../issue195-pre-stop/finalize.cjs
