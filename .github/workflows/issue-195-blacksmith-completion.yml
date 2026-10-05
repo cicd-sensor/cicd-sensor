@@ -1,0 +1,101 @@
+name: Issue 195 Blacksmith completion experiment
+on:
+  push:
+    branches: [verify/issue-195-blacksmith-lifecycle]
+    paths:
+      - .github/workflows/issue-195-blacksmith-completion.yml
+      - .github/scripts/issue195-install-completion.py
+      - .github/scripts/issue195-finalize.sh
+      - .github/scripts/issue195-manager-proxy.py
+      - .github/actions/issue195-tail/**
+  workflow_dispatch:
+    inputs:
+      scenario:
+        type: choice
+        options: [normal, post-failure, manager-503, cancel]
+        default: normal
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.value }}
+    steps:
+      - id: matrix
+        env:
+          SCENARIO: ${{ inputs.scenario || 'normal' }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          rows=[{'mode': mode, 'rep': rep} for mode in ['baseline','hook'] for rep in [1,2,3]] if os.environ['SCENARIO']=='normal' else [{'mode':'hook','rep':1}]
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('value='+json.dumps({'include':rows})+'\n')
+          PY
+  sensor:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 8
+    env:
+      ISSUE195_MODE: ${{ matrix.mode }}
+      ISSUE195_SCENARIO: ${{ inputs.scenario || 'normal' }}
+      PROBE_RUNNER: blacksmith-2vcpu-ubuntu-2404
+      PROBE_REP: ${{ matrix.rep }}
+      PROBE_ORDER: ${{ matrix.mode }}-${{ inputs.scenario || 'normal' }}
+      PROBE_ENDPOINT: https://cicd-sensor-manager-c5bmuzncpq-an.a.run.app/__shutdown_probe
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require a fresh dedicated VM and prepare forwarding proxy
+        run: |
+          set -euo pipefail
+          if systemctl is-active --quiet cicd-sensor-agent.service || [[ -S /run/cicd-sensor/agent.sock ]]; then
+            echo 'Refusing to stop or reuse a pre-existing agent'; exit 1
+          fi
+          sudo install -d -m 0755 /run/issue195
+          sudo install -m 0755 .github/scripts/issue195-shutdown-probe.sh /usr/local/bin/issue195-shutdown-probe
+          sudo install -m 0755 .github/scripts/issue195-finalize.sh /usr/local/bin/issue195-finalize
+          sudo install -m 0755 .github/scripts/issue195-manager-proxy.py /usr/local/bin/issue195-manager-proxy.py
+          sudo systemd-run --quiet --unit=issue195-manager-proxy --setenv=RUNNER_TRACKING_ID= \
+            /usr/bin/python3 /usr/local/bin/issue195-manager-proxy.py
+          for attempt in {1..30}; do
+            if curl --silent --output /dev/null http://127.0.0.1:19580; then break; fi
+            sleep 0.2
+          done
+          systemctl is-active issue195-manager-proxy.service
+      - name: Register a post that will run after sensor post
+        uses: ./.github/actions/issue195-tail
+      - name: Start released sensor
+        uses: cicd-sensor/cicd-sensor-action@6511eb44c91d71b2b93d71193b1bf2cb18352f66 # v0.0.38
+        with:
+          cicd-sensor-version: v0.0.45
+          manager-url: http://127.0.0.1:19580
+          manager-token: ${{ secrets.ISSUE195_MANAGER_TOKEN }}
+          enable-html-report: 'false'
+          enable-attestation-artifact: 'false'
+          enable-debug: 'false'
+      - name: Install hash-gated completion experiment
+        run: |
+          set -euo pipefail
+          sudo --preserve-env=GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_JOB,RUNNER_TRACKING_ID,PROBE_RUNNER,PROBE_REP,PROBE_ORDER,PROBE_ENDPOINT,ISSUE195_MODE \
+            python3 .github/scripts/issue195-install-completion.py
+          PROBE_TRACKING_ID="$RUNNER_TRACKING_ID" /usr/local/bin/issue195-shutdown-probe experiment_ready
+      - name: Run workload
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 https://example.com -o /tmp/issue195-workload.html
+          python3 -c 'print("issue195-workload")'
+          sleep 20
+      - name: Await external cancellation
+        if: inputs.scenario == 'cancel'
+        run: |
+          PROBE_TRACKING_ID="$RUNNER_TRACKING_ID" /usr/local/bin/issue195-shutdown-probe cancel_ready
+          sleep 240
+      - name: Last regular step
+        run: |
+          PROBE_TRACKING_ID="$RUNNER_TRACKING_ID" /usr/local/bin/issue195-shutdown-probe last_step
