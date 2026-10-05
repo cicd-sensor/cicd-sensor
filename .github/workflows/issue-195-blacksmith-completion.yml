@@ -1,19 +1,19 @@
 name: Issue 195 Blacksmith completion experiment
 on:
-  push:
-    branches: [verify/issue-195-blacksmith-lifecycle]
-    paths:
-      - .github/workflows/issue-195-blacksmith-completion.yml
-      - .github/scripts/issue195-install-completion.py
-      - .github/scripts/issue195-finalize.sh
-      - .github/scripts/issue195-manager-proxy.py
-      - .github/actions/issue195-tail/**
   workflow_dispatch:
     inputs:
+      mode:
+        type: choice
+        options: [baseline, hook, post, pre-post, worker-exit]
+        default: hook
       scenario:
         type: choice
         options: [normal, post-failure, manager-503, cancel]
         default: normal
+      repetitions:
+        type: choice
+        options: ['1', '3']
+        default: '3'
 permissions:
   contents: read
 jobs:
@@ -25,10 +25,12 @@ jobs:
       - id: matrix
         env:
           SCENARIO: ${{ inputs.scenario || 'normal' }}
+          MODE: ${{ inputs.mode }}
+          REPETITIONS: ${{ inputs.repetitions }}
         run: |
           python3 - <<'PY'
           import json,os
-          rows=[{'mode': mode, 'rep': rep} for mode in ['baseline','hook'] for rep in [1,2,3]] if os.environ['SCENARIO']=='normal' else [{'mode':'hook','rep':1}]
+          rows=[{'mode': os.environ['MODE'], 'rep': rep} for rep in range(1,int(os.environ['REPETITIONS'])+1)]
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
               f.write('value='+json.dumps({'include':rows})+'\n')
           PY
@@ -48,6 +50,9 @@ jobs:
       PROBE_ORDER: ${{ matrix.mode }}-${{ inputs.scenario || 'normal' }}
       PROBE_ENDPOINT: https://cicd-sensor-manager-c5bmuzncpq-an.a.run.app/__shutdown_probe
     steps:
+      - name: Register finalizer before other action pre and main steps
+        if: inputs.mode == 'pre-post'
+        uses: cicd-sensor/cicd-sensor/.github/actions/issue195-pre-stop@252ba250e68d5a0c1f180ca7ce4dcf68c9483da3
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -61,20 +66,30 @@ jobs:
           sudo install -m 0755 .github/scripts/issue195-shutdown-probe.sh /usr/local/bin/issue195-shutdown-probe
           sudo install -m 0755 .github/scripts/issue195-finalize.sh /usr/local/bin/issue195-finalize
           sudo install -m 0755 .github/scripts/issue195-manager-proxy.py /usr/local/bin/issue195-manager-proxy.py
+          sudo install -m 0755 .github/scripts/issue195-watch-worker.py /usr/local/bin/issue195-watch-worker.py
+          sudo openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /run/issue195/proxy.key -out /run/issue195/proxy.crt \
+            -subj /CN=localhost -addext subjectAltName=IP:127.0.0.1 2>/dev/null
+          sudo chmod 0600 /run/issue195/proxy.key
+          sudo install -m 0644 /run/issue195/proxy.crt /usr/local/share/ca-certificates/issue195-proxy.crt
+          sudo update-ca-certificates >/dev/null
           sudo systemd-run --quiet --unit=issue195-manager-proxy --setenv=RUNNER_TRACKING_ID= \
             /usr/bin/python3 /usr/local/bin/issue195-manager-proxy.py
           for attempt in {1..30}; do
-            if curl --silent --output /dev/null http://127.0.0.1:19580; then break; fi
+            if curl --silent --output /dev/null https://127.0.0.1:19580; then break; fi
             sleep 0.2
           done
           systemctl is-active issue195-manager-proxy.service
       - name: Register a post that will run after sensor post
         uses: ./.github/actions/issue195-tail
+      - name: Register ordinary post finalizer
+        if: inputs.mode == 'post'
+        uses: ./.github/actions/issue195-post-stop
       - name: Start released sensor
         uses: cicd-sensor/cicd-sensor-action@6511eb44c91d71b2b93d71193b1bf2cb18352f66 # v0.0.38
         with:
           cicd-sensor-version: v0.0.45
-          manager-url: http://127.0.0.1:19580
+          manager-url: https://127.0.0.1:19580
           manager-token: ${{ secrets.ISSUE195_MANAGER_TOKEN }}
           enable-html-report: 'false'
           enable-attestation-artifact: 'false'

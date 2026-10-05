@@ -11,7 +11,7 @@ expected = "42b819fe601e6125639174386b90f216e875f7960b30896f58fb2ed3aa412ff4"
 data = hook.read_bytes()
 actual = hashlib.sha256(data).hexdigest()
 print("completed_hook_sha256=" + actual, flush=True)
-if actual != expected:
+if os.environ["ISSUE195_MODE"] == "hook" and actual != expected:
     raise SystemExit("Provider hook changed; refusing to wrap an unreviewed script")
 root = Path("/run/issue195")
 root.mkdir(mode=0o755, exist_ok=True)
@@ -30,7 +30,19 @@ if not context["EXPECTED_INVOCATION_ID"]:
 target = root / "context.env"
 target.write_text("".join(f"export {k}={shlex.quote(v)}\n" for k, v in context.items()))
 target.chmod(0o644)  # Only run identity and non-secret diagnostic endpoint.
-if os.environ["ISSUE195_MODE"] == "baseline":
+if os.environ["ISSUE195_MODE"] == "worker-exit":
+    pid = os.getpid()
+    while pid > 1:
+        stat = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        if Path(f"/proc/{pid}/comm").read_text().strip() == "Runner.Worker":
+            subprocess.run(["systemd-run", "--quiet", "--unit=issue195-worker-watch",
+                            "--setenv=RUNNER_TRACKING_ID=", "/usr/bin/python3",
+                            "/usr/local/bin/issue195-watch-worker.py", str(pid), stat[19]], check=True)
+            break
+        pid = int(stat[1])
+    else:
+        raise SystemExit("Runner.Worker ancestor missing")
+if os.environ["ISSUE195_MODE"] != "hook":
     raise SystemExit(0)
 backup = root / "provider-completed.sh"
 if backup.exists():

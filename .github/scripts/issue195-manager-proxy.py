@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Loopback-only fault injector. Never log headers or request/response bodies."""
 import http.client
+import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -51,4 +52,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", 19580), Handler).serve_forever()
+    server = ThreadingHTTPServer(("127.0.0.1", 19580), Handler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain("/run/issue195/proxy.crt", "/run/issue195/proxy.key")
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    server.serve_forever()
