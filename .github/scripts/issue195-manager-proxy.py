@@ -2,6 +2,7 @@
 """Loopback-only fault injector. Never log headers or request/response bodies."""
 import http.client
 import ssl
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -23,6 +24,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(413)
             return
         body = self.rfile.read(length)
+        if self.path.endswith("/IngestLog") and Path("/run/issue195/manager-slow").exists():
+            print("injected_ingest_delay_8s", flush=True)
+            time.sleep(8)
         if self.path.endswith("/IngestLog") and Path("/run/issue195/manager-503").exists():
             self.send_response(503)
             self.send_header("Content-Type", "application/json")

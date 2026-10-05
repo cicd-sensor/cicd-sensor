@@ -8,7 +8,7 @@ on:
         default: hook
       scenario:
         type: choice
-        options: [normal, post-failure, manager-503, cancel]
+        options: [normal, post-failure, manager-503, slow-manager, cancel]
         default: normal
       repetitions:
         type: choice
