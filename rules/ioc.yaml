@@ -263,3 +263,81 @@ rule_sets:
           mitre_tactic: execution
           ioc_date: "2026-08-20"
           source_url: https://safedep.io/arrayref-proc-macro1-rust-build-time-malware/
+
+      - rule_id: subql_common_c2_domain
+        rule_name: "IOC: @subql/common npm compromise C2 domain"
+        description: |
+          What:
+            Terminates DNS resolution of ci-artifacts.dev, the attacker
+            infrastructure behind the October 2026 @subql/common@5.8.3 npm
+            supply-chain compromise.
+          Why:
+            Active-compromise IOC. The domain hosts the malicious package
+            tarball fetched by the tampered publish workflow and serves as the
+            C2 endpoint for exfiltration and reverse-shell polling.
+          Notes:
+            Preserve job logs and artifacts, rebuild the runner, and rotate all
+            credentials reachable from the job (AWS, GitHub, SSH, npm, Docker,
+            Kubernetes, Vault).
+        event_type: domain
+        condition: |
+          domain == "ci-artifacts.dev" ||
+          domain.endsWith(".ci-artifacts.dev")
+        action: terminate
+        tags:
+          mitre_tactic: command-and-control
+          ioc_date: "2026-10-06"
+          source_url: https://blog.flatt.tech/entry/2026/10/06/021103
+
+      - rule_id: subql_common_c2_ip
+        rule_name: "IOC: @subql/common npm compromise C2 IP"
+        description: |
+          What:
+            Terminates outbound connections to 185.146.234.137, the resolved
+            address of ci-artifacts.dev in the October 2026 @subql/common
+            compromise.
+          Why:
+            Active-compromise IOC. The compromised package beacons to this
+            address, which ci-artifacts.dev resolves to. The address sits in a
+            single-tenant FlokiNET range, not a shared CDN.
+          Notes:
+            Preserve job logs and artifacts, rebuild the runner, and rotate all
+            credentials reachable from the job.
+        event_type: network_connect
+        condition: |
+          family == "ipv4" &&
+          remote_ip == "185.146.234.137"
+        action: terminate
+        tags:
+          mitre_tactic: command-and-control
+          ioc_date: "2026-10-06"
+          source_url: https://blog.flatt.tech/entry/2026/10/06/021103
+
+      - rule_id: subql_common_manifest_cache_loader_exec
+        rule_name: "IOC: @subql/common manifest-cache.js loader executed"
+        description: |
+          What:
+            Terminates execution of dist/project/readers/manifest-cache.js, the
+            encrypted loader shipped in @subql/common@5.8.3.
+          Why:
+            Active-compromise IOC. The package runs the loader from a
+            postinstall hook (node ./dist/project/readers/manifest-cache.js)
+            and the loader re-spawns itself detached with --warm to decode and
+            execute the credential stealer. The file does not exist in the
+            clean 5.8.2 package, so any process whose arguments reference it is
+            the malicious package.
+          Notes:
+            The suffix match deliberately covers the relative postinstall path,
+            the absolute --warm child, and the npm sh -c wrapper so the earliest
+            exec is terminated. Preserve the package tree and job logs, rebuild
+            the runner, and rotate all credentials reachable from the job.
+        event_type: process_exec
+        condition: |
+          process.argv.exists(arg,
+            arg.endsWith("/dist/project/readers/manifest-cache.js")
+          )
+        action: terminate
+        tags:
+          mitre_tactic: execution
+          ioc_date: "2026-10-06"
+          source_url: https://blog.flatt.tech/entry/2026/10/06/021103
