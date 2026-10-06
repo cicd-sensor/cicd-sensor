@@ -1,11 +1,7 @@
-name: Issue 195 Blacksmith completion experiment
+name: Issue 195 Action candidate
 on:
   workflow_dispatch:
     inputs:
-      mode:
-        type: choice
-        options: [baseline, hook, post, pre-post, worker-exit, checkpoint]
-        default: hook
       scenario:
         type: choice
         options: [normal, post-failure, manager-503, slow-manager, cancel]
@@ -25,7 +21,7 @@ jobs:
       - id: matrix
         env:
           SCENARIO: ${{ inputs.scenario || 'normal' }}
-          MODE: ${{ inputs.mode }}
+          MODE: baseline
           REPETITIONS: ${{ inputs.repetitions }}
         run: |
           python3 - <<'PY'
@@ -47,12 +43,9 @@ jobs:
       ISSUE195_SCENARIO: ${{ inputs.scenario || 'normal' }}
       PROBE_RUNNER: blacksmith-2vcpu-ubuntu-2404
       PROBE_REP: ${{ matrix.rep }}
-      PROBE_ORDER: ${{ matrix.mode }}-${{ inputs.scenario || 'normal' }}
+      PROBE_ORDER: action-candidate-${{ inputs.scenario || 'normal' }}
       PROBE_ENDPOINT: https://cicd-sensor-manager-c5bmuzncpq-an.a.run.app/__shutdown_probe
     steps:
-      - name: Register finalizer before other action pre and main steps
-        if: inputs.mode == 'pre-post'
-        uses: cicd-sensor/cicd-sensor/.github/actions/issue195-pre-stop@252ba250e68d5a0c1f180ca7ce4dcf68c9483da3
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -82,13 +75,9 @@ jobs:
           systemctl is-active issue195-manager-proxy.service
       - name: Register a post that will run after sensor post
         uses: ./.github/actions/issue195-tail
-      - name: Register ordinary post finalizer
-        if: inputs.mode == 'post'
-        uses: ./.github/actions/issue195-post-stop
-      - name: Start released sensor
-        uses: cicd-sensor/cicd-sensor-action@6511eb44c91d71b2b93d71193b1bf2cb18352f66 # v0.0.38
+      - name: Start Action candidate
+        uses: cicd-sensor/cicd-sensor-action@74a8bc601af2665b7c2bd464dca688e720ea5c9a # PR 47
         with:
-          cicd-sensor-version: v0.0.45
           manager-url: https://127.0.0.1:19580
           manager-token: ${{ secrets.ISSUE195_MANAGER_TOKEN }}
           enable-html-report: 'false'
