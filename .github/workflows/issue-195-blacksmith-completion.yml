@@ -76,7 +76,7 @@ jobs:
       - name: Register a post that will run after sensor post
         uses: ./.github/actions/issue195-tail
       - name: Start Action candidate
-        uses: cicd-sensor/cicd-sensor-action@74a8bc601af2665b7c2bd464dca688e720ea5c9a # PR 47
+        uses: cicd-sensor/cicd-sensor-action@0b708dcf265dfe88701705fcfab1a131e29c0220 # PR 47
         with:
           manager-url: https://127.0.0.1:19580
           manager-token: ${{ secrets.ISSUE195_MANAGER_TOKEN }}
