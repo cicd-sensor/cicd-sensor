@@ -16,6 +16,42 @@ data:
     const METADATA_ANNOTATION = "cicd-sensor.github.io/metadata";
     const DEFAULT_K8S_HOOK = "/home/runner/k8s/index.js";
 
+    // ---------------------------------------------------------------------------
+    // OPERATOR SECTION — edit this object for your environment.
+    //
+    // The official ARC hook accepts a single template file. cicd-sensor must
+    // generate that file per job (identity annotations + nodeName), so do not
+    // set ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE yourself. Put Pod overrides
+    // here instead; the wrapper merges them under cicd-sensor's own annotations
+    // and spec.nodeName (cicd-sensor values always win for those fields).
+    //
+    // Caveat: pod-level runAsUser / fsGroup apply to EVERY container in the
+    // workflow Pod, including service containers and steps that expect root.
+    // Adjust or remove securityContext if your jobs need root inside containers.
+    // Non-root is fine for cicd-sensor itself: the agent reads /proc and cgroups
+    // from the node side; nothing of cicd-sensor runs inside the workflow Pod.
+    // ---------------------------------------------------------------------------
+    const OPERATOR_POD_TEMPLATE = {
+      metadata: {
+        labels: {
+          // "operator.example.com/preserve": "true",
+        },
+        annotations: {
+          // "operator.example.com/note": "keep-me",
+        },
+      },
+      spec: {
+        securityContext: {
+          // Official runner image uses UID/GID 1001. Match that unless your
+          // custom runner image or workloads need different values.
+          runAsUser: 1001,
+          fsGroup: 1001,
+        },
+        // Optional: shorten graceful shutdown for workflow Pods.
+        // terminationGracePeriodSeconds: 30,
+      },
+    };
+
     function providerHost() {
       const raw = process.env.GITHUB_SERVER_URL || "https://github.com";
       return raw.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "").replace(/\.$/, "").toLowerCase();
@@ -96,25 +132,107 @@ data:
       );
     }
 
+    function isPlainObject(value) {
+      return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+    }
+
+    function deepMerge(base, overlay) {
+      if (!isPlainObject(base)) {
+        return overlay;
+      }
+      if (!isPlainObject(overlay)) {
+        return overlay;
+      }
+      const out = { ...base };
+      for (const [key, value] of Object.entries(overlay)) {
+        if (isPlainObject(value) && isPlainObject(out[key])) {
+          out[key] = deepMerge(out[key], value);
+        } else {
+          out[key] = value;
+        }
+      }
+      return out;
+    }
+
     function yamlString(value) {
       return JSON.stringify(String(value));
     }
 
-    function templateYaml(identity, metadata, nodeName) {
-      const lines = [
-        "metadata:",
-        "  annotations:",
-        `    ${IDENTITY_ANNOTATION}: ${yamlString(JSON.stringify(identity))}`,
-        `    ${METADATA_ANNOTATION}: ${yamlString(JSON.stringify(metadata))}`,
-      ];
-      if (nodeName) {
-        lines.push(
-          "spec:",
-          `  nodeName: ${yamlString(nodeName)}`,
-        );
+    function yamlLines(value, indent) {
+      const pad = "  ".repeat(indent);
+      if (value === null || value === undefined) {
+        return [`${pad}null`];
       }
-      lines.push("");
-      return lines.join("\n");
+      if (typeof value === "boolean" || typeof value === "number") {
+        return [`${pad}${value}`];
+      }
+      if (typeof value === "string") {
+        return [`${pad}${yamlString(value)}`];
+      }
+      if (Array.isArray(value)) {
+        if (value.length === 0) {
+          return [`${pad}[]`];
+        }
+        const lines = [];
+        for (const item of value) {
+          if (isPlainObject(item) || Array.isArray(item)) {
+            const nested = yamlLines(item, indent + 1);
+            lines.push(`${pad}-`);
+            lines.push(...nested);
+          } else {
+            lines.push(`${pad}- ${yamlLines(item, 0)[0]}`);
+          }
+        }
+        return lines;
+      }
+      if (isPlainObject(value)) {
+        const keys = Object.keys(value);
+        if (keys.length === 0) {
+          return [`${pad}{}`];
+        }
+        const lines = [];
+        for (const key of keys) {
+          const child = value[key];
+          if (isPlainObject(child) || Array.isArray(child)) {
+            const nested = yamlLines(child, indent + 1);
+            if (nested.length === 1 && (nested[0].trim() === "{}" || nested[0].trim() === "[]")) {
+              lines.push(`${pad}${key}: ${nested[0].trim()}`);
+            } else {
+              lines.push(`${pad}${key}:`);
+              lines.push(...nested);
+            }
+          } else if (child === null || child === undefined) {
+            lines.push(`${pad}${key}: null`);
+          } else if (typeof child === "boolean" || typeof child === "number") {
+            lines.push(`${pad}${key}: ${child}`);
+          } else {
+            lines.push(`${pad}${key}: ${yamlString(child)}`);
+          }
+        }
+        return lines;
+      }
+      return [`${pad}${yamlString(value)}`];
+    }
+
+    function buildMergedTemplate(identity, metadata, nodeName) {
+      // Operator overrides are the base; cicd-sensor annotations and nodeName
+      // always win so identity injection and node pinning cannot be dropped.
+      const merged = deepMerge({}, OPERATOR_POD_TEMPLATE);
+      merged.metadata = isPlainObject(merged.metadata) ? merged.metadata : {};
+      merged.metadata.annotations = isPlainObject(merged.metadata.annotations)
+        ? merged.metadata.annotations
+        : {};
+      merged.metadata.annotations[IDENTITY_ANNOTATION] = JSON.stringify(identity);
+      merged.metadata.annotations[METADATA_ANNOTATION] = JSON.stringify(metadata);
+      merged.spec = isPlainObject(merged.spec) ? merged.spec : {};
+      if (nodeName) {
+        merged.spec.nodeName = nodeName;
+      }
+      return merged;
+    }
+
+    function templateYaml(identity, metadata, nodeName) {
+      return `${yamlLines(buildMergedTemplate(identity, metadata, nodeName), 0).join("\n")}\n`;
     }
 
     function writeTemplate(identity, metadata, nodeName) {
@@ -122,6 +240,20 @@ data:
       const file = path.join(dir, `hook-template-${process.pid}-${Date.now()}.yaml`);
       fs.writeFileSync(file, templateYaml(identity, metadata, nodeName), { mode: 0o600 });
       return file;
+    }
+
+    function rejectExistingHookTemplate() {
+      const existing = process.env.ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE;
+      if (!existing) {
+        return;
+      }
+      console.error(
+        "cicd-sensor hook wrapper: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE is already set " +
+        `(${existing}). The example wrapper refuses to overwrite an existing hook template. ` +
+        "Edit the OPERATOR_POD_TEMPLATE section in this wrapper instead " +
+        "(examples/kubernetes/github-arc/kubernetes-mode/container-hook-wrapper-configmap.yaml)."
+      );
+      process.exit(1);
     }
 
     function runOfficialHook(input, env) {
@@ -144,6 +276,8 @@ data:
     }
 
     async function main() {
+      rejectExistingHookTemplate();
+
       const input = await readStdin();
       let parsed;
       try {
