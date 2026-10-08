@@ -341,3 +341,67 @@ rule_sets:
           mitre_tactic: execution
           ioc_date: "2026-10-06"
           source_url: https://blog.flatt.tech/entry/2026/10/06/021103
+
+      - rule_id: tensorlake_payload_artifact
+        rule_name: "IOC: tensorlake npm compromise payload artifact"
+        description: |
+          What:
+            Terminates access to lib/setup.mjs and lib/Math_Symbol.js below the
+            installed tensorlake package, the loader and obfuscated worm payload
+            shipped in tensorlake@0.5.144 (October 2026 Shai-Hulud variant).
+          Why:
+            Active-compromise IOC. The package runs node lib/setup.mjs from a
+            preinstall hook, which downloads Bun and executes Math_Symbol.js to
+            steal GitHub, npm, cloud, SSH, Kubernetes, and Vault credentials.
+            Neither file exists in the clean 0.5.143 package (lib/ holds only
+            libc.cjs, runtime.cjs, and libc.d.cts), so any access is the
+            malicious package.
+          Notes:
+            The loader inspects CI variables (CI, GITHUB_ACTIONS, GITLAB_CI,
+            RUNNER_ENVIRONMENT) and reports disagree on whether it then exits
+            or branches, but node must read setup.mjs before that check runs,
+            so this fires on CI runners either way. Preserve the package tree
+            and job logs, rebuild the runner, back up data, and disable any
+            gh-token-monitor service (systemctl --user disable --now
+            gh-token-monitor.service) BEFORE rotating tokens: the service
+            wipes the home directory once the stolen token is revoked.
+        event_type: file_open
+        condition: |
+          (is_read || is_write) &&
+          (
+            path.endsWith("/node_modules/tensorlake/lib/setup.mjs") ||
+            path.endsWith("/node_modules/tensorlake/lib/Math_Symbol.js")
+          )
+        action: terminate
+        tags:
+          mitre_tactic: execution
+          ioc_date: "2026-10-08"
+          source_url: https://blog.flatt.tech/entry/tensorlake_compromise
+
+      - rule_id: tensorlake_c2_domain
+        rule_name: "IOC: tensorlake npm compromise C2 domain"
+        description: |
+          What:
+            Terminates DNS resolution of iseekaigogo.com, reported as the
+            primary C2 of the October 2026 tensorlake npm compromise.
+          Why:
+            Active-compromise IOC. The payload exfiltrates harvested
+            credentials to this endpoint. The endpoint is resolved through an
+            Ethereum contract rather than hardcoded, so it can rotate; this
+            rule covers the address observed at publication.
+          Notes:
+            The loader inspects CI variables and may behave differently on CI
+            runners, so absence of this hit does not mean the job is clean;
+            correlate with tensorlake_payload_artifact. Preserve job logs and
+            artifacts, rebuild the runner, and rotate all credentials reachable
+            from the job after disabling any gh-token-monitor service (see
+            tensorlake_payload_artifact).
+        event_type: domain
+        condition: |
+          domain == "iseekaigogo.com" ||
+          domain.endsWith(".iseekaigogo.com")
+        action: terminate
+        tags:
+          mitre_tactic: command-and-control
+          ioc_date: "2026-10-08"
+          source_url: https://blog.flatt.tech/entry/tensorlake_compromise
