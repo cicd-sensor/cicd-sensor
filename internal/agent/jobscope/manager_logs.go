@@ -44,7 +44,9 @@ func (s *JobScopeState) EmitSummaryLog(ctx context.Context, in SummaryLogInputs,
 	if err != nil {
 		return err
 	}
-	return s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
+	err = s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
+	s.managerJobLogs.CloseOIDCCredential()
+	return err
 }
 
 // FlushManagerLogs sends buffered streaming logs now, keeping the Job
@@ -55,6 +57,15 @@ func (s *JobScopeState) FlushManagerLogs(ctx context.Context) error {
 		return nil
 	}
 	return s.managerJobLogs.FlushStreamingLogs(ctx)
+}
+
+// ForceRefreshManagerIDToken remints and pins the project-scope OIDC JWT
+// while minting still works (project result), so shutdown Summary can reuse it.
+func (s *JobScopeState) ForceRefreshManagerIDToken(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.managerJobLogs.ForceRefreshIDToken(ctx)
 }
 
 func (s *JobScopeState) WriteDetectionLogForHit(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, hit observations.HitEntry, event jobevent.EventRecord, logger *slog.Logger) {

@@ -29,6 +29,7 @@ const (
 type CollectorServiceClient struct {
 	client managerv1beta1connect.CollectorServiceClient
 	token  string
+	auth   ClientAuth
 	logger *slog.Logger
 	sleep  sleepFunc
 	jitter jitterFunc
@@ -42,13 +43,15 @@ func newCollectorServiceClient(logger *slog.Logger, httpClient *http.Client, con
 	if httpClient == nil {
 		httpClient = NewConnectHTTPClient()
 	}
+	auth := conn.ClientAuth()
 	return &CollectorServiceClient{
 		client: managerv1beta1connect.NewCollectorServiceClient(
 			httpClient,
 			conn.BaseURL,
-			ConnectClientOptions(conn.Token)...,
+			ConnectClientOptionsWithAuth(auth)...,
 		),
-		token:  conn.Token,
+		token:  auth.Token,
+		auth:   auth,
 		logger: collectorServiceLogger(logger),
 		sleep:  sleep,
 		jitter: jitter,
@@ -67,8 +70,8 @@ func (c *CollectorServiceClient) sendIngestLogBatch(ctx context.Context, batch *
 	if c == nil {
 		return fmt.Errorf("collector service client is nil")
 	}
-	if c.token == "" {
-		return fmt.Errorf("manager token is required")
+	if c.token == "" && c.auth.TokenSource == nil {
+		return fmt.Errorf("manager credential is required")
 	}
 	if batch == nil {
 		return fmt.Errorf("collector ingest log batch is nil")

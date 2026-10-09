@@ -85,8 +85,8 @@ func TestCollectorServiceClient_SendBatchRejectsEmptyTokenBeforeRequest(t *testi
 	}
 	client := &CollectorServiceClient{client: svc}
 	err := client.sendIngestLogBatch(context.Background(), &managerv1beta1.IngestLogBatch{CompressedJsonl: []byte{0x1f, 0x8b}})
-	if err == nil || !strings.Contains(err.Error(), "manager token is required") {
-		t.Fatalf("error: got %v, want required token error", err)
+	if err == nil || !strings.Contains(err.Error(), "manager credential is required") {
+		t.Fatalf("error: got %v, want required credential error", err)
 	}
 	if svc.calls != 0 {
 		t.Fatalf("calls: got %d, want 0", svc.calls)

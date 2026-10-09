@@ -121,7 +121,7 @@ func (o *ManagerJobLogs) ensureManagerSender() func(context.Context, managerclie
 	if o.sendBatch != nil {
 		return o.sendBatch
 	}
-	if o.connection.BaseURL == "" || o.connection.Token == "" {
+	if o.connection.BaseURL == "" || !o.connection.HasCredential() {
 		return nil
 	}
 	logger := componentLogger(o.logger, "manager_output")
@@ -152,6 +152,23 @@ func (o *ManagerJobLogs) EmitAndCloseSummaryLog(ctx context.Context, payload []b
 		return nil
 	}
 	return o.summaryLog.EmitAndClose(ctx, payload)
+}
+
+// ForceRefreshIDToken remints and seeds the OIDC reuse cache used by manager
+// log workers. No-op when the connection uses a static manager token.
+func (o *ManagerJobLogs) ForceRefreshIDToken(ctx context.Context) error {
+	if o == nil {
+		return nil
+	}
+	return o.connection.ForceRefreshIDToken(ctx)
+}
+
+// CloseOIDCCredential cancels shared OIDC mint work after summary delivery.
+func (o *ManagerJobLogs) CloseOIDCCredential() {
+	if o == nil {
+		return
+	}
+	o.connection.CloseOIDCCredential()
 }
 
 // HasSummaryLog reports whether a summary_log destination is configured.

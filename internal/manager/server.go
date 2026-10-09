@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	oidcauth "github.com/cicd-sensor/cicd-sensor/internal/managerauth/oidc"
 	"github.com/cicd-sensor/cicd-sensor/internal/proto/cicd_sensor/manager/v1beta1/managerv1beta1connect"
 	"github.com/cicd-sensor/cicd-sensor/internal/rule/baseline"
 )
@@ -17,6 +18,7 @@ import (
 type Server struct {
 	logger        *slog.Logger
 	tokens        *TokenStore
+	oidc          *oidcauth.Verifier
 	config        *ServedConfig
 	baselineRules BaselineRuleSource
 	localRules    *RuleSourceCache
@@ -45,25 +47,54 @@ func newServer(logger *slog.Logger, addr string, tokens []string, config *Served
 		now:           time.Now,
 	}
 
+	authOpts := authMiddlewareOptions{tokens: s.tokens}
+	if startup != nil {
+		oidcCfg, err := startup.OIDCConfig()
+		if err != nil {
+			// LoadStartupConfig already rejects this; log if NewServer is
+			// reached with a hand-built StartupConfig.
+			s.logger.Error("manager_oidc_config_invalid", "error", err)
+		} else if oidcCfg.Enabled {
+			verifier, err := oidcauth.NewVerifier(context.Background(), oidcCfg)
+			if err != nil {
+				// Construction failures are configuration bugs; panic is avoided
+				// by surfacing via logger and leaving oidc disabled so requests
+				// fail closed on the id-token path. Callers should Validate at
+				// startup before NewServer.
+				s.logger.Error("manager_oidc_verifier_init_failed", "error", err)
+			} else {
+				s.oidc = verifier
+				authOpts.oidc = verifier
+				authOpts.oidcOn = true
+			}
+		}
+	}
+
+	interceptors := connect.WithInterceptors(
+		unaryOnlyInterceptor{},
+		oidcJobIdentityInterceptor{logger: s.logger},
+	)
+
 	mux := http.NewServeMux()
 	configPath, configHandler := managerv1beta1connect.NewConfigServiceHandler(
 		newConfigServiceHandler(s),
 		connect.WithReadMaxBytes(managerMaxRequestBytes),
-		connect.WithInterceptors(unaryOnlyInterceptor{}),
+		interceptors,
 	)
 	mux.Handle(configPath, configHandler)
 	collectorPath, collectorHandler := managerv1beta1connect.NewCollectorServiceHandler(
 		newCollectorServiceHandler(s),
 		connect.WithReadMaxBytes(managerMaxRequestBytes),
-		connect.WithInterceptors(unaryOnlyInterceptor{}),
+		interceptors,
 	)
 	mux.Handle(collectorPath, collectorHandler)
 
 	// Auth is enforced at the HTTP layer via connectrpc/authn middleware so
 	// unauthenticated requests are rejected before the Connect framework
 	// decompresses or unmarshals the body. unaryOnlyInterceptor is a separate
-	// defense-in-depth guard on the Connect handlers.
-	authMiddleware := newAuthMiddleware(s.logger, s.tokens)
+	// defense-in-depth guard on the Connect handlers; oidcJobIdentityInterceptor
+	// binds OIDC principals after body decode.
+	authMiddleware := newAuthMiddleware(s.logger, authOpts)
 
 	s.httpServer = &http.Server{
 		Addr:    addr,

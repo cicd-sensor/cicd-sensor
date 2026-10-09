@@ -27,10 +27,53 @@ type ConfigClient struct {
 	logger *slog.Logger
 }
 
-// Connection is the manager endpoint and bearer token used by manager RPCs.
+// Connection is the manager endpoint and credential used by manager RPCs.
+// Prefer Auth / Cached for OIDC; Token is the static manager-token path.
 type Connection struct {
 	BaseURL string
 	Token   string
+	Auth    ClientAuth
+	// Cached is the force-refreshable OIDC source used for shutdown Summary.
+	// When set, it must be the same TokenSource wired into Auth.
+	Cached *CachedTokenSource
+}
+
+// ClientAuth returns the effective credential for Connect clients.
+func (c Connection) ClientAuth() ClientAuth {
+	if c.Auth.TokenSource != nil || c.Auth.Token != "" || c.Auth.TokenType == TokenTypeIDToken {
+		auth := c.Auth
+		if auth.TokenType == "" {
+			if auth.TokenSource != nil {
+				auth.TokenType = TokenTypeIDToken
+			} else {
+				auth.TokenType = TokenTypeManagerToken
+			}
+		}
+		return auth
+	}
+	return StaticTokenAuth(c.Token)
+}
+
+// HasCredential reports whether a static token or TokenSource is configured.
+func (c Connection) HasCredential() bool {
+	auth := c.ClientAuth()
+	return auth.Token != "" || auth.TokenSource != nil
+}
+
+// ForceRefreshIDToken remints and seeds the OIDC reuse cache when Cached is set.
+// Manager-token connections are a no-op.
+func (c Connection) ForceRefreshIDToken(ctx context.Context) error {
+	if c.Cached == nil {
+		return nil
+	}
+	return c.Cached.ForceRefresh(ctx)
+}
+
+// CloseOIDCCredential stops shared OIDC mint work after the final Summary flush.
+func (c Connection) CloseOIDCCredential() {
+	if c.Cached != nil {
+		c.Cached.Close()
+	}
 }
 
 // NewConfigClient validates the manager endpoint and builds the config client.
@@ -44,14 +87,14 @@ func NewConfigClient(logger *slog.Logger, conn Connection) (*ConfigClient, error
 		return nil, err
 	}
 	warnIfInsecureManagerURL(component, parsed, conn.BaseURL)
-	if conn.Token == "" {
-		return nil, fmt.Errorf("manager token is required")
+	if !conn.HasCredential() {
+		return nil, fmt.Errorf("manager credential is required")
 	}
 	return &ConfigClient{
 		client: managerv1beta1connect.NewConfigServiceClient(
 			NewConnectHTTPClient(),
 			conn.BaseURL,
-			ConnectClientOptions(conn.Token)...,
+			ConnectClientOptionsWithAuth(conn.ClientAuth())...,
 		),
 		logger: component,
 	}, nil

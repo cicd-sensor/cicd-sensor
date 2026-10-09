@@ -30,7 +30,22 @@ func TestValidateManagerStartupOptions(t *testing.T) {
 			},
 		},
 		{
-			name: "missing token",
+			name: "oidc only without manager token",
+			opts: managerStartupOptions{
+				ConfigFile:  "manager.yaml",
+				OIDCEnabled: true,
+			},
+		},
+		{
+			name: "dual mode token and oidc",
+			opts: managerStartupOptions{
+				ConfigFile:  "manager.yaml",
+				Tokens:      []string{validToken},
+				OIDCEnabled: true,
+			},
+		},
+		{
+			name: "missing token and oidc disabled",
 			opts: managerStartupOptions{
 				ConfigFile: "manager.yaml",
 			},
@@ -44,8 +59,8 @@ func TestValidateManagerStartupOptions(t *testing.T) {
 			wantErr: "--config-file or CICD_SENSOR_MANAGER_CONFIG_FILE",
 		},
 		{
-			name:    "missing token and config reports token first",
-			wantErr: "manager token is required",
+			name:    "missing token and config reports config first",
+			wantErr: "--config-file or CICD_SENSOR_MANAGER_CONFIG_FILE",
 		},
 	}
 

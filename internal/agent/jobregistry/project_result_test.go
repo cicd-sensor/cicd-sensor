@@ -3,13 +3,18 @@ package jobregistry_test
 import (
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -255,5 +260,69 @@ func TestJobRegistry_RequestGitHubProjectResult_FlushFailureStillReturnsBody(t *
 	}
 	if !json.Valid(body) {
 		t.Fatal("result body is not valid JSON")
+	}
+}
+
+func TestJobRegistry_RequestGitHubProjectResult_ForceRefreshOIDC(t *testing.T) {
+	var mintCalls atomic.Int32
+	mintSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := mintCalls.Add(1)
+		header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`))
+		payload := base64.RawURLEncoding.EncodeToString([]byte(`{"exp":9999999999}`))
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"value": header + "." + payload + ".sig-" + strconv.Itoa(int(n)),
+		})
+	}))
+	t.Cleanup(mintSrv.Close)
+
+	conn := managerclient.NewOIDCConnection(
+		"https://manager.example.com",
+		mintSrv.URL,
+		"request-secret",
+		"https://manager.example.com",
+		mintSrv.Client(),
+	)
+
+	jr := newJobRegistry(t)
+	id := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "oidc-force-refresh")
+	if _, err := jr.ApplyGitHubProjectStart(testCtx, jobregistry.GitHubProjectStartConfig{
+		Identity:   id,
+		RunnerType: "machine",
+	}); err != nil {
+		t.Fatalf("apply project start: %v", err)
+	}
+	job := registeredJob(jr, id)
+	if job == nil || job.ProjectScope() == nil {
+		t.Fatal("project job not registered")
+	}
+	logs := joblogs.NewManagerJobLogs(joblogs.ManagerJobLogsConfig{
+		Logger:     testLogger,
+		Connection: conn,
+		Identity:   id,
+		Type:       job.ProjectScope().Type,
+	})
+	job.ProjectScope().SetManagerJobLogs(logs)
+
+	before := mintCalls.Load()
+	if _, err := jr.RequestGitHubProjectResult(testCtx, id, 0); err != nil {
+		t.Fatalf("project result: %v", err)
+	}
+	after := mintCalls.Load()
+	if after != before+1 {
+		t.Fatalf("ForceRefresh mint calls: before=%d after=%d, want +1", before, after)
+	}
+	tok1, err := conn.Cached.Token()
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	tok2, err := conn.Cached.Token()
+	if err != nil {
+		t.Fatalf("Token again: %v", err)
+	}
+	if tok1.AccessToken != tok2.AccessToken {
+		t.Fatal("shutdown path must reuse forced JWT")
+	}
+	if mintCalls.Load() != after {
+		t.Fatalf("pinned token reminted unexpectedly: calls=%d", mintCalls.Load())
 	}
 }

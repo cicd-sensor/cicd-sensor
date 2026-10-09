@@ -118,6 +118,26 @@ func TestRedactArgvForOutput_Table(t *testing.T) {
 		{name: "GitHub ghp_", argv: []string{"echo", "ghp_abcDEF1234567890XYZqrstUVWxyz"}, want: []string{"echo", "<redacted>"}},
 		{name: "GitLab glpat-", argv: []string{"echo", "glpat-AbCdEf1234567890XyZ"}, want: []string{"echo", "<redacted>"}},
 		{
+			name: "manager bearer sk_cs_ prefix",
+			argv: []string{"cicd-sensor", "sk_cs_" + strings.Repeat("a", 64)},
+			want: []string{"cicd-sensor", "<redacted>"},
+		},
+		{
+			name: "ACTIONS_ID_TOKEN_REQUEST_TOKEN env assignment",
+			argv: []string{"env", "ACTIONS_ID_TOKEN_REQUEST_TOKEN=request-secret-value"},
+			want: []string{"env", "<redacted>"},
+		},
+		{
+			name: "ACTIONS_ID_TOKEN_REQUEST_URL env assignment",
+			argv: []string{"env", "ACTIONS_ID_TOKEN_REQUEST_URL=https://vstoken.actions.githubusercontent.com/token"},
+			want: []string{"env", "<redacted>"},
+		},
+		{
+			name: "Authorization Bearer manager token header",
+			argv: []string{"curl", "-H", "Authorization: Bearer sk_cs_" + strings.Repeat("b", 64)},
+			want: []string{"curl", "-H", "<redacted>"},
+		},
+		{
 			name: "first item carries token substring",
 			argv: []string{"--token=aBcDeF0123456789secret"},
 			want: []string{"<redacted>"},
