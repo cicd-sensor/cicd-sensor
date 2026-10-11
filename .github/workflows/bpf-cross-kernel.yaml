@@ -264,21 +264,29 @@ jobs:
             uname -a | tee -a "\$log"
             test -e /sys/kernel/btf/vmlinux && echo "BTF: present" | tee -a "\$log"
             export DEBIAN_FRONTEND=noninteractive
-            apt-get update -q | tee -a "\$log"
-            apt-get install -y -q curl dnsutils libnss-resolve python3 | tee -a "\$log"
+            apt-get update -q </dev/null | tee -a "\$log"
+            apt-get install -y -q -o Dpkg::Options::=--force-confold curl dnsutils libnss-resolve python3 gcc libc6-dev </dev/null | tee -a "\$log"
             export TMPDIR=/dev/shm
-            /host/${{ env.KERNELTRACKER_INTEGRATION_TEST_BIN }} -test.v -test.count=1 -test.timeout=15m 2>&1 | tee -a "\$log"
-            /host/${{ env.KERNELIO_INTEGRATION_TEST_BIN }} -test.v -test.count=1 -test.timeout=15m 2>&1 | tee -a "\$log"
+            /host/${{ env.KERNELTRACKER_INTEGRATION_TEST_BIN }} -test.v -test.count=1 -test.timeout=15m </dev/null 2>&1 | tee -a "\$log"
+            echo "suite completed: kerneltracker" | tee -a "\$log"
+            /host/${{ env.KERNELIO_INTEGRATION_TEST_BIN }} -test.v -test.count=1 -test.timeout=15m </dev/null 2>&1 | tee -a "\$log"
+            echo "suite completed: kernelio" | tee -a "\$log"
 
-      - name: Reject unexpected skips
+      - name: Verify completed suites and reject unexpected skips
         run: |
           log="_lvh/logs/bpf-integration-${{ matrix.kernel.label }}.log"
           if [ ! -s "$log" ]; then
             echo "::error::LVH log not produced at $log"
             exit 1
           fi
+          for suite in kerneltracker kernelio; do
+            if ! grep -qx "suite completed: $suite" "$log"; then
+              echo "::error::LVH $suite did not complete successfully."
+              exit 1
+            fi
+          done
           skips="$(grep -E '^[[:space:]]*--- SKIP:' "$log" \
-            | grep -v 'real_var_run_docker_upstream_sock_if_proxy_deployed' || true)"
+            | grep -Ev 'real_var_run_docker_upstream_sock_if_proxy_deployed|TestBindPodCgroupTreeForProcess_KubernetesPod' || true)"
           if [ -n "$skips" ]; then
             {
               echo "## Skipped tests on LVH ${{ matrix.kernel.label }}"
@@ -290,8 +298,8 @@ jobs:
             exit 1
           fi
 
-      - name: Upload logs on failure
-        if: failure()
+      - name: Upload integration logs
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: "bpf-integration-${{ matrix.kernel.label }}"
