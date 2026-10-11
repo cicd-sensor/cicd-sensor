@@ -8,83 +8,21 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
+	"strconv"
 	"time"
 
 	"golang.org/x/sys/unix"
 )
 
-// The node-only packet protocol carries version byte 1 and FDs (membership first); replies are 0 (done)
-// or 1 (incomplete). Lifecycle source labels stay in the producer log.
-func prepareRemote(ctx context.Context, socket string, resolve RootResolver) error {
-	var dialer net.Dialer
-	c, err := dialer.DialContext(ctx, "unixpacket", socket)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-	conn := c.(*net.UnixConn)
-	deadline, _ := ctx.Deadline()
-	if err = conn.SetDeadline(deadline); err != nil {
-		return err
-	}
-	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
-	defer stop()
-	// Dial first: unavailable preparation does not inspect the runtime or root.
-	root, err := resolve(ctx)
-	if err != nil {
-		return err
-	}
-	if err = ctx.Err(); err != nil {
-		return err
-	}
-	membership, err := openProcessMembership(root)
-	if err != nil {
-		return err
-	}
-	defer membership.Close()
-	files, scanErr := OpenFiles(ctx, root)
-	defer CloseFiles(files)
-	if err = ctx.Err(); err != nil {
-		return err
-	}
-	if len(files) == 0 {
-		return scanErr
-	}
-	fds := make([]int, len(files)+1)
-	fds[0] = int(membership.Fd())
-	for i, f := range files {
-		fds[i+1] = int(f.Fd())
-	}
-	// SCM_RIGHTS gives the receiver its own FDs for the files already opened
-	// here. Sending just these numbers would not identify files in that process.
-	n, _, err := conn.WriteMsgUnix([]byte{1}, unix.UnixRights(fds...), nil)
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return errors.New("short HTTP preparation message")
-	}
-	var response [1]byte
-	n, _, flags, _, err := conn.ReadMsgUnix(response[:], nil)
-	if err != nil {
-		return err
-	}
-	if n != 1 || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || response[0] > 1 {
-		return errors.New("invalid HTTP preparation reply")
-	}
-	if response[0] != 0 {
-		return errors.New("HTTP target preparation incomplete")
-	}
-	return scanErr
-}
+type peerAllowedKey struct{}
 
-// Serve receives exact FDs only from the Agent owner. This socket must stay on
-// the node; it is never part of the runner/job socket mount or route family.
-func Serve(ctx context.Context, socket string, handler FileHandler, logger *slog.Logger) error {
-	if handler == nil {
+// Serve accepts PIDs only on the node-owned 0600 socket, with a same-UID check.
+// Handlers queue metadata and wait; they do not perform target filesystem I/O.
+func Serve(ctx context.Context, socket string, prepare Handler, logger *slog.Logger) error {
+	if prepare == nil {
 		return errors.New("HTTP preparation handler required")
 	}
 	if err := os.MkdirAll(filepath.Dir(socket), 0o755); err != nil {
@@ -94,7 +32,7 @@ func Serve(ctx context.Context, socket string, handler FileHandler, logger *slog
 		if info.Mode()&os.ModeSocket == 0 {
 			return errors.New("HTTP preparation path is not a socket")
 		}
-		c, e := net.DialTimeout("unixpacket", socket, 50*time.Millisecond)
+		c, e := net.DialTimeout("unix", socket, 50*time.Millisecond)
 		if e == nil {
 			_ = c.Close()
 			return errors.New("HTTP preparation socket already active")
@@ -108,117 +46,65 @@ func Serve(ctx context.Context, socket string, handler FileHandler, logger *slog
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	listener, err := net.ListenUnix("unixpacket", &net.UnixAddr{Name: socket, Net: "unixpacket"})
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
-	if err = os.Chmod(socket, 0o600); err != nil {
+	if err := os.Chmod(socket, 0o600); err != nil {
 		return err
 	}
-	stop := context.AfterFunc(ctx, func() { _ = listener.Close() })
+	server := &http.Server{
+		Handler:     preparationHandler(prepare, logger),
+		ReadTimeout: Budget, ReadHeaderTimeout: Budget, WriteTimeout: Budget, IdleTimeout: Budget, MaxHeaderBytes: 1024,
+		BaseContext: func(net.Listener) context.Context { return ctx },
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			allowed := false
+			raw, err := c.(*net.UnixConn).SyscallConn()
+			if err == nil {
+				err = raw.Control(func(fd uintptr) {
+					credential, e := unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+					allowed = e == nil && credential.Uid == uint32(os.Geteuid())
+				})
+			}
+			return context.WithValue(ctx, peerAllowedKey{}, err == nil && allowed)
+		},
+	}
+	stop := context.AfterFunc(ctx, func() { _ = server.Close() })
 	defer stop()
-	slots := make(chan struct{}, MaxConcurrent)
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	for {
-		conn, err := listener.AcceptUnix()
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return err
-		}
-		select {
-		case slots <- struct{}{}:
-		default:
-			_ = conn.Close()
-			continue
-		}
-		wg.Go(func() {
-			defer func() {
-				<-slots
-				_ = conn.Close()
-			}()
-			if err := serveConnection(ctx, conn, handler); err != nil && logger != nil {
-				logger.DebugContext(ctx, "http_preparation_request_failed", "error", err)
-			}
-		})
+	err = server.Serve(listener)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
 	}
-}
-
-func serveConnection(ctx context.Context, conn *net.UnixConn, handler FileHandler) error {
-	accepted := time.Now()
-	if err := conn.SetDeadline(accepted.Add(Budget)); err != nil {
-		return err
-	}
-	raw, err := conn.SyscallConn()
-	if err != nil {
-		return err
-	}
-	var credential *unix.Ucred
-	var socketErr error
-	if err = raw.Control(func(fd uintptr) {
-		credential, socketErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
-	}); err != nil {
-		return err
-	}
-	if socketErr != nil {
-		return socketErr
-	}
-	if credential == nil || credential.Uid != uint32(os.Geteuid()) {
-		return errors.New("HTTP preparation peer UID mismatch")
-	}
-	data := make([]byte, 1)
-	oob := make([]byte, unix.CmsgSpace((MaxFiles+1)*4))
-	// On Linux ReadMsgUnix receives all descriptors with atomic CLOEXEC.
-	n, oobn, flags, _, err := conn.ReadMsgUnix(data, oob)
-	if err != nil {
-		return err
-	}
-	files, err := receivedFiles(oob[:oobn])
-	defer func() { CloseFiles(files) }()
-	if err != nil {
-		return err
-	}
-	if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 {
-		return errors.New("truncated HTTP preparation message")
-	}
-	if n != 1 || data[0] != 1 || len(files) < 2 || len(files) > MaxFiles+1 {
-		return errors.New("invalid HTTP preparation packet")
-	}
-	requestCtx, cancel := context.WithDeadline(ctx, accepted.Add(Budget))
-	defer cancel()
-	if err = requestCtx.Err(); err != nil {
-		return err
-	}
-	owned := files
-	files = nil // handler now closes these FDs, even on timeout/rejection
-	prepareErr := handler(requestCtx, owned[1:], "remote", owned[0])
-	reply := byte(0)
-	if prepareErr != nil {
-		reply = 1
-	}
-	_, err = conn.Write([]byte{reply})
 	return err
 }
 
-func receivedFiles(oob []byte) (files []*os.File, err error) {
-	messages, err := unix.ParseSocketControlMessage(oob)
-	if err != nil {
-		return nil, err
-	}
-	for _, message := range messages {
-		if message.Header.Level != unix.SOL_SOCKET || message.Header.Type != unix.SCM_RIGHTS {
-			continue
+func preparationHandler(prepare Handler, logger *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if allowed, _ := r.Context().Value(peerAllowedKey{}).(bool); !allowed {
+			w.WriteHeader(http.StatusForbidden)
+			return
 		}
-		fds, e := unix.ParseUnixRights(&message)
-		if e != nil {
-			return files, e
+		if r.Method != http.MethodPost || r.URL.Path != "/prepare" {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
-		for _, fd := range fds {
-			files = append(files, os.NewFile(uintptr(fd), "HTTP preparation target"))
+		pid, err := strconv.Atoi(r.URL.Query().Get("pid"))
+		daemon, daemonErr := strconv.Atoi(r.URL.Query().Get("daemon_pid"))
+		process := Process{PID: pid, DaemonPID: daemon}
+		if err != nil || daemonErr != nil || process.Validate() != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
-	}
-	return files, nil
+		ctx, cancel := context.WithTimeout(r.Context(), Budget)
+		defer cancel()
+		if err := prepare(ctx, process); err != nil {
+			if logger != nil {
+				logger.DebugContext(ctx, "http_preparation_request_failed", "pid", pid, "error", err)
+			}
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 }

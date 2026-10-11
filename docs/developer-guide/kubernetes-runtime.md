@@ -320,26 +320,15 @@ flowchart TB
 
 ### HTTP preparation permissions
 
-Opening another container's `/proc/<initPID>/root` is subject to
-`PTRACE_MODE_READ_FSCREDS`. The node-side NRI observer uses `CAP_SYS_PTRACE`
-for different-UID or nondumpable targets. The examples drop default capabilities
-and add `SYS_PTRACE` only; ordinary readable target files need no DAC override.
-A private/unreadable target directory can still fail inventory and use fallback.
-`DAC_READ_SEARCH`, `CHECKPOINT_RESTORE`, and `SYS_ADMIN` do not replace this
-ptrace access check. See [Linux ptrace access checks](https://github.com/torvalds/linux/blob/v6.12/kernel/ptrace.c).
-The capability itself also authorizes more than read-only proc access; the
-observer remains a trusted node component.
-`hostPID: true` alone does not grant this access. The Kubernetes-mode ARC and
-GitLab examples add this capability to the observer; the job Pods receive no
-additional capability or host mount. Without it, preparation fails open and
-logs `permission denied`, while existing NRI staging continues.
+The NRI observer sends the node-view init PID to the Agent. It does not open
+`/proc/<initPID>/root` or target files. The observer examples drop all
+capabilities and require no HTTP-specific AppArmor exception. `hostPID: true`
+keeps observer and Agent PID numbering consistent.
 
-AppArmor must also permit the observer's ptrace read of the waiting runc init.
-GKE COS's `cri-containerd.apparmor.d` profile denied that access even with
-`SYS_PTRACE`; the node-owned observer examples therefore use an Unconfined
-AppArmor profile. Operators may instead supply a profile allowing that read.
-This exception is limited to the observer container, not CI job containers.
-
-The examples use the `securityContext.appArmorProfile` field (stable since
-Kubernetes 1.31; older clusters require the corresponding version-specific
-configuration). See the [Kubernetes AppArmor documentation](https://kubernetes.io/docs/tutorials/security/apparmor/).
+The already-privileged Agent opens the process root and performs inventory in
+its existing HTTP worker. Opening another process's root is still subject to
+`PTRACE_MODE_READ_FSCREDS`; moving the operation does not eliminate that Linux
+check. See [Linux ptrace access checks](https://github.com/torvalds/linux/blob/v6.12/kernel/ptrace.c).
+The Agent's existing privilege boundary must permit this access. Jobs receive
+no additional capability, socket or host filesystem mount. Preparation failures
+remain fail-open and do not affect NRI staging.

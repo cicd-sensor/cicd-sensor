@@ -62,14 +62,12 @@ func TestStartResponsePreparation(t *testing.T) {
 			defer daemon.Close()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			entered := make(chan string, 1)
+			entered := make(chan httpprepare.Process, 1)
 			release := make(chan struct{})
 			served := make(chan error, 1)
 			go func() {
-				served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(_ context.Context, files []*os.File, source string, membership *os.File) error {
-					defer membership.Close()
-					defer httpprepare.CloseFiles(files)
-					entered <- source
+				served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(_ context.Context, process httpprepare.Process) error {
+					entered <- process
 					<-release
 					return nil
 				}, nil)
@@ -82,7 +80,7 @@ func TestStartResponsePreparation(t *testing.T) {
 			}()
 			deadline := time.Now().Add(time.Second)
 			for {
-				connection, dialErr := net.Dial("unixpacket", httpprepare.SocketPath(agentSocket))
+				connection, dialErr := net.Dial("unix", httpprepare.SocketPath(agentSocket))
 				if dialErr == nil {
 					_ = connection.Close()
 					break
@@ -104,9 +102,9 @@ func TestStartResponsePreparation(t *testing.T) {
 			}()
 			if tc.prepare {
 				select {
-				case source := <-entered:
-					if source != "remote" {
-						t.Error(source)
+				case process := <-entered:
+					if process.PID != os.Getpid() || process.DaemonPID != os.Getpid() {
+						t.Error(process)
 					}
 				case <-time.After(2 * time.Second):
 					close(release)

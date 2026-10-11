@@ -46,17 +46,21 @@ func decodeHTTPUprobeAttachCandidate(raw []byte) (httpUprobeAttachCandidate, err
 
 	return httpUprobeAttachCandidate{
 		tgid:     sample.Tgid,
-		cgroupID: sample.CgroupId, owner: sample.Owner,
+		cgroupID: sample.CgroupId, rootCgroupID: sample.RootCgroupId,
 		vmStart: sample.VmStart,
 		vmEnd:   sample.VmEnd,
-		file: fileClassificationKey{
-			mappedFile: mappedFileIdentity{
-				deviceMajor: sample.File.MappedFile.DeviceMajor,
-				deviceMinor: sample.File.MappedFile.DeviceMinor,
-				inode:       sample.File.MappedFile.Inode,
-			},
-			ctimeSec:  sample.File.CtimeSec,
-			ctimeNsec: sample.File.CtimeNsec,
-		},
+		file:    fileKeyFromBPF(sample.File),
 	}, nil
+}
+
+func fileKeyFromBPF(file bpfprog.BPFProgramFileClassificationKey) fileClassificationKey {
+	return fileClassificationKey{
+		mappedFile: mappedFileIdentity{
+			deviceMajor: file.MappedFile.DeviceMajor,
+			deviceMinor: file.MappedFile.DeviceMinor,
+			inode:       file.MappedFile.Inode,
+		},
+		ctimeSec:  file.CtimeSec,
+		ctimeNsec: file.CtimeNsec,
+	}
 }

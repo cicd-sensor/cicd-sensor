@@ -3,93 +3,64 @@ package httpprepare
 import (
 	"context"
 	"errors"
-	"log/slog"
-	"os"
-	"time"
+	"fmt"
+	"net"
+	"net/http"
 )
 
-// SocketPath keeps descriptor transfer separate from job-facing HTTP routes.
+// Process identifies a process on this node. Docker reports PID in the daemon's
+// namespace; DaemonPID anchors that namespace in the Agent's host PID view.
+// NRI and machine callers leave DaemonPID zero and supply a host PID.
+type Process struct {
+	PID       int
+	DaemonPID int
+}
+
+// Validate rejects values that cannot represent Linux process identifiers.
+func (p Process) Validate() error {
+	if p.PID <= 0 || p.PID > 1<<31-1 || p.DaemonPID < 0 || p.DaemonPID > 1<<31-1 {
+		return errors.New("invalid HTTP preparation PID")
+	}
+	return nil
+}
+
+// Handler queues metadata only; all filesystem work belongs to the HTTP worker.
+type Handler func(context.Context, Process) error
+
+// SocketPath is node-only, separate from the Job-facing HTTP routes.
 func SocketPath(agentSocket string) string { return agentSocket + ".http-preparation" }
 
-// Preparation bounds producers doing potentially blocking filesystem I/O.
-// Slots stay occupied until the operation really finishes, even after timeout.
-// Classification and links remain owned by the supplied KernelIO preparer.
-type Preparation struct {
-	slots  chan struct{}
-	local  FileHandler
-	socket string
-	logger *slog.Logger
-}
+// Client sends process metadata. It never opens another process's files.
+type Client struct{ client *http.Client }
 
-// NewLocal connects inventory directly to the Agent-owned worker.
-func NewLocal(preparer FileHandler, logger *slog.Logger) *Preparation {
-	return &Preparation{slots: make(chan struct{}, MaxConcurrent), local: preparer, logger: logger}
-}
-
-// NewRemote connects a node-side producer to the descriptor-transfer socket.
-func NewRemote(agentSocket string, logger *slog.Logger) *Preparation {
-	return &Preparation{slots: make(chan struct{}, MaxConcurrent), socket: SocketPath(agentSocket), logger: logger}
-}
-
-// Prepare runs bounded inventory and waits only until the common deadline.
-func (p *Preparation) Prepare(ctx context.Context, root string, source string) error {
-	return p.PrepareResolved(ctx, func(context.Context) (string, error) {
-		return root, nil
-	}, source)
-}
-
-// RootResolver selects the process root. It runs
-// within Preparation's admission slot and may outlive the caller's deadline.
-type RootResolver func(context.Context) (string, error)
-
-// PrepareResolved includes runtime inspection in the same budget and retained
-// slot as inventory. Remote preparation connects before invoking resolve so
-// disabled HTTP capture performs no runtime inspection or filesystem scan.
-func (p *Preparation) PrepareResolved(ctx context.Context, resolve RootResolver, source string) error {
-	ctx, cancel := context.WithTimeout(ctx, Budget)
-	defer cancel()
-	select {
-	case p.slots <- struct{}{}:
-	default:
-		return errors.New("HTTP preparation producer limit")
+// NewRemote connects to the Agent on the same node and PID view.
+func NewRemote(agentSocket string) *Client {
+	transport := &http.Transport{
+		DisableKeepAlives: true,
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", SocketPath(agentSocket))
+		},
 	}
-	done := make(chan error, 1)
-	started := time.Now()
-	go func() {
-		var err error
-		defer func() {
-			<-p.slots
-			done <- err
-		}()
-		if p.local != nil {
-			root, resolveErr := resolve(ctx)
-			if resolveErr != nil || ctx.Err() != nil {
-				err = errors.Join(resolveErr, ctx.Err())
-				return
-			}
-			membership, resolveErr := openProcessMembership(root)
-			if resolveErr != nil {
-				err = resolveErr
-				return
-			}
-			files, scanErr := OpenFiles(ctx, root)
-			prepareErr := p.local(ctx, files, source, membership)
-			err = errors.Join(scanErr, prepareErr)
-		} else {
-			err = prepareRemote(ctx, p.socket, resolve)
-		}
-	}()
-	var err error
-	select {
-	case err = <-done:
-	case <-ctx.Done():
-		err = ctx.Err()
-	}
-	if p.logger != nil {
-		p.logger.DebugContext(ctx, "http_preparation_callback", "source", source, "elapsed", time.Since(started), "error", err)
-	}
-	return err
+	return &Client{client: &http.Client{Transport: transport, Timeout: Budget}}
 }
 
-// FileHandler adopts all file and membership descriptors, including on an error.
-type FileHandler func(context.Context, []*os.File, string, *os.File) error
+// Prepare waits for preparation within the caller deadline or Budget.
+func (p *Client) Prepare(ctx context.Context, process Process) error {
+	if err := process.Validate(); err != nil {
+		return err
+	}
+	url := fmt.Sprintf("http://agent/prepare?pid=%d&daemon_pid=%d", process.PID, process.DaemonPID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("HTTP preparation returned %d", resp.StatusCode)
+	}
+	return nil
+}

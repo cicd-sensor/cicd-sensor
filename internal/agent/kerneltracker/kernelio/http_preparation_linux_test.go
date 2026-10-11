@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"github.com/cilium/ebpf/link"
 )
 
@@ -18,172 +19,96 @@ type notifyCloseLink struct {
 
 func (l notifyCloseLink) Close() error { l.notify(); return nil }
 
-func preparationTestFile(t *testing.T) *os.File {
-	t.Helper()
-	f, err := os.CreateTemp(t.TempDir(), "target")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = f.Close() })
-	return f
-}
-
-func requirePreparationFileClosed(t *testing.T, f *os.File) {
-	t.Helper()
-	if _, err := f.Stat(); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("descriptor not closed: %v", err)
-	}
-}
-
 func TestSubmitPreparation(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name     string
-		setup    func(*httpUprobeWorker)
-		canceled bool
-		count    int
-		want     error
+		name           string
+		full, canceled bool
+		process        httpprepare.Process
+		want           error
 	}{
-		{"full queue closes adopted files", func(w *httpUprobeWorker) {
-			for range cap(w.preparationRequests) {
-				w.preparationRequests <- &httpPreparationRequest{}
-			}
-		}, false, 1, errHTTPPreparationQueueFull},
-		{"stopped worker closes adopted files", func(w *httpUprobeWorker) { w.shutdownPreparation() }, false, 1, errHTTPPreparationStopped},
-		{"canceled caller closes adopted files", func(*httpUprobeWorker) {}, true, 1, context.Canceled},
-		{"file cap closes whole batch", func(*httpUprobeWorker) {}, false, MaxHTTPPreparationFiles + 1, nil},
+		{name: "full queue rejects immediately", full: true, process: httpprepare.Process{PID: 1}, want: errHTTPPreparationQueueFull},
+		{name: "canceled caller does not enqueue", canceled: true, process: httpprepare.Process{PID: 1}, want: context.Canceled},
+		{name: "invalid PID is rejected", process: httpprepare.Process{PID: -1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
-			w.tracking = testTracking{members: map[uint64]uint64{1: 7}}
-			tc.setup(w)
+			if tc.full {
+				for range cap(w.preparationRequests) {
+					w.preparationRequests <- &httpPreparationRequest{}
+				}
+			}
+			before := len(w.preparationRequests)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if tc.canceled {
 				cancel()
 			}
-			files := make([]*os.File, tc.count)
-			for i := range files {
-				files[i] = preparationTestFile(t)
-			}
-			err := w.submitPreparation(ctx, files, "", 1)
+			err := w.submitPreparation(ctx, tc.process)
 			if err == nil || tc.want != nil && !errors.Is(err, tc.want) {
 				t.Fatalf("error=%v want=%v", err, tc.want)
 			}
-			for _, f := range files {
-				requirePreparationFileClosed(t, f)
+			if len(w.preparationRequests) != before {
+				t.Fatal("rejected request was queued")
 			}
 		})
 	}
-	t.Run("accepted request survives caller timeout until worker cleanup", func(t *testing.T) {
+	t.Run("caller cancellation prevents queued filesystem work", func(t *testing.T) {
 		w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
-		w.tracking = testTracking{members: map[uint64]uint64{1: 7}}
-		f := preparationTestFile(t)
 		ctx, cancel := context.WithCancel(t.Context())
-		files := []*os.File{f}
 		done := make(chan error, 1)
-		go func() { err := w.submitPreparation(ctx, files, "", 1); done <- err }()
+		go func() { done <- w.submitPreparation(ctx, httpprepare.Process{PID: os.Getpid()}) }()
 		r := <-w.preparationRequests
 		cancel()
 		if err := <-done; !errors.Is(err, context.Canceled) {
 			t.Fatal(err)
 		}
-		if _, err := f.Stat(); err != nil {
-			t.Fatalf("caller prematurely closed accepted FD: %v", err)
-		}
-		files[0] = nil // caller storage is reusable after API return
+		// No mmap/tracking state is configured: reaching either would fail differently.
 		w.prepareRequest(t.Context(), r)
-		requirePreparationFileClosed(t, f)
-		w.shutdownPreparation()
+		if err := <-r.done; !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
 	})
-	t.Run("shutdown drains queued descriptors and is idempotent", func(t *testing.T) {
+	t.Run("absent worker still bounds caller waiting", func(t *testing.T) {
 		w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
-		w.tracking = testTracking{members: map[uint64]uint64{1: 7}}
-		f := preparationTestFile(t)
-		r := &httpPreparationRequest{files: []*os.File{f}, done: make(chan error, 1)}
-		w.preparationRequests <- r
-		w.shutdownPreparation()
-		w.shutdownPreparation()
-		requirePreparationFileClosed(t, f)
-		if reply := <-r.done; !errors.Is(reply, errHTTPPreparationStopped) {
-			t.Fatal(reply)
+		if err := w.submitPreparation(t.Context(), httpprepare.Process{PID: os.Getpid()}); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal(err)
 		}
 	})
 }
 
-func TestPrepareHTTPFilesClosesRejectedDescriptors(t *testing.T) {
-	for _, tc := range []struct {
-		name             string
-		missing, enabled bool
-	}{
-		{name: "missing membership closes targets", missing: true},
-		{name: "disabled capture closes both FD classes"},
-		{name: "invalid membership closes both FD classes", enabled: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			target := preparationTestFile(t)
-			var membership *os.File
-			if !tc.missing {
-				membership = preparationTestFile(t)
-			}
-			ki := &LinuxKernelIO{}
-			if tc.enabled {
-				ki.httpUprobeWorker = newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
-				ki.httpUprobeWorker.control = &uprobeControl{}
-			}
-			if err := ki.PrepareHTTPFiles(t.Context(), []*os.File{target}, "test", membership); err == nil {
-				t.Fatal("invalid request accepted")
-			}
-			requirePreparationFileClosed(t, target)
-			if membership != nil {
-				requirePreparationFileClosed(t, membership)
-			}
-		})
+func TestPrepareHTTPDisabled(t *testing.T) {
+	if err := (&LinuxKernelIO{}).PrepareHTTP(t.Context(), httpprepare.Process{PID: os.Getpid()}); !errors.Is(err, ErrNotSupported) {
+		t.Fatal(err)
 	}
 }
 
-// Cleanup belongs to the worker even when its caller has already stopped waiting.
-func TestPrepareRequestClosesBatchBeforeReply(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name         string
-		cancelCaller bool
-		cancelWorker bool
-		want         error
-	}{
-		{name: "classification failure closes every file", want: ErrNotSupported},
-		{name: "caller cancellation closes unprocessed files", cancelCaller: true, want: context.Canceled},
-		{name: "worker cancellation closes unprocessed files", cancelWorker: true, want: context.Canceled},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
-			w.tracking = testTracking{members: map[uint64]uint64{1: 7}}
-			callerCtx, cancelCaller := context.WithCancel(t.Context())
-			defer cancelCaller()
-			workerCtx, cancelWorker := context.WithCancel(t.Context())
-			defer cancelWorker()
-			if tc.cancelCaller {
-				cancelCaller()
-			}
-			if tc.cancelWorker {
-				cancelWorker()
-			}
-			files := []*os.File{preparationTestFile(t), preparationTestFile(t)}
-			for _, f := range files {
-				if _, err := f.WriteString("target"); err != nil {
-					t.Fatal(err)
-				}
-			}
-			r := &httpPreparationRequest{cgroupID: 1, owner: 7, ctx: callerCtx, files: files, done: make(chan error, 1)}
-			go w.prepareRequest(workerCtx, r)
-			if err := <-r.done; !errors.Is(err, tc.want) {
-				t.Fatalf("reply=%v want=%v", err, tc.want)
-			}
-			for _, f := range files {
-				requirePreparationFileClosed(t, f)
-			}
-		})
+func TestPrepareProcessGone(t *testing.T) {
+	w := newHTTPUprobeWorker(nil, nil, t.TempDir(), nil, nil)
+	r := &httpPreparationRequest{ctx: t.Context(), process: httpprepare.Process{PID: 2147483647}}
+	if err := w.prepareProcess(t.Context(), r); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+}
+
+func TestPrepareProcessUntrackedClosesProcFiles(t *testing.T) {
+	w := newHTTPUprobeWorker(nil, nil, "/sys/fs/cgroup", nil, nil)
+	before, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 20 {
+		r := &httpPreparationRequest{ctx: t.Context(), process: httpprepare.Process{PID: os.Getpid()}}
+		if err := w.prepareProcess(t.Context(), r); !errors.Is(err, errHTTPTrackingEnded) {
+			t.Fatal(err)
+		}
+	}
+	after, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("FDs before=%d after=%d", len(before), len(after))
 	}
 }

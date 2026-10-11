@@ -2,13 +2,14 @@ package nri
 
 import (
 	"context"
-	"fmt"
+
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 
 	nriapi "github.com/containerd/nri/pkg/api"
 )
 
 type httpPreparer interface {
-	Prepare(context.Context, string, string) error
+	Prepare(context.Context, httpprepare.Process) error
 }
 
 // StartContainer prepares the final init root before containerd/CRI task.Start.
@@ -23,10 +24,7 @@ func (o *Observer) StartContainer(ctx context.Context, pod *nriapi.PodSandbox, c
 	if !eligible {
 		return nil
 	}
-	// This root shows the container's files, including its mounted libraries,
-	// rather than the observer's own /usr/lib.
-	root := fmt.Sprintf("/proc/%d/root", container.GetPid())
-	if err := o.preparation.Prepare(ctx, root, "nri-start"); err != nil && o.logger != nil {
+	if err := o.preparation.Prepare(ctx, httpprepare.Process{PID: int(container.GetPid())}); err != nil && o.logger != nil {
 		o.logger.WarnContext(ctx, "nri_http_preparation_incomplete", "container_id", container.GetId(), "error", err)
 	}
 	return nil

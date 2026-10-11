@@ -118,8 +118,8 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 	served := make(chan error, 1)
 	prepared := make(chan error, 8)
 	go func() {
-		served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(ctx context.Context, files []*os.File, source string, membership *os.File) error {
-			err := ki.PrepareHTTPFiles(ctx, files, source, membership)
+		served <- httpprepare.Serve(ctx, httpprepare.SocketPath(agentSocket), func(ctx context.Context, process httpprepare.Process) error {
+			err := ki.PrepareHTTP(ctx, process)
 			prepared <- err
 			return err
 		}, nil)
@@ -132,7 +132,7 @@ func TestDockerExecHTTPPreparation(t *testing.T) {
 	}()
 	deadline := time.Now().Add(time.Second)
 	for {
-		connection, dialErr := net.Dial("unixpacket", httpprepare.SocketPath(agentSocket))
+		connection, dialErr := net.Dial("unix", httpprepare.SocketPath(agentSocket))
 		if dialErr == nil {
 			_ = connection.Close()
 			break

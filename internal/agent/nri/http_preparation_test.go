@@ -3,6 +3,7 @@ package nri
 import (
 	"context"
 	"errors"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"testing"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -10,16 +11,14 @@ import (
 )
 
 type recordingHTTPPreparation struct {
-	calls  int
-	root   string
-	source string
-	err    error
+	calls   int
+	process httpprepare.Process
+	err     error
 }
 
-func (p *recordingHTTPPreparation) Prepare(ctx context.Context, root string, source string) error {
+func (p *recordingHTTPPreparation) Prepare(ctx context.Context, process httpprepare.Process) error {
 	p.calls++
-	p.root = root
-	p.source = source
+	p.process = process
 	return p.err
 }
 
@@ -52,7 +51,7 @@ func TestStartContainerHTTPPreparation(t *testing.T) {
 			if p.calls != tc.calls {
 				t.Fatalf("calls=%d", p.calls)
 			}
-			if p.calls > 0 && (p.root != "/proc/123/root" || p.source != "nri-start") {
+			if p.calls > 0 && (p.process != (httpprepare.Process{PID: 123})) {
 				t.Fatalf("preparation=%+v", p)
 			}
 		})

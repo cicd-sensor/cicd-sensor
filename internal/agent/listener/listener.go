@@ -47,13 +47,13 @@ type Listener struct {
 	runnerType        string
 	provider          jobcontext.Provider
 	server            *http.Server
-	httpPreparation   *httpprepare.Preparation
+	httpPreparation   httpprepare.Handler
 }
 
 // Config is the process-wide listener configuration. Project manager inputs
 // remain request-local in project/start.
 type Config struct {
-	HTTPPreparation       *httpprepare.Preparation
+	HTTPPreparation       httpprepare.Handler
 	Logger                *slog.Logger
 	JobRegistry           *jobregistry.JobRegistry
 	SocketPath            string

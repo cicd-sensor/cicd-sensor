@@ -87,10 +87,9 @@ struct {
     __type(value, __u32);
 } http_uprobe_stages SEC(".maps");
 
-// Staged cgroups receive a fresh HTTP tracking lifetime before creation.
+// The staging value is reserved; the root ID becomes known at cgroup_mkdir.
 struct staging_value {
-    __u64 http_owner;
-    __u64 reserved;
+    __u64 reserved[2];
 };
 
 const volatile struct staging_value *unused_staging_value;
@@ -142,6 +141,15 @@ struct {
     __type(value, __u8);
 } http_uprobe_discovery_cache SEC(".maps");
 
+// The serial HTTP worker writes an empty value before its own mmap. The mmap
+// hook fills it once; userspace reads the result and deletes the request.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1);
+    __type(key, __u64); // Agent PID/TID, matching bpf_get_current_pid_tgid().
+    __type(value, struct file_classification_key);
+} http_uprobe_mmap_requests SEC(".maps");
+
 // staging_map: basename -> staging_value. Userspace stages sibling-container
 // basenames; cgroup_mkdir promotes and deletes matching entries in-kernel.
 struct {
@@ -151,12 +159,3 @@ struct {
     __type(key, char[STAGING_KEY_LEN]);
     __type(value, struct staging_value);
 } staging_map SEC(".maps");
-
-// Reclaim accepts a tracked-map snapshot only with no overlapping BPF writers.
-struct cgroup_tracking_stamp { __u64 writers; __u64 sequence; };
-struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __uint(max_entries, 1);
-    __type(key, __u32);
-    __type(value, struct cgroup_tracking_stamp);
-} cgroup_tracking_changes SEC(".maps");

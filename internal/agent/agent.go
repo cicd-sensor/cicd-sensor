@@ -117,9 +117,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	jobRegistry.BindKernelTracker(kernelTracker)
 
-	var preparation *httpprepare.Preparation
+	var preparation httpprepare.Handler
 	if a.enableHTTPRequest {
-		preparation = httpprepare.NewLocal(kernelTracker.PrepareHTTPFiles, a.logger)
+		preparation = kernelTracker.PrepareHTTP
 	}
 	l := listener.New(listener.Config{
 		Logger:                a.logger,
@@ -156,15 +156,14 @@ func (a *Agent) Run(ctx context.Context) error {
 		engineDone <- kernelTracker.Run(engineCtx)
 	}()
 
-	// The socket belongs to Agent, while descriptors and links belong to KernelIO.
-	// Shutdown joins socket handlers before closing the kernel worker.
+	// Agent owns the node-only PID endpoint; KernelIO owns all target files and links.
 	preparationCtx, cancelPreparation := context.WithCancel(ctx)
 	var preparationDone chan struct{}
 	if preparation != nil {
 		preparationDone = make(chan struct{})
 		go func() {
 			defer close(preparationDone)
-			if err := httpprepare.Serve(preparationCtx, httpprepare.SocketPath(a.socketPath), kernelTracker.PrepareHTTPFiles, a.logger); err != nil {
+			if err := httpprepare.Serve(preparationCtx, httpprepare.SocketPath(a.socketPath), kernelTracker.PrepareHTTP, a.logger); err != nil {
 				a.logger.WarnContext(ctx, "http_preparation_socket_unavailable", "error", err)
 			}
 		}()

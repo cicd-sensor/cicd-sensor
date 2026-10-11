@@ -8,11 +8,7 @@ import (
 	"log/slog"
 )
 
-func prepareRemote(context.Context, string, RootResolver) error {
-	return errors.New("HTTP preparation requires Linux")
-}
-
 // Serve is unavailable outside the supported Linux runner platforms.
-func Serve(context.Context, string, FileHandler, *slog.Logger) error {
+func Serve(context.Context, string, Handler, *slog.Logger) error {
 	return errors.New("HTTP preparation requires Linux")
 }

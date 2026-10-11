@@ -69,7 +69,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	observer := &Observer{
 		logger:      logger,
-		preparation: httpprepare.NewRemote(opts.AgentSocketPath, logger),
+		preparation: httpprepare.NewRemote(opts.AgentSocketPath),
 		agent:       newAgentClient(opts.AgentSocketPath, opts.Provider),
 		provider:    opts.Provider,
 	}

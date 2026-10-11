@@ -3,11 +3,13 @@
 package kernelio
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"golang.org/x/sys/unix"
 )
 
@@ -37,7 +40,11 @@ func TestHTTPPreparationClients(t *testing.T) {
 		for _, target := range []struct{ family, name, source string }{
 			{"openssl", "libssl.so.3", findLibssl(t)}, {"nghttp2", "libnghttp2.so.14", findLibnghttp2(t)}, {"gh", "gh", gh}, {"glab", "glab", glab},
 		} {
-			copyPreparationFixture(t, target.source, filepath.Join(lower, target.family, fmt.Sprint(i), target.name))
+			directory := "usr/local/lib"
+			if target.family == "gh" || target.family == "glab" {
+				directory = "usr/local/bin"
+			}
+			copyPreparationFixture(t, target.source, filepath.Join(lower, target.family, fmt.Sprint(i), directory, target.name))
 		}
 	}
 	copyPreparationFixture(t, findLibssl(t), filepath.Join(lower, "fallback", "libssl.so.3"))
@@ -67,8 +74,8 @@ func TestHTTPPreparationClients(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ki.Close()
-	if ki.httpUprobeWorker.control == nil {
-		t.Fatal("backing control unavailable")
+	if ki.httpUprobeWorker.mmapRequests == nil {
+		t.Fatal("mmap identity unavailable")
 	}
 	if err := ki.PutCgroupIDInTrackedCgroupsMap(t.Context(), stat.Ino); err != nil {
 		t.Fatal(err)
@@ -172,14 +179,16 @@ func TestHTTPPreparationClients(t *testing.T) {
 			captured := 0
 			var latency []time.Duration
 			for i := range 20 {
-				dir := filepath.Join(merged, tc.name, fmt.Sprint(i))
-				f, err := os.Open(filepath.Join(dir, tc.file))
-				if err != nil {
-					t.Fatal(err)
+				processRoot := filepath.Join(merged, tc.name, fmt.Sprint(i))
+				preparationPID, stop := startPreparationProcess(t, processRoot, cgf)
+				dir := filepath.Join(processRoot, "usr/local/lib")
+				if tc.source == 3 {
+					dir = filepath.Join(processRoot, "usr/local/bin")
 				}
 				ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 				start := time.Now()
-				err = ki.httpUprobeWorker.submitPreparation(ctx, []*os.File{f}, "test-client", stat.Ino)
+				err := ki.PrepareHTTP(ctx, httpprepare.Process{PID: preparationPID})
+				stop()
 				latency = append(latency, time.Since(start))
 				cancel()
 				if err != nil {
@@ -234,5 +243,55 @@ func TestHTTPPreparationClients(t *testing.T) {
 				t.Errorf("first request captured %d/20", captured)
 			}
 		})
+	}
+}
+
+// The helper has the container root and cgroup but executes no HTTP client.
+// Preparation must discover the targets through its PID before the client runs.
+func TestHTTPPreparationProcessHelper(t *testing.T) {
+	root := os.Getenv("CICD_PREPARATION_HELPER_ROOT")
+	if root == "" {
+		return
+	}
+	if err := unix.Chroot(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir("/"); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("ready")
+	_, _ = io.Copy(io.Discard, os.Stdin)
+}
+
+func startPreparationProcess(t *testing.T, root string, cgroup *os.File) (int, func()) {
+	t.Helper()
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), binary, "-test.run=^TestHTTPPreparationProcessHelper$")
+	cmd.Env = append(os.Environ(), "CICD_PREPARATION_HELPER_ROOT="+root)
+	cmd.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: int(cgroup.Fd())}
+	input, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	if line, err := bufio.NewReader(output).ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("helper: %q %v", line, err)
+	}
+	return cmd.Process.Pid, func() {
+		_ = input.Close()
+		if err := cmd.Wait(); err != nil {
+			t.Error(err)
+		}
 	}
 }

@@ -12,7 +12,7 @@ import (
 
 func TestDecodeHTTPUprobeAttachCandidate(t *testing.T) {
 	want := httpUprobeAttachCandidate{
-		cgroupID: 111, owner: 222,
+		cgroupID: 111, rootCgroupID: 222,
 		tgid:    1234,
 		vmStart: 0x400000,
 		vmEnd:   0x401000,
@@ -52,6 +52,21 @@ func TestFileClassificationKeyBPFMapABI(t *testing.T) {
 func TestHandleHTTPUprobeAttachCandidate(t *testing.T) {
 	candidate := httpUprobeAttachCandidate{tgid: 1234, vmStart: 0x400000, vmEnd: 0x401000}
 
+	t.Run("cgroup removal wakes cleanup and still reaches KernelTracker", func(t *testing.T) {
+		w := newHTTPUprobeWorker(nil, nil, "", nil, nil)
+		ki := &LinuxKernelIO{httpUprobeWorker: w}
+		raw := binary.LittleEndian.AppendUint32(nil, SampleKindCgroupRmdir)
+		for range 2 {
+			handled, err := ki.handleHTTPUprobeAttachCandidate(raw)
+			if handled || err != nil {
+				t.Fatalf("removal delivery: handled=%v err=%v", handled, err)
+			}
+		}
+		if len(w.reconcileRequests) != 1 {
+			t.Fatal("removals did not coalesce a cleanup wakeup")
+		}
+	})
+
 	t.Run("ordinary security sample stays on the caller path", func(t *testing.T) {
 		kernelIO := &LinuxKernelIO{}
 		handled, err := kernelIO.handleHTTPUprobeAttachCandidate([]byte{1, 0, 0, 0})
@@ -89,7 +104,7 @@ func encodeHTTPUprobeAttachCandidate(t *testing.T, candidate httpUprobeAttachCan
 		VmStart: candidate.vmStart,
 		VmEnd:   candidate.vmEnd,
 	}
-	sample.Owner = candidate.owner
+	sample.RootCgroupId = candidate.rootCgroupID
 	sample.CgroupId = candidate.cgroupID
 	sample.File.CtimeSec = candidate.file.ctimeSec
 	sample.File.CtimeNsec = candidate.file.ctimeNsec

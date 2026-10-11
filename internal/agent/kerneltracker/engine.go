@@ -106,8 +106,7 @@ func (engine *KernelTracker) Run(ctx context.Context) error {
 			effects := handleEngineInput(engine.jobTracking, in)
 			engine.runEngineEffects(ctx, effects)
 		case <-httpUprobeReconcileTicker.C:
-			// Copy only loop-owned tracking identities. KernelIO resolves paths and
-			// performs the full reclaim asynchronously in its single worker.
+			// Retry HTTP cleanup even if a cgroup removal notification was lost.
 			engine.kernelIO.QueueHTTPUprobeReconciliation()
 		}
 	}

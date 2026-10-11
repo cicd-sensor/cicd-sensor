@@ -29,7 +29,7 @@ entry point; the scanner still needs the bounded directory and filename list.
 See the Linux [`proc_pid_root(5)`](https://man7.org/linux/man-pages/man5/proc_pid_root.5.html) documentation.
 
 PIDs can have different numbers in different PID namespaces. Docker inspect
-reports the daemon's numbering, so `dockerProcessRoot` uses that daemon's `/proc`
+reports the daemon's numbering, so `Process.OpenProc` uses that daemon's `/proc`
 view and checks it before interpreting the container PID. This avoids depending
 on Docker's private storage-directory layout.
 
@@ -47,18 +47,18 @@ lookup rejects these with `RESOLVE_NO_MAGICLINKS` and keeps normal symlinks insi
 the selected root with `RESOLVE_IN_ROOT`. This restriction applies *after* the
 runtime-supplied `/proc/PID/root` entry point has been opened intentionally.
 
-### Passing an opened file to the Agent
+### Sending the PID instead of files
 
-An FD is a process-local number for an opened file. Sending the number alone is
-not enough: FD 7 in the observer can mean something different from FD 7 in the
-Agent. `SCM_RIGHTS` asks Linux to give the receiving Agent its own FD for the file
-already opened by the sender. The Agent might receive FD 12; closing the sender's
-FD 7 does not close the Agent's FD 12. No file contents need to be copied.
+The observer sends a process number to the Agent. The Agent's worker opens that
+process's `/proc/PID` directory, reads its cgroup membership, and looks for the
+known files below its root. The worker opens and closes every target itself;
+no target file descriptors cross processes or wait in the preparation queue.
 
-This keeps the opened target available across processes. The worker additionally
-checks the actual backing file used by Linux, because an overlay filesystem can
-present a different visible identity. The identity checks below handle this
-separately from the FD transfer.
+Holding the proc directory prevents subsequent path lookups from selecting a
+reused PID. It does not freeze the process's root, cgroup membership or file
+contents. A PID already stale before that first open remains a best-effort hint:
+the Agent only prepares a currently tracked cgroup, never a root ID supplied by
+the caller. Backing checks remain necessary for overlay copy-up.
 
 ## Purpose and scope
 
@@ -113,7 +113,7 @@ flowchart LR
     end
 
     PREP["Bounded file preparation<br/>machine / Docker start+exec / NRI Start"]
-    PREP -->|"target FDs + unread membership FD"| WORKER
+    PREP -->|"PID metadata"| WORKER
 
     subgraph KT["KernelTracker"]
         CGROUPS["Job and cgroup state"]
@@ -122,13 +122,13 @@ flowchart LR
 
     EVENTS --> READER
     WORKER -->|"attach / close"| LINKS
-    WORKER -->|"reclaim: delete entry"| CACHE
+    WORKER -->|"classify / retry on failure"| CACHE
     CGROUPS -->|"tracking-change wakeup<br/>+ periodic retry"| WORKER
     READER -->|"http_request event samples"| DECODE
 ```
 
-For each executable file mapping, BPF checks the owner/file LRU cache and inserts a key on a
-miss before emitting an attach candidate. Reclaim closes ended-owner links and removes their cache entries. Transient work failure and a
+For each executable file mapping, BPF checks the root/file LRU cache and inserts a key on a
+miss before emitting an attach candidate. Reclaim closes ended-root links; positive cache entries are removed with links; negative entries expire through the bounded LRU. Transient work failure and a
 full worker queue also remove the entry so a later mapping can retry.
 
 KernelTracker requests a periodic reclaim check. KernelIO also wakes the worker
@@ -159,48 +159,46 @@ is not a substitute for the container's file.
 
 ```mermaid
 flowchart TB
-    MACHINE["Agent / machine Job start"] --> INVENTORY["httpprepare<br/>bounded named-file inventory"]
-    DOCKER["Host Docker proxy<br/>exec request / start response"] --> INVENTORY
-    NRI["NRI observer<br/>StartContainer"] --> INVENTORY
-    INVENTORY -->|"machine: direct call"| API["KernelIO PrepareHTTPFiles<br/>adopts every FD"]
-    INVENTORY -->|"Docker / NRI: SCM_RIGHTS"| SOCKET["Agent-owned FD socket<br/>same-owner UID only"]
+    MACHINE["Machine Job start: peer PID"] --> API["KernelIO PrepareHTTP"]
+    DOCKER["Docker proxy: inspect PID"] --> SOCKET["Node-only Unix HTTP<br/>0600 + same UID"]
+    NRI["NRI StartContainer: init PID"] --> SOCKET
     SOCKET --> API
-    API --> QUEUE["bounded preparation queue"]
-    QUEUE --> WORKER["one HTTP uprobe worker<br/>classify / attach / reclaim / close"]
-    DIND["dind: inherited cgroup tracking"] --> MMAP["executable mmap discovery"]
-    MMAP -->|"existing candidate queue"| WORKER
-    WORKER --> STATE["shared cache and attached-target registry"]
+    API --> QUEUE["8 pending PID requests<br/>no target FDs"]
+    QUEUE --> WORKER["Existing HTTP worker"]
+    WORKER --> INVENTORY["Open proc directory<br/>check active tracking root<br/>bounded target inventory"]
+    INVENTORY --> ATTACH["normalize / classify / attach / verify"]
+    MMAP["Tracked executable mappings<br/>including dind"] -->|"existing candidate queue"| WORKER
+    ATTACH --> STATE["same cache and attached-target registry"]
 ```
 
-The inventory opens files; the worker interprets them. Runtime adapters select
-the root and timing but do not parse ELF, store links, or create Job state.
-Local inventory and the FD receiver use the same `FileHandler` contract: calling
-the handler transfers responsibility for every target and membership FD.
-The FD socket is owned by Agent and is never mounted into Jobs. KernelTracker's
-preparation method forwards to KernelIO without entering the event reactor.
+Runtime adapters select the process and timing. They neither open target files
+nor parse ELF, store links, or create Job state. The worker owns the entire file
+lifetime. The node-only socket remains Agent-owned and is never mounted into
+Jobs. KernelTracker forwards preparation to KernelIO without its event reactor.
 
 | Read in this order | Responsibility |
 | --- | --- |
-| `internal/agent/httpprepare/preparation.go`, `inventory_linux.go` | Bound filesystem work; open only known names below the selected root |
-| `internal/agent/httpprepare/transport_linux.go` | Authenticate node-side producers; transfer and release exact FDs |
-| `internal/agent/kerneltracker/kernelio/http_preparation_linux.go` | Adopt requests; share classification, cache, and attachment with mapping discovery |
-| `internal/agent/kerneltracker/kernelio/http_uprobe_control_linux.go` | Confirm backing identities before parsing and after registration |
-| `internal/agent/kerneltracker/kernelio/http_uprobe_worker.go` | Serialize work and reclaim targets |
+| `internal/agent/httpprepare/preparation.go`, `transport_linux.go` | Send PID metadata using standard Unix HTTP; authenticate node-side producers |
+| `internal/agent/kerneltracker/kernelio/http_preparation_linux.go` | Queue PIDs; open proc/inventory in the worker; share attachment with mapping discovery |
+| `internal/agent/httpprepare/process_linux.go`, `inventory_linux.go` | Pin the proc directory and open bounded target names under its root |
+| `internal/agent/kerneltracker/kernelio/http_uprobe_attach_linux.go` | Shared classification, attachment, verification and registry commit |
+| `internal/agent/kerneltracker/kernelio/http_uprobe_mmap_linux.go` | Confirm backing identities before parsing and after registration |
+| `internal/agent/kerneltracker/kernelio/http_uprobe_worker.go` | Serialize work and reclaim ended-root links |
 
 ### Retained runtime state
 
 | Type | State | Purpose and identity | Access | Bound and removal |
 | --- | --- | --- | --- | --- |
-| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by tracking owner and backing `mappedFileIdentity` (device, inode); stores classification key and links | HTTP uprobe worker only | 4,096 owner/file targets; reclaimed after the last owner member leaves tracking |
-| Shared BPF cache | `http_uprobe_discovery_cache` | Keyed by owner and `fileClassificationKey` (device, inode, ctime); suppresses callbacks for files already queued, classified, or attached | BPF hook, KernelIO reader, and worker | 65,536-entry LRU; failed work and reclaim remove entries |
+| Worker-owned registry | `attachedTargets` (`attachedUprobeTarget` entries) | Keyed by tracking root cgroup ID and backing `mappedFileIdentity` (device, inode); stores classification key and links | HTTP uprobe worker only | 4,096 root/file targets; reclaimed after the root leaves tracking |
+| Shared BPF cache | `http_uprobe_discovery_cache` | Keyed by root cgroup ID and `fileClassificationKey` (device, inode, ctime); suppresses callbacks for files already queued, classified, or attached | BPF hook, KernelIO reader, and worker | 65,536-entry LRU; transient failures remove entries for retry; positive entries are removed on link close; negatives expire through eviction |
 
 The cache is notification suppression, not the link registry. Eviction can cause
 another classification, but it cannot detach or lose a link. `attachedTargets`
 remains the source of truth for attached links.
 
 A kernel uprobe observes a file and offset across processes. Each retained link
-here additionally carries its tracking owner as an attach cookie. Every HTTP
-uprobe BPF entry compares that cookie with the calling cgroup's owner before
+here additionally carries its tracking root cgroup ID as an attach cookie. Every HTTP
+uprobe BPF entry compares that cookie with the calling cgroup's root ID before
 parsing or emitting an event.
 
 ## Discovery and attachment
@@ -245,7 +243,7 @@ runs independently of stdin. Existing container-create cgroup staging is unchang
 GitHub job-container steps normally use Docker exec; Docker container actions
 and service entrypoints do not wait for an exec gate.
 Both paths share container inspect, the daemon's verified PID/procfs view, and
-the same FD preparation API. No script/stream parsing or buffering is added. Containers bypassing the proxy
+the same PID preparation API. No script/stream parsing or buffering is added. Containers bypassing the proxy
 remain mapping-discovered. The proxy requires the existing systemd cgroup driver and stages `docker-ID.scope`.
 The daemon must be local to the proxy; TCP-only remote Docker endpoints do not
 expose a verifiable process root. dind inner workloads use existing
@@ -274,39 +272,36 @@ It retains at most 32 FDs. Custom paths, excess entries and late-installed files
 mapping discovery. Prepared files remain attached for their cgroup tracking
 lifetime, including a delayed first use. There is no preparation grace timer.
 
-All producers call `PrepareHTTPFiles`; the API adopts every FD, including on
-rejection, and returns only an error; per-batch counts remain worker diagnostics.
-NRI and Docker use an Agent-owned Unix packet socket at
-`<agent-socket>.http-preparation`, mode `0600`, with same-owner `SO_PEERCRED`
-validation and `SCM_RIGHTS` transfer. Keep this socket node-side, outside Job
-mounts. It is separate from the runner-facing HTTP routes. Received ancillary
-data determines the FD count; empty or truncated transfers are rejected. The
-wire uses version byte 1, an unread `/proc/PID/cgroup` FD first, then target
-FDs, and a one-byte reply (0: complete, 1: incomplete);
-source labels remain in producer logs. The Agent reads membership in its node
-cgroup namespace and resolves the ID against its configured cgroup mount.
-The NRI observer needs no additional cgroup mount or namespace-changing privilege.
-The membership FD pins the process identity; it does not freeze its membership.
-An exited process or an untracked cgroup fails preparation open. Agent and node-side producers use the
-same protocol version. A mismatched packet fails open. The receiver uses its own 500 ms deadline
-from connection acceptance, including the time waiting for descriptors. The
-caller has its own 500 ms total wait; an earlier caller cancellation need not
-immediately cancel already-adopted work.
+Preparation attaches to the file object, not to its pathname. Replacing a file
+at the same path after preparation does not transfer its probes to the new
+inode, even when the replacement has identical contents. A later executable
+mapping discovers the replacement and queues attachment through the existing
+worker; the first selected call can precede that attachment. This is an accepted
+coverage limit. Preparation does not watch file updates or block execution until
+replacement files are attached.
 
-The 500 ms deadline covers root resolution, inventory, transfer, queueing, classification, and
-attachment waiting. Workloads continue on timeout, queue saturation, missing
-files, or attach failure. A filesystem syscall or link close can outlive that
-wait; bounded producer slots and worker ownership retain responsibility for
-cleanup. Preparation has an eight-request queue and eight producer slots per
-Preparation instance, plus eight receiver connections per Agent. Docker inspect
-and root acquisition run inside the same producer slot as inventory. These are
-resource budgets, not measured optimal concurrency or a node-wide eight-job
-limit. Each 32-FD batch gives at most 256 queued target FDs and 32 active target
-FDs at the worker; each admitted call also retains at most one membership FD.
-Producer/SCM_RIGHTS copies and link FDs are additional.
-Canceled callers cannot free admission while their actual work is still blocked.
-The 500 ms budget bounds waiting; it is not an I/O cancellation guarantee. Saturation fails open instead of
-adding workers or an unbounded wait queue. Existing mapping cap 4096 remains.
+All producers call `PrepareHTTP` with a PID and, for Docker, a daemon PID to
+interpret its namespace. Remote callers use standard HTTP over the Agent-owned
+Unix stream socket `<agent-socket>.http-preparation`, mode `0600`, with same-owner
+`SO_PEERCRED` validation. It is separate from Job-facing routes and never mounted
+into Jobs. The request carries numeric process identifiers, not paths or root IDs.
+The Agent reads membership in its own cgroup namespace and resolves the ID
+against its configured cgroup mount. The observer needs no proc-root read
+capability, extra cgroup mount, or namespace-changing privilege.
+
+The 500 ms caller deadline covers Docker inspect when needed, request delivery,
+queueing, inventory and attachment waiting. Workloads continue on timeout,
+queue saturation, missing files or attachment failure. Docker inspect can run
+even if HTTP preparation is unavailable; its context bounds the request.
+
+The queue holds at most eight metadata requests and no target FDs. The single
+worker holds at most 32 inventory files plus its local proc/membership and
+attachment handles. Expired queued requests are skipped. An in-flight filesystem
+syscall or link close can outlive the deadline and delay other attachment work;
+only this worker performs it, so blocked filesystem goroutines do not multiply.
+The server uses standard HTTP cancellation and read/header/write timeouts; there is
+no custom FD protocol, producer admission layer or queued-FD shutdown drain.
+The eight-entry queue is a resource budget, not a measured optimal concurrency.
 
 Normal mapping samples and event delivery keep their existing queues. Mapping
 discovery and reconciliation are serviced between preparation batches. Between target closes it yields to pending
@@ -315,25 +310,74 @@ close latency is measured because kernel unregister cannot be preempted.
 
 ### Backing identity
 
+PID preparation and mapping discovery use different ways to open a candidate,
+not different canonical file identities. The proxy sends only process metadata.
+The worker opens preparation candidates below the process root; mapping discovery
+opens the notified VMA through `map_files`. Neither FD's raw `fstat` identity is
+used as the attached-target key. Both paths use `mapFile` to obtain the backing
+identity, and mapping candidates additionally compare it with the notification.
+
 The existing `uprobe_mmap` hook reports the backing identity of a temporary
 one-page read-only mapping made by the worker. ELF and Go resolvers use normal
 FD reads. After attaching selected offsets, the worker reopens `/proc/self/fd/FD`
-and normalizes again. A copy-up, replacement, or changed generation rejects the
-result and closes provisional links. The mapping is never read by userspace.
+and normalizes again. If that lookup now resolves to a different backing or
+generation, the result is rejected and provisional links are closed. The mapping
+is never read by userspace. The worker-request branch and normal executable-map
+discovery read `vm_file->f_inode` with the same `http_uprobe_inode_key` helper;
+the worker-request branch fills its request map entry without emitting a
+discovery event.
 
-Both discovery paths use the same worker, owner/file cache, and owner/inode
+Obtaining a backing identity does not convert the input into a backing-only FD.
+This is why post-attachment verification remains necessary. It is also not a
+watch on the original pathname: a pathname replacement can leave an already-open
+FD referring to the old file. Later mappings of the replacement discover its new
+identity independently.
+
+Both discovery paths use the same worker, root/file cache, and root/inode
 registry. A completed negative classification differs from a queued notification.
 Before work and before committing a result, the worker checks that the cgroup
-still has the owner captured at queue admission. The owner is also the attach
+still belongs to its active tracking root. That root ID is also the attach
 cookie checked by each HTTP uprobe entry program. An end racing with the final
 userspace check makes that cookie inactive immediately; reclaim closes any
 remaining link later.
 
-Reclaim no longer reads process maps or requires `show_map_vma`, visible-inode
-aliases, or a separately loaded BPF control object. The existing mmap hook remains
-necessary for file identity. If it cannot be attached, HTTP initialization follows
-the existing loader error behavior; normalization is not an optional silent
-fallback to visible overlay inode numbers.
+Reclaim checks the tracking root, independently of file mapping lifetime. The
+mmap hook is required for file identity; failure to attach it fails HTTP
+initialization rather than substituting visible overlay inode numbers.
+
+#### Synchronous mmap query
+
+The worker uses one `http_uprobe_mmap_requests` hash map, with at most one entry.
+The same entry carries the request and response:
+
+```text
+worker: LockOSThread
+worker: requests[PID/TID] = empty file identity
+worker: mmap one read-only page
+    BPF: find requests[current PID/TID]
+    BPF: fill the empty identity from vm_file->f_inode
+worker: mmap returns; read requests[PID/TID]
+worker: require a nonzero inode; delete the entry; UnlockOSThread
+```
+
+`LockOSThread` keeps the goroutine on one OS thread and prevents other goroutines
+from running on that thread. The Agent's host PID/TID numbering must match
+`bpf_get_current_pid_tgid`. The fentry program runs during the worker's syscall,
+so the worker can look up the result after mmap returns; no event receiver or
+polling loop is involved. A completed result is not overwritten by later hook
+calls. Every request starts empty, so an unread result cannot become the next
+query's success. Lookup, mmap, or missing-result failures abort preparation.
+
+This protocol assumes no unrelated file mapping runs on the marked thread before
+the intended mmap. Thread locking does not mask native signal handlers; it is
+not a general proof against same-thread reentry. The Agent builds without cgo,
+and does not deliberately perform another file mapping in that interval. This
+assumption is distinct from file-content mutation or overlay copy-up. Ordinary
+mapping discovery still uses the ring buffer because the workload does not wait
+for the userspace worker.
+
+See [Go's LockOSThread contract](https://pkg.go.dev/runtime#LockOSThread) and
+[Linux BPF map access](https://docs.kernel.org/bpf/maps.html).
 
 These checks do not make concurrent file-content writes atomic. In particular,
 a provisional link can execute before post-attachment validation rejects it.
@@ -377,11 +421,11 @@ flowchart LR
 program emits an attach candidate only when all of these conditions hold:
 
 - the VMA is executable and file-backed;
-- the current cgroup has a nonzero HTTP tracking owner;
+- the current cgroup has a nonzero HTTP tracking root cgroup ID;
 - the file is not already queued, classified, or attached according to
   `http_uprobe_discovery_cache`.
 
-One ELF can create several executable VMAs. Dedup therefore uses the owner/file key
+One ELF can create several executable VMAs. Dedup therefore uses the root/file key
 above rather than the VMA range or process identity. Filtering and dedup stay in
 BPF because the kernel already has these values and rejecting a candidate there
 avoids a ring-buffer sample and userspace work.
@@ -417,7 +461,7 @@ an attached function enters the existing security-event path.
 flowchart LR
     CALL["Tracked process calls<br/>selected function"]
     UPROBE["uprobe BPF entry"]
-    GATE["tracking owner = attach cookie"]
+    GATE["tracking root cgroup ID = attach cookie"]
     PARSE["bounded in-kernel parse"]
     SAMPLE["http_request sample"]
     READER["KernelIO reader"]
@@ -460,64 +504,71 @@ kernel boundary. This is the redaction invariant.
 
 ## Link lifetime and reclaim
 
-A tracking owner is a number for one cgroup family, not a container ID or a Job's
-rule scope. KernelIO allocates a fresh nonzero number when directly binding or
-staging a new root. Child cgroups and newly tracked migration destinations inherit
-it in BPF. Existing destinations retain their own owner. Rebinding after removal
-allocates another number, so delayed work cannot reactivate the old cookie.
+The tracking root's **cgroup ID** determines link lifetime. A directly bound root
+stores its own ID in `tracked_cgroups`; a staged container does so when
+`cgroup_mkdir` supplies its ID. Children and newly tracked migration destinations
+inherit that value. Existing destinations keep their own root. There is no
+Agent-allocated owner number, tracking generation, or retired-root history.
 
 ```mermaid
 flowchart LR
-    ROOT["tracked root: owner 7"] --> CHILD["child: owner 7"]
-    ROOT --> MOVED["new migration destination: owner 7"]
-    TRACKED["tracked_cgroups values"] --> SNAP["unchanged snapshot?"]
-    SNAP -->|"owner 7 still present"| KEEP["keep owner 7 links"]
-    SNAP -->|"owner 7 absent"| CLOSE["worker closes owner 7 links"]
-    SNAP -->|"changed or failed"| RETRY["keep and retry"]
+    ROOT["root cgroup 700 → 700"] --> CHILD["child 701 → 700"]
+    ROOT --> MOVED["migration destination 900 → 700"]
+    END["root rmdir / untrack"] --> OFF["root entry zero / absent"]
+    OFF --> GATE["HTTP capture and preparation stop"]
+    OFF --> WAKE["existing notification wakes worker"]
+    WAKE --> CLOSE["worker closes root 700 links"]
+    TICK["periodic retry"] --> CLOSE
 ```
 
-`cgroup_rmdir` sets its value to zero before emitting the event, so a dropped
-notification cannot leave its HTTP cookie active. The map entry remains for the
-existing late-event attribution grace. Job finalization and normal cgroup purge
-remove tracked-map entries through KernelIO. A target remains retained while any
-member still holds its owner, including children and propagated migration targets.
+`cgroup_rmdir` clears the value before emitting its existing notification, so even
+if the ring buffer drops it, the root cannot remain HTTP-active. The entry stays
+for the existing late-event attribution grace. KernelIO wakes the HTTP worker on
+that notification and on explicit tracked-map deletion. The periodic wakeup
+retries missed notifications. Reclaim checks each target's root entry directly;
+it does not scan all cgroup values or require a coherent snapshot.
 
-One shared image file may have links for owners A and B. Closing A's own links
-does not close B's registration. Both BPF entries can run on a call, but only the
-entry whose cookie matches the calling cgroup parses it. The worker prevents
-same-owner/inode duplicates. No URL, time-window, or last-event cache discards
-legitimate repeated requests. Shared-file dispatch overhead still grows with the
-number of registrations.
+A child deletion does not close its root's links. A root deletion does, even if a
+process migrated elsewhere and remains alive. The HTTP BPF gate checks both the
+calling cgroup's root ID and the root entry itself. This lifetime policy does not
+change KernelTracker's general event attribution or Job finalization.
 
-The worker reclaims only a coherent tracking-map snapshot. A userspace update
-generation detects overlapping KernelIO map writes without making the tracking
-reactor wait behind the scan. BPF brackets inheritance/removal
-with an in-flight writer count and sequence; scans with active writers or changed
-sequence fail-keep. The bracket starts before reading an inherited owner. This
-prevents a disappearing source from hiding a newly created destination.
-Numbers are never intentionally reused during the loaded object's lifetime.
+One shared image file can have independent links for roots A and B. Closing A's
+links leaves B's registration intact. Only the registration whose cookie matches
+the caller's active root parses the call. The worker prevents duplicate
+(root cgroup ID, backing device, inode) targets. No event-content cache discards
+legitimate repeated requests; dispatch overhead still grows with registrations.
 
 | State | Action |
 | --- | --- |
-| At least one member retains the owner | Keep all its targets, even if not yet mapped. |
-| Last member has ended in a coherent scan | Close that owner's links and delete its cache entries, including negatives. |
-| Snapshot failed or changed | Keep links and retry on a later wakeup or periodic tick. |
-| Preparation/candidate queue has work | Yield between target closes, retaining a reclaim wakeup. |
-| Agent shutdown | The same worker closes remaining links after stopping admissions. |
+| Root maps to itself | Keep targets, including files not yet mapped by a Job. |
+| Root entry zero or absent | Close its links and remove each link's positive discovery-cache entry. |
+| Root lookup fails | Keep links and retry on another wakeup. |
+| Preparation/candidate queue has work | Yield between target closes, keeping a reclaim wakeup. |
+| Agent shutdown | The same worker closes remaining links; metadata requests own no FDs. |
 
-There is no recursive cgroup walk or `/proc/maps` read for HTTP reclaim. A stale
-mapping notification can still use a bounded maps-text lookup to find its merged
-address range; the worker verifies the opened FD against the backing identity.
-That lookup reads addresses, not the overlay-visible device/inode fields.
-Discovery notifications and temporary normalization mappings use the same BPF
-inode-key helper, so userspace does not need a second identity parser.
-Long-running owners can retain more files than maps-liveness reclaim did; the
-4,096-target cap remains, and cap saturation can reduce coverage.
+Preparation checks root activity before work and before committing links. If
+removal happens after that check, the BPF root gate stops new captures and the
+worker later closes the link. A handler already executing at removal may finish;
+this is not a synchronous drain of events. No filesystem or link syscall runs
+inside the cgroup notification reader.
 
-Moving into an already independently tracked owner does not itself discover all
-existing VMAs. That destination must have prepared or discovered the target;
-future mappings remain the fallback. KernelTracker's existing notification-loss
-and Job attribution limits also still apply to newly inherited cgroups.
+The key uses the kernel's full 64-bit cgroup ID, not its pathname. Recreating a
+cgroup at the same path creates a different identity; Linux kernfs incorporates
+ID rollover into that value ([Linux 5.15 allocation](https://github.com/torvalds/linux/blob/v5.15/fs/kernfs/dir.c#L591)).
+Assigning successive Jobs to the same still-existing cgroup is not given a
+separate HTTP lifetime by this design. Negative classifications may stay in the
+65,536-entry LRU: they describe file identity plus ctime and own no links. Ended
+queued candidates clear their pending entries. No full cache walk is needed.
+
+Reclaim reads neither process maps nor container files. Mapping discovery may
+still read `/proc/maps` to recover a merged VMA address range; the opened file is
+verified against its BPF backing identity. A long-lived root can retain more
+files until that root ends; the 4,096-target cap bounds this retention.
+
+Moving into an independently tracked root does not discover its existing VMAs;
+that root needs preparation or later mapping discovery. General tracking and
+Job attribution notification-loss limits also remain.
 
 ## Coverage
 
@@ -550,10 +601,10 @@ x64 and arm64 unless noted otherwise.
   uprobe runtime, and remains the disable path after default enablement.
 - Mapping notification precedes the selected function call, but ELF
   classification and attachment are asynchronous. The function can run before
-  its uprobe is attached, so the initial request can be missed. This remains a
-  rollout gate.
+  its uprobe is attached, so the initial request can be missed. This is an
+  accepted coverage limit of asynchronous discovery.
 - Preparation improves common existing files only. Workspace downloads,
-  replacement after preparation, owner/target-cap saturation, and Docker
+  replacement after preparation, root/target-cap saturation, and Docker
   initial entrypoints can still lose the first request. Dind inner workloads
   use mapping discovery only; inner-proxy preparation is outside the supported preparation paths.
 - Discovery observes executable mappings created while the process is already in
@@ -576,21 +627,19 @@ x64 and arm64 unless noted otherwise.
 
 ### Kernel implementation notes
 
-Owner filtering uses `bpf_get_attach_cookie`, available on the Linux 5.15 baseline
+Root filtering uses `bpf_get_attach_cookie`, available on the Linux 5.15 baseline
 for perf-event uprobes. See [Linux's helper dispatch](https://github.com/torvalds/linux/blob/v5.15/kernel/trace/bpf_trace.c)
 and [cilium/ebpf's UprobeOptions](https://github.com/cilium/ebpf/blob/v0.20.0/link/uprobe.go).
 A cookie is a userspace-assigned number, not a kernel pointer or a JobIdentity.
 The three entry programs gate before reading HTTP fields; tail-call stages and
 rule/event schemas are unchanged.
 
-Tracking snapshots use one fixed-size array value and 64-bit BPF atomic updates.
-Every early return from a cgroup hook passes through its wrapper's decrement.
-The existing CO-RE cgroup and inode reads remain; no new kfunc, variable-length
-kernel read, or unbounded BPF loop is introduced. The implementation needs its
-own cookie gate because these HTTP programs parse directly from selected client
-functions rather than using a generic tracing-policy dispatcher.
+Root liveness uses two bounded hash lookups, without new kernel structure reads
+or writer atomics. Existing CO-RE cgroup/inode reads and the Linux 5.15 helper
+baseline remain; no new kfunc or BPF loop is needed. The HTTP programs need a
+cookie gate because they parse selected client functions directly, rather than
+using a generic tracing-policy dispatcher.
 
-Reading a transferred membership FD in the Agent namespace follows
-[`proc_cgroup_show`](https://github.com/torvalds/linux/blob/v6.8/kernel/cgroup/cgroup.c#L5869):
-the path is rendered using the current reader's cgroup namespace. Producers must
-leave it unread so seq_file does not buffer an earlier namespace's rendering.
+The worker reads `/proc/PID/cgroup` in the Agent's cgroup namespace, as defined by
+[`proc_cgroup_show`](https://github.com/torvalds/linux/blob/v6.8/kernel/cgroup/cgroup.c#L5869).
+The observer supplies process metadata; the worker resolves membership.

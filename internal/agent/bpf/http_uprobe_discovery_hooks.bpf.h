@@ -19,8 +19,8 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
         return 0;
 
     __u64 cgroup_id = current_cgroup_id();
-    __u64 owner = http_tracking_owner(cgroup_id);
-    if (!owner)
+    __u64 root_cgroup_id = http_tracking_root(cgroup_id);
+    if (!root_cgroup_id || http_tracking_root(root_cgroup_id) != root_cgroup_id)
         return 0;
 
     struct inode *inode = BPF_CORE_READ(file, f_inode);
@@ -33,7 +33,7 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     struct file_classification_key classification = {};
     http_uprobe_inode_key(inode, &classification);
 
-    struct http_discovery_key key = {.owner = owner, .file = classification};
+    struct http_discovery_key key = {.root_cgroup_id = root_cgroup_id, .file = classification};
     if (bpf_map_lookup_elem(&http_uprobe_discovery_cache, &key))
         return 0;
 
@@ -53,7 +53,7 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
     sample->kind = SAMPLE_KIND_HTTP_UPROBE_ATTACH_CANDIDATE;
     sample->tgid = current_tgid();
     sample->cgroup_id = cgroup_id;
-    sample->owner = owner;
+    sample->root_cgroup_id = root_cgroup_id;
     sample->vm_start = BPF_CORE_READ(vma, vm_start);
     sample->vm_end = BPF_CORE_READ(vma, vm_end);
     sample->file = classification;
@@ -64,22 +64,22 @@ static __always_inline int emit_http_uprobe_attach_candidate(struct vm_area_stru
 SEC("fentry/uprobe_mmap")
 int BPF_PROG(handle_uprobe_mmap, struct vm_area_struct *vma)
 {
-    // A worker-owned request identifies its own temporary PROT_READ mapping.
-    // This branch must precede VM_EXEC/cgroup gates, and emits no event.
+    // A marked Agent thread is querying its temporary read-only mapping.
+    // Answer in the same map before VM_EXEC/cgroup gates; no event is emitted.
     __u64 tid = bpf_get_current_pid_tgid();
-    struct http_uprobe_control_request *request =
-        bpf_map_lookup_elem(&http_uprobe_control_requests, &tid);
+    struct file_classification_key *request =
+        bpf_map_lookup_elem(&http_uprobe_mmap_requests, &tid);
     if (request) {
+        if (request->mapped_file.inode)
+            return 0; // Preserve the first completed result until userspace reads it.
         struct file *file = BPF_CORE_READ(vma, vm_file);
         struct inode *inode = file ? BPF_CORE_READ(file, f_inode) : 0;
         if (inode) {
-            __u64 zero = 0;
-            struct http_uprobe_control_result result = {
-                .nonce = request->nonce,
-            };
-            http_uprobe_inode_key(inode, &result.file);
-            if (!bpf_map_update_elem(&http_uprobe_control_results, &zero, &result, BPF_ANY))
-                bpf_map_delete_elem(&http_uprobe_control_requests, &tid);
+            struct file_classification_key result = {};
+            http_uprobe_inode_key(inode, &result);
+            // If this fails, the empty result makes userspace reject the query.
+            if (bpf_map_update_elem(&http_uprobe_mmap_requests, &tid, &result, BPF_EXIST))
+                return 0;
         }
         return 0;
     }

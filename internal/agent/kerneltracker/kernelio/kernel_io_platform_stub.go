@@ -4,6 +4,7 @@ package kernelio
 
 import (
 	"context"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"log/slog"
 )
 
@@ -53,3 +54,5 @@ func (kernelIO *StubKernelIO) StartKernelSampleLoop(ctx context.Context, handle 
 func (kernelIO *StubKernelIO) Close() error {
 	return nil
 }
+
+func (*StubKernelIO) PrepareHTTP(context.Context, httpprepare.Process) error { return ErrNotSupported }

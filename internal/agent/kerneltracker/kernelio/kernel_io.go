@@ -3,6 +3,7 @@ package kernelio
 import (
 	"context"
 	"errors"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 )
 
 var ErrNotSupported = errors.New("not supported")
@@ -18,11 +19,12 @@ type Config struct {
 // KernelIO is the BPF program/map/ringbuf I/O boundary. It stays as an
 // interface so engine loop tests can run without loading kernel programs.
 type KernelIO interface {
+	PrepareHTTP(context.Context, httpprepare.Process) error
 	PutCgroupIDInTrackedCgroupsMap(ctx context.Context, cgroupID uint64) error
 	DeleteCgroupIDsFromTrackedCgroupsMap(ctx context.Context, cgroupIDs []uint64) error
 	PutCgroupBasenameInStagingMap(ctx context.Context, basename string) error
 	DeleteCgroupBasenamesFromStagingMap(ctx context.Context, basenames []string) error
-	// QueueHTTPUprobeReconciliation schedules a non-blocking tracking-owner sweep.
+	// QueueHTTPUprobeReconciliation schedules a non-blocking tracking-root sweep.
 	// It is a no-op when HTTP uprobe capture is disabled.
 	QueueHTTPUprobeReconciliation()
 	StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error

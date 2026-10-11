@@ -24,25 +24,25 @@ static __always_inline bool match_staging_and_track_cgroup(struct cgroup *cgrp, 
     if (!val)
         return false;
 
-    // Make the kernel map reflect ownership before userspace mirrors it.
-    __u64 owner = val->http_owner;
-    if (!owner || bpf_map_update_elem(&tracked_cgroups, &cgroup_id, &owner, BPF_NOEXIST) != 0)
+    // A staged container starts its own tracking root.
+    if (bpf_map_update_elem(&tracked_cgroups, &cgroup_id, &cgroup_id, BPF_NOEXIST) != 0)
         return false;
 
     bpf_map_delete_elem(&staging_map, key);
     return true;
 }
 
-static __always_inline int track_cgroup_mkdir(struct cgroup *cgrp, const char *path)
+SEC("tp_btf/cgroup_mkdir")
+int BPF_PROG(handle_cgroup_mkdir, struct cgroup *cgrp, const char *path)
 {
     __u64 cgroup_id = cgroup_id_from_cgroup(cgrp);
     __u64 parent_cgroup_id = parent_cgroup_id_from_cgroup(cgrp);
     __u8 staging_matched = 0;
-    __u64 owner = http_tracking_owner(parent_cgroup_id);
+    __u64 root_cgroup_id = http_tracking_root(parent_cgroup_id);
 
-    if (owner) {
+    if (root_cgroup_id) {
         // Track child cgroups before userspace observes the mkdir.
-        if (bpf_map_update_elem(&tracked_cgroups, &cgroup_id, &owner, BPF_NOEXIST) != 0)
+        if (bpf_map_update_elem(&tracked_cgroups, &cgroup_id, &root_cgroup_id, BPF_NOEXIST) != 0)
             return 0;
     } else {
         // Sibling-container fallback: an untracked parent may have a staged child basename.
@@ -70,7 +70,8 @@ static __always_inline int track_cgroup_mkdir(struct cgroup *cgrp, const char *p
 
 // handle_cgroup_attach_task captures the source cgroup before the kernel
 // overwrites it, then extends tracking for the destination cgroup.
-static __always_inline int track_cgroup_attach_task(struct cgroup *dst_cgrp, struct task_struct *leader, bool threadgroup)
+SEC("fentry/cgroup_attach_task")
+int BPF_PROG(handle_cgroup_attach_task, struct cgroup *dst_cgrp, struct task_struct *leader, bool threadgroup)
 {
     struct cgroup *old_cgrp;
     __u64 source_cgroup_id;
@@ -97,8 +98,8 @@ static __always_inline int track_cgroup_attach_task(struct cgroup *dst_cgrp, str
 
     // Track the destination before later samples hit cgroup_is_tracked().
     if (!destination_tracked) {
-        __u64 owner = *source_tracked;
-        if (bpf_map_update_elem(&tracked_cgroups, &destination_cgroup_id, &owner, BPF_NOEXIST) != 0)
+        __u64 root_cgroup_id = *source_tracked;
+        if (bpf_map_update_elem(&tracked_cgroups, &destination_cgroup_id, &root_cgroup_id, BPF_NOEXIST) != 0)
             return 0;
     }
 
@@ -116,20 +117,21 @@ static __always_inline int track_cgroup_attach_task(struct cgroup *dst_cgrp, str
     return 0;
 }
 
-static __always_inline int track_cgroup_rmdir(struct cgroup *cgrp, const char *path)
+SEC("tp_btf/cgroup_rmdir")
+int BPF_PROG(handle_cgroup_rmdir, struct cgroup *cgrp, const char *path)
 {
     __u64 cgroup_id;
 
     (void)path;
 
     cgroup_id = cgroup_id_from_cgroup(cgrp);
-    __u64 *owner = bpf_map_lookup_elem(&tracked_cgroups, &cgroup_id);
-    if (!owner)
+    __u64 *root_cgroup_id = bpf_map_lookup_elem(&tracked_cgroups, &cgroup_id);
+    if (!root_cgroup_id)
         return 0;
 
-    // Keep the entry for late sample attribution, but end its HTTP ownership
+    // Keep the entry for late sample attribution, but end its HTTP lifetime
     // even if the ring buffer cannot deliver the rmdir notification.
-    *owner = 0;
+    *root_cgroup_id = 0;
     RESERVE_SAMPLE(sample, struct cgroup_rmdir_sample, return 0);
 
     sample->kind = SAMPLE_KIND_CGROUP_RMDIR;
@@ -139,37 +141,4 @@ static __always_inline int track_cgroup_rmdir(struct cgroup *cgrp, const char *p
 
     bpf_ringbuf_submit(sample, 0);
     return 0;
-}
-
-SEC("tp_btf/cgroup_mkdir")
-int BPF_PROG(handle_cgroup_mkdir, struct cgroup *cgrp, const char *path)
-{
-    struct cgroup_tracking_stamp *stamp = tracking_change_begin();
-    if (!stamp)
-        return 0;
-    int result = track_cgroup_mkdir(cgrp, path);
-    tracking_change_end(stamp);
-    return result;
-}
-
-SEC("fentry/cgroup_attach_task")
-int BPF_PROG(handle_cgroup_attach_task, struct cgroup *dst_cgrp, struct task_struct *leader, bool threadgroup)
-{
-    struct cgroup_tracking_stamp *stamp = tracking_change_begin();
-    if (!stamp)
-        return 0;
-    int result = track_cgroup_attach_task(dst_cgrp, leader, threadgroup);
-    tracking_change_end(stamp);
-    return result;
-}
-
-SEC("tp_btf/cgroup_rmdir")
-int BPF_PROG(handle_cgroup_rmdir, struct cgroup *cgrp, const char *path)
-{
-    struct cgroup_tracking_stamp *stamp = tracking_change_begin();
-    if (!stamp)
-        return 0;
-    int result = track_cgroup_rmdir(cgrp, path);
-    tracking_change_end(stamp);
-    return result;
 }

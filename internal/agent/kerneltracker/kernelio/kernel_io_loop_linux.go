@@ -191,8 +191,7 @@ func (kernelIO *LinuxKernelIO) Close() error {
 	// Drain goroutines before closing map FDs; the drop watcher may be in Map.Lookup.
 	kernelIO.loopWG.Wait()
 	if kernelIO.httpUprobeWorker != nil {
-		// Also drain submissions made before StartKernelSampleLoop was called.
-		kernelIO.httpUprobeWorker.shutdownPreparation()
+		// Close any links even if the sample loop never started.
 		kernelIO.httpUprobeWorker.closeAll()
 	}
 	for _, attachedLink := range slices.Backward(kernelIO.links) {

@@ -10,7 +10,6 @@
 
 #include "kernel_samples.h"
 #include "maps.bpf.h"
-#include "http_uprobe_control_maps.bpf.h"
 #include "common_helpers.bpf.h"
 #include "cgroup_helpers.bpf.h"
 #include "path_helpers.bpf.h"

@@ -2,6 +2,7 @@ package kerneltracker
 
 import (
 	"context"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"io"
 	"log/slog"
 	"testing"
@@ -124,4 +125,12 @@ func runTestEffects(t *testing.T, state *jobTrackingState, effects []engineEffec
 	engine.jobTracking = state
 	engine.runEngineEffects(context.Background(), effects)
 	return kernelIO
+}
+
+func (noopKernelIO) PrepareHTTP(context.Context, httpprepare.Process) error {
+	return kernelio.ErrNotSupported
+}
+
+func (*recordingKernelIO) PrepareHTTP(context.Context, httpprepare.Process) error {
+	return kernelio.ErrNotSupported
 }

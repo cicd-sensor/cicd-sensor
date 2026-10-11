@@ -12,10 +12,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
@@ -25,8 +23,7 @@ import (
 //
 // A single worker owns all attached targets and userspace updates to the
 // discovery cache, so no locking. Attach candidates and reconcile requests only
-// enter this worker. A tracking owner retains its links until its last cgroup
-// leaves tracking; file mappings do not determine link lifetime.
+// enter this worker. Links live until their tracking root cgroup ends.
 
 type symbolUprobeTarget struct {
 	symbol  string
@@ -35,12 +32,12 @@ type symbolUprobeTarget struct {
 }
 
 // maxAttachedUprobeTargets bounds attached targets. On cap the worker refuses new
-// targets and never evicts a live one. Many simultaneous or long-lived owners
+// targets and never evicts a live one. Many simultaneous or long-lived roots
 // can reach the cap even without malicious activity.
 const maxAttachedUprobeTargets = 4096
 
 // attachCandidateQueueSize absorbs first-seen executable mapping bursts while
-// symbol classification and uprobe attach run on the single owner worker.
+// symbol classification and uprobe attach run on the single worker.
 const attachCandidateQueueSize = 4096
 
 type mappedFileIdentity struct {
@@ -57,48 +54,44 @@ type fileClassificationKey struct {
 }
 
 type httpDiscoveryKey struct {
-	owner uint64
-	file  fileClassificationKey
+	rootCgroupID uint64
+	file         fileClassificationKey
 }
 
 type httpTargetKey struct {
-	owner uint64
-	file  mappedFileIdentity
+	rootCgroupID uint64
+	file         mappedFileIdentity
 }
 
 type httpUprobeAttachCandidate struct {
-	cgroupID uint64
-	owner    uint64
-	tgid     int32
-	vmStart  uint64
-	vmEnd    uint64
-	file     fileClassificationKey
+	cgroupID     uint64
+	rootCgroupID uint64
+	tgid         int32
+	vmStart      uint64
+	vmEnd        uint64
+	file         fileClassificationKey
 }
 
-// attachedUprobeTarget holds one owner's links for a file. The classification
+// attachedUprobeTarget holds one tracking root's links for a file. The classification
 // key distinguishes file generations when a later mapping reaches the worker.
 type attachedUprobeTarget struct {
 	classificationKey httpDiscoveryKey
 	links             []link.Link
 }
 
-type httpOwnerSource interface {
-	httpOwner(uint64) uint64
-	httpOwners() (map[uint64]struct{}, error)
+type httpRootSource interface {
+	httpRootCgroup(uint64) uint64
+	httpRootActive(uint64) (bool, error)
 }
 
 type httpUprobeWorker struct {
 	symbolTargets  []symbolUprobeTarget // OpenSSL/nghttp2, attached by ELF symbol
-	control        *uprobeControl
-	goProgram      *ebpf.Program // Go net/http, attached by resolved file offset
+	mmapRequests   *ebpf.Map            // one worker request and its backing-identity response
+	goProgram      *ebpf.Program        // Go net/http, attached by resolved file offset
 	logger         *slog.Logger
 	cgroupRootPath string
 
-	// Submission is synchronized only against shutdown; classification stays loop-local.
-	submissionMu        sync.Mutex
-	stopped             bool
 	preparationRequests chan *httpPreparationRequest
-	preparationDrops    uint64 // submissionMu-owned
 
 	// Worker inputs. run consumes serially.
 	attachCandidates  chan httpUprobeAttachCandidate // candidates emitted by BPF and decoded by KernelIO
@@ -108,7 +101,7 @@ type httpUprobeWorker struct {
 	// concurrency-safe kernel objects shared with the hook and sample reader.
 	attachedTargets map[httpTargetKey]*attachedUprobeTarget
 	discoveryCache  *ebpf.Map
-	tracking        httpOwnerSource
+	tracking        httpRootSource
 
 	// Throttled-warning counters. attachCandidateQueueDropped is sample-reader-owned;
 	// the others are worker-owned. Each counter is touched by one goroutine.
@@ -147,7 +140,7 @@ func (w *httpUprobeWorker) queueTargetReconciliation() {
 	}
 }
 
-// QueueHTTPUprobeReconciliation requests a tracking-owner reclaim sweep.
+// QueueHTTPUprobeReconciliation requests a tracking-root reclaim sweep.
 // No-op when HTTP uprobe capture is disabled.
 func (kernelIO *LinuxKernelIO) QueueHTTPUprobeReconciliation() {
 	if kernelIO.httpUprobeWorker == nil {
@@ -163,7 +156,7 @@ func (w *httpUprobeWorker) queueAttachCandidate(candidate httpUprobeAttachCandid
 	select {
 	case w.attachCandidates <- candidate:
 	default:
-		if err := w.deleteDiscoveryCacheEntry(httpDiscoveryKey{candidate.owner, candidate.file}); err != nil {
+		if err := w.deleteDiscoveryCacheEntry(httpDiscoveryKey{candidate.rootCgroupID, candidate.file}); err != nil {
 			w.warn("http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
 		}
 		w.warnThrottled(&w.attachCandidateQueueDropped, "http_uprobe_attach_candidate_dropped")
@@ -175,7 +168,6 @@ func (w *httpUprobeWorker) queueAttachCandidate(candidate httpUprobeAttachCandid
 // attachedTargets and link lifecycle; there is no separate closer goroutine.
 func (w *httpUprobeWorker) run(ctx context.Context) {
 	defer w.closeAll()
-	defer w.shutdownPreparation()
 	for {
 		select {
 		case <-ctx.Done():
@@ -256,21 +248,17 @@ func (w *httpUprobeWorker) closeAll() {
 	clear(w.attachedTargets)
 }
 
-// Reclaim uses a coherent snapshot of tracking owners, never process maps.
-// A missing owner cannot reappear: numbers are never reused, and inheritance
-// needs an existing member. The tracking stamp also covers in-flight inheritance.
+// Only the tracking root controls lifetime. A surviving child or migration
+// destination cannot keep links after that root has been deleted or untracked.
 func (w *httpUprobeWorker) reconcileTargets(ctx context.Context) {
 	if ctx.Err() != nil || w.tracking == nil {
 		return
 	}
-	owners, err := w.tracking.httpOwners()
-	if err != nil {
-		return
-	} // Changing or unreadable map: fail-keep.
 	for key, target := range w.attachedTargets {
-		if _, live := owners[key.owner]; live {
+		live, err := w.tracking.httpRootActive(key.rootCgroupID)
+		if err != nil || live {
 			continue
-		}
+		} // Unreadable tracking state: fail-keep.
 		if ctx.Err() != nil {
 			return
 		}
@@ -281,39 +269,21 @@ func (w *httpUprobeWorker) reconcileTargets(ctx context.Context) {
 		start := time.Now()
 		closeLinks(target.links)
 		delete(w.attachedTargets, key)
+		if err := w.deleteDiscoveryCacheEntry(target.classificationKey); err != nil {
+			w.warn("http_uprobe_discovery_unexpected_error", "op", "discovery_cache_delete", "error", err)
+		}
 		if w.logger != nil {
-			w.logger.Debug("http_uprobe_target_closed", "owner", key.owner, "elapsed", time.Since(start))
+			w.logger.Debug("http_uprobe_target_closed", "root_cgroup_id", key.rootCgroupID, "elapsed", time.Since(start))
 		}
-	}
-	// Includes negative classifications and notifications abandoned at teardown.
-	if w.discoveryCache == nil {
-		return
-	}
-	var key bpfprog.BPFProgramHttpDiscoveryKey
-	var value uint8
-	var expired []bpfprog.BPFProgramHttpDiscoveryKey
-	it := w.discoveryCache.Iterate()
-	for it.Next(&key, &value) {
-		if _, live := owners[key.Owner]; !live {
-			expired = append(expired, key)
-		}
-	}
-	if it.Err() != nil {
-		return
-	}
-	for _, key := range expired {
-		_ = w.discoveryCache.Delete(key)
 	}
 }
 
-func (w *httpUprobeWorker) ownerActive(cgroupID, owner uint64) bool {
-	return owner != 0 && w.tracking != nil && w.tracking.httpOwner(cgroupID) == owner
-}
-
-func (w *httpUprobeWorker) logInfo(msg string, args ...any) {
-	if w.logger != nil {
-		w.logger.Info(msg, args...)
+func (w *httpUprobeWorker) rootActive(cgroupID, rootCgroupID uint64) bool {
+	if rootCgroupID == 0 || w.tracking == nil || w.tracking.httpRootCgroup(cgroupID) != rootCgroupID {
+		return false
 	}
+	live, err := w.tracking.httpRootActive(rootCgroupID)
+	return err == nil && live
 }
 
 func (w *httpUprobeWorker) warn(msg string, args ...any) {

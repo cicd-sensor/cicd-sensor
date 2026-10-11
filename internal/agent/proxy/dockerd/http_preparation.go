@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+	"time"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"github.com/cicd-sensor/cicd-sensor/internal/jobcontext"
@@ -45,16 +46,20 @@ func withHTTPPreparation(next *httputil.ReverseProxy, upstreamSocket, agentSocke
 	if logger == nil {
 		logger = slog.Default()
 	}
-	preparation := httpprepare.NewRemote(agentSocket, logger)
+	preparation := httpprepare.NewRemote(agentSocket)
 	prepare := func(ctx context.Context, id string, isExec bool) {
 		source := "docker-start"
 		if isExec {
 			source = "docker-exec"
 		}
-		// Preparation logs failures and bounds the entire inspect/scan/attach wait.
-		_ = preparation.PrepareResolved(ctx, func(ctx context.Context) (string, error) {
-			return resolveDockerTarget(ctx, upstreamSocket, id, isExec)
-		}, source)
+		ctx, cancel := context.WithTimeout(ctx, httpprepare.Budget)
+		defer cancel()
+		started := time.Now()
+		process, err := resolveDockerTarget(ctx, upstreamSocket, id, isExec)
+		if err == nil {
+			err = preparation.Prepare(ctx, process)
+		}
+		logger.DebugContext(ctx, "http_preparation_callback", "source", source, "elapsed", time.Since(started), "error", err)
 	}
 	previous := next.ModifyResponse
 	next.ModifyResponse = func(resp *http.Response) error {

@@ -5,21 +5,16 @@ package httpprepare
 import (
 	"os"
 	"time"
-
-	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker/kernelio"
 )
 
 const (
-	// MaxConcurrent bounds retained producers/connections, not parallel attach workers.
-	// This is a resource budget, not a measured optimal concurrency.
-	MaxConcurrent = 8
 	// Budget bounds caller waiting, including root acquisition through attachment.
 	Budget = 500 * time.Millisecond
-	// MaxFiles is the worker's per-request descriptor limit.
-	MaxFiles = kernelio.MaxHTTPPreparationFiles
+	// MaxFiles bounds target files opened by the worker for one process.
+	MaxFiles = 32
 )
 
-// CloseFiles releases files not transferred to the preparation API.
+// CloseFiles releases the inventory after the worker finishes preparation.
 func CloseFiles(files []*os.File) {
 	for _, f := range files {
 		if f != nil {

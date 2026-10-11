@@ -91,14 +91,14 @@ func TestLinuxOpenSSLUprobeDoubleAttachDuplicatesEvents(t *testing.T) {
 		}
 	}
 
-	single, err := ex.Uprobe("SSL_write", kernelIO.TestOnlyOpenSSLProgram(), &link.UprobeOptions{Cookie: kernelIO.TestOnlyHTTPOwner(cgroupID)})
+	single, err := ex.Uprobe("SSL_write", kernelIO.TestOnlyOpenSSLProgram(), &link.UprobeOptions{Cookie: kernelIO.TestOnlyHTTPRootCgroup(cgroupID)})
 	if err != nil {
 		t.Fatalf("first Uprobe(SSL_write): %v", err)
 	}
 	defer single.Close()
 	singleCount := countFor("/single-attach")
 
-	double, err := ex.Uprobe("SSL_write", kernelIO.TestOnlyOpenSSLProgram(), &link.UprobeOptions{Cookie: kernelIO.TestOnlyHTTPOwner(cgroupID)})
+	double, err := ex.Uprobe("SSL_write", kernelIO.TestOnlyOpenSSLProgram(), &link.UprobeOptions{Cookie: kernelIO.TestOnlyHTTPRootCgroup(cgroupID)})
 	if err != nil {
 		t.Fatalf("second Uprobe(SSL_write): %v", err)
 	}
@@ -225,17 +225,13 @@ func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArg
 	t.Cleanup(server.Close)
 	url := server.URL + path + "?token=secret"
 
-	// The first short-lived process can finish before asynchronous attach. Each
-	// later process maps the same file again and retries discovery; once attached,
-	// the file-scoped link covers subsequent processes without an artificial wait.
-	for range 4 {
-		if output, err := exec.Command(client, clientArgs(url)...).CombinedOutput(); err != nil {
+	// Keep generating mappings and requests until discovery attaches. Sending a
+	// fixed burst then only waiting can miss every call under worker load.
+	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
+		if output, err := exec.CommandContext(t.Context(), client, clientArgs(url)...).CombinedOutput(); err != nil {
 			t.Fatalf("HTTPS client %s: %v: %s", client, err, output)
 		}
-	}
-
-	waitForEngineInput(t, kernelTracker.inputCh, 20*time.Second, "openssl http_request for "+path,
-		func(in engineInput) bool {
+		if _, found := findEngineInput(kernelTracker.inputCh, 100*time.Millisecond, func(in engineInput) bool {
 			sample, ok := in.(httpRequestSample)
 			if !ok || sample.CgroupID != cgroupID || sample.Source != HTTPSourceOpenSSL {
 				return false
@@ -244,5 +240,9 @@ func testOpenSSLUprobeCapturesHTTPS(t *testing.T, client, path string, clientArg
 				t.Fatalf("path = %q, want %s (query must be stripped in-kernel)", sample.Path, path)
 			}
 			return true
-		})
+		}); found {
+			return
+		}
+	}
+	t.Fatalf("timed out waiting for openssl http_request for %s", path)
 }

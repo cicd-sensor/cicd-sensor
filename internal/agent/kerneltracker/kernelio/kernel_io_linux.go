@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 
 	bpfprog "github.com/cicd-sensor/cicd-sensor/internal/agent/bpf/generated"
 	"github.com/cilium/ebpf"
@@ -18,13 +17,10 @@ import (
 
 // LinuxKernelIO owns BPF program, map, and ring buffer I/O.
 type LinuxKernelIO struct {
-	trackingMu       sync.Mutex
-	trackingSequence atomic.Uint64
-	nextHTTPOwner    atomic.Uint64
-	logger           *slog.Logger
-	objs             bpfprog.BPFProgramObjects
-	links            []link.Link
-	reader           *ringbuf.Reader
+	logger *slog.Logger
+	objs   bpfprog.BPFProgramObjects
+	links  []link.Link
+	reader *ringbuf.Reader
 	// Serialize loop startup with teardown, including WaitGroup registration.
 	lifecycleMu     sync.Mutex
 	closed          bool
@@ -148,10 +144,7 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 	}
 	if kernelIO.httpUprobeWorker != nil {
 		kernelIO.httpUprobeWorker.tracking = kernelIO
-		kernelIO.httpUprobeWorker.control = &uprobeControl{
-			requests: kernelIO.objs.HttpUprobeControlRequests,
-			results:  kernelIO.objs.HttpUprobeControlResults,
-		}
+		kernelIO.httpUprobeWorker.mmapRequests = kernelIO.objs.HttpUprobeMmapRequests
 	}
 	for _, attach := range tracingPrograms {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})

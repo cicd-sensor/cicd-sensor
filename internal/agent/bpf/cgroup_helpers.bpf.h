@@ -72,38 +72,19 @@ static __always_inline __u64 parent_cgroup_id_from_cgroup(struct cgroup *cgrp)
     return parent_id;
 }
 
-static __always_inline __u64 http_tracking_owner(__u64 id)
+static __always_inline __u64 http_tracking_root(__u64 id)
 {
-    __u64 *owner = bpf_map_lookup_elem(&tracked_cgroups, &id);
-    return owner ? *owner : 0;
+    __u64 *root_cgroup_id = bpf_map_lookup_elem(&tracked_cgroups, &id);
+    return root_cgroup_id ? *root_cgroup_id : 0;
 }
 
+// The root itself must still be tracked: migration cannot extend its lifetime.
 // Cookies distinguish independent registrations for one shared image inode.
 // Linux 5.15 introduced bpf_get_attach_cookie for perf-event uprobes.
 // https://github.com/torvalds/linux/blob/v5.15/kernel/trace/bpf_trace.c
-static __always_inline bool http_uprobe_is_owner(void *ctx)
+static __always_inline bool http_uprobe_matches_root(void *ctx)
 {
-    __u64 owner = http_tracking_owner(current_cgroup_id());
-    return owner && owner == bpf_get_attach_cookie(ctx);
-}
-
-// Fixed-size array and 64-bit BPF atomics work on the 5.15 baseline.
-// Begin BEFORE reading the source owner: an in-flight inheritance must not
-// resurrect an owner after a reclaim snapshot has declared it absent.
-static __always_inline struct cgroup_tracking_stamp *tracking_change_begin(void)
-{
-    __u32 zero = 0;
-    struct cgroup_tracking_stamp *stamp = bpf_map_lookup_elem(&cgroup_tracking_changes, &zero);
-    if (stamp) {
-        __sync_fetch_and_add(&stamp->writers, 1);
-        __sync_fetch_and_add(&stamp->sequence, 1);
-    }
-    return stamp;
-}
-static __always_inline void tracking_change_end(struct cgroup_tracking_stamp *stamp)
-{
-    if (stamp) {
-        __sync_fetch_and_add(&stamp->sequence, 1);
-        __sync_fetch_and_sub(&stamp->writers, 1);
-    }
+    __u64 root_cgroup_id = http_tracking_root(current_cgroup_id());
+    return root_cgroup_id && http_tracking_root(root_cgroup_id) == root_cgroup_id &&
+           root_cgroup_id == bpf_get_attach_cookie(ctx);
 }
