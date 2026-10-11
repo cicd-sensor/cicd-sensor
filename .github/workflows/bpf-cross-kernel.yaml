@@ -267,8 +267,10 @@ jobs:
             apt-get update -q </dev/null | tee -a "\$log"
             apt-get install -y -q -o Dpkg::Options::=--force-confold curl dnsutils libnss-resolve python3 gcc libc6-dev </dev/null | tee -a "\$log"
             export TMPDIR=/dev/shm
+            cd /host/internal/agent/kerneltracker/kernelio
             /host/${{ env.KERNELIO_INTEGRATION_TEST_BIN }} -test.v -test.count=1 -test.timeout=15m </dev/null 2>&1 | tee -a "\$log"
             echo "suite completed: kernelio" | tee -a "\$log"
+            cd /host/internal/agent/kerneltracker
             /host/${{ env.KERNELTRACKER_INTEGRATION_TEST_BIN }} -test.v -test.count=1 -test.timeout=15m </dev/null 2>&1 | tee -a "\$log"
             echo "suite completed: kerneltracker" | tee -a "\$log"
 
