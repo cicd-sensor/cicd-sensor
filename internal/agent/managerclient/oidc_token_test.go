@@ -258,8 +258,8 @@ func TestCachedTokenSource_ForceRefreshFailureRetainsReuse(t *testing.T) {
 	if _, err := cached.Token(); err != nil {
 		t.Fatalf("initial Token: %v", err)
 	}
-	if err := cached.ForceRefresh(context.Background()); err != nil {
-		t.Fatalf("ForceRefresh should retain reuse cache: %v", err)
+	if err := cached.ForceRefresh(context.Background()); err == nil {
+		t.Fatal("ForceRefresh should fail when mint is unavailable")
 	}
 	tok, err := cached.Token()
 	if err != nil {

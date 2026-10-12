@@ -210,6 +210,34 @@ func TestRedactProcessSummaryForOutputKeepsProcessIdentity(t *testing.T) {
 	}
 }
 
+func TestRedactProcessSummaryForOutput_RedactsOIDCAndManagerSecrets(t *testing.T) {
+	t.Parallel()
+
+	managerToken := "sk_cs_" + strings.Repeat("c", 64)
+	got := RedactProcessSummaryForOutput(ProcessSummary{
+		PID:      42,
+		ExecPath: "/usr/bin/env",
+		Argv: []string{
+			"env",
+			"ACTIONS_ID_TOKEN_REQUEST_TOKEN=request-secret",
+			"ACTIONS_ID_TOKEN_REQUEST_URL=https://vstoken.actions.githubusercontent.com/token",
+		},
+		Ancestors: []AncestorProcess{{
+			ExecPath: "/bin/bash",
+			Argv:     []string{"bash", "-c", "Authorization: Bearer " + managerToken},
+		}},
+	})
+
+	for i, argv := range got.Argv[1:] {
+		if argv != "<redacted>" {
+			t.Fatalf("argv[%d] = %q, want redacted", i+1, argv)
+		}
+	}
+	if got.Ancestors[0].Argv[2] != "<redacted>" {
+		t.Fatalf("ancestor argv[2] = %q, want redacted", got.Ancestors[0].Argv[2])
+	}
+}
+
 func TestContainsTokenSubstring(t *testing.T) {
 	t.Parallel()
 

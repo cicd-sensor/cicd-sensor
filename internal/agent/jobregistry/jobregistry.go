@@ -67,6 +67,8 @@ type JobRegistry struct {
 	jobTTL time.Duration
 	// starting hides half-created jobs and serializes duplicate start requests.
 	starting map[jobcontext.JobIdentity]chan struct{}
+	// removeJobHook replaces KernelTracker.RemoveJob during finalize when set (tests only).
+	removeJobHook func(context.Context, jobcontext.JobIdentity) error
 }
 
 // New creates an empty job registry. Callers must follow with BindKernelTracker
@@ -86,6 +88,13 @@ func New(logger *slog.Logger) *JobRegistry {
 
 func (jr *JobRegistry) SetBaselineLoadForTesting(load BaselineLoader) {
 	jr.baselineLoad = load
+}
+
+// SetRemoveJobHookForTesting replaces KernelTracker.RemoveJob during finalize.
+func (jr *JobRegistry) SetRemoveJobHookForTesting(hook func(context.Context, jobcontext.JobIdentity) error) {
+	jr.mu.Lock()
+	defer jr.mu.Unlock()
+	jr.removeJobHook = hook
 }
 
 // SetJobTTL overrides the default maximum job lifetime applied to jobs

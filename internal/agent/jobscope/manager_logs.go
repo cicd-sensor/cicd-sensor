@@ -44,9 +44,17 @@ func (s *JobScopeState) EmitSummaryLog(ctx context.Context, in SummaryLogInputs,
 	if err != nil {
 		return err
 	}
-	err = s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
+	return s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
+}
+
+// CloseOIDCCredential cancels shared OIDC mint work. Finalize defers
+// closeOIDCForJob so this runs after both parallel paths — summary emit
+// and FinalizeStreamingLogs — complete (see finalize.go).
+func (s *JobScopeState) CloseOIDCCredential() {
+	if s == nil {
+		return
+	}
 	s.managerJobLogs.CloseOIDCCredential()
-	return err
 }
 
 // FlushManagerLogs sends buffered streaming logs now, keeping the Job

@@ -69,7 +69,8 @@ func (c Connection) ForceRefreshIDToken(ctx context.Context) error {
 	return c.Cached.ForceRefresh(ctx)
 }
 
-// CloseOIDCCredential stops shared OIDC mint work after the final Summary flush.
+// CloseOIDCCredential stops shared OIDC mint work after summary delivery and
+// streaming log finalize complete.
 func (c Connection) CloseOIDCCredential() {
 	if c.Cached != nil {
 		c.Cached.Close()

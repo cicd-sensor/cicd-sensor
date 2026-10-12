@@ -234,7 +234,8 @@ func (d *deadlineMintSource) TokenContext(ctx context.Context) (*oauth2.Token, e
 	return mintTokenContext(d.inner, mintCtx)
 }
 
-// Close cancels in-flight shared mint work. Call after the final Summary flush.
+// Close cancels in-flight shared mint work. Call after summary delivery and
+// streaming log finalize complete.
 func (c *CachedTokenSource) Close() {
 	if c == nil {
 		return
@@ -250,6 +251,16 @@ func (c *CachedTokenSource) Close() {
 	if cancel != nil {
 		cancel()
 	}
+}
+
+// ClosedForTesting reports whether Close has run.
+func (c *CachedTokenSource) ClosedForTesting() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closed
 }
 
 // ForceRefresh remints immediately and seeds the reuse cache with the fresh
@@ -332,10 +343,7 @@ func (c *CachedTokenSource) executeAcquire(force bool) (*oauth2.Token, error) {
 	defer cancel()
 	fresh, err := mintTokenContext(mint, mintCtx)
 	if err != nil {
-		// Force mint failed: keep serving a still-valid reuse cache entry.
-		if tok, reuseErr := reuse.Token(); reuseErr == nil {
-			return tok, nil
-		}
+		// Force mint failed: leave reuse cache unchanged; callers see the error.
 		return nil, err
 	}
 

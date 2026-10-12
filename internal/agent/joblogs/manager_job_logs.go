@@ -163,7 +163,8 @@ func (o *ManagerJobLogs) ForceRefreshIDToken(ctx context.Context) error {
 	return o.connection.ForceRefreshIDToken(ctx)
 }
 
-// CloseOIDCCredential cancels shared OIDC mint work after summary delivery.
+// CloseOIDCCredential cancels shared OIDC mint work after summary delivery
+// and streaming log finalize complete.
 func (o *ManagerJobLogs) CloseOIDCCredential() {
 	if o == nil {
 		return

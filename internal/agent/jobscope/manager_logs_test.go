@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -442,6 +443,63 @@ func TestJobScopeStateWriteRuntimeEventLog_AlwaysSanitizesDebugOutput(t *testing
 		t.Fatalf("input event argv mutated: got %q, want %q", got, want)
 	}
 	if got, want := event.Process.Ancestors[0].Argv[2], "Bearer ancestor-secret"; got != want {
+		t.Fatalf("input event ancestor argv mutated: got %q, want %q", got, want)
+	}
+}
+
+func TestJobScopeStateWriteRuntimeEventLog_RedactsOIDCSecretsInDebugOutput(t *testing.T) {
+	t.Parallel()
+
+	debugDir := t.TempDir()
+	scope := jobscope.NewProject()
+	scope.OutputSettings = &managerv1beta1.OutputSettings{RedactProcessArgs: proto.Bool(false)}
+	debugOutput, err := joblogs.NewDebugOutputForTesting(testJobScopeLogger, debugDir)
+	if err != nil {
+		t.Fatalf("NewDebugOutput: %v", err)
+	}
+	scope.SetDebugOutput(debugOutput)
+
+	managerToken := "sk_cs_" + strings.Repeat("d", 64)
+	event := jobevent.EventRecord{
+		ID:        "event-debug-oidc-redaction",
+		EventType: jobevent.ProcessExec,
+		Timestamp: testEventTime,
+		Process: jobevent.ProcessSummary{
+			PID:      100,
+			ExecPath: "/usr/bin/env",
+			Argv: []string{
+				"env",
+				"ACTIONS_ID_TOKEN_REQUEST_TOKEN=oidc-request-secret",
+				"ACTIONS_ID_TOKEN_REQUEST_URL=https://vstoken.actions.githubusercontent.com/token",
+			},
+			Ancestors: []jobevent.AncestorProcess{{
+				ExecPath: "/bin/bash",
+				Argv:     []string{"bash", "-c", "Authorization: Bearer " + managerToken},
+			}},
+		},
+	}
+	scope.WriteRuntimeEventLog(t.Context(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	if err := scope.CloseDebugOutput(t.Context()); err != nil {
+		t.Fatalf("close debug output: %v", err)
+	}
+
+	entry := readDebugRuntimeEventEntry(t, debugDir)
+	proc := entry.GetEvent().GetProcess()
+	for i, argv := range proc.GetArgv()[1:] {
+		if argv != "<redacted>" {
+			t.Fatalf("debug argv[%d]: got %q, want redacted", i+1, argv)
+		}
+	}
+	if got := proc.GetAncestors()[0].GetArgv()[2]; got != "<redacted>" {
+		t.Fatalf("debug ancestor argv: got %q, want redacted", got)
+	}
+	if got, want := event.Process.Argv[1], "ACTIONS_ID_TOKEN_REQUEST_TOKEN=oidc-request-secret"; got != want {
+		t.Fatalf("input event argv mutated: got %q, want %q", got, want)
+	}
+	if got, want := event.Process.Argv[2], "ACTIONS_ID_TOKEN_REQUEST_URL=https://vstoken.actions.githubusercontent.com/token"; got != want {
+		t.Fatalf("input event argv mutated: got %q, want %q", got, want)
+	}
+	if got, want := event.Process.Ancestors[0].Argv[2], "Authorization: Bearer "+managerToken; got != want {
 		t.Fatalf("input event ancestor argv mutated: got %q, want %q", got, want)
 	}
 }
