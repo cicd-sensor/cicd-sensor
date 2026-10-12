@@ -166,6 +166,12 @@ func (engine *KernelTracker) runEngineEffects(ctx context.Context, effects []eng
 				engine.logEventDeliverySummary(ctx, value.JobID)
 				channel := engine.jobTracking.removeJob(value.JobID)
 				if channel != nil {
+					// The Job worker still has to drain what is queued here;
+					// logging it shows how much work finalize waits on (#200).
+					engine.logger.InfoContext(ctx, "job_event_channel_closed",
+						"job_id", value.JobID,
+						"queued", len(channel),
+					)
 					close(channel)
 				}
 			}

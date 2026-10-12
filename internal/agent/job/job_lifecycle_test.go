@@ -72,6 +72,14 @@ func TestJob_NilEventChannelIsImmediatelyDone(t *testing.T) {
 	}
 }
 
+func TestJob_QueuedEventsIsZeroWithoutEventChannel(t *testing.T) {
+	j := job.NewJob(externalTestLogger, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil, 0)
+
+	if got := j.QueuedEvents(); got != 0 {
+		t.Fatalf("QueuedEvents: got %d, want 0 for a nil channel", got)
+	}
+}
+
 func TestJob_NilLoggerUsesDefaultLogger(t *testing.T) {
 	j := job.NewJob(nil, jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123"), jobcontext.JobMetadata{}, "machine", nil, 0)
 
