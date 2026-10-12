@@ -19,7 +19,7 @@
 // interpreter calls. The getter:
 //   - Type-asserts to the concrete struct (no reflect)
 //   - Returns a pre-built ref.Val cache when one was populated by
-//     NewCELProcess / buildAncestorRefList (see native_val.go)
+//     NewCELProcess / buildLineageRefList (see native_val.go)
 //   - Falls back to building the ref.Val on the fly so test code can
 //     write `CELProcess{...}` literals without touching the cache
 //

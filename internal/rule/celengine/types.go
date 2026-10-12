@@ -3,7 +3,7 @@
 //
 // Cache field invariant. The unexported *Val fields on CELProcess /
 // CELAncestor mirror their exported counterparts. They are written
-// exactly once per event by NewCELProcess / buildAncestorRefList
+// exactly once per event by NewCELProcess / buildLineageRefList
 // (native_val.go) and read by the field-spec getters (native_field_spec.go).
 // Test literals can leave them nil; the getters detect nil and build on
 // the fly. No external caller should write these directly — go through
@@ -36,7 +36,7 @@ type CELProcess struct {
 
 // CELAncestor is one entry of process.ancestors, ordered newest parent
 // first (immediate parent at index 0). Same caching pattern as
-// CELProcess; populated by buildAncestorRefList in native_val.go.
+// CELProcess; populated by buildLineageRefList in native_val.go.
 type CELAncestor struct {
 	ExecPath    string
 	Argv        []string
