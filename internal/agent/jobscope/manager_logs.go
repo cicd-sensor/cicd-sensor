@@ -130,6 +130,13 @@ func (s *JobScopeState) WriteRuntimeEventLog(ctx context.Context, identity jobco
 	if s == nil {
 		return
 	}
+	// Marshal and redaction are the dominant per-event cost once the
+	// event reaches rule evaluation; with no destination the payload would
+	// be built and dropped by WriteRuntimeEventPayload (#200). Observations
+	// are recorded by the caller, so summaries and detections are unaffected.
+	if !s.managerJobLogs.HasRuntimeEventLog() && s.debugOutput == nil {
+		return
+	}
 
 	redactProcessArgs := s.processArgsRedactionEnabled()
 	payload, err := joblogs.MarshalRuntimeEventLogEntry(joblogs.RuntimeEventLogInput{

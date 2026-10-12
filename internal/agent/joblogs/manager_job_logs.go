@@ -159,6 +159,11 @@ func (o *ManagerJobLogs) HasSummaryLog() bool {
 	return o != nil && o.summaryLog != nil
 }
 
+// HasRuntimeEventLog reports whether a runtime_event destination is configured.
+func (o *ManagerJobLogs) HasRuntimeEventLog() bool {
+	return o != nil && o.runtimeEvent != nil
+}
+
 // DroppedLogRecords returns the number of streaming records dropped because
 // the manager output backlog was full. Close-after-emit errors are not drops.
 func (o *ManagerJobLogs) DroppedLogRecords(logType managerv1beta1.LogType) uint64 {
