@@ -222,6 +222,13 @@ func (j *Job) Done() <-chan struct{} {
 	return j.doneCh
 }
 
+// QueuedEvents reports how many delivered events still wait for the event
+// worker. It is a snapshot for drain progress logs, not a synchronization
+// point; the event being evaluated right now is not counted.
+func (j *Job) QueuedEvents() int {
+	return len(j.eventCh)
+}
+
 // IsExpired returns true if the job has exceeded its TTL.
 func (j *Job) IsExpired() bool {
 	j.mu.Lock()

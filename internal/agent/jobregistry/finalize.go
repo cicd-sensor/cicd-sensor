@@ -163,7 +163,7 @@ func (jr *JobRegistry) finalizeTakenJobSync(ctx context.Context, job *job.Job, r
 			return fmt.Errorf("remove bpf job: %w", err)
 		}
 	}
-	<-job.Done()
+	jr.waitForDrain(ctx, job)
 	// The summary is sent in parallel with the streaming flush so a kill
 	// timer landing mid-drain cannot starve it behind the backlog (#143).
 	// Safe: scope state is quiescent after the drain above and each send
@@ -207,6 +207,39 @@ func (jr *JobRegistry) finalizeTakenJobSync(ctx context.Context, job *job.Job, r
 	wg.Wait()
 	jr.logger.InfoContext(ctx, "job_finalized", "job_identity", job.Identity(), "reason", string(reason))
 	return summaryErr
+}
+
+// drainProgressInterval spaces the progress logs of a slow drain. Five
+// seconds keeps a 20-30s shutdown window readable without flooding journal.
+const drainProgressInterval = 5 * time.Second
+
+// waitForDrain blocks until the Job's event worker has consumed every
+// delivered event. The wait is unbounded on purpose (queued events are
+// evidence); the logs make a long drain visible instead of looking like
+// a hang (#200). Completion is Done(), not an empty queue: the worker may
+// still be inside the last event.
+func (jr *JobRegistry) waitForDrain(ctx context.Context, job *job.Job) {
+	queuedAtStart := job.QueuedEvents()
+	started := time.Now()
+	ticker := time.NewTicker(drainProgressInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-job.Done():
+			jr.logger.InfoContext(ctx, "job_drain_completed",
+				"job_identity", job.Identity(),
+				"queued_at_start", queuedAtStart,
+				"duration_ms", time.Since(started).Milliseconds(),
+			)
+			return
+		case <-ticker.C:
+			jr.logger.InfoContext(ctx, "job_drain_in_progress",
+				"job_identity", job.Identity(),
+				"queued", job.QueuedEvents(),
+				"elapsed_ms", time.Since(started).Milliseconds(),
+			)
+		}
+	}
 }
 
 func (jr *JobRegistry) takeJob(identity jobcontext.JobIdentity) (*job.Job, bool) {

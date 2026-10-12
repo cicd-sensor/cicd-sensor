@@ -421,6 +421,37 @@ func TestRunEngineEffects_RemoveJobLogsDeliverySummary(t *testing.T) {
 	}
 }
 
+func TestRunEngineEffects_RemoveJobLogsQueuedEventsBeforeClose(t *testing.T) {
+	t.Parallel()
+
+	jobID := jobcontext.GitLabJobIdentity("gitlab.com", "group/project", "123")
+	state := newJobTrackingState()
+	channel := state.registerJob(jobID, 4)
+	channel <- jobevent.EventRecord{EventType: jobevent.FileOpen}
+	channel <- jobevent.EventRecord{EventType: jobevent.ProcessExec}
+	var logs bytes.Buffer
+	engine := &KernelTracker{
+		logger:      slog.New(slog.NewJSONHandler(&logs, nil)),
+		kernelIO:    noopKernelIO{},
+		jobTracking: state,
+	}
+
+	engine.runEngineEffects(context.Background(), []engineEffect{removeJobFromKernel{JobID: jobID}})
+
+	got := logs.String()
+	if !strings.Contains(got, `"msg":"job_event_channel_closed"`) || !strings.Contains(got, `"queued":2`) {
+		t.Fatalf("queued count was not logged before close: %s", got)
+	}
+	if _, open := <-channel; !open {
+		// Two queued records are still readable; the channel closes after them.
+		t.Fatal("queued events must stay readable after close")
+	}
+	<-channel
+	if _, open := <-channel; open {
+		t.Fatal("channel should be closed after the queued events")
+	}
+}
+
 func TestRunEngineEffects_NotifyJobEnded(t *testing.T) {
 	t.Parallel()
 
