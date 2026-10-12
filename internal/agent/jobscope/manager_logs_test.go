@@ -335,6 +335,36 @@ func TestJobScopeStateWriteRuntimeEventLog_EmitsEvent(t *testing.T) {
 	}
 }
 
+// Without a manager runtime_event sink and without debug output the payload
+// would only be built to be discarded, so the write must do no work at all.
+// A sink-backed scope on the same event is the contrast that proves the
+// allocation count is measuring the marshal.
+func TestJobScopeStateWriteRuntimeEventLog_SkipsMarshalWithoutDestination(t *testing.T) {
+	event := testJobScopeProcessEvent("event-no-destination")
+
+	withoutDestination := jobscope.NewProject()
+	if got := testing.AllocsPerRun(20, func() {
+		withoutDestination.WriteRuntimeEventLog(context.Background(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	}); got != 0 {
+		t.Fatalf("allocations without a destination: got %.0f, want 0", got)
+	}
+
+	recorder := &recordingJobScopeBatches{}
+	withSink := jobscope.NewProject()
+	withSink.ManagerJobLogsForTesting().AttachRuntimeEventRecorderForTesting(testJobIdentity, withSink.Type, recorder.sendBatch)
+	if got := testing.AllocsPerRun(20, func() {
+		withSink.WriteRuntimeEventLog(context.Background(), testJobIdentity, testJobMetadata, "machine", event, testJobScopeLogger)
+	}); got == 0 {
+		t.Fatal("a sink-backed scope must still marshal the event")
+	}
+	if err := withSink.FinalizeStreamingLogs(context.Background()); err != nil {
+		t.Fatalf("finalize logs: %v", err)
+	}
+	if entries := recorder.runtimeEventEntries(t); len(entries) == 0 {
+		t.Fatal("sink-backed scope delivered no runtime events")
+	}
+}
+
 func TestJobScopeStateWriteRuntimeEventLog_IsolatesProcessArgsPolicyByScope(t *testing.T) {
 	t.Parallel()
 

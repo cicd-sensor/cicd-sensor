@@ -119,6 +119,12 @@ func TestManagerJobLogsNoOpWhenLogTypesAreNotConfigured(t *testing.T) {
 	if conn.HasSummaryLog() {
 		t.Fatal("summary log reported configured on zero ManagerJobLogs")
 	}
+	if conn.HasRuntimeEventLog() {
+		t.Fatal("runtime event log reported configured on zero ManagerJobLogs")
+	}
+	if (*ManagerJobLogs)(nil).HasRuntimeEventLog() {
+		t.Fatal("runtime event log reported configured on nil ManagerJobLogs")
+	}
 	if got := conn.DroppedLogRecords(managerv1beta1.LogType_LOG_TYPE_DETECTION); got != 0 {
 		t.Fatalf("dropped records on zero ManagerJobLogs: got %d, want 0", got)
 	}
@@ -172,6 +178,9 @@ func TestManagerJobLogsEmitAndCloseSummaryLog(t *testing.T) {
 
 	if !conn.HasSummaryLog() {
 		t.Fatal("expected summary log to be configured")
+	}
+	if conn.HasRuntimeEventLog() {
+		t.Fatal("runtime event log must not be reported when only summary is enabled")
 	}
 	if err := conn.EmitAndCloseSummaryLog(context.Background(), []byte(`{"final":true}`)); err != nil {
 		t.Fatalf("emit summary log: %v", err)
