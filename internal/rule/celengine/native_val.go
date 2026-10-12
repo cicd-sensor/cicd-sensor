@@ -53,7 +53,7 @@ func (a ancestorVal) Value() any     { return a.v }
 // Equal compares the logical fields and ignores the
 // unexported ref.Val cache fields. Without this, a CELAncestor built from
 // a test literal (caches nil) would not compare equal to the same value
-// returned through buildAncestorRefList (caches populated), even though
+// returned through buildLineageRefList (caches populated), even though
 // the rule-visible state is identical. reflect.DeepEqual on CELAncestor
 // would also walk the cache fields, so we compare field-by-field instead.
 //
@@ -156,7 +156,7 @@ func NewCELProcess(execPath string, argv []string, ancestors []CELAncestor) CELP
 		ancestorDescendants: ancestorDescendants,
 		execPathVal:         types.String(execPath),
 		argvVal:             buildStringRefList(argv),
-		ancestorsVal:        buildAncestorRefList(ancestors),
+		ancestorsVal:        buildLineageRefList(ancestorDescendants),
 	}
 }
 
@@ -196,7 +196,7 @@ func withDescendants(ancestors []CELAncestor) ([]CELAncestor, []CELAncestor) {
 // newCELAncestorVal / newCELRuleHitVal: explicit boxing helpers. The
 // composite-literal form would also satisfy ref.Val via Go's implicit
 // interface conversion, but the named helper marks the type→ref.Val
-// transition at call sites (correlation_activation.go, buildAncestorRefList,
+// transition at call sites (correlation_activation.go, buildLineageRefList,
 // test code).
 func newCELAncestorVal(a CELAncestor) ref.Val { return ancestorVal{v: a} }
 func newCELRuleHitVal(h CELRuleHit) ref.Val   { return ruleHitVal{v: h} }
@@ -222,18 +222,38 @@ func buildStringRefList(xs []string) ref.Val {
 	return types.NewRefValList(types.DefaultTypeAdapter, out)
 }
 
-// buildAncestorRefList wraps each ancestor in ancestorVal with its
-// hot-field caches pre-populated. Descendants are already wired by
-// withDescendants in rule-visible parent -> child order. Nested descendants
-// are safe to pre-box because each step moves closer to the current process,
-// so the descendant path gets shorter and cannot cycle.
-//
-// The loop body writes cache fields directly instead of going through a
-// helper that would take &a; that's deliberate. A helper accepting
-// *CELAncestor would force the loop variable to escape to the heap (one
-// alloc per ancestor per event) because Go's escape analysis assumes the
-// helper might retain the pointer.
-func buildAncestorRefList(xs []CELAncestor) ref.Val {
+// buildLineageRefList boxes one root-to-current lineage once and returns
+// process.ancestors (newest-first). Every descendantsVal is a suffix of the
+// same boxed slice, built current -> root so each suffix exists before the
+// node that points at it. Re-boxing the sub-tree per level instead was
+// O(2^depth) per event and starved the Job event worker (#200). Sharing is
+// safe because boxed values are never written after this returns; the
+// three-index slice only keeps a later append out of a sibling's suffix.
+// Cache fields are set on the loop copy so ancestors do not escape to heap.
+func buildLineageRefList(rootToCurrent []CELAncestor) ref.Val {
+	n := len(rootToCurrent)
+	if n == 0 {
+		return types.NewRefValList(types.DefaultTypeAdapter, nil)
+	}
+	boxed := make([]ref.Val, n)
+	newestFirst := make([]ref.Val, n)
+	for k := n - 1; k >= 0; k-- {
+		a := rootToCurrent[k]
+		a.execPathVal = types.String(a.ExecPath)
+		a.argvVal = buildStringRefList(a.Argv)
+		a.descendantsVal = types.NewRefValList(types.DefaultTypeAdapter, boxed[k+1:n:n])
+		v := newCELAncestorVal(a)
+		boxed[k] = v
+		newestFirst[n-1-k] = v
+	}
+	return types.NewRefValList(types.DefaultTypeAdapter, newestFirst)
+}
+
+// buildShallowAncestorRefList is the fallback for values that did not go
+// through NewCELProcess (test literals). It boxes one level in the order
+// given and leaves descendantsVal nil; keep it non-recursive so the
+// O(2^depth) path cannot come back through the getters.
+func buildShallowAncestorRefList(xs []CELAncestor) ref.Val {
 	if len(xs) == 0 {
 		return types.NewRefValList(types.DefaultTypeAdapter, nil)
 	}
@@ -241,7 +261,6 @@ func buildAncestorRefList(xs []CELAncestor) ref.Val {
 	for i, a := range xs {
 		a.execPathVal = types.String(a.ExecPath)
 		a.argvVal = buildStringRefList(a.Argv)
-		a.descendantsVal = buildAncestorRefList(a.Descendants)
 		out[i] = newCELAncestorVal(a)
 	}
 	return types.NewRefValList(types.DefaultTypeAdapter, out)

@@ -21,7 +21,10 @@ var benchEvalIdentity = jobcontext.GitHubJobIdentity(
 	"github.com", "acme/example", "123", "build", "1", "runner-1",
 )
 
-func BenchmarkEvaluateFileOpen(b *testing.B)          { runEvalBench(b, fileOpenBenchEvent()) }
+func BenchmarkEvaluateFileOpen(b *testing.B) { runEvalBench(b, fileOpenBenchEvent()) }
+func BenchmarkEvaluateFileOpenDeepLineage(b *testing.B) {
+	runEvalBench(b, fileOpenDeepLineageBenchEvent())
+}
 func BenchmarkEvaluateProcessExec(b *testing.B)       { runEvalBench(b, processExecBenchEvent()) }
 func BenchmarkEvaluateDomain(b *testing.B)            { runEvalBench(b, domainBenchEvent()) }
 func BenchmarkEvaluateUnixSocketConnect(b *testing.B) { runEvalBench(b, unixSocketConnectBenchEvent()) }
@@ -103,6 +106,35 @@ func fileOpenBenchEvent() jobevent.EventRecord {
 		},
 		Tags: map[string]string{},
 	}
+}
+
+// fileOpenDeepLineageBenchEvent mirrors the p90 shape of a GitHub-hosted
+// build job (nginx-build, #200): 11 ancestors and ~180 argv strings in
+// total. The shallow fileOpenBenchEvent hides any cost that grows with
+// lineage depth, which is where the event worker was starving.
+func fileOpenDeepLineageBenchEvent() jobevent.EventRecord {
+	event := fileOpenBenchEvent()
+	event.Process.Argv = []string{
+		"cc1", "-quiet", "-I", ".", "-I", "include", "-I", "apps/include", "-I", "providers/common/include",
+		"-D", "OPENSSL_BUILDING_OPENSSL", "-D", "NDEBUG", "-D", "AES_ASM", "-D", "ECP_NISTZ256_ASM",
+	}
+	chain := []string{
+		"/usr/bin/gcc", "/bin/sh", "/usr/bin/make", "/bin/sh", "/usr/bin/make", "/bin/bash",
+		"/home/runner/work/nginx-build/nginx-build", "/bin/bash",
+		"/home/runner/actions-runner/cached/2.337.0/bin/Runner.Worker",
+		"/home/runner/actions-runner/cached/2.337.0/bin/Runner.Listener", "/usr/bin/bash",
+	}
+	event.Process.Ancestors = make([]jobevent.AncestorProcess, len(chain))
+	for i, execPath := range chain {
+		argv := make([]string, 0, 15)
+		argv = append(argv, execPath)
+		for j := 1; j < 15; j++ {
+			argv = append(argv, "-D")
+			argv = append(argv, "OPENSSL_SETTING_"+string(rune('A'+j)))
+		}
+		event.Process.Ancestors[i] = jobevent.AncestorProcess{ExecPath: execPath, Argv: argv[:15]}
+	}
+	return event
 }
 
 func processExecBenchEvent() jobevent.EventRecord {

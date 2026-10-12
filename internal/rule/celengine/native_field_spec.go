@@ -29,7 +29,8 @@ import (
 //     dominates pprof at any non-trivial rule count.
 //
 // get returns the cached ref.Val when populated by NewCELProcess /
-// buildAncestorRefList, else builds on the fly. The cache lookup is the
+// buildLineageRefList, else builds on the fly (shallow, one level per
+// access; see buildShallowAncestorRefList). The cache lookup is the
 // hot path; the fall-through exists so test code can write struct
 // literals like `CELProcess{ExecPath: "..."}` without manually populating
 // caches. Cache population is open-coded in native_val.go (not routed
@@ -69,7 +70,7 @@ var processFieldSpecs = []fieldSpec[*CELProcess]{
 			if p.ancestorsVal != nil {
 				return p.ancestorsVal
 			}
-			return buildAncestorRefList(p.Ancestors)
+			return buildShallowAncestorRefList(p.Ancestors)
 		},
 	},
 }
@@ -102,7 +103,7 @@ var ancestorFieldSpecs = []fieldSpec[CELAncestor]{
 			if a.descendantsVal != nil {
 				return a.descendantsVal
 			}
-			return buildAncestorRefList(a.Descendants)
+			return buildShallowAncestorRefList(a.Descendants)
 		},
 	},
 }

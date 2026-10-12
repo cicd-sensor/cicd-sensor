@@ -173,7 +173,7 @@ func TestCelStructValValueReturnsUnderlying(t *testing.T) {
 // ancestorVal.Equal must compare only the rule-visible fields (ExecPath,
 // Argv) and ignore the unexported ref.Val caches. Two ancestors with the
 // same logical content — one constructed as a test literal and one
-// produced through buildAncestorRefList (with caches populated) — should
+// produced through buildLineageRefList (with caches populated) — should
 // be equal.
 func TestAncestorValEqualIgnoresCacheFields(t *testing.T) {
 	t.Parallel()
@@ -182,7 +182,7 @@ func TestAncestorValEqualIgnoresCacheFields(t *testing.T) {
 		ExecPath: "/bin/bash",
 		Argv:     []string{"bash", "-c", "echo"},
 	})
-	withCaches := buildAncestorRefList([]CELAncestor{{
+	withCaches := buildLineageRefList([]CELAncestor{{
 		ExecPath: "/bin/bash",
 		Argv:     []string{"bash", "-c", "echo"},
 	}}).(traits.Lister).Get(types.Int(0))
