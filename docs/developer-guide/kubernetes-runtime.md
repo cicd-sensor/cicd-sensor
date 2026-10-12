@@ -190,7 +190,7 @@ cicd-sensor uses a small container customization hook wrapper:
 
 1. The runner calls the cicd-sensor wrapper through `ACTIONS_RUNNER_CONTAINER_HOOKS`.
 2. The wrapper reads GitHub identity from the hook process environment.
-3. The wrapper refuses to run if `ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE` is already set, then writes a temporary hook template that merges the example's `OPERATOR_POD_TEMPLATE` under cicd-sensor annotations and the runner Pod's `nodeName`.
+3. The wrapper refuses to run if `ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE` is already set, then writes a temporary hook template from `operatorPodTemplate()` with cicd-sensor annotations and the runner Pod's `nodeName`.
 4. The wrapper delegates to the official ARC Kubernetes hook at `/home/runner/k8s/index.js`.
 5. NRI reads the injected annotations during `CreateContainer` and stages the cgroup.
 
@@ -206,13 +206,11 @@ It supplies identity before Pod creation; NRI still supplies the runtime cgroup 
 Using the hook alone would require post-create Kubernetes API lookup or exposing a staging socket to the runner, and would no longer match the existing cgroup-mkdir staging model.
 
 The example wrapper fails at startup if `ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE`
-is already set, instead of silently replacing it. Put security context, labels,
-annotations, `terminationGracePeriodSeconds`, and other PodSpec overrides in the
-wrapper's `OPERATOR_POD_TEMPLATE` section (a plain JS object). The wrapper merges
-those overrides under cicd-sensor's identity/metadata annotations and
-`spec.nodeName`, which always win. Pod-level `runAsUser` / `fsGroup` apply to
-every container in the workflow Pod, including service containers and steps that
-expect root, so adjust or remove that hardening when workloads need root.
+is already set, instead of silently replacing it. Put labels, annotations,
+job-container options (via the hook's `$job` container name), `terminationGracePeriodSeconds`,
+and other PodSpec overrides in `operatorPodTemplate()`, which returns a fresh object
+each call. `buildTemplate()` adds cicd-sensor identity/metadata annotations and
+optional `spec.nodeName` before writing JSON the official hook accepts.
 
 ARC Kubernetes mode keeps workflow-created Pods on the same node as the runner Pod.
 The wrapper enforces this by setting the workflow Pod's `nodeName` to the runner Pod's node.

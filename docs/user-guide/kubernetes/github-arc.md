@@ -34,7 +34,7 @@ The example files use `:latest` only as a placeholder.
 - The GitHub Kubernetes runner socket mounted into ARC runner containers is the only cicd-sensor socket exception in this guide.
 - The ARC runner namespace must allow the hostPath volume used for the GitHub Kubernetes runner socket.
 - dind mode runs a privileged Docker daemon sidecar and should be treated as a higher-risk compatibility mode.
-- Kubernetes mode uses `ACTIONS_RUNNER_CONTAINER_HOOKS`. The example wrapper fails if `ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE` is already set; put Pod overrides (labels, annotations, `securityContext`, and similar) in the wrapper's `OPERATOR_POD_TEMPLATE` section instead.
+- Kubernetes mode uses `ACTIONS_RUNNER_CONTAINER_HOOKS`. The example wrapper fails if `ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE` is already set; put Pod overrides (labels, annotations, job-container `securityContext` via `$job`, and similar) in the wrapper's `operatorPodTemplate()` function instead.
 
 ## Shared setup
 
@@ -189,8 +189,8 @@ If your custom runner image uses a different runner GID, adjust `fsGroup` to mat
 
 Do not set `ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE` on the runner when using this example.
 The wrapper fails loudly if that variable is already set.
-Edit the `OPERATOR_POD_TEMPLATE` section in `cicd-sensor-container-hook-wrapper.yaml` for workflow Pod labels, annotations, `securityContext`, or `terminationGracePeriodSeconds`.
-Pod-level `runAsUser` applies to service containers and to steps that expect root, so adjust that hardening when needed.
+Edit `operatorPodTemplate()` in `cicd-sensor-container-hook-wrapper.yaml` for workflow Pod labels, annotations, job-container `securityContext` (the `$job` entry), or `terminationGracePeriodSeconds`.
+Default `runAsUser: 1001` on `$job` matches the official runner image and only affects the job container; remove it when job steps need root.
 
 Apply and upgrade:
 

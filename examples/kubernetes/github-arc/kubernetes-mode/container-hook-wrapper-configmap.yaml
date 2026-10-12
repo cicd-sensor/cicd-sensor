@@ -17,40 +17,46 @@ data:
     const DEFAULT_K8S_HOOK = "/home/runner/k8s/index.js";
 
     // ---------------------------------------------------------------------------
-    // OPERATOR SECTION — edit this object for your environment.
+    // OPERATOR SECTION — edit operatorPodTemplate() below for your environment.
     //
     // The official ARC hook accepts a single template file. cicd-sensor must
     // generate that file per job (identity annotations + nodeName), so do not
-    // set ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE yourself. Put Pod overrides
-    // here instead; the wrapper merges them under cicd-sensor's own annotations
-    // and spec.nodeName (cicd-sensor values always win for those fields).
+    // set ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE yourself. Put Pod overrides in
+    // operatorPodTemplate() instead; buildTemplate() adds cicd-sensor annotations
+    // and spec.nodeName on top of that object each time.
     //
-    // Caveat: pod-level runAsUser / fsGroup apply to EVERY container in the
-    // workflow Pod, including service containers and steps that expect root.
-    // Adjust or remove securityContext if your jobs need root inside containers.
+    // Caveat: runAsUser on the "$job" container applies only to the job container.
+    // Steps that need root fail with a clear "Permission denied"; remove that
+    // securityContext line when needed. Service containers are unaffected.
     // Non-root is fine for cicd-sensor itself: the agent reads /proc and cgroups
     // from the node side; nothing of cicd-sensor runs inside the workflow Pod.
     // ---------------------------------------------------------------------------
-    const OPERATOR_POD_TEMPLATE = {
-      metadata: {
-        labels: {
-          // "operator.example.com/preserve": "true",
+    function operatorPodTemplate() {
+      return {
+        metadata: {
+          labels: {
+            // "operator.example.com/preserve": "true",
+          },
+          annotations: {
+            // "operator.example.com/note": "keep-me",
+          },
         },
-        annotations: {
-          // "operator.example.com/note": "keep-me",
+        spec: {
+          containers: [
+            {
+              name: "$job",
+              securityContext: {
+                // Official runner image uses UID 1001. Match that unless your
+                // custom runner image or job steps need root.
+                runAsUser: 1001,
+              },
+            },
+          ],
+          // Optional: shorten graceful shutdown for workflow Pods.
+          // terminationGracePeriodSeconds: 30,
         },
-      },
-      spec: {
-        securityContext: {
-          // Official runner image uses UID/GID 1001. Match that unless your
-          // custom runner image or workloads need different values.
-          runAsUser: 1001,
-          fsGroup: 1001,
-        },
-        // Optional: shorten graceful shutdown for workflow Pods.
-        // terminationGracePeriodSeconds: 30,
-      },
-    };
+      };
+    }
 
     function providerHost() {
       const raw = process.env.GITHUB_SERVER_URL || "https://github.com";
@@ -132,113 +138,23 @@ data:
       );
     }
 
-    function isPlainObject(value) {
-      return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-    }
-
-    function deepMerge(base, overlay) {
-      if (!isPlainObject(base)) {
-        return overlay;
-      }
-      if (!isPlainObject(overlay)) {
-        return overlay;
-      }
-      const out = { ...base };
-      for (const [key, value] of Object.entries(overlay)) {
-        if (isPlainObject(value) && isPlainObject(out[key])) {
-          out[key] = deepMerge(out[key], value);
-        } else {
-          out[key] = value;
-        }
-      }
-      return out;
-    }
-
-    function yamlString(value) {
-      return JSON.stringify(String(value));
-    }
-
-    function yamlLines(value, indent) {
-      const pad = "  ".repeat(indent);
-      if (value === null || value === undefined) {
-        return [`${pad}null`];
-      }
-      if (typeof value === "boolean" || typeof value === "number") {
-        return [`${pad}${value}`];
-      }
-      if (typeof value === "string") {
-        return [`${pad}${yamlString(value)}`];
-      }
-      if (Array.isArray(value)) {
-        if (value.length === 0) {
-          return [`${pad}[]`];
-        }
-        const lines = [];
-        for (const item of value) {
-          if (isPlainObject(item) || Array.isArray(item)) {
-            const nested = yamlLines(item, indent + 1);
-            lines.push(`${pad}-`);
-            lines.push(...nested);
-          } else {
-            lines.push(`${pad}- ${yamlLines(item, 0)[0]}`);
-          }
-        }
-        return lines;
-      }
-      if (isPlainObject(value)) {
-        const keys = Object.keys(value);
-        if (keys.length === 0) {
-          return [`${pad}{}`];
-        }
-        const lines = [];
-        for (const key of keys) {
-          const child = value[key];
-          if (isPlainObject(child) || Array.isArray(child)) {
-            const nested = yamlLines(child, indent + 1);
-            if (nested.length === 1 && (nested[0].trim() === "{}" || nested[0].trim() === "[]")) {
-              lines.push(`${pad}${key}: ${nested[0].trim()}`);
-            } else {
-              lines.push(`${pad}${key}:`);
-              lines.push(...nested);
-            }
-          } else if (child === null || child === undefined) {
-            lines.push(`${pad}${key}: null`);
-          } else if (typeof child === "boolean" || typeof child === "number") {
-            lines.push(`${pad}${key}: ${child}`);
-          } else {
-            lines.push(`${pad}${key}: ${yamlString(child)}`);
-          }
-        }
-        return lines;
-      }
-      return [`${pad}${yamlString(value)}`];
-    }
-
-    function buildMergedTemplate(identity, metadata, nodeName) {
-      // Operator overrides are the base; cicd-sensor annotations and nodeName
-      // always win so identity injection and node pinning cannot be dropped.
-      const merged = deepMerge({}, OPERATOR_POD_TEMPLATE);
-      merged.metadata = isPlainObject(merged.metadata) ? merged.metadata : {};
-      merged.metadata.annotations = isPlainObject(merged.metadata.annotations)
-        ? merged.metadata.annotations
-        : {};
-      merged.metadata.annotations[IDENTITY_ANNOTATION] = JSON.stringify(identity);
-      merged.metadata.annotations[METADATA_ANNOTATION] = JSON.stringify(metadata);
-      merged.spec = isPlainObject(merged.spec) ? merged.spec : {};
+    function buildTemplate(identity, metadata, nodeName) {
+      const t = operatorPodTemplate();
+      t.metadata ??= {};
+      t.metadata.annotations ??= {};
+      t.metadata.annotations[IDENTITY_ANNOTATION] = JSON.stringify(identity);
+      t.metadata.annotations[METADATA_ANNOTATION] = JSON.stringify(metadata);
       if (nodeName) {
-        merged.spec.nodeName = nodeName;
+        t.spec ??= {};
+        t.spec.nodeName = nodeName;
       }
-      return merged;
-    }
-
-    function templateYaml(identity, metadata, nodeName) {
-      return `${yamlLines(buildMergedTemplate(identity, metadata, nodeName), 0).join("\n")}\n`;
+      return JSON.stringify(t, null, 2) + "\n";
     }
 
     function writeTemplate(identity, metadata, nodeName) {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cicd-sensor-arc-hook-"));
-      const file = path.join(dir, `hook-template-${process.pid}-${Date.now()}.yaml`);
-      fs.writeFileSync(file, templateYaml(identity, metadata, nodeName), { mode: 0o600 });
+      const file = path.join(dir, `hook-template-${process.pid}-${Date.now()}.json`);
+      fs.writeFileSync(file, buildTemplate(identity, metadata, nodeName), { mode: 0o600 });
       return file;
     }
 
@@ -250,7 +166,7 @@ data:
       console.error(
         "cicd-sensor hook wrapper: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE is already set " +
         `(${existing}). The example wrapper refuses to overwrite an existing hook template. ` +
-        "Edit the OPERATOR_POD_TEMPLATE section in this wrapper instead " +
+        "Edit operatorPodTemplate() in this wrapper instead " +
         "(examples/kubernetes/github-arc/kubernetes-mode/container-hook-wrapper-configmap.yaml)."
       );
       process.exit(1);
