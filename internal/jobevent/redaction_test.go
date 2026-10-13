@@ -118,6 +118,26 @@ func TestRedactArgvForOutput_Table(t *testing.T) {
 		{name: "GitHub ghp_", argv: []string{"echo", "ghp_abcDEF1234567890XYZqrstUVWxyz"}, want: []string{"echo", "<redacted>"}},
 		{name: "GitLab glpat-", argv: []string{"echo", "glpat-AbCdEf1234567890XyZ"}, want: []string{"echo", "<redacted>"}},
 		{
+			name: "manager bearer sk_cs_ prefix",
+			argv: []string{"cicd-sensor", "sk_cs_" + strings.Repeat("a", 64)},
+			want: []string{"cicd-sensor", "<redacted>"},
+		},
+		{
+			name: "ACTIONS_ID_TOKEN_REQUEST_TOKEN env assignment",
+			argv: []string{"env", "ACTIONS_ID_TOKEN_REQUEST_TOKEN=request-secret-value"},
+			want: []string{"env", "<redacted>"},
+		},
+		{
+			name: "ACTIONS_ID_TOKEN_REQUEST_URL env assignment",
+			argv: []string{"env", "ACTIONS_ID_TOKEN_REQUEST_URL=https://vstoken.actions.githubusercontent.com/token"},
+			want: []string{"env", "<redacted>"},
+		},
+		{
+			name: "Authorization Bearer manager token header",
+			argv: []string{"curl", "-H", "Authorization: Bearer sk_cs_" + strings.Repeat("b", 64)},
+			want: []string{"curl", "-H", "<redacted>"},
+		},
+		{
 			name: "first item carries token substring",
 			argv: []string{"--token=aBcDeF0123456789secret"},
 			want: []string{"<redacted>"},
@@ -187,6 +207,34 @@ func TestRedactProcessSummaryForOutputKeepsProcessIdentity(t *testing.T) {
 	}
 	if got.Argv[1] != "<redacted>" {
 		t.Fatalf("argv[1] = %q, want redacted", got.Argv[1])
+	}
+}
+
+func TestRedactProcessSummaryForOutput_RedactsOIDCAndManagerSecrets(t *testing.T) {
+	t.Parallel()
+
+	managerToken := "sk_cs_" + strings.Repeat("c", 64)
+	got := RedactProcessSummaryForOutput(ProcessSummary{
+		PID:      42,
+		ExecPath: "/usr/bin/env",
+		Argv: []string{
+			"env",
+			"ACTIONS_ID_TOKEN_REQUEST_TOKEN=request-secret",
+			"ACTIONS_ID_TOKEN_REQUEST_URL=https://vstoken.actions.githubusercontent.com/token",
+		},
+		Ancestors: []AncestorProcess{{
+			ExecPath: "/bin/bash",
+			Argv:     []string{"bash", "-c", "Authorization: Bearer " + managerToken},
+		}},
+	})
+
+	for i, argv := range got.Argv[1:] {
+		if argv != "<redacted>" {
+			t.Fatalf("argv[%d] = %q, want redacted", i+1, argv)
+		}
+	}
+	if got.Ancestors[0].Argv[2] != "<redacted>" {
+		t.Fatalf("ancestor argv[2] = %q, want redacted", got.Ancestors[0].Argv[2])
 	}
 }
 

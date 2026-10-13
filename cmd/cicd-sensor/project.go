@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/managerclient"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/projectconfig"
 	"github.com/cicd-sensor/cicd-sensor/internal/rulesource"
 )
@@ -49,6 +51,8 @@ func runProjectStart(args []string) {
 	var rulesFile string
 	var managerURL string
 	var managerTokenFilePath string
+	var managerAuth string
+	var idTokenAudience string
 	var debugEnabled bool
 	var identity jobIdentityFlags
 	var metadata jobMetadataFlags
@@ -63,7 +67,9 @@ func runProjectStart(args []string) {
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Conditionally required:")
 		fmt.Fprintln(fs.Output(), "  CICD_SENSOR_MANAGER_TOKEN or --manager-token-file PATH")
-		fmt.Fprintln(fs.Output(), "        Required only when --manager-url is set.")
+		fmt.Fprintln(fs.Output(), "        Required when --manager-url is set and --manager-auth is manager-token (default).")
+		fmt.Fprintln(fs.Output(), "  ACTIONS_ID_TOKEN_REQUEST_URL / ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		fmt.Fprintln(fs.Output(), "        Required when --manager-auth=oidc (forwarded from the Actions runner).")
 		fmt.Fprintln(fs.Output())
 		fmt.Fprintln(fs.Output(), "Optional:")
 		fmt.Fprintf(fs.Output(), "  --socket PATH\n        Agent control socket path. (default %q)\n", defaultSocketPath)
@@ -75,6 +81,10 @@ func runProjectStart(args []string) {
 		fmt.Fprintln(fs.Output(), "        Project scope manager URL. Cannot be combined with --config-file or --rules-file.")
 		fmt.Fprintln(fs.Output(), "  --manager-token-file PATH")
 		fmt.Fprintln(fs.Output(), "        Path to a file containing the project manager bearer token. Overrides CICD_SENSOR_MANAGER_TOKEN.")
+		fmt.Fprintln(fs.Output(), "  --manager-auth manager-token|oidc")
+		fmt.Fprintln(fs.Output(), "        Manager credential mode. oidc mints GitHub Actions ID tokens (default manager-token).")
+		fmt.Fprintln(fs.Output(), "  --id-token-audience AUDIENCE")
+		fmt.Fprintln(fs.Output(), "        OIDC audience for minting. Defaults to the manager URL origin.")
 		fmt.Fprintln(fs.Output(), "  --enable-debug")
 		fmt.Fprintln(fs.Output(), "        Enable GitHub Actions debug artifact output.")
 		fmt.Fprintln(fs.Output())
@@ -87,6 +97,8 @@ func runProjectStart(args []string) {
 	fs.StringVar(&rulesFile, "rules-file", "", "Path to the project-local rules YAML file.")
 	fs.StringVar(&managerURL, "manager-url", "", "Project scope manager URL.")
 	fs.StringVar(&managerTokenFilePath, "manager-token-file", "", "Path to a file containing the project manager bearer token.")
+	fs.StringVar(&managerAuth, "manager-auth", "manager-token", "Manager credential mode (manager-token or oidc).")
+	fs.StringVar(&idTokenAudience, "id-token-audience", "", "OIDC audience for minting (defaults to manager URL origin).")
 	fs.BoolVar(&debugEnabled, "enable-debug", false, "Enable GitHub Actions debug artifact output.")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
@@ -103,9 +115,9 @@ func runProjectStart(args []string) {
 		os.Exit(1)
 	}
 
-	projectManager, err := buildProjectManagerConnection(managerURL, managerTokenFilePath, slog.Default())
+	projectManager, err := buildProjectManagerConnection(managerURL, managerTokenFilePath, managerAuth, idTokenAudience, slog.Default())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve manager token: %v\n", err)
+		fmt.Fprintf(os.Stderr, "resolve manager credential: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -190,19 +202,46 @@ func runProjectResult(args []string) {
 	}
 }
 
-func buildProjectManagerConnection(managerURL string, managerTokenFilePath string, logger *slog.Logger) (managerConnectionConfig, error) {
+func buildProjectManagerConnection(managerURL string, managerTokenFilePath string, managerAuth string, idTokenAudience string, logger *slog.Logger) (managerConnectionConfig, error) {
 	if managerURL == "" {
 		if managerTokenFilePath != "" {
 			return managerConnectionConfig{}, fmt.Errorf("--manager-token-file requires --manager-url")
 		}
+		if normalizeManagerAuth(managerAuth) == "oidc" {
+			return managerConnectionConfig{}, fmt.Errorf("--manager-auth=oidc requires --manager-url")
+		}
 		return managerConnectionConfig{}, nil
 	}
 
-	managerToken, err := resolveManagerTokenSecret(managerTokenFilePath, logger)
-	if err != nil {
-		return managerConnectionConfig{}, err
+	switch normalizeManagerAuth(managerAuth) {
+	case managerclient.TokenTypeManagerToken:
+		managerToken, err := resolveManagerTokenSecret(managerTokenFilePath, logger)
+		if err != nil {
+			return managerConnectionConfig{}, err
+		}
+		return managerConnectionConfig{URL: managerURL, Token: managerToken, Auth: managerclient.TokenTypeManagerToken}, nil
+	case "oidc":
+		if managerTokenFilePath != "" {
+			return managerConnectionConfig{}, fmt.Errorf("--manager-token-file cannot be combined with --manager-auth=oidc")
+		}
+		requestURL := strings.TrimSpace(os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"))
+		requestToken := strings.TrimSpace(os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
+		if requestURL == "" {
+			return managerConnectionConfig{}, fmt.Errorf("manager-auth=oidc requires ACTIONS_ID_TOKEN_REQUEST_URL")
+		}
+		if requestToken == "" {
+			return managerConnectionConfig{}, fmt.Errorf("manager-auth=oidc requires ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		}
+		return managerConnectionConfig{
+			URL:                 managerURL,
+			Auth:                "oidc",
+			IDTokenRequestURL:   requestURL,
+			IDTokenRequestToken: requestToken,
+			IDTokenAudience:     strings.TrimSpace(idTokenAudience),
+		}, nil
+	default:
+		return managerConnectionConfig{}, fmt.Errorf("unknown --manager-auth %q (want manager-token or oidc)", managerAuth)
 	}
-	return managerConnectionConfig{URL: managerURL, Token: managerToken}, nil
 }
 
 func writeProjectResult(outputFile string, body []byte, stdout io.Writer) error {
@@ -225,7 +264,7 @@ func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFla
 		return nil, err
 	}
 
-	req := make(map[string]any, len(identityReq)+4)
+	req := make(map[string]any, len(identityReq)+8)
 	for key, value := range identityReq {
 		req[key] = value
 	}
@@ -241,11 +280,22 @@ func buildProjectStartRequest(identity jobIdentityFlags, metadata jobMetadataFla
 		if rulesFile != "" {
 			return nil, fmt.Errorf("project manager cannot be combined with --rules-file")
 		}
-		if manager.Token == "" {
-			return nil, fmt.Errorf("project manager requires CICD_SENSOR_MANAGER_TOKEN env or --manager-token-file")
-		}
 		req["manager_url"] = manager.URL
-		req["manager_token"] = manager.Token
+		switch normalizeManagerAuth(manager.Auth) {
+		case "oidc":
+			req["manager_auth"] = "oidc"
+			req["id_token_request_url"] = manager.IDTokenRequestURL
+			req["id_token_request_token"] = manager.IDTokenRequestToken
+			if manager.IDTokenAudience != "" {
+				req["id_token_audience"] = manager.IDTokenAudience
+			}
+		default:
+			if manager.Token == "" {
+				return nil, fmt.Errorf("project manager requires CICD_SENSOR_MANAGER_TOKEN env or --manager-token-file")
+			}
+			req["manager_token"] = manager.Token
+			req["manager_auth"] = managerclient.TokenTypeManagerToken
+		}
 		return req, nil
 	}
 

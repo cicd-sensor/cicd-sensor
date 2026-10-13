@@ -95,6 +95,36 @@ It does not interpret runtime events or evaluate detections.
 Cloud credentials are held only by the Manager process.
 Agents do not receive cloud credentials.
 
+## GitHub Actions OIDC authentication (project scope)
+
+Agent → Manager auth has two modes:
+
+1. **Manager token** (`sk_cs_…`): the default. Used outside GitHub Actions, and on Actions when OIDC is not selected.
+2. **GitHub Actions OIDC ID token**: a short-lived JWT. Used when the Agent runs inside a GitHub Actions job that can mint ID tokens (`permissions: id-token: write` and the runner request URL/token env vars).
+
+Agents in GitHub Actions workflows may send an OIDC ID token instead of a long lived `sk_cs_` secret.
+Self hosted Actions runners can mint the same way when the job grants `id-token`.
+GitHub hosted VM teardown is a separate shutdown hazard (minting can fail after the job ends); it is not a requirement for using OIDC.
+
+Both modes still send `Authorization: Bearer …`. `Cicd-Sensor-Token-Type` says which credential it is:
+
+| HTTP header | Manager token | OIDC ID token |
+| --- | --- | --- |
+| `Authorization` | `Bearer sk_cs_…` | `Bearer <jwt>` |
+| `Cicd-Sensor-Token-Type` | `manager-token` (or omit; absent means manager token) | `id-token` |
+
+Network and minting:
+
+- Manager verifies JWTs locally with configured `issuer`, `audience`, and `jwks_url` (no issuer discovery at startup).
+- Agent mints with **GET** to the runner `request_url`, after checking **https** and a startup host allowlist (default `*.actions.githubusercontent.com`).
+- Mint HTTP has a **10s** timeout and **does not follow redirects** (3xx fails the mint).
+- Concurrent RPCs share one in-flight mint. Each RPC wait follows its own context (`Canceled` / `DeadlineExceeded`); the mint itself has a separate bound and is canceled after the final Summary flush.
+
+Shutdown / lifetime:
+
+- On GitHub-hosted runners, a fresh mint during VM teardown after the job can return HTTP 400. `project result` **force-refreshes** while minting still works, then seeds `ReuseTokenSourceWithExpiry(..., 60s)` so later RPCs still honor JWT expiry.
+- Never log `ACTIONS_ID_TOKEN_REQUEST_TOKEN` or manager bearer tokens (Agent logs, debug bundles, or Manager audit). Log only `auth_kind` and matched claim metadata.
+
 ## Design rules
 
 - Treat the Manager as a stateless config server and log router.

@@ -26,6 +26,7 @@ type Agent struct {
 	kernelTracker             *kerneltracker.KernelTracker
 	socketPath                string
 	githubK8sRunnerSocketPath string
+	idTokenRequestURLHosts    []string
 	shutdownGrace             time.Duration
 	jobTTL                    time.Duration
 	enableHTTPRequest         bool
@@ -82,6 +83,12 @@ func (a *Agent) SetGitHubK8sRunnerSocketPath(path string) {
 	a.githubK8sRunnerSocketPath = path
 }
 
+// SetIDTokenRequestURLHosts sets the Agent startup allowlist for OIDC
+// request_url hosts. Empty resets to the default Actions hosts.
+func (a *Agent) SetIDTokenRequestURLHosts(hosts []string) {
+	a.idTokenRequestURLHosts = append([]string(nil), hosts...)
+}
+
 // Run starts the listener and TTL finalizer, then blocks until ctx is canceled.
 // On shutdown it finalizes all remaining jobs.
 func (a *Agent) Run(ctx context.Context) error {
@@ -117,22 +124,26 @@ func (a *Agent) Run(ctx context.Context) error {
 	jobRegistry.BindKernelTracker(kernelTracker)
 
 	l := listener.New(listener.Config{
-		Logger:                a.logger,
-		JobRegistry:           jobRegistry,
-		SocketPath:            a.socketPath,
-		HostManagerConnection: a.hostManagerConn,
-		HostManagerClient:     hostManagerClient,
-		RunnerType:            a.runnerType,
-		Provider:              a.provider,
+		Logger:                 a.logger,
+		JobRegistry:            jobRegistry,
+		SocketPath:             a.socketPath,
+		HostManagerConnection:  a.hostManagerConn,
+		HostManagerClient:      hostManagerClient,
+		RunnerType:             a.runnerType,
+		Provider:               a.provider,
+		IDTokenRequestURLHosts: a.idTokenRequestURLHosts,
+		IDTokenHTTPClient:      managerclient.NewIDTokenMintHTTPClient(),
 	})
 	listeners := []*listener.Listener{l}
 	if a.provider == jobcontext.ProviderGitHub && a.runnerType == "kubernetes" && a.githubK8sRunnerSocketPath != "" {
 		listeners = append(listeners, listener.NewGitHubK8sStart(listener.Config{
-			Logger:                a.logger,
-			JobRegistry:           jobRegistry,
-			SocketPath:            a.githubK8sRunnerSocketPath,
-			HostManagerConnection: a.hostManagerConn,
-			HostManagerClient:     hostManagerClient,
+			Logger:                 a.logger,
+			JobRegistry:            jobRegistry,
+			SocketPath:             a.githubK8sRunnerSocketPath,
+			HostManagerConnection:  a.hostManagerConn,
+			HostManagerClient:      hostManagerClient,
+			IDTokenRequestURLHosts: a.idTokenRequestURLHosts,
+			IDTokenHTTPClient:      managerclient.NewIDTokenMintHTTPClient(),
 		}))
 	}
 

@@ -32,7 +32,7 @@ func TestAuthMiddleware_RejectsMissingToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, tokens).Wrap(inner))
+	server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, authMiddlewareOptions{tokens: tokens}).Wrap(inner))
 	defer server.Close()
 
 	// Simulate an RPC path so procedure extraction lands in the audit log.
@@ -75,7 +75,7 @@ func TestAuthMiddleware_RejectsBadToken(t *testing.T) {
 		t.Fatal("inner handler must not be invoked on bad token")
 	})
 
-	server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, tokens).Wrap(inner))
+	server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, authMiddlewareOptions{tokens: tokens}).Wrap(inner))
 	defer server.Close()
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
@@ -113,7 +113,7 @@ func TestAuthMiddleware_AcceptsValidToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, tokens).Wrap(inner))
+	server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, authMiddlewareOptions{tokens: tokens}).Wrap(inner))
 	defer server.Close()
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
@@ -153,7 +153,7 @@ func TestAuthMiddleware_AcceptsAnyRotationToken(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			})
 
-			server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, tokens).Wrap(inner))
+			server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, authMiddlewareOptions{tokens: tokens}).Wrap(inner))
 			defer server.Close()
 
 			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
@@ -190,7 +190,7 @@ func TestAuthMiddleware_MisconfiguredTokensFailsClosed(t *testing.T) {
 		t.Fatal("inner handler must not be invoked when tokens=nil")
 	})
 
-	server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, nil).Wrap(inner))
+	server := newManagerHTTPTestServer(t, newAuthMiddleware(logger, authMiddlewareOptions{}).Wrap(inner))
 	defer server.Close()
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,

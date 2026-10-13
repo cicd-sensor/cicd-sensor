@@ -59,7 +59,7 @@ func TestBuildProjectManagerConnection(t *testing.T) {
 	t.Run("no manager url ignores env token", func(t *testing.T) {
 		t.Setenv("CICD_SENSOR_MANAGER_TOKEN", validToken)
 
-		got, err := buildProjectManagerConnection("", "", discardLogger())
+		got, err := buildProjectManagerConnection("", "", "", "", discardLogger())
 		if err != nil {
 			t.Fatalf("buildProjectManagerConnection: %v", err)
 		}
@@ -69,7 +69,7 @@ func TestBuildProjectManagerConnection(t *testing.T) {
 	})
 
 	t.Run("token file without manager url is rejected", func(t *testing.T) {
-		_, err := buildProjectManagerConnection("", filepath.Join(t.TempDir(), "missing-token"), discardLogger())
+		_, err := buildProjectManagerConnection("", filepath.Join(t.TempDir(), "missing-token"), "", "", discardLogger())
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -81,7 +81,7 @@ func TestBuildProjectManagerConnection(t *testing.T) {
 	t.Run("manager url without token returns config for request builder validation", func(t *testing.T) {
 		t.Setenv("CICD_SENSOR_MANAGER_TOKEN", "")
 
-		got, err := buildProjectManagerConnection("https://project-manager.example.com", "", discardLogger())
+		got, err := buildProjectManagerConnection("https://project-manager.example.com", "", "", "", discardLogger())
 		if err != nil {
 			t.Fatalf("buildProjectManagerConnection: %v", err)
 		}
@@ -96,7 +96,7 @@ func TestBuildProjectManagerConnection(t *testing.T) {
 	t.Run("manager url with env token", func(t *testing.T) {
 		t.Setenv("CICD_SENSOR_MANAGER_TOKEN", validToken)
 
-		got, err := buildProjectManagerConnection("https://project-manager.example.com", "", discardLogger())
+		got, err := buildProjectManagerConnection("https://project-manager.example.com", "", "", "", discardLogger())
 		if err != nil {
 			t.Fatalf("buildProjectManagerConnection: %v", err)
 		}
@@ -105,6 +105,37 @@ func TestBuildProjectManagerConnection(t *testing.T) {
 		}
 		if got.Token != validToken {
 			t.Fatalf("manager token: got %q, want env token", got.Token)
+		}
+	})
+
+	t.Run("oidc forwards actions request env", func(t *testing.T) {
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://vstoken.actions.githubusercontent.com/token")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "request-secret")
+
+		got, err := buildProjectManagerConnection("https://manager.example.com", "", "oidc", "", discardLogger())
+		if err != nil {
+			t.Fatalf("buildProjectManagerConnection: %v", err)
+		}
+		if got.Auth != "oidc" {
+			t.Fatalf("auth: got %q", got.Auth)
+		}
+		if got.IDTokenRequestURL != "https://vstoken.actions.githubusercontent.com/token" {
+			t.Fatalf("request url: got %q", got.IDTokenRequestURL)
+		}
+		if got.IDTokenRequestToken != "request-secret" {
+			t.Fatalf("request token: got %q", got.IDTokenRequestToken)
+		}
+		if got.Token != "" {
+			t.Fatalf("manager token must be empty for oidc")
+		}
+	})
+
+	t.Run("oidc requires request url env", func(t *testing.T) {
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "request-secret")
+		_, err := buildProjectManagerConnection("https://manager.example.com", "", "oidc", "", discardLogger())
+		if err == nil || !strings.Contains(err.Error(), "ACTIONS_ID_TOKEN_REQUEST_URL") {
+			t.Fatalf("error: got %v", err)
 		}
 	})
 }

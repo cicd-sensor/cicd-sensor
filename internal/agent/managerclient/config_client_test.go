@@ -316,7 +316,7 @@ func TestManagerClient_New_ValidatesConfig(t *testing.T) {
 		{
 			name:    "empty token",
 			baseURL: "https://manager.example.com",
-			wantErr: "manager token is required",
+			wantErr: "manager credential is required",
 		},
 		{
 			name:    "custom token",

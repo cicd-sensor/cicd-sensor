@@ -44,6 +44,15 @@ func (jr *JobRegistry) RequestGitHubProjectResult(ctx context.Context, identity 
 	}
 	body = append(body, '\n')
 
+	// Force-remint the OIDC JWT while the Actions token service is still
+	// reachable so VM-shutdown Summary can reuse it without a fresh mint.
+	if err := projectScope.ForceRefreshManagerIDToken(ctx); err != nil {
+		jr.logger.WarnContext(ctx, "project_result_oidc_force_refresh_failed",
+			"job_identity", identity,
+			"error", err,
+		)
+	}
+
 	// Fail-open: the report body must still be produced, monitoring
 	// continues, and shutdown finalize still sends the tail and summary.
 	flushCtx, cancelFlush := context.WithTimeout(ctx, projectResultFlushTimeout)

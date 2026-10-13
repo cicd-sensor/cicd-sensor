@@ -38,26 +38,31 @@ const (
 
 // Listener serves the control socket API over a unix domain socket.
 type Listener struct {
-	logger            *slog.Logger
-	jobRegistry       *jobregistry.JobRegistry
-	socketPath        string
-	hostManagerConn   managerclient.Connection
-	hostManagerClient jobregistry.ManagerConfigFetcher
-	runnerType        string
-	provider          jobcontext.Provider
-	server            *http.Server
+	logger                 *slog.Logger
+	jobRegistry            *jobregistry.JobRegistry
+	socketPath             string
+	hostManagerConn        managerclient.Connection
+	hostManagerClient      jobregistry.ManagerConfigFetcher
+	runnerType             string
+	provider               jobcontext.Provider
+	idTokenRequestURLHosts []string
+	idTokenHTTPClient      *http.Client
+	server                 *http.Server
 }
 
 // Config is the process-wide listener configuration. Project manager inputs
 // remain request-local in project/start.
 type Config struct {
-	Logger                *slog.Logger
-	JobRegistry           *jobregistry.JobRegistry
-	SocketPath            string
-	HostManagerConnection managerclient.Connection
-	HostManagerClient     jobregistry.ManagerConfigFetcher
-	RunnerType            string
-	Provider              jobcontext.Provider
+	Logger                 *slog.Logger
+	JobRegistry            *jobregistry.JobRegistry
+	SocketPath             string
+	HostManagerConnection  managerclient.Connection
+	HostManagerClient      jobregistry.ManagerConfigFetcher
+	RunnerType             string
+	Provider               jobcontext.Provider
+	IDTokenRequestURLHosts []string
+	// IDTokenHTTPClient is optional; used when minting Actions ID tokens.
+	IDTokenHTTPClient *http.Client
 }
 
 // New creates a listener bound to cfg.SocketPath.
@@ -99,14 +104,20 @@ func newBase(cfg Config) *Listener {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	hosts := cfg.IDTokenRequestURLHosts
+	if len(hosts) == 0 {
+		hosts = append([]string(nil), managerclient.DefaultIDTokenRequestURLHosts...)
+	}
 	return &Listener{
-		logger:            logger.With("component", "listener"),
-		jobRegistry:       cfg.JobRegistry,
-		socketPath:        cfg.SocketPath,
-		hostManagerConn:   cfg.HostManagerConnection,
-		hostManagerClient: cfg.HostManagerClient,
-		runnerType:        cfg.RunnerType,
-		provider:          cfg.Provider,
+		logger:                 logger.With("component", "listener"),
+		jobRegistry:            cfg.JobRegistry,
+		socketPath:             cfg.SocketPath,
+		hostManagerConn:        cfg.HostManagerConnection,
+		hostManagerClient:      cfg.HostManagerClient,
+		runnerType:             cfg.RunnerType,
+		provider:               cfg.Provider,
+		idTokenRequestURLHosts: hosts,
+		idTokenHTTPClient:      cfg.IDTokenHTTPClient,
 	}
 }
 
