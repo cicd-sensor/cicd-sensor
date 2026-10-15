@@ -89,9 +89,24 @@ Kubernetes runner deployments use:
 
 Use the mode-specific examples listed on the [GitHub ARC runner scale sets](github-arc.md) and [GitLab Runner Kubernetes executor](gitlab-runner.md) pages.
 
+## Optional HTTP request capture
+
+HTTP request capture is disabled by default. To evaluate it, add
+`--enable-http-request=true` to the Agent container's arguments. For ARC
+Kubernetes mode and GitLab Kubernetes executor, the node-side NRI observer
+sends the waiting container process ID to the Agent. The Agent prepares common
+HTTP libraries and CLI binaries before user code starts. The observer needs no
+additional capability or AppArmor exception for this notification.
+
+Preparation waits up to 500 ms and allows startup to continue if it fails or
+times out. This improves common-case capture; it does not guarantee the first
+request. The dind inner-container path uses executable-mapping discovery only. No inner Docker proxy is deployed. See
+[HTTP Uprobe Runtime](../../developer-guide/ebpf/http-uprobes.md#preparation-entry-points-and-ownership)
+for timing, resource bounds, and verified environments.
+
 ## Security notes
 
-Do not mount host `containerd.sock`, CRI socket, NRI socket, or cicd-sensor staging socket into CI/CD job Pods.
+Do not mount host `containerd.sock`, CRI socket, NRI socket, cicd-sensor staging socket, or the `.http-preparation` socket into CI/CD job Pods.
 Those sockets are host-control surfaces, and exposing them to jobs makes the Kubernetes boundary substantially weaker.
 
 GitHub ARC dind mode requires a privileged dind sidecar.

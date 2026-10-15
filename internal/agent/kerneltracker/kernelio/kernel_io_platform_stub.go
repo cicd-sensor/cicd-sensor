@@ -4,6 +4,7 @@ package kernelio
 
 import (
 	"context"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"log/slog"
 )
 
@@ -41,8 +42,7 @@ func (kernelIO *StubKernelIO) DeleteCgroupBasenamesFromStagingMap(ctx context.Co
 	return ErrNotSupported
 }
 
-func (kernelIO *StubKernelIO) QueueHTTPUprobeReconciliation(activeCgroupIDs []uint64) {
-	_ = activeCgroupIDs
+func (kernelIO *StubKernelIO) QueueHTTPUprobeReconciliation() {
 }
 
 func (kernelIO *StubKernelIO) StartKernelSampleLoop(ctx context.Context, handle KernelSampleHandler) error {
@@ -54,3 +54,5 @@ func (kernelIO *StubKernelIO) StartKernelSampleLoop(ctx context.Context, handle 
 func (kernelIO *StubKernelIO) Close() error {
 	return nil
 }
+
+func (*StubKernelIO) PrepareHTTP(context.Context, httpprepare.Process) error { return ErrNotSupported }

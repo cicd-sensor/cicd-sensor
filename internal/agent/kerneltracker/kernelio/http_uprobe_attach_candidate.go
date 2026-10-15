@@ -13,6 +13,9 @@ import (
 // handleHTTPUprobeAttachCandidate keeps KernelIO control samples out of the
 // KernelTracker security-event path.
 func (kernelIO *LinuxKernelIO) handleHTTPUprobeAttachCandidate(raw []byte) (bool, error) {
+	if len(raw) >= 4 && binary.LittleEndian.Uint32(raw[:4]) == SampleKindCgroupRmdir {
+		kernelIO.QueueHTTPUprobeReconciliation()
+	}
 	if len(raw) < 4 || binary.LittleEndian.Uint32(raw[:4]) != SampleKindHTTPUprobeAttachCandidate {
 		return false, nil
 	}
@@ -42,17 +45,22 @@ func decodeHTTPUprobeAttachCandidate(raw []byte) (httpUprobeAttachCandidate, err
 	}
 
 	return httpUprobeAttachCandidate{
-		tgid:    sample.Tgid,
+		tgid:     sample.Tgid,
+		cgroupID: sample.CgroupId, rootCgroupID: sample.RootCgroupId,
 		vmStart: sample.VmStart,
 		vmEnd:   sample.VmEnd,
-		file: fileClassificationKey{
-			mappedFile: mappedFileIdentity{
-				deviceMajor: sample.File.MappedFile.DeviceMajor,
-				deviceMinor: sample.File.MappedFile.DeviceMinor,
-				inode:       sample.File.MappedFile.Inode,
-			},
-			ctimeSec:  sample.File.CtimeSec,
-			ctimeNsec: sample.File.CtimeNsec,
-		},
+		file:    fileKeyFromBPF(sample.File),
 	}, nil
+}
+
+func fileKeyFromBPF(file bpfprog.BPFProgramFileClassificationKey) fileClassificationKey {
+	return fileClassificationKey{
+		mappedFile: mappedFileIdentity{
+			deviceMajor: file.MappedFile.DeviceMajor,
+			deviceMinor: file.MappedFile.DeviceMinor,
+			inode:       file.MappedFile.Inode,
+		},
+		ctimeSec:  file.CtimeSec,
+		ctimeNsec: file.CtimeNsec,
+	}
 }

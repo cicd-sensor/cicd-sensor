@@ -173,6 +173,12 @@ type BPFProgramForkSample struct {
 	ParentTgid          int32
 }
 
+type BPFProgramHttpDiscoveryKey struct {
+	_            structs.HostLayout
+	RootCgroupId uint64
+	File         BPFProgramFileClassificationKey
+}
+
 type BPFProgramHttpRequestSample struct {
 	_             structs.HostLayout
 	Kind          uint32
@@ -218,12 +224,14 @@ type BPFProgramHttpScratch struct {
 }
 
 type BPFProgramHttpUprobeAttachCandidateSample struct {
-	_       structs.HostLayout
-	Kind    uint32
-	Tgid    int32
-	VmStart uint64
-	VmEnd   uint64
-	File    BPFProgramFileClassificationKey
+	_            structs.HostLayout
+	Kind         uint32
+	Tgid         int32
+	CgroupId     uint64
+	RootCgroupId uint64
+	VmStart      uint64
+	VmEnd        uint64
+	File         BPFProgramFileClassificationKey
 }
 
 type BPFProgramMountSample struct {
@@ -283,9 +291,8 @@ type BPFProgramPathScratch struct {
 }
 
 type BPFProgramStagingValue struct {
-	_       structs.HostLayout
-	JobIdLo uint64
-	JobIdHi uint64
+	_        structs.HostLayout
+	Reserved [2]uint64
 }
 
 type BPFProgramUnixSocketConnectSample struct {
@@ -315,6 +322,7 @@ const (
 	BPFProgramMapHttpScratch                           = "http_scratch"
 	BPFProgramMapHttpStages                            = "http_stages"
 	BPFProgramMapHttpUprobeDiscoveryCache              = "http_uprobe_discovery_cache"
+	BPFProgramMapHttpUprobeMmapRequests                = "http_uprobe_mmap_requests"
 	BPFProgramMapHttpUprobeStages                      = "http_uprobe_stages"
 	BPFProgramMapPathScratch                           = "path_scratch"
 	BPFProgramMapRingbufDropCount                      = "ringbuf_drop_count"
@@ -455,6 +463,7 @@ type BPFProgramMapSpecs struct {
 	HttpScratch              *ebpf.MapSpec `ebpf:"http_scratch"`
 	HttpStages               *ebpf.MapSpec `ebpf:"http_stages"`
 	HttpUprobeDiscoveryCache *ebpf.MapSpec `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeMmapRequests   *ebpf.MapSpec `ebpf:"http_uprobe_mmap_requests"`
 	HttpUprobeStages         *ebpf.MapSpec `ebpf:"http_uprobe_stages"`
 	PathScratch              *ebpf.MapSpec `ebpf:"path_scratch"`
 	RingbufDropCount         *ebpf.MapSpec `ebpf:"ringbuf_drop_count"`
@@ -509,6 +518,7 @@ type BPFProgramMaps struct {
 	HttpScratch              *ebpf.Map `ebpf:"http_scratch"`
 	HttpStages               *ebpf.Map `ebpf:"http_stages"`
 	HttpUprobeDiscoveryCache *ebpf.Map `ebpf:"http_uprobe_discovery_cache"`
+	HttpUprobeMmapRequests   *ebpf.Map `ebpf:"http_uprobe_mmap_requests"`
 	HttpUprobeStages         *ebpf.Map `ebpf:"http_uprobe_stages"`
 	PathScratch              *ebpf.Map `ebpf:"path_scratch"`
 	RingbufDropCount         *ebpf.Map `ebpf:"ringbuf_drop_count"`
@@ -522,6 +532,7 @@ func (m *BPFProgramMaps) Close() error {
 		m.HttpScratch,
 		m.HttpStages,
 		m.HttpUprobeDiscoveryCache,
+		m.HttpUprobeMmapRequests,
 		m.HttpUprobeStages,
 		m.PathScratch,
 		m.RingbufDropCount,

@@ -52,7 +52,11 @@ When a CI/CD job starts a container through the host-side Docker socket, the act
 
 The Docker proxy checks the peer process of the Docker create request and determines whether that process belongs to a tracked job cgroup. If it does, the proxy stages the basename of the container cgroup that will be created and associates it with the job. Later, when the kernel-side `cgroup_mkdir` hook observes the actual container cgroup creation, that staging entry is promoted and the container cgroup is added to the job's tracked cgroups.
 
-`cgroup_rmdir` does not immediately delete non-final cgroups from `tracked_cgroups`.
+`tracked_cgroups` stores the tracking root cgroup ID per cgroup; a root maps to itself.
+Child inheritance preserves that number. `cgroup_rmdir` sets it to zero immediately
+to disable that cgroup's HTTP uprobes. When a root ends, inherited children also
+stop using its HTTP links. This does not immediately delete
+non-final cgroup entries from `tracked_cgroups`.
 KernelTracker marks them removed and purges them after the 10-second grace period plus the next purge tick, so in-flight samples that arrive after rmdir can still be attributed to the Job.
 If the removed cgroup is the Job's last active cgroup, KernelTracker ends the Job immediately and lets normal Job finalization clean up kernel and userspace state.
 KernelTracker also periodically scans the cgroup v2 root from userspace and reconciles active tracked cgroups, so a missed `cgroup_rmdir` sample does not leave stale cgroups or Jobs indefinitely.
@@ -112,7 +116,8 @@ those remain in the KernelTracker/KernelIO userspace owners.
 | --- | --- | --- |
 | `tracked_cgroups` | cgroup ID | Lets BPF hooks decide on the fast path whether the current cgroup is in scope |
 | `staging_map` | Docker cgroup basename | Lets the `cgroup_mkdir` hook detect cgroup creation staged by the Docker proxy |
-| `http_uprobe_discovery_cache` | device, inode, ctime | Suppresses mapping notifications for files already queued, classified, or attached; eviction only causes reclassification |
+| `http_uprobe_discovery_cache` | root cgroup ID, device, inode, ctime | Suppresses mapping notifications for files already queued, classified, or attached; eviction only causes reclassification |
+| `http_uprobe_mmap_requests` | worker PID/TID | One empty request, filled once with backing identity by the mmap hook and removed after lookup |
 
 `staging_map` does not contain JobIdentity. The kernel side only matches the basename; userspace mirror state knows which job it belongs to.
 
@@ -172,6 +177,7 @@ KernelIO sizes it from node CPU count, so larger runner nodes get a larger kerne
 | `internal/agent/bpf` | Hand-written eBPF C source, headers, and bpf2go-generated bindings / objects |
 | `internal/agent/kerneltracker` | KernelTracker reactor, decoded sample domain, cgroup / process tracking |
 | `internal/agent/kerneltracker/kernelio` | BPF object load, attach, ringbuf read, and map operations |
-| `internal/agent/proxy/dockerd` | Registers staging basenames from Docker API responses |
+| `internal/agent/httpprepare` | Bounded HTTP target inventory and node-side PID notification; no classifier or link state |
+| `internal/agent/proxy/dockerd` | Registers staging basenames and requests HTTP preparation at supported Docker lifecycle windows |
 
 `internal/agent/bpf` owns the eBPF assets, and `internal/agent/kerneltracker` owns the userspace reactor. Generated artifacts (`bpf2go` output) are not edited by hand — fix the C source or generator input.
