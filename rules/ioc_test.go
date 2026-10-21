@@ -123,3 +123,90 @@ func TestSubqlCommonManifestCacheLoaderExecRule(t *testing.T) {
 		})
 	}
 }
+
+// TestLitellm1107ExfilDomainRule evaluates the shipped litellm==1.107.0
+// exfiltration domain indicator against the lookups the payload produces.
+func TestLitellm1107ExfilDomainRule(t *testing.T) {
+	t.Parallel()
+
+	loaded, err := rulesource.LoadRulesFile("ioc.yaml")
+	if err != nil {
+		t.Fatalf("load ioc rules: %v", err)
+	}
+	if len(loaded.RuleSets) != 1 {
+		t.Fatalf("expected 1 ruleset, got %d", len(loaded.RuleSets))
+	}
+	set := loaded.RuleSets[0]
+
+	var target rule.Rule
+	for _, candidate := range set.Rules {
+		if candidate.RuleID == "litellm_1107_exfil_domain" {
+			target = candidate
+			break
+		}
+	}
+	if target.RuleID == "" {
+		t.Fatal("litellm_1107_exfil_domain rule not present in shipped ruleset")
+	}
+	if target.EventType != jobevent.Domain {
+		t.Fatalf("event_type=%q, want %q", target.EventType, jobevent.Domain)
+	}
+	if target.Action != rule.RuleActionTerminate {
+		t.Fatalf("action=%q, want %q", target.Action, rule.RuleActionTerminate)
+	}
+
+	env, err := celengine.NewEnv()
+	if err != nil {
+		t.Fatalf("new env: %v", err)
+	}
+	prog, err := env.Compile(target.RuleID, target.EventType, target.Condition, set.Lists)
+	if err != nil {
+		t.Fatalf("compile rule: %v", err)
+	}
+	staticActivation, err := celengine.NewListActivation(rule.NormalizePredefinedLists(set.Lists))
+	if err != nil {
+		t.Fatalf("list activation: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		input     celengine.CELInputEvent
+		wantMatch bool
+	}{
+		{
+			name:      "terminates the apex exfil domain",
+			input:     celengine.CELInputEvent{Domain: "litellm.dev", Source: "dns"},
+			wantMatch: true,
+		},
+		{
+			name:      "terminates the www host used by cook.py",
+			input:     celengine.CELInputEvent{Domain: "www.litellm.dev", Source: "dns"},
+			wantMatch: true,
+		},
+		{
+			name:  "ignores the project's official litellm.ai",
+			input: celengine.CELInputEvent{Domain: "docs.litellm.ai", Source: "dns"},
+		},
+		{
+			name:  "ignores a domain that merely ends in the same letters",
+			input: celengine.CELInputEvent{Domain: "notlitellm.dev", Source: "dns"},
+		},
+		{
+			name:  "ignores an empty domain",
+			input: celengine.CELInputEvent{Source: "dns"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			matched, err := prog.EvalActivation(celengine.NewEventActivation(tc.input).WithParent(staticActivation))
+			if err != nil {
+				t.Fatalf("evaluate rule: %v", err)
+			}
+			if matched != tc.wantMatch {
+				t.Fatalf("matched=%v, want %v", matched, tc.wantMatch)
+			}
+		})
+	}
+}
