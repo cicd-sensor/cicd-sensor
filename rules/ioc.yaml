@@ -405,3 +405,37 @@ rule_sets:
           mitre_tactic: command-and-control
           ioc_date: "2026-10-08"
           source_url: https://blog.flatt.tech/entry/tensorlake_compromise
+
+      - rule_id: litellm_1107_exfil_domain
+        rule_name: "IOC: litellm 1.107.0 PyPI compromise exfiltration domain"
+        description: |
+          What:
+            Terminates DNS resolution of litellm.dev, the exfiltration endpoint
+            (http://www.litellm.dev/healthcheck) of the October 2026
+            litellm==1.107.0 PyPI compromise.
+          Why:
+            Active-compromise IOC. The dropped cook.py stealer encrypts SSH
+            keys, cloud credentials, browser passwords, AI tool configs,
+            environment variables, Kubernetes tokens, and the LiteLLM database
+            and POSTs them to this host. The domain was registered on
+            2026-10-13 behind Cloudflare and is unrelated to the project's
+            litellm.ai, so no legitimate job resolves it.
+          Notes:
+            No IP rule: the host resolves to shared Cloudflare edge addresses.
+            The hourly C2 domain is read from a GitHub-hosted domain.txt and
+            rotates, so it is not covered here. The wheels also drop cook.pth,
+            cook.py, and sitecustomize.py into site-packages and leave
+            /tmp/.pc_once_* and /tmp/remote_code_loader.lock once the payload
+            ran (source: https://x.com/advocatemack/status/2112886821948452897).
+            Preserve job logs and artifacts, rebuild the runner, and rotate all
+            credentials reachable from the job.
+        event_type: domain
+        condition: |
+          domain == "litellm.dev" ||
+          domain.endsWith(".litellm.dev")
+        action: terminate
+        tags:
+          mitre_tactic: exfiltration
+          ioc_date: "2026-10-21"
+          source_url: https://blog.flatt.tech/entry/litellm_2nd_compromise
+
