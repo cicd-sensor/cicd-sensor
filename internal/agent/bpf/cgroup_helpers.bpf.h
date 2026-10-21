@@ -6,7 +6,7 @@
 static __always_inline __u8 cgroup_is_tracked(__u64 cgroup_id)
 {
     // tracked_cgroups is the kernel-side source of truth for event filtering.
-    __u8 *value = bpf_map_lookup_elem(&tracked_cgroups, &cgroup_id);
+    __u64 *value = bpf_map_lookup_elem(&tracked_cgroups, &cgroup_id);
     if (value)
         return 1;
     return 0;
@@ -70,4 +70,21 @@ static __always_inline __u64 parent_cgroup_id_from_cgroup(struct cgroup *cgrp)
 
     parent_id = BPF_CORE_READ(parent_cgrp, kn, id);
     return parent_id;
+}
+
+static __always_inline __u64 http_tracking_root(__u64 id)
+{
+    __u64 *root_cgroup_id = bpf_map_lookup_elem(&tracked_cgroups, &id);
+    return root_cgroup_id ? *root_cgroup_id : 0;
+}
+
+// The root itself must still be tracked: migration cannot extend its lifetime.
+// Cookies distinguish independent registrations for one shared image inode.
+// Linux 5.15 introduced bpf_get_attach_cookie for perf-event uprobes.
+// https://github.com/torvalds/linux/blob/v5.15/kernel/trace/bpf_trace.c
+static __always_inline bool http_uprobe_matches_root(void *ctx)
+{
+    __u64 root_cgroup_id = http_tracking_root(current_cgroup_id());
+    return root_cgroup_id && http_tracking_root(root_cgroup_id) == root_cgroup_id &&
+           root_cgroup_id == bpf_get_attach_cookie(ctx);
 }

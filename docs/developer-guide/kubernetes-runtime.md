@@ -7,7 +7,7 @@ Runner modes are install recipes; the runtime implementation uses NRI and hooks 
 
 | Mechanism | Used by | Responsibility |
 | --- | --- | --- |
-| NRI | GitHub ARC Kubernetes mode, GitLab Runner Kubernetes executor | Receives containerd `CreateContainer` events and stages Kubernetes-created container cgroups when job identity is available. |
+| NRI | GitHub ARC Kubernetes mode, GitLab Runner Kubernetes executor | Stages cgroups at `CreateContainer`. When HTTP capture is enabled, requests bounded file preparation at `StartContainer` before user code on the supported CRI/runc path. |
 | Job hook | GitHub ARC default, dind, Kubernetes mode | Runs after GitHub job assignment and calls the GitHub Kubernetes runner socket so cicd-sensor can bind the runner cgroup. |
 | Container customization hook wrapper | GitHub ARC Kubernetes mode | Wraps `ACTIONS_RUNNER_CONTAINER_HOOKS` and injects GitHub identity into workflow Pod annotations before ARC creates Kubernetes workflow containers. |
 
@@ -53,6 +53,14 @@ Host start and K8s staging paths build host scope from that memory cache.
 This keeps containerd NRI callbacks local and bounded; manager unavailability after a successful fetch leaves the last known-good config in use.
 
 ### Cgroup staging
+
+HTTP preparation reuses the existing KernelIO worker through a separate,
+node-owned FD-transfer socket. It does not change cgroup staging or Job
+ownership. The observer needs the node PID view to open the waiting init's
+root, but does not require a containerd client socket. Preparation waits at most
+500 ms and fails open; later exec and Docker initial-entrypoint coverage are
+not implied by NRI Start. See [HTTP Uprobe Runtime](ebpf/http-uprobes.md) for
+target bounds, exact backing identity, retention, and compatibility limits.
 
 Kubernetes support initially requires containerd, runc, and systemd cgroups.
 NRI exposes OCI `linux.cgroupsPath` in systemd form, for example:
@@ -155,6 +163,15 @@ cicd-sensor uses the job hook as the identity point.
 At start time, the hook calls the GitHub Kubernetes runner socket.
 The agent reads the hook peer PID's cgroup path, finds the kubelet-created Pod cgroup ancestor, and binds the Pod cgroup tree so the dind sidecar is tracked as part of the job.
 Once the dind sidecar cgroup is tracked, inner Docker cgroups created below it are picked up by the existing cgroup propagation path.
+For Day 1, inner Docker workloads use this cgroup tracking and HTTP
+executable-mapping discovery. The normal host Docker proxy does not receive
+the inner daemon's API requests, and host NRI does not prepare the inner
+container's files. First-request capture is therefore best-effort.
+
+Deploying an inner Docker proxy and pre-attaching inner workload files are
+outside the Day 1 scope. The worker's threaded-cgroup liveness handling covers
+mmap-discovered inner files. The node's systemd kubelet layout requirement is
+unchanged.
 
 ```mermaid
 flowchart TB
@@ -300,3 +317,18 @@ flowchart TB
     classDef cicd fill:#ecfdf5,stroke:#0f766e,color:#134e4a,stroke-width:1.5px;
     class NRI,AGENT,KT,SENSOR cicd
 ```
+
+### HTTP preparation permissions
+
+The NRI observer sends the node-view init PID to the Agent. It does not open
+`/proc/<initPID>/root` or target files. The observer examples drop all
+capabilities and require no HTTP-specific AppArmor exception. `hostPID: true`
+keeps observer and Agent PID numbering consistent.
+
+The already-privileged Agent opens the process root and performs inventory in
+its existing HTTP worker. Opening another process's root is still subject to
+`PTRACE_MODE_READ_FSCREDS`; moving the operation does not eliminate that Linux
+check. See [Linux ptrace access checks](https://github.com/torvalds/linux/blob/v6.12/kernel/ptrace.c).
+The Agent's existing privilege boundary must permit this access. Jobs receive
+no additional capability, socket or host filesystem mount. Preparation failures
+remain fail-open and do not affect NRI staging.

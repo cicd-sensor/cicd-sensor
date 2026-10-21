@@ -87,11 +87,9 @@ struct {
     __type(value, __u32);
 } http_uprobe_stages SEC(".maps");
 
-// The hook only checks staging_map lookup hits; this value is reserved for a
-// future kernel path that may surface JobIdentity without userspace lookup.
+// The staging value is reserved; the root ID becomes known at cgroup_mkdir.
 struct staging_value {
-    __u64 job_id_lo;
-    __u64 job_id_hi;
+    __u64 reserved[2];
 };
 
 const volatile struct staging_value *unused_staging_value;
@@ -107,7 +105,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 65536);
     __type(key, __u64);
-    __type(value, __u8);
+    __type(value, __u64);
 } tracked_cgroups SEC(".maps");
 
 // Per-CPU path workspace. FILE_PATH_LEN does not fit on the 512B BPF stack.
@@ -139,9 +137,18 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, 65536);
-    __type(key, struct file_classification_key);
+    __type(key, struct http_discovery_key);
     __type(value, __u8);
 } http_uprobe_discovery_cache SEC(".maps");
+
+// The serial HTTP worker writes an empty value before its own mmap. The mmap
+// hook fills it once; userspace reads the result and deletes the request.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1);
+    __type(key, __u64); // Agent PID/TID, matching bpf_get_current_pid_tgid().
+    __type(value, struct file_classification_key);
+} http_uprobe_mmap_requests SEC(".maps");
 
 // staging_map: basename -> staging_value. Userspace stages sibling-container
 // basenames; cgroup_mkdir promotes and deletes matching entries in-kernel.

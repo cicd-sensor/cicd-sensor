@@ -2,6 +2,7 @@ package kerneltracker
 
 import (
 	"context"
+	"github.com/cicd-sensor/cicd-sensor/internal/agent/httpprepare"
 	"io"
 	"log/slog"
 	"testing"
@@ -29,7 +30,7 @@ func (noopKernelIO) DeleteCgroupBasenamesFromStagingMap(context.Context, []strin
 	return nil
 }
 
-func (noopKernelIO) QueueHTTPUprobeReconciliation([]uint64) {}
+func (noopKernelIO) QueueHTTPUprobeReconciliation() {}
 
 func (noopKernelIO) StartKernelSampleLoop(context.Context, kernelio.KernelSampleHandler) error {
 	return kernelio.ErrNotSupported
@@ -94,8 +95,7 @@ func (kernelIO *recordingKernelIO) DeleteCgroupBasenamesFromStagingMap(_ context
 	return nil
 }
 
-func (kernelIO *recordingKernelIO) QueueHTTPUprobeReconciliation(activeCgroupIDs []uint64) {
-	_ = activeCgroupIDs
+func (kernelIO *recordingKernelIO) QueueHTTPUprobeReconciliation() {
 }
 
 func (kernelIO *recordingKernelIO) Close() error {
@@ -125,4 +125,12 @@ func runTestEffects(t *testing.T, state *jobTrackingState, effects []engineEffec
 	engine.jobTracking = state
 	engine.runEngineEffects(context.Background(), effects)
 	return kernelIO
+}
+
+func (noopKernelIO) PrepareHTTP(context.Context, httpprepare.Process) error {
+	return kernelio.ErrNotSupported
+}
+
+func (*recordingKernelIO) PrepareHTTP(context.Context, httpprepare.Process) error {
+	return kernelio.ErrNotSupported
 }

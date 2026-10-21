@@ -42,10 +42,12 @@ merge.
 ```mermaid
 flowchart LR
     MAP["Executable mapping"] --> WORKER["HTTP uprobe worker"]
+    PREP["Bounded preparation<br/>existing gh / glab files"] --> WORKER
     WORKER --> C{"selected C symbol?"}
-    C -->|"yes"| SYMBOL["attach by symbol"]
+    C -->|"yes"| SYMBOL["resolve ELF symbol and attach"]
     C -->|"no"| PCLN["read Go pclntab"]
-    PCLN --> OFFSET["function VA → PT_LOAD file offset"]
+    PCLN --> GUARD["recognize and skip Go stack check"]
+    GUARD --> OFFSET["body VA → PT_LOAD file offset"]
     OFFSET --> ATTACH["attach by absolute offset"]
 ```
 
@@ -62,9 +64,24 @@ HPACK, so one hook covers both protocol paths used by the standard
 `net/http.Transport`. It records an attempted request; it does not prove that
 the request was delivered.
 
+The probe attaches immediately after the function's stack check, before the
+stack frame or argument registers change. When Go needs a larger goroutine
+stack, `morestack` grows it and jumps back to the function entry. A probe at
+that entry can therefore report the same call twice even with only one link.
+The compiler implements this in `stacksplit` for
+[amd64](https://github.com/golang/go/blob/go1.22.0/src/cmd/internal/obj/x86/obj6.go)
+and [arm64](https://github.com/golang/go/blob/go1.22.0/src/cmd/internal/obj/arm64/obj7.go).
+
+KernelIO recognizes the supported ABIInternal small/medium stack-check
+sequences in at most 32 bytes. Unknown sequences are classified as unsupported;
+the worker does not guess an offset. This check adds no event-content cache:
+two real calls with identical URLs must still produce two events.
+
 ```mermaid
 flowchart LR
-    CALL["Transport.roundTrip(req)"] --> ABI["read ABIInternal arg 2"]
+    CALL["Transport.roundTrip(req)"] --> STACK{"enough stack?"}
+    STACK -->|"no: grow and retry"| CALL
+    STACK -->|"yes"| ABI["probe: read ABIInternal arg 2"]
     ABI --> REQUEST["Request + URL fields"]
     REQUEST --> GATE{"scheme is https<br/>fields valid"}
     GATE -->|"yes"| SAMPLE["http_request<br/>source = go_net_http"]
@@ -86,8 +103,10 @@ the escaped path sent on the wire.
 ## Go runtime contracts
 
 Go's ABIInternal and object layout are implementation details. The current
-implementation supports Go 1.18 through 1.27 with the tested 64-bit layouts on
-Linux amd64 and arm64; it does not infer a Go version at runtime.
+metadata and object-field layout tests cover Go 1.18 through 1.27 on Linux
+amd64 and arm64. Capture additionally requires a recognized stack-check
+sequence; metadata resolution alone does not establish capture compatibility.
+The implementation does not infer a Go version at runtime.
 
 Only the register-based [ABIInternal](https://go.dev/s/regabi) is supported.
 Go introduced this calling convention on Linux amd64 in
@@ -122,26 +141,30 @@ no event, but these checks are not a formal compatibility guarantee for a
 future Go release. Offset tests must be updated together with any supported Go
 range change.
 
-Address resolution and request decoding are separate compatibility contracts.
+Address resolution, stack-check recognition, and request decoding are separate
+compatibility contracts.
 The profiler dependency handles Go metadata layout differences. cicd-sensor
 still owns the ABI registers and `http.Request` / `url.URL` field offsets above.
-A new Go release must pass both address-resolution and real-request tests before
+A new Go release must pass address-resolution, stack-check, and real-request tests before
 the documented range is advanced.
 
 ## Resolution and link lifetime
 
 KernelIO asks the profiler resolver for the selected function's virtual
-address, then converts that address through the containing executable
+address, skips the recognized stack check, then converts the resulting address
+through the containing executable
 `PT_LOAD` segment:
 
 ```text
-file offset = function VA - segment virtual address + segment file offset
+file offset = body VA - segment virtual address + segment file offset
 ```
 
 The worker then calls cilium/ebpf with an empty symbol and
 `UprobeOptions.Address` set to that absolute file offset. The resulting link is
-stored in the existing inode-keyed `attachedTargets` registry and follows the
-same maps-liveness reclaim as every other HTTP uprobe.
+stored in the existing owner-and-file-keyed `attachedTargets` registry. Like
+every HTTP uprobe, it stays until its tracking owner has no tracked cgroups.
+The attach cookie admits only calls from that owner; another Job sharing the
+same image file keeps its own link when this owner ends.
 
 No Go-specific worker, queue, registry, target cap, or reclaim path exists.
 
@@ -153,6 +176,8 @@ No Go-specific worker, queue, registry, target cap, or reclaim path exists.
   are not supported.
 - Binaries whose retained Go metadata is not supported by the pinned profiler
   dependency are not captured.
+- Unrecognized stack checks, including unsupported compiler instrumentation or
+  large-frame sequences, are not captured by the Go probe.
 - Classification and attachment are asynchronous, so the first request can run
   before the uprobe is attached.
 - Retries and redirects can produce more than one request event.
@@ -168,6 +193,9 @@ integration tests exercise both `http.Client.Do` and direct
 `Transport.RoundTrip` over HTTP/1.1 and HTTP/2. A dedicated Ubuntu 24.04 matrix
 uses stripped internally and externally linked fixtures built with Go 1.18.10,
 1.20.14, 1.26.7, and 1.27.0 on amd64 and arm64. Real-client coverage includes
-the `gh` binary. Fixture requests are repeated within one process because
+the `gh` binary. Those metadata/ABI tests do not replace validation of the
+stack-check capture point. Dedicated tests reject malformed prologues, and
+long-running real-client tests check for stack-growth re-entry duplicates.
+Fixture requests are repeated within one process because
 asynchronous attachment does not guarantee capture of a newly mapped file's
 first request.

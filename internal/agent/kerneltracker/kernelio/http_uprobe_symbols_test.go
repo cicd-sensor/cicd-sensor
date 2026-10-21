@@ -19,9 +19,9 @@ func TestDefinedSymbolTargets(t *testing.T) {
 			t.Fatalf("open self executable: %v", err)
 		}
 		defer f.Close()
-		got, definitive, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: "not.a.real.symbol"}})
-		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedSymbolTargets = %+v, %v, %v", got, definitive, err)
+		got, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: "not.a.real.symbol"}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("definedSymbolTargets = %+v, %v", got, err)
 		}
 	})
 
@@ -36,17 +36,17 @@ func TestDefinedSymbolTargets(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer f.Close()
-		got, definitive, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: "SSL_write"}})
-		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedSymbolTargets = %+v, %v, %v", got, definitive, err)
+		got, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: "SSL_write"}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("definedSymbolTargets = %+v, %v", got, err)
 		}
 	})
 
 	t.Run("reader failure remains retryable", func(t *testing.T) {
 		t.Parallel()
-		got, definitive, err := definedSymbolTargets(failingReaderAt{}, []symbolUprobeTarget{{symbol: "SSL_write"}})
-		if err == nil || definitive || len(got) != 0 {
-			t.Fatalf("definedSymbolTargets = %+v, %v, %v; want empty, false, error", got, definitive, err)
+		got, err := definedSymbolTargets(failingReaderAt{}, []symbolUprobeTarget{{symbol: "SSL_write"}})
+		if err == nil || len(got) != 0 {
+			t.Fatalf("definedSymbolTargets = %+v, %v; want empty, error", got, err)
 		}
 	})
 
@@ -77,9 +77,9 @@ func TestDefinedSymbolTargets(t *testing.T) {
 			t.Skip("/bin/sh has no undefined function import")
 		}
 
-		got, definitive, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: imported}})
-		if err != nil || !definitive || len(got) != 0 {
-			t.Fatalf("definedSymbolTargets(%q) = %+v, %v, %v", imported, got, definitive, err)
+		got, err := definedSymbolTargets(f, []symbolUprobeTarget{{symbol: imported}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("definedSymbolTargets(%q) = %+v, %v", imported, got, err)
 		}
 	})
 }

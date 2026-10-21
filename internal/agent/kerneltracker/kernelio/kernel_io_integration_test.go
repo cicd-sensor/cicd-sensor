@@ -158,12 +158,12 @@ func TestLinuxKernelIOTrackedCgroupsMapOperations(t *testing.T) {
 	if !found {
 		t.Fatalf("tracked cgroup lookup after put: got false, want true")
 	}
-	var got uint8
+	var got uint64
 	if err := kernelIO.objs.TrackedCgroups.Lookup(cgroupID, &got); err != nil {
 		t.Fatalf("lookup tracked cgroup: %v", err)
 	}
-	if got != 1 {
-		t.Fatalf("tracked cgroup value: got %d, want 1", got)
+	if got != cgroupID {
+		t.Fatalf("tracked cgroup value: got %d, want root %d", got, cgroupID)
 	}
 
 	if err := kernelIO.DeleteCgroupIDsFromTrackedCgroupsMap(ctx, []uint64{cgroupID}); err != nil {
@@ -215,8 +215,8 @@ func TestLinuxKernelIOStagingMapOperations(t *testing.T) {
 	if err := kernelIO.objs.StagingMap.Lookup(fixedKey, &got); err != nil {
 		t.Fatalf("lookup staging entry: %v", err)
 	}
-	if got.JobIdLo != 0 || got.JobIdHi != 0 {
-		t.Fatalf("staging value: got %+v, want zero value", got)
+	if got.Reserved != [2]uint64{} {
+		t.Fatalf("staging value: got %+v, want zero reserved value", got)
 	}
 
 	if err := kernelIO.DeleteCgroupBasenamesFromStagingMap(ctx, []string{basename}); err != nil {

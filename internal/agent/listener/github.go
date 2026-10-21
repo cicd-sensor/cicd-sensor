@@ -42,6 +42,7 @@ func (l *Listener) handleGitHubHostStart(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	l.prepareMachineHTTP(r.Context())
 	l.logger.InfoContext(r.Context(), "host_start_accepted", "job_identity", identity)
 	l.writeJSON(r.Context(), w, http.StatusOK, map[string]any{
 		"job_identity": identity,
@@ -148,6 +149,7 @@ func (l *Listener) handleGitHubProjectStart(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	l.prepareMachineHTTP(r.Context())
 	l.logger.InfoContext(r.Context(), "project_start_accepted", "job_identity", identity)
 	l.writeJSON(r.Context(), w, http.StatusOK, map[string]any{
 		"job_identity": identity,

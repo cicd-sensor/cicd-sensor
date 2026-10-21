@@ -13,7 +13,7 @@ import (
 
 func (kernelIO *LinuxKernelIO) PutCgroupIDInTrackedCgroupsMap(ctx context.Context, cgroupID uint64) error {
 	_ = ctx
-	if err := kernelIO.objs.TrackedCgroups.Update(cgroupID, uint8(1), ebpf.UpdateAny); err != nil {
+	if err := kernelIO.objs.TrackedCgroups.Update(cgroupID, cgroupID, ebpf.UpdateNoExist); err != nil && !errors.Is(err, ebpf.ErrKeyExist) {
 		return fmt.Errorf("put cgroup id %d in tracked_cgroups map: %w", cgroupID, err)
 	}
 	return nil
@@ -21,6 +21,7 @@ func (kernelIO *LinuxKernelIO) PutCgroupIDInTrackedCgroupsMap(ctx context.Contex
 
 func (kernelIO *LinuxKernelIO) DeleteCgroupIDsFromTrackedCgroupsMap(ctx context.Context, cgroupIDs []uint64) error {
 	_ = ctx
+	defer kernelIO.QueueHTTPUprobeReconciliation()
 	for _, cgroupID := range cgroupIDs {
 		if err := kernelIO.objs.TrackedCgroups.Delete(cgroupID); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
 			return fmt.Errorf("delete cgroup id %d from tracked_cgroups map: %w", cgroupID, err)
@@ -62,7 +63,7 @@ func (kernelIO *LinuxKernelIO) DeleteCgroupBasenamesFromStagingMap(ctx context.C
 
 func (kernelIO *LinuxKernelIO) TestOnlyLookupCgroupIDInTrackedCgroupsMap(ctx context.Context, cgroupID uint64) (bool, error) {
 	_ = ctx
-	var value uint8
+	var value uint64
 	err := kernelIO.objs.TrackedCgroups.Lookup(cgroupID, &value)
 	if errors.Is(err, ebpf.ErrKeyNotExist) {
 		return false, nil
@@ -107,7 +108,7 @@ func fixedStagingMapValue(value []byte) ([]byte, error) {
 	if len(value) > StagingValueLen {
 		return nil, fmt.Errorf("staging_map value must be at most %d bytes, got %d", StagingValueLen, len(value))
 	}
-	// The current BPF hook only checks lookup hits; zero value is the intended v1 payload.
+	// Preserve the fixed staging ABI; the value is reserved.
 	fixed := make([]byte, StagingValueLen)
 	copy(fixed, value)
 	return fixed, nil
@@ -118,4 +119,28 @@ func fixedStagingMapValue(value []byte) ([]byte, error) {
 // production use — production attaches via OpenSSL uprobe discovery.
 func (kernelIO *LinuxKernelIO) TestOnlyOpenSSLProgram() *ebpf.Program {
 	return kernelIO.objs.HandleSslWrite
+}
+
+// httpRootCgroup reads only the kernel tracking decision, not a container pathname.
+func (kernelIO *LinuxKernelIO) httpRootCgroup(cgroupID uint64) uint64 {
+	var rootCgroupID uint64
+	if kernelIO.objs.TrackedCgroups == nil || kernelIO.objs.TrackedCgroups.Lookup(cgroupID, &rootCgroupID) != nil {
+		return 0
+	}
+	return rootCgroupID
+}
+
+// httpRootActive checks one root, so child changes cannot invalidate reclaim.
+func (kernelIO *LinuxKernelIO) httpRootActive(rootCgroupID uint64) (bool, error) {
+	var value uint64
+	err := kernelIO.objs.TrackedCgroups.Lookup(rootCgroupID, &value)
+	if errors.Is(err, ebpf.ErrKeyNotExist) {
+		return false, nil
+	}
+	return value == rootCgroupID && rootCgroupID != 0, err
+}
+
+// TestOnlyHTTPRootCgroup exposes the attach cookie for direct-program integration tests.
+func (kernelIO *LinuxKernelIO) TestOnlyHTTPRootCgroup(cgroupID uint64) uint64 {
+	return kernelIO.httpRootCgroup(cgroupID)
 }

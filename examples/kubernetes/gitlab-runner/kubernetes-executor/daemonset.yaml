@@ -72,6 +72,8 @@ spec:
             runAsUser: 0
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
           volumeMounts:
             - name: run
               mountPath: /run/cicd-sensor

@@ -17,10 +17,13 @@ import (
 
 // LinuxKernelIO owns BPF program, map, and ring buffer I/O.
 type LinuxKernelIO struct {
-	logger          *slog.Logger
-	objs            bpfprog.BPFProgramObjects
-	links           []link.Link
-	reader          *ringbuf.Reader
+	logger *slog.Logger
+	objs   bpfprog.BPFProgramObjects
+	links  []link.Link
+	reader *ringbuf.Reader
+	// Serialize loop startup with teardown, including WaitGroup registration.
+	lifecycleMu     sync.Mutex
+	closed          bool
 	cancelLoop      context.CancelFunc
 	closeReaderOnce sync.Once
 	// loopWG tracks goroutines spawned by StartKernelSampleLoop. Close
@@ -136,11 +139,12 @@ func NewLinux(logger *slog.Logger, config Config) (kernelIO *LinuxKernelIO, err 
 			kernelIO.logger,
 			config.CgroupV2RootPath,
 			kernelIO.objs.HttpUprobeDiscoveryCache,
-			goUprobeTarget{
-				function: goNetHTTPRoundTripFunction,
-				program:  kernelIO.objs.HandleGoNetHttpRoundTrip,
-			},
+			kernelIO.objs.HandleGoNetHttpRoundTrip,
 		)
+	}
+	if kernelIO.httpUprobeWorker != nil {
+		kernelIO.httpUprobeWorker.tracking = kernelIO
+		kernelIO.httpUprobeWorker.mmapRequests = kernelIO.objs.HttpUprobeMmapRequests
 	}
 	for _, attach := range tracingPrograms {
 		attached, err := link.AttachTracing(link.TracingOptions{Program: attach.program})

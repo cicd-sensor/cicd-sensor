@@ -295,9 +295,8 @@ struct http_request_sample {
     char host[HTTP_HOST_LEN];
 };
 
-// One mapped file has a stable device/inode identity for link ownership and
-// maps-liveness reclaim. Classification adds ctime so inode reuse or an
-// in-place metadata change cannot inherit an old non-target decision.
+// Links use the backing device/inode within a tracking root. Classification
+// adds ctime so a changed file cannot inherit an old non-target decision.
 struct mapped_file_identity {
     __u32 device_major;
     __u32 device_minor;
@@ -312,9 +311,16 @@ struct file_classification_key {
 };
 
 // Discovery metadata only. No HTTP bytes or file content cross this boundary.
+struct http_discovery_key {
+    __u64 root_cgroup_id;
+    struct file_classification_key file;
+};
+
 struct http_uprobe_attach_candidate_sample {
     __u32 kind;
     __s32 tgid;
+    __u64 cgroup_id;
+    __u64 root_cgroup_id;
     __u64 vm_start;
     __u64 vm_end;
     struct file_classification_key file;
