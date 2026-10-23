@@ -16,6 +16,48 @@ data:
     const METADATA_ANNOTATION = "cicd-sensor.github.io/metadata";
     const DEFAULT_K8S_HOOK = "/home/runner/k8s/index.js";
 
+    // ---------------------------------------------------------------------------
+    // OPERATOR SECTION — edit operatorPodTemplate() below for your environment.
+    //
+    // The official ARC hook accepts a single template file. cicd-sensor must
+    // generate that file per job (identity annotations + nodeName), so do not
+    // set ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE yourself. Put Pod overrides in
+    // operatorPodTemplate() instead; buildTemplate() adds cicd-sensor annotations
+    // and spec.nodeName on top of that object each time.
+    //
+    // Caveat: runAsUser on the "$job" container applies only to the job container.
+    // Steps that need root fail with a clear "Permission denied"; remove that
+    // securityContext line when needed. Service containers are unaffected.
+    // Non-root is fine for cicd-sensor itself: the agent reads /proc and cgroups
+    // from the node side; nothing of cicd-sensor runs inside the workflow Pod.
+    // ---------------------------------------------------------------------------
+    function operatorPodTemplate() {
+      return {
+        metadata: {
+          labels: {
+            // "operator.example.com/preserve": "true",
+          },
+          annotations: {
+            // "operator.example.com/note": "keep-me",
+          },
+        },
+        spec: {
+          containers: [
+            {
+              name: "$job",
+              securityContext: {
+                // Official runner image uses UID 1001. Match that unless your
+                // custom runner image or job steps need root.
+                runAsUser: 1001,
+              },
+            },
+          ],
+          // Optional: shorten graceful shutdown for workflow Pods.
+          // terminationGracePeriodSeconds: 30,
+        },
+      };
+    }
+
     function providerHost() {
       const raw = process.env.GITHUB_SERVER_URL || "https://github.com";
       return raw.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "").replace(/\.$/, "").toLowerCase();
@@ -96,32 +138,38 @@ data:
       );
     }
 
-    function yamlString(value) {
-      return JSON.stringify(String(value));
-    }
-
-    function templateYaml(identity, metadata, nodeName) {
-      const lines = [
-        "metadata:",
-        "  annotations:",
-        `    ${IDENTITY_ANNOTATION}: ${yamlString(JSON.stringify(identity))}`,
-        `    ${METADATA_ANNOTATION}: ${yamlString(JSON.stringify(metadata))}`,
-      ];
+    function buildTemplate(identity, metadata, nodeName) {
+      const t = operatorPodTemplate();
+      t.metadata ??= {};
+      t.metadata.annotations ??= {};
+      t.metadata.annotations[IDENTITY_ANNOTATION] = JSON.stringify(identity);
+      t.metadata.annotations[METADATA_ANNOTATION] = JSON.stringify(metadata);
       if (nodeName) {
-        lines.push(
-          "spec:",
-          `  nodeName: ${yamlString(nodeName)}`,
-        );
+        t.spec ??= {};
+        t.spec.nodeName = nodeName;
       }
-      lines.push("");
-      return lines.join("\n");
+      return JSON.stringify(t, null, 2) + "\n";
     }
 
     function writeTemplate(identity, metadata, nodeName) {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cicd-sensor-arc-hook-"));
-      const file = path.join(dir, `hook-template-${process.pid}-${Date.now()}.yaml`);
-      fs.writeFileSync(file, templateYaml(identity, metadata, nodeName), { mode: 0o600 });
+      const file = path.join(dir, `hook-template-${process.pid}-${Date.now()}.json`);
+      fs.writeFileSync(file, buildTemplate(identity, metadata, nodeName), { mode: 0o600 });
       return file;
+    }
+
+    function rejectExistingHookTemplate() {
+      const existing = process.env.ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE;
+      if (!existing) {
+        return;
+      }
+      console.error(
+        "cicd-sensor hook wrapper: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE is already set " +
+        `(${existing}). The example wrapper refuses to overwrite an existing hook template. ` +
+        "Edit operatorPodTemplate() in this wrapper instead " +
+        "(examples/kubernetes/github-arc/kubernetes-mode/container-hook-wrapper-configmap.yaml)."
+      );
+      process.exit(1);
     }
 
     function runOfficialHook(input, env) {
@@ -144,6 +192,8 @@ data:
     }
 
     async function main() {
+      rejectExistingHookTemplate();
+
       const input = await readStdin();
       let parsed;
       try {
