@@ -7,11 +7,13 @@
   "dependencyDashboard": true,
   "internalChecksFilter": "strict",
   "rebaseWhen": "behind-base-branch",
-  // Routine dependency branches are created and updated Tuesday morning JST.
-  // Renovate vulnerability alert PRs bypass this schedule.
+  // Routine dependency branches are created and updated on Tuesday JST.
+  // Mend-hosted Renovate schedules repo jobs daily (or 4-hourly once activated)
+  // at an arbitrary time, so the window must cover the whole day; a 9-12 window
+  // was almost never hit. Renovate vulnerability alert PRs bypass this schedule.
   "timezone": "Asia/Tokyo",
   "schedule": [
-    "* 9-12 * * 2"
+    "* * * * 2"
   ],
   "updateNotScheduled": false,
   "labels": [
@@ -25,6 +27,15 @@
   "env": {
     "GOPROXY": "https://golang.flatt.tech,direct",
   },
+  // Renovate's default lookup concurrency (16) trips the proxy's rate limit and
+  // the resulting 429 aborts the whole repository run as an external host error.
+  "hostRules": [
+    {
+      "matchHost": "golang.flatt.tech",
+      "concurrentRequestLimit": 2,
+      "maxRequestsPerSecond": 2
+    }
+  ],
   "packageRules": [
     {
       "description": "Group Go module updates",
