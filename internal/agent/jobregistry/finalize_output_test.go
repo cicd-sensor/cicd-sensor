@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/joblogs"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobscope"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/kerneltracker"
@@ -350,5 +352,130 @@ func TestFinalizeFlushesScopesInParallel(t *testing.T) {
 	close(gate.release)
 	if err := <-done; err != nil {
 		t.Fatalf("finalizeTakenJobSync: %v", err)
+	}
+}
+
+func TestFinalizeTakenJob_CloseOIDCAfterSummaryAndStreaming(t *testing.T) {
+	t.Parallel()
+
+	gate := newGatedLogBatchSender()
+	summaryPoster := &recordingManagerBatchPoster{}
+	cached := managerclient.NewCachedTokenSource(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test"}))
+
+	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	metadata := jobcontext.JobMetadata{}
+	job, eventCh := newTestJob(identity, metadata, testEventChannelSize)
+	scope := jobscope.NewHost()
+	logs := joblogs.NewForTesting(testLogger, summaryPoster.sendBatch)
+	logs.SetConnectionForTesting(managerclient.Connection{Cached: cached})
+	logs.AttachBufferedRuntimeEventRecorderForTesting(identity, scope.Type, gate.sendBatch)
+	logs.AttachSummaryRecorderForTesting(identity, scope.Type, summaryPoster.sendBatch)
+	scope.SetManagerJobLogs(logs)
+	if err := job.SetHostScope(testCtx, scope); err != nil {
+		t.Fatalf("SetHostScope: %v", err)
+	}
+	scope.WriteRuntimeEventLog(testCtx, identity, metadata, "machine", testDispatchEvent("/usr/bin/curl", "registry.npmjs.org", 443), testLogger)
+	close(eventCh)
+
+	jr := New(testLogger)
+	done := make(chan error, 1)
+	go func() {
+		done <- jr.finalizeTakenJobSync(testCtx, job, kerneltracker.EndShutdown, time.Now().UTC())
+	}()
+
+	<-gate.entered
+	waitForJob(t, "summary sent while streaming flush is blocked", func() bool {
+		return len(managerBatchPosterSnapshot(summaryPoster)) == 1
+	})
+	if cached.ClosedForTesting() {
+		t.Fatal("OIDC close ran before streaming finalize finished")
+	}
+
+	close(gate.release)
+	if err := <-done; err != nil {
+		t.Fatalf("finalizeTakenJobSync: %v", err)
+	}
+	if !cached.ClosedForTesting() {
+		t.Fatal("OIDC close did not run after summary and streaming finalize")
+	}
+}
+
+func TestFinalizeTakenJob_SharedCachedCloseIsIdempotentAcrossScopes(t *testing.T) {
+	t.Parallel()
+
+	poster := &recordingManagerBatchPoster{}
+	cached := managerclient.NewCachedTokenSource(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "shared-oidc"}))
+
+	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	metadata := jobcontext.JobMetadata{}
+	job, eventCh := newTestJob(identity, metadata, testEventChannelSize)
+	close(eventCh)
+
+	hostScope := jobscope.NewHost()
+	hostLogs := joblogs.NewForTesting(testLogger, poster.sendBatch)
+	hostLogs.SetConnectionForTesting(managerclient.Connection{Cached: cached})
+	hostLogs.AttachSummaryRecorderForTesting(identity, hostScope.Type, poster.sendBatch)
+	hostScope.SetManagerJobLogs(hostLogs)
+	hostScope.ResolveRules(identity)
+	if err := job.SetHostScope(testCtx, hostScope); err != nil {
+		t.Fatalf("SetHostScope: %v", err)
+	}
+
+	projectScope := jobscope.NewProject()
+	projectLogs := joblogs.NewForTesting(testLogger, poster.sendBatch)
+	projectLogs.SetConnectionForTesting(managerclient.Connection{Cached: cached})
+	projectLogs.AttachSummaryRecorderForTesting(identity, projectScope.Type, poster.sendBatch)
+	projectScope.SetManagerJobLogs(projectLogs)
+	projectScope.ResolveRules(identity)
+	if err := job.SetProjectScope(testCtx, projectScope); err != nil {
+		t.Fatalf("SetProjectScope: %v", err)
+	}
+
+	jr := New(testLogger)
+	if err := jr.finalizeTakenJobSync(testCtx, job, kerneltracker.EndShutdown, time.Now().UTC()); err != nil {
+		t.Fatalf("finalizeTakenJobSync: %v", err)
+	}
+	if !cached.ClosedForTesting() {
+		t.Fatal("shared CachedTokenSource not closed after finalize")
+	}
+
+	// Second close via the deferred closeOIDCForJob already ran; call it
+	// again directly to prove idempotency under explicit double-close.
+	cached.Close()
+	if !cached.ClosedForTesting() {
+		t.Fatal("CachedTokenSource not closed after explicit double-close")
+	}
+}
+
+func TestFinalizeTakenJob_ClosesOIDCWhenRemoveJobFails(t *testing.T) {
+	t.Parallel()
+
+	removeErr := errors.New("remove bpf job failed")
+	cached := managerclient.NewCachedTokenSource(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test"}))
+
+	identity := jobcontext.GitHubJobIdentity("github.com", "acme/example", "123", "build", "1", "runner-1")
+	job, eventCh := newTestJob(identity, jobcontext.JobMetadata{}, 1)
+	close(eventCh)
+
+	hostScope := jobscope.NewHost()
+	hostLogs := joblogs.NewForTesting(testLogger, func(context.Context, managerclient.LogBatch) error { return nil })
+	hostLogs.SetConnectionForTesting(managerclient.Connection{Cached: cached})
+	hostScope.SetManagerJobLogs(hostLogs)
+	if err := job.SetHostScope(testCtx, hostScope); err != nil {
+		t.Fatalf("SetHostScope: %v", err)
+	}
+
+	jr := newTestJobRegistry()
+	jr.kernelTracker = fakeUnavailableKernelTracker()
+	jr.SetRemoveJobHookForTesting(func(context.Context, jobcontext.JobIdentity) error {
+		return removeErr
+	})
+
+	err := jr.finalizeTakenJobSync(testCtx, job, kerneltracker.EndShutdown, time.Now().UTC())
+	if err == nil || !errors.Is(err, removeErr) {
+		t.Fatalf("finalizeTakenJobSync error: got %v, want %v", err, removeErr)
+	}
+	if !cached.ClosedForTesting() {
+		t.Fatal("OIDC close did not run when RemoveJob failed")
 	}
 }

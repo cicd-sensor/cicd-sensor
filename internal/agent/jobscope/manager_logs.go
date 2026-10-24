@@ -47,6 +47,16 @@ func (s *JobScopeState) EmitSummaryLog(ctx context.Context, in SummaryLogInputs,
 	return s.managerJobLogs.EmitAndCloseSummaryLog(ctx, payload)
 }
 
+// CloseOIDCCredential cancels shared OIDC mint work. Finalize defers
+// closeOIDCForJob so this runs after both parallel paths — summary emit
+// and FinalizeStreamingLogs — complete (see finalize.go).
+func (s *JobScopeState) CloseOIDCCredential() {
+	if s == nil {
+		return
+	}
+	s.managerJobLogs.CloseOIDCCredential()
+}
+
 // FlushManagerLogs sends buffered streaming logs now, keeping the Job
 // tracked and its workers open. Reachable from inside the job, so it may
 // only accelerate delivery — never stop collection or emit the summary.
@@ -55,6 +65,15 @@ func (s *JobScopeState) FlushManagerLogs(ctx context.Context) error {
 		return nil
 	}
 	return s.managerJobLogs.FlushStreamingLogs(ctx)
+}
+
+// ForceRefreshManagerIDToken remints and pins the project-scope OIDC JWT
+// while minting still works (project result), so shutdown Summary can reuse it.
+func (s *JobScopeState) ForceRefreshManagerIDToken(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.managerJobLogs.ForceRefreshIDToken(ctx)
 }
 
 func (s *JobScopeState) WriteDetectionLogForHit(ctx context.Context, identity jobcontext.JobIdentity, metadata jobcontext.JobMetadata, runnerType string, hit observations.HitEntry, event jobevent.EventRecord, logger *slog.Logger) {

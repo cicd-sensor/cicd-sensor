@@ -26,8 +26,9 @@ import (
 const managerUsage = "usage: cicd-sensor-manager [flags]"
 
 type managerStartupOptions struct {
-	ConfigFile string
-	Tokens     []string
+	ConfigFile  string
+	Tokens      []string
+	OIDCEnabled bool
 }
 
 type tokenFileFlags []string
@@ -54,6 +55,7 @@ func main() {
 		fmt.Fprintln(flag.CommandLine.Output(), "        Manager startup config YAML.")
 		fmt.Fprintln(flag.CommandLine.Output(), "  CICD_SENSOR_MANAGER_TOKEN{,_2} or --manager-token-file PATH")
 		fmt.Fprintln(flag.CommandLine.Output(), "        Manager bearer token secret. Provide up to 2 tokens for rotation overlap.")
+		fmt.Fprintln(flag.CommandLine.Output(), "        Optional when auth.oidc.enabled is true in the config file (OIDC-only mode).")
 		fmt.Fprintln(flag.CommandLine.Output())
 		fmt.Fprintln(flag.CommandLine.Output(), "Optional:")
 		fmt.Fprintln(flag.CommandLine.Output(), "  --version, -v")
@@ -85,16 +87,21 @@ func main() {
 	}
 	configFile := resolveFilePathFromFlagOrEnv(configFileFlag, "CICD_SENSOR_MANAGER_CONFIG_FILE", "manager_config_file", logger)
 	rulesFile := resolveFilePathFromFlagOrEnv(rulesFileFlag, "CICD_SENSOR_MANAGER_RULES_FILE", "manager_rules_file", logger)
-	opts := managerStartupOptions{
-		ConfigFile: configFile,
-		Tokens:     tokens,
+	if configFile == "" {
+		slog.ErrorContext(ctx, "manager_failed", "error", errors.New("--config-file or CICD_SENSOR_MANAGER_CONFIG_FILE is required"))
+		os.Exit(1)
 	}
-	if err := validateManagerStartupOptions(opts); err != nil {
+	startupConfig, err := manager.LoadStartupConfig(configFile)
+	if err != nil {
 		slog.ErrorContext(ctx, "manager_failed", "error", err)
 		os.Exit(1)
 	}
-	startupConfig, err := manager.LoadStartupConfig(opts.ConfigFile)
-	if err != nil {
+	opts := managerStartupOptions{
+		ConfigFile:  configFile,
+		Tokens:      tokens,
+		OIDCEnabled: startupConfig.Auth.OIDC.Enabled,
+	}
+	if err := validateManagerStartupOptions(opts); err != nil {
 		slog.ErrorContext(ctx, "manager_failed", "error", err)
 		os.Exit(1)
 	}
@@ -134,11 +141,11 @@ func main() {
 }
 
 func validateManagerStartupOptions(opts managerStartupOptions) error {
-	if len(opts.Tokens) == 0 {
-		return errors.New("manager token is required: set CICD_SENSOR_MANAGER_TOKEN or --manager-token-file")
-	}
 	if opts.ConfigFile == "" {
 		return errors.New("--config-file or CICD_SENSOR_MANAGER_CONFIG_FILE is required")
+	}
+	if len(opts.Tokens) == 0 && !opts.OIDCEnabled {
+		return errors.New("manager token is required: set CICD_SENSOR_MANAGER_TOKEN or --manager-token-file (or enable auth.oidc in the config file)")
 	}
 	return nil
 }

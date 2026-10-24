@@ -306,6 +306,37 @@ func TestBuildProjectStartRequest_LoadsProjectManager(t *testing.T) {
 	if got["manager_token"] != token {
 		t.Fatalf("manager_token: got %#v, want token", got["manager_token"])
 	}
+	if got["manager_auth"] != "manager-token" {
+		t.Fatalf("manager_auth: got %#v, want manager-token", got["manager_auth"])
+	}
+}
+
+func TestBuildProjectStartRequest_LoadsOIDCManager(t *testing.T) {
+	got, err := buildProjectStartRequest(githubIdentity(), jobMetadataFlags{}, "", "", managerConnectionConfig{
+		URL:                 "https://project-manager.example.com",
+		Auth:                "oidc",
+		IDTokenRequestURL:   "https://vstoken.actions.githubusercontent.com/token",
+		IDTokenRequestToken: "request-secret",
+		IDTokenAudience:     "https://project-manager.example.com",
+	}, false)
+	if err != nil {
+		t.Fatalf("buildProjectStartRequest: %v", err)
+	}
+	if got["manager_auth"] != "oidc" {
+		t.Fatalf("manager_auth: got %#v", got["manager_auth"])
+	}
+	if got["id_token_request_url"] != "https://vstoken.actions.githubusercontent.com/token" {
+		t.Fatalf("id_token_request_url: got %#v", got["id_token_request_url"])
+	}
+	if got["id_token_request_token"] != "request-secret" {
+		t.Fatalf("id_token_request_token: got %#v", got["id_token_request_token"])
+	}
+	if got["id_token_audience"] != "https://project-manager.example.com" {
+		t.Fatalf("id_token_audience: got %#v", got["id_token_audience"])
+	}
+	if _, ok := got["manager_token"]; ok {
+		t.Fatalf("manager_token must be absent for oidc")
+	}
 }
 
 func TestBuildProjectStartRequest_IncludesDebugEnabled(t *testing.T) {

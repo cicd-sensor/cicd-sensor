@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/job"
 	"github.com/cicd-sensor/cicd-sensor/internal/agent/jobregistry"
@@ -116,7 +118,11 @@ func (l *Listener) handleGitHubProjectStart(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Registry owns peer authorization because it depends on Job/BPF state.
-	managerConnection := managerclient.Connection{BaseURL: req.ManagerURL, Token: req.ManagerToken}
+	managerConnection, err := l.buildProjectManagerConnection(req)
+	if err != nil {
+		l.writeError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
 	var projectManagerClient jobregistry.ManagerConfigFetcher
 	if req.ManagerURL != "" {
 		projectManagerClient, err = managerclient.NewConfigClient(l.logger, managerConnection)
@@ -377,6 +383,46 @@ func (l *Listener) decodeGitHubJobIdentity(w http.ResponseWriter, r *http.Reques
 		return jobcontext.JobIdentity{}, false
 	}
 	return identity, true
+}
+
+// buildProjectManagerConnection builds the manager Connection for project
+// start. OIDC validates request_url against the Agent startup host allowlist.
+func (l *Listener) buildProjectManagerConnection(req githubProjectStartRequest) (managerclient.Connection, error) {
+	if req.ManagerURL == "" {
+		return managerclient.Connection{}, nil
+	}
+	switch req.managerAuthMode() {
+	case managerclient.TokenTypeManagerToken:
+		return managerclient.Connection{BaseURL: req.ManagerURL, Token: req.ManagerToken}, nil
+	case managerclient.TokenTypeIDToken:
+		if err := managerclient.ValidateIDTokenRequestURL(req.IDTokenRequestURL, l.idTokenRequestURLHosts); err != nil {
+			return managerclient.Connection{}, err
+		}
+		audience := strings.TrimSpace(req.IDTokenAudience)
+		if audience == "" {
+			audience = managerAudienceFromURL(req.ManagerURL)
+		}
+		if audience == "" {
+			return managerclient.Connection{}, fmt.Errorf("id_token_audience is required when manager_url has no origin")
+		}
+		return managerclient.NewOIDCConnection(
+			req.ManagerURL,
+			req.IDTokenRequestURL,
+			req.IDTokenRequestToken,
+			audience,
+			l.idTokenHTTPClient,
+		), nil
+	default:
+		return managerclient.Connection{}, fmt.Errorf("unknown manager_auth %q", req.ManagerAuth)
+	}
+}
+
+func managerAudienceFromURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return strings.TrimRight(strings.TrimSpace(raw), "/")
+	}
+	return parsed.Scheme + "://" + parsed.Host
 }
 
 func scopeHealthStatus(active bool) string {

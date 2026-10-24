@@ -43,6 +43,10 @@ var tokenSubstringsLower = []string{
 	"github_pat_",
 	"glpat-",
 	"glptt-",
+	// Manager / Actions OIDC credentials (journal + debug argv paths).
+	"sk_cs_",
+	"actions_id_token_request_token",
+	"actions_id_token_request_url",
 }
 
 func RedactArgvForOutput(argv []string) []string {

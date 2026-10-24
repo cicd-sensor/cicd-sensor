@@ -33,6 +33,7 @@ type agentStartOptions struct {
 	ManagerToken              string
 	SocketPath                string
 	GitHubK8sRunnerSocketPath string
+	IDTokenRequestURLHosts    []string
 	ShutdownGrace             time.Duration
 	JobTTL                    time.Duration
 	EnableHTTPRequest         bool
@@ -60,11 +61,13 @@ func runAgentStart(args []string) {
 	var managerURL string
 	var managerTokenFilePath string
 	var githubK8sRunnerSocketPath string
+	var idTokenRequestURLHosts string
 	var shutdownGrace time.Duration
 	var jobTTL time.Duration
 	var enableHTTPRequest bool
 	socketPath = defaultSocketPath
 	githubK8sRunnerSocketPath = os.Getenv("CICD_SENSOR_GITHUB_K8S_RUNNER_SOCKET")
+	idTokenRequestURLHosts = os.Getenv("CICD_SENSOR_ID_TOKEN_REQUEST_URL_HOSTS")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), agentStartUsage)
 		fmt.Fprintln(fs.Output())
@@ -81,6 +84,9 @@ func runAgentStart(args []string) {
 		fmt.Fprintln(fs.Output(), "        Host scope manager URL. Required for --runner kubernetes and host-installed machine runners.")
 		fmt.Fprintln(fs.Output(), "  CICD_SENSOR_MANAGER_TOKEN or --manager-token-file PATH")
 		fmt.Fprintln(fs.Output(), "        Host scope manager bearer token. Required only when --manager-url is set.")
+		fmt.Fprintln(fs.Output(), "  --id-token-request-url-hosts HOSTS")
+		fmt.Fprintln(fs.Output(), "        Comma-separated allowlist for Actions OIDC request_url hosts (project start).")
+		fmt.Fprintln(fs.Output(), "        Also CICD_SENSOR_ID_TOKEN_REQUEST_URL_HOSTS. Default: *.actions.githubusercontent.com")
 		fmt.Fprintln(fs.Output(), "  --shutdown-grace DURATION")
 		fmt.Fprintln(fs.Output(), "        Best-effort drain window used after SIGTERM. (default 8s)")
 		fmt.Fprintf(fs.Output(), "  --job-ttl DURATION\n        Job age threshold after which the job is expired and forcibly finalized.\n        Expiry is checked about once per minute, so finalization may happen up to\n        about one minute after the TTL is reached. (default %s)\n", formatDuration(job.DefaultTTL))
@@ -93,6 +99,7 @@ func runAgentStart(args []string) {
 	fs.StringVar(&runner, "runner", "", "Runner type (machine or kubernetes).")
 	fs.StringVar(&managerURL, "manager-url", "", "Host scope manager URL.")
 	fs.StringVar(&managerTokenFilePath, "manager-token-file", "", "Path to a file containing the host scope manager bearer token. Overrides CICD_SENSOR_MANAGER_TOKEN.")
+	fs.StringVar(&idTokenRequestURLHosts, "id-token-request-url-hosts", idTokenRequestURLHosts, "Comma-separated allowlist for Actions OIDC request_url hosts.")
 	fs.DurationVar(&shutdownGrace, "shutdown-grace", 8*time.Second, "Best-effort drain window used after SIGTERM. Must end before the supervisor's kill timeout (for example systemd TimeoutStopSec), or the drain is cut off mid-flight.")
 	fs.DurationVar(&jobTTL, "job-ttl", job.DefaultTTL, "Job age threshold after which the job is expired and forcibly finalized; expiry is checked about once per minute.")
 	fs.BoolVar(&enableHTTPRequest, "enable-http-request", false, "Enable HTTP request capture.")
@@ -116,6 +123,7 @@ func runAgentStart(args []string) {
 		ManagerURL:                managerURL,
 		SocketPath:                socketPath,
 		GitHubK8sRunnerSocketPath: githubK8sRunnerSocketPath,
+		IDTokenRequestURLHosts:    splitCommaList(idTokenRequestURLHosts),
 		ShutdownGrace:             shutdownGrace,
 		JobTTL:                    jobTTL,
 		EnableHTTPRequest:         enableHTTPRequest,
@@ -174,6 +182,7 @@ func runAgentStart(args []string) {
 	a.SetJobTTL(opts.JobTTL)
 	a.SetHTTPRequestEnabled(opts.EnableHTTPRequest)
 	a.SetGitHubK8sRunnerSocketPath(opts.GitHubK8sRunnerSocketPath)
+	a.SetIDTokenRequestURLHosts(opts.IDTokenRequestURLHosts)
 	if err := a.Run(ctx); err != nil {
 		if errors.Is(err, listener.ErrAlreadyRunning) {
 			slog.InfoContext(ctx, "agent_already_running", "socket", opts.SocketPath)
@@ -184,6 +193,22 @@ func runAgentStart(args []string) {
 	}
 
 	slog.InfoContext(ctx, "agent_stopped")
+}
+
+func splitCommaList(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func validateAgentStartOptions(opts agentStartOptions) error {

@@ -151,15 +151,32 @@ func (jr *JobRegistry) GetGitHubJobHealth(ctx context.Context, identity jobconte
 	}, nil
 }
 
+func closeOIDCForJob(job *job.Job) {
+	if host := job.HostScope(); host != nil {
+		host.CloseOIDCCredential()
+	}
+	if project := job.ProjectScope(); project != nil {
+		project.CloseOIDCCredential()
+	}
+}
+
 func (jr *JobRegistry) finalizeTakenJobSync(ctx context.Context, job *job.Job, reason kerneltracker.EndReason, finalizedAt time.Time) error {
 	job.MarkClosing()
+	defer closeOIDCForJob(job)
 
 	jr.mu.Lock()
 	kernelTracker := jr.kernelTracker
+	removeJob := jr.removeJobHook
 	jr.mu.Unlock()
 	if kernelTracker != nil {
 		// RemoveJob must run even when shutdown already canceled ctx.
-		if err := kernelTracker.RemoveJob(context.Background(), job.Identity()); err != nil {
+		var err error
+		if removeJob != nil {
+			err = removeJob(context.Background(), job.Identity())
+		} else {
+			err = kernelTracker.RemoveJob(context.Background(), job.Identity())
+		}
+		if err != nil {
 			return fmt.Errorf("remove bpf job: %w", err)
 		}
 	}
