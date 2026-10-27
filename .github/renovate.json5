@@ -56,6 +56,24 @@
       "groupName": "github actions"
     },
     {
+      // Moving CI/release jobs to a new runner OS is a migration, not a routine
+      // bump: the eBPF cross-kernel and release workflows do not run on PRs, and
+      // docs/user-guide/github-hosted.md lists the runners we support. Keep these
+      // out of the "github actions" group and wait for Dependency Dashboard approval.
+      "description": "Hold GitHub-hosted runner OS major updates for manual approval",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "github-runner"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "github runner images",
+      "dependencyDashboardApproval": true
+    },
+    {
       "description": "Group Dockerfile base image updates",
       "matchManagers": [
         "dockerfile"
