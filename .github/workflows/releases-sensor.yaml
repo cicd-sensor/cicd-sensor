@@ -42,7 +42,7 @@ permissions:
 jobs:
   validate:
     name: Validate inputs
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.parse.outputs.version }}
       version_tag: ${{ steps.parse.outputs.version_tag }}
@@ -96,7 +96,7 @@ jobs:
   approval:
     name: Approve release
     needs: [validate, ci, bpf-integration, blacksmith-bpf-integration, takumi-integration]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     environment: sensor-releases/approval
     permissions:
       contents: read
@@ -107,7 +107,7 @@ jobs:
   build:
     name: Build release binaries
     needs: [validate, approval]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       # cicd-sensor-action's predicate generation uses these to fetch
@@ -123,7 +123,7 @@ jobs:
       # at job end, which the downstream sign-tarballs and image
       # jobs sign with actions/attest as a runtime-trace attestation.
       - name: Start cicd-sensor (self-monitoring)
-        uses: cicd-sensor/cicd-sensor-action@6511eb44c91d71b2b93d71193b1bf2cb18352f66 # v0.0.38
+        uses: cicd-sensor/cicd-sensor-action@49560b716a9abba9190a48c0b6bca18ba98918e8 # v0.0.40
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -176,7 +176,7 @@ jobs:
           done
 
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: ./
           format: cyclonedx-json
@@ -185,7 +185,7 @@ jobs:
           upload-release-assets: false
 
       - name: Upload archives
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-tarballs
           path: |
@@ -195,7 +195,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-sbom
           path: release/cicd-sensor_*_sbom.cdx.json
@@ -204,7 +204,7 @@ jobs:
   sign-tarballs:
     name: Sign and attest tarballs
     needs: [validate, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       id-token: write
@@ -212,19 +212,19 @@ jobs:
       artifact-metadata: write
     steps:
       - name: Download tarballs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-tarballs
           path: dist
 
       - name: Download SBOM
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-sbom
           path: dist
 
       - name: Download cicd-sensor runtime-trace predicate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: cicd-sensor-attestation
           path: trace
@@ -265,7 +265,7 @@ jobs:
           predicate-path: trace/predicate.json
 
       - name: Upload signed release assets
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-signed
           path: |
@@ -280,7 +280,7 @@ jobs:
   image:
     name: Image (${{ matrix.image }})
     needs: [validate, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       id-token: write
@@ -302,19 +302,19 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download SBOM
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-sbom
           path: dist
 
       - name: Download cicd-sensor runtime-trace predicate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: cicd-sensor-attestation
           path: trace
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Login to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -341,7 +341,7 @@ jobs:
 
       - name: Build and push image
         id: build_and_push
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -391,7 +391,7 @@ jobs:
   finalize:
     name: Tag and publish GitHub Release
     needs: [validate, sign-tarballs, image]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
@@ -402,7 +402,7 @@ jobs:
           persist-credentials: true
 
       - name: Download signed release assets
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-signed
           path: dist
@@ -462,7 +462,7 @@ jobs:
   bump-action:
     name: Kick Renovate on cicd-sensor-action
     needs: [finalize]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     environment: sensor-releases/bump-action
     continue-on-error: true
     permissions:
@@ -475,7 +475,7 @@ jobs:
       # issue via the cicd-sensor-action-bump GitHub App.
       - name: Mint GitHub App token (cicd-sensor-action-bump)
         id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.ACTION_BUMP_APP_CLIENT_ID }}
           private-key: ${{ secrets.ACTION_BUMP_APP_PRIVATE_KEY }}
