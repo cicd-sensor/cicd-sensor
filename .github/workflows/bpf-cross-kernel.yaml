@@ -162,7 +162,7 @@ jobs:
 
   kernel:
     name: "x64 kernel ${{ matrix.kernel.label }}"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -240,7 +240,7 @@ jobs:
           done
 
       - name: "Run integration tests on kernel ${{ matrix.kernel.label }}"
-        uses: cilium/little-vm-helper@5ae749011735fd77f30f38add52f1a53a5568671 # v0.0.30
+        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
         with:
           test-name: "bpf-integration-${{ matrix.kernel.label }}"
           image: ${{ env.LVH_IMAGE }}
@@ -292,7 +292,7 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: "bpf-integration-${{ matrix.kernel.label }}"
           path: "_lvh/logs/*.log"
