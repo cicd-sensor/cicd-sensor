@@ -1,5 +1,9 @@
 name: cicd-sensor test
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches: [aca-manager]
+    paths: [.github/workflows/cicd-sensor-test.yml]
 permissions:
   contents: read
 jobs:
