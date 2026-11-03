@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cicd-sensor log viewer</title>
+<style>
+  :root { --bg:#f6f8fa; --card:#fff; --bd:#d8dee4; --fg:#1f2328; --mut:#656d76; --ok:#1a7f37; --ng:#cf222e; --warn:#9a6700; --acc:#0f766e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+  header { background:#134e4a; color:#fff; padding:.8rem 1.5rem; display:flex; align-items:center; gap:1rem; }
+  header h1 { font-size:1.1rem; margin:0; cursor:pointer; }
+  main { max-width:1200px; margin:1rem auto; padding:0 1rem; }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:8px; padding:1rem; margin-bottom:1rem; }
+  .card h2 { font-size:1rem; margin:0 0 .6rem; }
+  form { display:flex; flex-wrap:wrap; gap:.75rem; align-items:end; }
+  label { display:flex; flex-direction:column; font-size:.75rem; color:var(--mut); gap:.2rem; }
+  label.inline { flex-direction:row; align-items:center; color:var(--fg); font-size:.85rem; gap:.3rem; }
+  input[type=datetime-local], input[type=search], input[type=text], select { padding:.35rem .5rem; border:1px solid var(--bd); border-radius:6px; font:inherit; }
+  button { padding:.4rem 1rem; border:0; border-radius:6px; background:var(--acc); color:#fff; font:inherit; cursor:pointer; }
+  button.link { background:none; color:var(--acc); padding:0; }
+  .muted { color:var(--mut); }
+  .badge { display:inline-block; padding:0 .55rem; border-radius:999px; font-size:.75rem; font-weight:600; border:1px solid currentColor; }
+  .b-ok { color:var(--ok); } .b-ng { color:var(--ng); } .b-warn { color:var(--warn); } .b-mut { color:var(--mut); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:.75rem; }
+  .stat { background:var(--card); border:1px solid var(--bd); border-radius:6px; padding:.6rem .8rem; }
+  .stat b { display:block; font-size:1.3rem; }
+  .stat span { color:var(--mut); font-size:.75rem; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { border-bottom:1px solid var(--bd); padding:.35rem .5rem; text-align:left; vertical-align:top; }
+  th { font-size:.75rem; color:var(--mut); font-weight:600; }
+  tr.click { cursor:pointer; } tr.click:hover { background:var(--bg); }
+  code, pre { font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  pre { margin:0; white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:.5rem; border-radius:6px; }
+  .tags span { display:inline-block; background:var(--bg); border:1px solid var(--bd); border-radius:4px; padding:0 .4rem; margin:0 .25rem .25rem 0; font-size:.8rem; }
+  .kv { display:grid; grid-template-columns:max-content 1fr; gap:.2rem 1rem; margin:0; }
+  .kv dt { color:var(--mut); } .kv dd { margin:0; word-break:break-all; }
+  .toolbar { display:flex; gap:.6rem; margin-bottom:.6rem; flex-wrap:wrap; align-items:center; }
+  .wrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<header><h1 id="home">cicd-sensor log viewer</h1><span id="crumb" class="muted"></span></header>
+<main>
+  <section id="listView">
+    <div class="card">
+      <form id="f">
+        <label>From <input type="datetime-local" name="from"></label>
+        <label>To <input type="datetime-local" name="to"></label>
+        <label>Keyword <input type="search" name="q" size="28" placeholder="repo, actor, curl, rule_id..."></label>
+        <label class="inline"><input type="checkbox" name="onlyDet"> 検知ありのみ</label>
+        <button>検索</button>
+      </form>
+    </div>
+    <div id="listStatus" class="muted"></div>
+    <div class="card wrap" id="listCard" hidden>
+      <table>
+        <thead><tr><th>結果</th><th>開始 (local)</th><th>プロジェクト</th><th>ジョブ</th><th>ref</th><th>actor</th><th>時間</th><th>イベント</th><th>検知</th></tr></thead>
+        <tbody id="jobRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="detailView" hidden>
+    <button class="link" id="back">&larr; 一覧に戻る</button>
+    <div id="detailStatus" class="muted"></div>
+    <div id="detailBody"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const pad = (n) => String(n).padStart(2, "0");
+const local = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const f = $("f");
+f.from.value = local(new Date(Date.now() - 24 * 3600e3));
+f.to.value = local(new Date(Date.now() + 60e3));
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null) el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  return el;
+}
+const fmtTime = (t) => (t ? new Date(t).toLocaleString() : "");
+const fmtDur = (s) => { s = Number(s); if (!isFinite(s)) return ""; return s >= 60 ? `${Math.floor(s / 60)}m${s % 60}s` : `${s}s`; };
+const typeOf = (r) => String(r.log_type || "").replace("cicd_sensor.", "");
+const jobKey = (r) => {
+  const j = r.job || {};
+  return (j.job_link || j.github_runner_tracking_id || "unknown") + "#" + (j.github_run_attempt || "1");
+};
+const resultBadge = (res) => h("span", { class: "badge " + (res === "passed" ? "b-ok" : res ? "b-ng" : "b-mut") }, res || "—");
+const actionBadge = (a) => h("span", { class: "badge " + (a === "terminate" ? "b-ng" : a === "detect" ? "b-warn" : "b-mut") }, a || "—");
+// Detection logs may nest the hit; read fields from either level.
+const det = (r) => ({ ...r, ...(r.detection || {}), ...(r.hit || {}) });
+
+async function api(params) {
+  const res = await fetch("/api/search?" + new URLSearchParams(params));
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+const range = () => ({ from: new Date(f.from.value).toISOString(), to: new Date(f.to.value).toISOString() });
+
+// ---- list ----
+f.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("listStatus").textContent = "検索中...";
+  $("listCard").hidden = true;
+  try {
+    const p = { ...range(), type: "summary,detection", limit: 1000 };
+    if (f.q.value) p.q = f.q.value;
+    const data = await api(p);
+    const jobs = new Map();
+    for (const r of data.results) {
+      const k = jobKey(r);
+      const j = jobs.get(k) || { key: k, job: r.job || {}, dets: 0, summary: null, start: r.timestamp };
+      if (typeOf(r) === "summary") { j.summary = r; j.start = r.start_time || r.timestamp; }
+      else if (typeOf(r) === "detection") j.dets++;
+      jobs.set(k, j);
+    }
+    let list = [...jobs.values()];
+    if (f.onlyDet.checked) list = list.filter((j) => j.dets > 0);
+    list.sort((a, b) => (a.start < b.start ? 1 : -1));
+    $("listStatus").textContent = `${list.length} ジョブ` + (data.truncated ? "（件数上限に達しました。絞り込んでください）" : "");
+    $("jobRows").replaceChildren(...list.map((j) => {
+      const s = j.summary || {};
+      return h("tr", { class: "click", onclick: () => openJob(j) },
+        h("td", {}, resultBadge(s.result)),
+        h("td", {}, fmtTime(j.start)),
+        h("td", {}, j.job.project_path),
+        h("td", {}, (j.job.github_job || j.job.job_name || "") + (j.job.github_run_attempt > 1 ? ` (attempt ${j.job.github_run_attempt})` : "")),
+        h("td", {}, j.job.ref_name),
+        h("td", {}, j.job.actor_name),
+        h("td", {}, fmtDur(s.duration_s)),
+        h("td", {}, s.events_total ?? ""),
+        h("td", {}, j.dets ? h("span", { class: "badge b-warn" }, j.dets) : "0"));
+    }));
+    $("listCard").hidden = list.length === 0;
+  } catch (err) {
+    $("listStatus").textContent = "エラー: " + err.message;
+  }
+});
+
+// ---- detail ----
+const show = (detail) => { $("listView").hidden = detail; $("detailView").hidden = !detail; $("crumb").textContent = ""; };
+$("back").onclick = $("home").onclick = () => show(false);
+
+function evDetail(ev) {
+  const d = ev[ev.type] || {};
+  switch (ev.type) {
+    case "network_connect": return `${d.remote_ip}:${d.remote_port} ${d.protocol || ""}`;
+    case "file_open": return `${d.path}${d.is_read ? " (read)" : ""}${d.is_write ? " (write)" : ""}`;
+    case "process_exec": return (ev.process?.argv || []).join(" ");
+    default: return JSON.stringify(d);
+  }
+}
+
+function kv(obj) {
+  return h("dl", { class: "kv" }, Object.entries(obj).filter(([, v]) => v).flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]));
+}
+const stat = (v, label) => h("div", { class: "stat" }, h("b", {}, v ?? 0), h("span", {}, label));
+
+async function openJob(j) {
+  show(true);
+  const body = $("detailBody");
+  body.replaceChildren();
+  $("detailStatus").textContent = "読み込み中...";
+  $("crumb").textContent = `${j.job.project_path || ""} / ${j.job.github_job || ""}`;
+  let data;
+  try {
+    data = await api({ ...range(), q: j.job.job_link || j.job.github_runner_tracking_id || "", limit: 1000 });
+  } catch (err) {
+    $("detailStatus").textContent = "エラー: " + err.message;
+    return;
+  }
+  const recs = data.results.filter((r) => jobKey(r) === j.key);
+  const summary = recs.find((r) => typeOf(r) === "summary") || {};
+  const byTime = (a, b) => (a.timestamp < b.timestamp ? -1 : 1);
+  const dets = recs.filter((r) => typeOf(r) === "detection").map(det).sort(byTime);
+  const evs = recs.filter((r) => typeOf(r) === "runtime_event").sort(byTime);
+  $("detailStatus").textContent = data.truncated ? "件数上限に達したため一部のみ表示しています" : "";
+  const jb = j.job;
+
+  body.append(
+    h("div", { class: "card" },
+      h("h2", {}, resultBadge(summary.result), " ", jb.project_path, " / ", jb.github_job || ""),
+      kv({ ジョブ: jb.job_link ? h("a", { href: jb.job_link, target: "_blank", rel: "noreferrer" }, jb.job_link) : "", ref: jb.ref_name, commit: jb.commit_sha,
+        actor: jb.actor_name, trigger: jb.trigger, workflow: jb.github_workflow, runner: summary.runner_type, 開始: fmtTime(summary.start_time), 終了: fmtTime(summary.end_time),
+        終了理由: summary.finalize_reason, version: summary.service_version })),
+    h("div", { class: "grid", style: "margin-bottom:1rem" },
+      stat(summary.events_total, "runtime events"), stat(summary.events_dropped, "dropped"), stat(dets.length, "detections"),
+      stat((summary.domains || []).length, "domains"), stat((summary.network_connects || []).length, "network connects"), stat(fmtDur(summary.duration_s), "duration")),
+    dets.length ? h("div", { class: "card wrap" }, h("h2", {}, "検知 (Detection)"),
+      h("table", {}, h("thead", {}, h("tr", {}, ["時刻", "アクション", "ルール", "内容"].map((t) => h("th", {}, t)))),
+        h("tbody", {}, dets.map((d) => h("tr", {}, h("td", {}, fmtTime(d.timestamp)), h("td", {}, actionBadge(d.action)),
+          h("td", {}, d.rule_name || d.rule_id, h("div", { class: "muted" }, d.ruleset_id || "")),
+          h("td", {}, h("details", {}, h("summary", {}, d.event?.type || d.event_type || "詳細"), h("pre", {}, JSON.stringify(d, null, 2))))))))) : "",
+    h("div", { class: "card" }, h("h2", {}, "通信先"),
+      h("div", { class: "tags" }, (summary.domains || []).map((d) => h("span", {}, d))),
+      h("div", { class: "tags" }, (summary.network_connects || []).map((d) => h("span", {}, d)))),
+    h("div", { class: "card" }, h("h2", {}, "適用ルールセット"),
+      h("div", { class: "tags" }, (summary.rulesets || []).map((r) => h("span", {}, `${r.ruleset_id} @ ${r.revision}`)))),
+    eventsCard(evs));
+}
+
+function eventsCard(evs) {
+  const types = [...new Set(evs.map((e) => e.event?.type).filter(Boolean))].sort();
+  const sel = h("select", {}, h("option", { value: "" }, "すべてのイベント種別"), types.map((t) => h("option", { value: t }, t)));
+  const txt = h("input", { type: "text", placeholder: "プロセス・パス・IP で絞り込み", size: "32" });
+  const tbody = h("tbody");
+  const count = h("span", { class: "muted" });
+  const draw = () => {
+    const q = txt.value.toLowerCase();
+    const rows = evs.filter((e) => e.event && (!sel.value || e.event.type === sel.value) &&
+      (!q || ((e.event.process?.exec_path || "") + " " + evDetail(e.event)).toLowerCase().includes(q)));
+    count.textContent = `${rows.length} / ${evs.length} 件`;
+    tbody.replaceChildren(...rows.slice(0, 500).map((e) => h("tr", {}, h("td", {}, new Date(e.timestamp).toLocaleTimeString()),
+      h("td", {}, e.event.type), h("td", {}, h("code", {}, e.event.process?.exec_path || "")), h("td", {}, h("code", {}, evDetail(e.event))))));
+    if (rows.length > 500) tbody.append(h("tr", {}, h("td", { colspan: 4, class: "muted" }, "先頭 500 件のみ表示。絞り込んでください")));
+  };
+  sel.onchange = txt.oninput = draw;
+  draw();
+  return h("div", { class: "card wrap" }, h("h2", {}, "ランタイムイベント"), h("div", { class: "toolbar" }, sel, txt, count),
+    h("table", {}, h("thead", {}, h("tr", {}, ["時刻", "種別", "プロセス", "詳細"].map((t) => h("th", {}, t)))), tbody));
+}
+
+f.requestSubmit();
+</script>
+</body>
+</html>
