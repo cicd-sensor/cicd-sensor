@@ -20,7 +20,6 @@
     "dependencies"
   ],
   "minimumReleaseAge": "7 days",
-  "separateMajorMinor": false,
   "separateMinorPatch": false,
   // Route Renovate's Go module fetches through Flatt Security's Takumi Guard secure proxy.
   // https://shisho.dev/docs/t/guard/quickstart/golang/
@@ -38,15 +37,28 @@
   ],
   "packageRules": [
     {
-      "description": "Group Go module updates",
+      "description": "Tidy and rewrite import paths for every Go module update",
       "matchManagers": [
         "gomod"
       ],
-      "groupName": "go dependencies",
       "postUpdateOptions": [
         "gomodTidy",
         "gomodUpdateImportPaths"
       ]
+    },
+    {
+      // Go majors change the import path (e.g. connectrpc.com/connect/v2) and need
+      // manual work, so they get their own PR instead of blocking the weekly group.
+      "description": "Group non-major Go module updates",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "go dependencies"
     },
     {
       "description": "Group GitHub Actions workflow updates",
