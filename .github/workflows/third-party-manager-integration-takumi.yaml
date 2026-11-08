@@ -31,7 +31,7 @@ jobs:
     name: Sensor with third-party hosted manager (Takumi)
     # OIDC trust and the bot only exist for the canonical repo; skip forks.
     if: github.repository == 'cicd-sensor/cicd-sensor'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     # id-token: write is needed by the Shisho Cloud auth step. Auth runs in
     # the same job as the sensor because GitHub drops secret-masked values
@@ -42,7 +42,7 @@ jobs:
     steps:
       - name: Authenticate with Shisho Cloud (keyless OIDC)
         id: auth
-        uses: flatt-security/shisho-cloud-action@9b68d33503ebf75d7c285d489b288f96ef3df758 # v1.1.0
+        uses: flatt-security/shisho-cloud-action@85917b87b9344f2d6de761ac2c8ef4433775bcf3 # v1.2.0
         with:
           bot-id: "BT01M0D9877ZSZK7DAX0G2WCKCRB" # cicd-sensor
           export-token: true
@@ -51,7 +51,7 @@ jobs:
           expires-in-minutes: 60
 
       - name: Start cicd-sensor (third-party Takumi manager)
-        uses: cicd-sensor/cicd-sensor-action@6511eb44c91d71b2b93d71193b1bf2cb18352f66 # v0.0.38
+        uses: cicd-sensor/cicd-sensor-action@49560b716a9abba9190a48c0b6bca18ba98918e8 # v0.0.40
         with:
           manager-url: https://manager.cicdsensor.cloud.shisho.dev
           manager-token: ${{ steps.auth.outputs.token }}
