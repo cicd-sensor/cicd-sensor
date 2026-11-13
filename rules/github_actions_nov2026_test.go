@@ -44,23 +44,20 @@ func TestGitHubActionsNovember2026Rules(t *testing.T) {
 			},
 		},
 		{
-			name: "telegram_upload", file: "generic-exfiltration.yaml",
-			ruleID:    "telegram_bot_document_upload",
-			eventType: jobevent.HTTPRequest, action: rule.RuleActionDetect,
-			// Payload fields are normalized before CEL evaluation. The token is synthetic.
+			name: "telegram_domain", file: "generic-exfiltration.yaml",
+			ruleID:    "telegram_bot_api_domain",
+			eventType: jobevent.Domain, action: rule.RuleActionDetect,
+			// Domain events are lowercased and have their trailing dot removed before evaluation.
 			cases: []struct {
 				name  string
 				input celengine.CELInputEvent
 				want  bool
 			}{
-				{"document_upload_is_detect_only", celengine.CELInputEvent{Method: "post", Host: "api.telegram.org", Path: "/bot123:synthetic/senddocument"}, true},
-				{"explicit_https_port_is_supported", celengine.CELInputEvent{Method: "post", Host: "api.telegram.org:443", Path: "/bot123:synthetic/senddocument"}, true},
-				{"ordinary_message_is_not_document_upload", celengine.CELInputEvent{Method: "post", Host: "api.telegram.org", Path: "/bot123:synthetic/sendmessage"}, false},
-				{"lookalike_host_is_not_telegram", celengine.CELInputEvent{Method: "post", Host: "api.telegram.org.example.com", Path: "/bot123:synthetic/senddocument"}, false},
-				{"get_is_outside_observed_post_behavior", celengine.CELInputEvent{Method: "get", Host: "api.telegram.org", Path: "/bot123:synthetic/senddocument"}, false},
-				{"non_bot_path_is_not_bot_api", celengine.CELInputEvent{Method: "post", Host: "api.telegram.org", Path: "/other/senddocument"}, false},
-				{"longer_method_name_does_not_match", celengine.CELInputEvent{Method: "post", Host: "api.telegram.org", Path: "/bot123:synthetic/senddocumentary"}, false},
-				{"missing_captured_host_cannot_attribute_upload", celengine.CELInputEvent{Method: "post", Path: "/bot123:synthetic/senddocument"}, false},
+				{"api_dns_query_is_detect_only_without_http_fields", celengine.CELInputEvent{Domain: "api.telegram.org", Source: "dns"}, true},
+				{"parent_domain_is_not_api", celengine.CELInputEvent{Domain: "telegram.org", Source: "dns"}, false},
+				{"subdomain_is_not_exact_api_domain", celengine.CELInputEvent{Domain: "files.api.telegram.org", Source: "dns"}, false},
+				{"lookalike_suffix_is_not_telegram", celengine.CELInputEvent{Domain: "api.telegram.org.example.com", Source: "dns"}, false},
+				{"lookalike_prefix_is_not_telegram", celengine.CELInputEvent{Domain: "evilapi.telegram.org", Source: "dns"}, false},
 				{"zero_event_does_not_match", celengine.CELInputEvent{}, false},
 			},
 		},
