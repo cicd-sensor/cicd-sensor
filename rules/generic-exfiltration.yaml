@@ -1,0 +1,26 @@
+rule_sets:
+  - ruleset_id: cicd_sensor_baseline/generic_exfiltration
+    rules:
+      - rule_id: telegram_bot_api_domain
+        rule_name: "Exfiltration: Telegram Bot API domain lookup"
+        description: |
+          What:
+            Detects DNS queries for api.telegram.org, the Telegram Bot API domain.
+          Why:
+            CI infostealers can upload collected secrets as documents through
+            this shared service, as reported in the November 2026 GitHub Actions
+            supply-chain campaign.
+          Notes:
+            Legitimate CI notifications and artifact delivery can also match;
+            review process ancestry and credential-access detections and use a rule modifier
+            for approved use. This is not a campaign-specific IOC.
+            Does not require HTTP or HTTPS request capture. A DNS query does not
+            establish a connection or upload; API method, destination chat ID,
+            and document contents are not checked. Cached resolution, direct IP
+            access, or encrypted DNS can bypass this signal.
+        event_type: domain
+        condition: domain == "api.telegram.org"
+        action: detect
+        tags:
+          mitre_tactic: exfiltration
+          source_url: https://blog.flatt.tech/entry/github_actions_widespread_supply_chain_attack
