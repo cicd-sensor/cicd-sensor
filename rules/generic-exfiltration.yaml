@@ -1,0 +1,29 @@
+rule_sets:
+  - ruleset_id: cicd_sensor_baseline/generic_exfiltration
+    rules:
+      - rule_id: telegram_bot_document_upload
+        rule_name: "Exfiltration: Telegram Bot API document upload"
+        description: |
+          What:
+            Detects HTTP POST requests to the Telegram Bot API sendDocument endpoint.
+          Why:
+            CI infostealers can upload collected secrets as documents through
+            this shared service, as reported in the November 2026 GitHub Actions
+            supply-chain campaign.
+          Notes:
+            Legitimate CI artifact delivery can also match; review process
+            ancestry and credential-access detections and use a rule modifier
+            for approved uploads. This is not a campaign-specific IOC.
+            Requires --enable-http-request=true and a supported capture source;
+            HTTP capture is best-effort. Request bodies are unavailable, so the
+            destination chat ID and document contents are not checked.
+        event_type: http_request
+        condition: |
+          method == "post" &&
+          (host == "api.telegram.org" || host == "api.telegram.org:443") &&
+          path.startsWith("/bot") &&
+          path.endsWith("/senddocument")
+        action: detect
+        tags:
+          mitre_tactic: exfiltration
+          source_url: https://blog.flatt.tech/entry/github_actions_widespread_supply_chain_attack

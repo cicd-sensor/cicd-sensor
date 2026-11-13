@@ -3,6 +3,34 @@ rule_sets:
     # Short-lived, high-confidence campaign indicators live here.
 
     rules:
+      - rule_id: github_actions_nov2026_exfiltration_ip
+        rule_name: "IOC: November 2026 GitHub Actions exfiltration IP"
+        description: |
+          What:
+            Terminates processes connecting to either exfiltration IP reported
+            in the November 10-12, 2026 GitHub Actions supply-chain campaign.
+          Why:
+            Injected workflow steps and npm hooks collect CI secrets and send
+            archives to these destinations over HTTP.
+          Notes:
+            Matches the exact IPv4 destinations on any port; the report observed
+            TCP port 8080 and /exfil. A connection event does not prove upload
+            success, and termination does not guarantee prevention of data loss.
+            This rule does not cover the campaign's Telegram delivery variant.
+            Preserve job logs and artifacts and rotate exposed credentials.
+        event_type: network_connect
+        condition: |
+          family == "ipv4" &&
+          (
+            remote_ip == "18.143.168.96" ||
+            remote_ip == "194.150.166.244"
+          )
+        action: terminate
+        tags:
+          mitre_tactic: exfiltration
+          ioc_date: "2026-11-12"
+          source_url: https://blog.flatt.tech/entry/github_actions_widespread_supply_chain_attack
+
       - rule_id: mini_shaihulud_antv_c2_domain
         rule_name: "IOC: Mini Shai-Hulud AntV C2 domain"
         description: |
