@@ -9,7 +9,7 @@ require (
 	cloud.google.com/go/pubsub/v2 v2.7.0
 	cloud.google.com/go/storage v1.67.0
 	connectrpc.com/authn v0.2.0
-	connectrpc.com/connect v1.20.0
+	connectrpc.com/connect/v2 v2.0.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.1
