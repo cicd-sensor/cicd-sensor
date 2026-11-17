@@ -8,5 +8,5 @@ rule_sets:
         # so an ancestors × argv scan stays charged in the static cost
         # estimate. The many ORed contains pushes it well above the
         # advisory threshold.
-        exceptions: process.ancestors.exists(p, p.argv.exists(a, a.contains("aaa") || a.contains("bbb") || a.contains("ccc") || a.contains("ddd") || a.contains("eee") || a.contains("fff") || a.contains("ggg") || a.contains("hhh") || a.contains("iii") || a.contains("jjj")))
+        exceptions: process.ancestors.exists(p, p.argv.exists(a, a.contains("aaa") || a.contains("bbb") || a.contains("ccc") || a.contains("ddd") || a.contains("eee") || a.contains("fff") || a.contains("ggg") || a.contains("hhh") || a.contains("iii") || a.contains("jjj") || a.contains("kkk") || a.contains("lll") || a.contains("mmm") || a.contains("nnn") || a.contains("ooo") || a.contains("ppp")))
         action: detect
