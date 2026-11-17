@@ -235,11 +235,9 @@ func (g *grpcClient) Peer() Peer {
 }
 
 func (g *grpcClient) WriteRequestHeader(_ StreamType, header http.Header) {
+	setUserAgentIfAbsent(header, defaultGrpcUserAgent)
 	// We know these header keys are in canonical form, so we can bypass all the
 	// checks in Header.Set.
-	if getHeaderCanonical(header, headerUserAgent) == "" {
-		header[headerUserAgent] = []string{defaultGrpcUserAgent}
-	}
 	if g.web && getHeaderCanonical(header, headerXUserAgent) == "" {
 		// The gRPC-Web pseudo-specification seems to require X-User-Agent rather
 		// than User-Agent for all clients, even if they're not browser-based. This
@@ -366,12 +364,19 @@ func (cc *grpcClientConn) CloseRequest() error {
 }
 
 func (cc *grpcClientConn) Receive(msg any) error {
-	if err := cc.duplexCall.BlockUntilResponseReady(); err != nil {
+	if _, err := cc.duplexCall.blockUntilResponseReady(); err != nil {
 		return err
 	}
 	err := cc.unmarshaler.Unmarshal(msg)
 	if err == nil {
 		return nil
+	}
+	if !errors.Is(err, io.EOF) {
+		// The body may still be open, for example after rejecting a message
+		// larger than the read limit. Close it so reading the trailers doesn't
+		// wait for the server, which in a full-duplex stream may be waiting on
+		// the client. Trailers already received at EOF are kept.
+		_ = cc.duplexCall.CloseRead()
 	}
 	mergeHeaders(
 		cc.responseTrailer,
@@ -421,12 +426,12 @@ func (cc *grpcClientConn) Receive(msg any) error {
 }
 
 func (cc *grpcClientConn) ResponseHeader() http.Header {
-	_ = cc.duplexCall.BlockUntilResponseReady()
+	_, _ = cc.duplexCall.blockUntilResponseReady()
 	return cc.responseHeader
 }
 
 func (cc *grpcClientConn) ResponseTrailer() http.Header {
-	_ = cc.duplexCall.BlockUntilResponseReady()
+	_, _ = cc.duplexCall.blockUntilResponseReady()
 	return cc.responseTrailer
 }
 
@@ -593,7 +598,28 @@ func (m *grpcMarshaler) MarshalWebTrailers(trailer http.Header) *Error {
 	if err := trailer.Write(raw); err != nil {
 		return errorf(CodeInternal, "format trailers: %w", err)
 	}
-	return m.Write(&envelope{
+	writeErr := m.Write(&envelope{
+		Data:  raw,
+		Flags: grpcFlagEnvelopeTrailer,
+	})
+	if writeErr == nil || writeErr.Code() != CodeResourceExhausted {
+		return writeErr
+	}
+	// The trailers exceed sendMaxBytes. Rather than drop them, send only the
+	// status and message, reporting the limit if there's no error.
+	status, message := strings.ToLower(grpcHeaderStatus), strings.ToLower(grpcHeaderMessage)
+	minimal := http.Header{status: trailer[status], message: trailer[message]}
+	if code := trailer[status]; len(code) == 0 || code[0] == "0" {
+		minimal = http.Header{
+			status:  {strconv.Itoa(int(writeErr.Code()))},
+			message: {grpcPercentEncode(writeErr.Message())},
+		}
+	}
+	raw.Reset()
+	if err := minimal.Write(raw); err != nil {
+		return errorf(CodeInternal, "format trailers: %w", err)
+	}
+	return m.write(&envelope{
 		Data:  raw,
 		Flags: grpcFlagEnvelopeTrailer,
 	})

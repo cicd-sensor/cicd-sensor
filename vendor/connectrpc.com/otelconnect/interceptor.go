@@ -18,39 +18,71 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/protobuf/proto"
 )
 
-// Interceptor implements [connect.Interceptor] that adds
-// OpenTelemetry metrics and tracing to connect handlers and clients.
-type Interceptor struct {
-	config            config
-	clientInstruments instruments
-	serverInstruments instruments
+// Span start options shared by every RPC. clientSpanOptions is a slice, to
+// avoid allocating one per RPC.
+//
+//nolint:gochecknoglobals
+var (
+	serverSpanKind    = trace.WithSpanKind(trace.SpanKindServer)
+	newRootSpan       = trace.WithNewRoot()
+	clientSpanOptions = []trace.SpanStartOption{trace.WithSpanKind(trace.SpanKindClient)}
+)
+
+// interceptor bundles the configuration and OpenTelemetry instruments for
+// one side of an RPC.
+type interceptor struct {
+	config      config
+	instruments instruments
 }
 
-var _ connect.Interceptor = &Interceptor{}
+// NewServerInterceptor returns a [connect.ServerInterceptor] that adds
+// OpenTelemetry metrics and tracing to connect handlers. The interceptor uses
+// the OTel global tracer and meter providers by default.
+func NewServerInterceptor(options ...Option) (connect.ServerInterceptor, error) {
+	intercept, err := newInterceptor(serverKey, options...)
+	if err != nil {
+		return nil, err
+	}
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return intercept.serveServer(ctx, spec, stream, next)
+		}
+	}, nil
+}
 
-// NewInterceptor returns an interceptor that implements [connect.Interceptor].
-// It adds OpenTelemetry metrics and tracing to connect handlers and clients.
-// Use options to configure the interceptor. Any invalid options will cause an
-// error to be returned. The interceptor will use the default tracer and meter
-// providers. To use a custom tracer or meter provider pass in the
-// [WithTracerProvider] or [WithMeterProvider] options. To disable metrics or
-// tracing pass in the [WithoutMetrics] or [WithoutTracing] options.
-func NewInterceptor(options ...Option) (*Interceptor, error) {
+// NewClientInterceptor returns a [connect.ClientInterceptor] that adds
+// OpenTelemetry metrics and tracing to connect clients. The interceptor uses
+// the OTel global tracer and meter providers by default.
+func NewClientInterceptor(options ...Option) (connect.ClientInterceptor, error) {
+	intercept, err := newInterceptor(clientKey, options...)
+	if err != nil {
+		return nil, err
+	}
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			return intercept.serveClient(ctx, spec, next)
+		}
+	}, nil
+}
+
+// newInterceptor applies options and builds the instruments for the named
+// side (serverKey or clientKey).
+func newInterceptor(side string, options ...Option) (*interceptor, error) {
 	cfg := config{
 		now: time.Now,
 		tracer: otel.GetTracerProvider().Tracer(
@@ -65,298 +97,260 @@ func NewInterceptor(options ...Option) (*Interceptor, error) {
 	for _, opt := range options {
 		opt.apply(&cfg)
 	}
-	clientInstruments, err := createInstruments(cfg.meter, clientKey)
+	sideInstruments, err := createInstruments(cfg.meter, side, cfg.durationHistogramOptions)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client instruments: %w", err)
+		return nil, fmt.Errorf("failed to create %s instruments: %w", side, err)
 	}
-	serverInstruments, err := createInstruments(cfg.meter, serverKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create server instruments: %w", err)
-	}
-	return &Interceptor{
-		config:            cfg,
-		clientInstruments: clientInstruments,
-		serverInstruments: serverInstruments,
+	return &interceptor{
+		config:      cfg,
+		instruments: sideInstruments,
 	}, nil
 }
 
-// WrapUnary implements otel tracing and metrics for unary handlers.
-func (i *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
-		requestStartTime := i.config.now()
-		if i.config.filter != nil {
-			if !i.config.filter(ctx, request.Spec()) {
-				return next(ctx, request)
-			}
-		}
-		attributeFilter := i.config.filterAttribute.filter
-		isClient := request.Spec().IsClient
-		name := strings.TrimLeft(request.Spec().Procedure, "/")
-		protocol := protocolToSemConv(request.Peer().Protocol, i.config.rpcSystem)
-		attributes := make([]attribute.KeyValue, 0, 6+len(i.config.requestHeaderKeys)) // 5 max request attrs + status code attr + headers
-		attributes = attributeFilter(request.Spec(), addRequestAttributes(protocol, attributes, request.Spec(), request.Peer())...)
-		instrumentation := i.getInstruments(isClient)
-		carrier := propagation.HeaderCarrier(request.Header())
-		spanKind := trace.SpanKindClient
-		requestSpan, responseSpan := semconv.MessageTypeSent, semconv.MessageTypeReceived
-		attributesTrace := addHeaderAttributes(attributes, protocol, requestKey, request.Header(), i.config.requestHeaderKeys)
-		traceOpts := make([]trace.SpanStartOption, 0, 4)
-		traceOpts = append(traceOpts, trace.WithAttributes(attributesTrace...))
-		if !isClient {
-			spanKind = trace.SpanKindServer
-			requestSpan, responseSpan = semconv.MessageTypeReceived, semconv.MessageTypeSent
-			// if a span already exists in ctx then there must have already been another interceptor
-			// that set it, so don't extract from carrier.
-			if !trace.SpanContextFromContext(ctx).IsValid() {
-				ctx = i.config.propagator.Extract(ctx, carrier)
-				if !i.config.trustRemote {
-					traceOpts = append(traceOpts,
-						trace.WithNewRoot(),
-						trace.WithLinks(trace.LinkFromContext(ctx)),
-					)
-				}
-			}
-		}
-		traceOpts = append(traceOpts, trace.WithSpanKind(spanKind))
-		ctx, span := i.config.tracer.Start(
-			ctx,
-			name,
-			traceOpts...,
-		)
-		defer span.End()
-		if isClient {
-			i.config.propagator.Inject(ctx, carrier)
-		}
-		var requestSize int
-		if request != nil {
-			if msg, ok := request.Any().(proto.Message); ok {
-				requestSize = proto.Size(msg)
-			}
-		}
-		if !i.config.omitTraceEvents && span.IsRecording() {
-			span.AddEvent(messageKey,
-				trace.WithAttributes(
-					requestSpan,
-					semconv.MessageIDKey.Int(1),
-					semconv.MessageUncompressedSizeKey.Int(requestSize),
-				),
-			)
-		}
-		response, err := next(ctx, request)
-		if statusCode, ok := statusCodeAttribute(protocol, err); ok {
-			attributes = append(attributes, statusCode)
-		}
-		var responseSize int
-		if err == nil {
-			if msg, ok := response.Any().(proto.Message); ok {
-				responseSize = proto.Size(msg)
-			}
-			if span.IsRecording() {
-				span.SetAttributes(headerAttributes(protocol, responseKey, response.Header(), i.config.responseHeaderKeys)...)
-			}
-			if !isClient && i.config.propagateResponseHeader {
-				responseCarrier := propagation.HeaderCarrier(response.Header())
-				i.config.propagator.Inject(ctx, responseCarrier)
-			}
-		}
-		if !i.config.omitTraceEvents && span.IsRecording() {
-			span.AddEvent(messageKey,
-				trace.WithAttributes(
-					responseSpan,
-					semconv.MessageIDKey.Int(1),
-					semconv.MessageUncompressedSizeKey.Int(responseSize),
-				),
-			)
-		}
-		attributes = attributeFilter(request.Spec(), attributes...)
-		if isClient {
-			span.SetStatus(clientSpanStatus(protocol, err))
-		} else {
-			span.SetStatus(serverSpanStatus(protocol, err))
-		}
-		span.SetAttributes(attributes...)
-		attributesSet := attribute.NewSet(attributes...)
-		instrumentation.duration.Record(ctx, i.config.now().Sub(requestStartTime).Milliseconds(), metric.WithAttributeSet(attributesSet))
-		instrumentation.requestSize.Record(ctx, int64(requestSize), metric.WithAttributeSet(attributesSet))
-		instrumentation.requestsPerRPC.Record(ctx, 1, metric.WithAttributeSet(attributesSet))
-		instrumentation.responseSize.Record(ctx, int64(responseSize), metric.WithAttributeSet(attributesSet))
-		instrumentation.responsesPerRPC.Record(ctx, 1, metric.WithAttributeSet(attributesSet))
-		return response, err
-	}
+// serverCall holds the state of one handler call.
+type serverCall struct {
+	rpcCall
+
+	spanAttributes [4]attribute.KeyValue // RPC and peer attributes
+	traceOpts      [5]trace.SpanStartOption
 }
 
-// WrapStreamingClient implements otel tracing and metrics for streaming connect clients.
-func (i *Interceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		if i.config.filter != nil {
-			if !i.config.filter(ctx, spec) {
-				return next(ctx, spec)
-			}
-		}
-		requestStartTime := i.config.now()
-		name := strings.TrimLeft(spec.Procedure, "/")
-		// Span is closed on context cancelation or when the stream is closed.
-		ctx, span := i.config.tracer.Start( //nolint:spancheck
-			ctx,
-			name,
-			trace.WithSpanKind(trace.SpanKindClient),
-		)
-		conn := next(ctx, spec)
-		instrumentation := i.getInstruments(spec.IsClient)
-		// inject the newly created span into the carrier
-		carrier := propagation.HeaderCarrier(conn.RequestHeader())
-		i.config.propagator.Inject(ctx, carrier)
-		protocol := protocolToSemConv(conn.Peer().Protocol, i.config.rpcSystem)
-		state := newStreamingState(
-			protocol,
-			spec,
-			conn.Peer(),
-			i.config.filterAttribute,
-			i.config.omitTraceEvents,
-			instrumentation.responseSize,
-			instrumentation.requestSize,
-		)
-		var requestOnce sync.Once
-		setRequestAttributes := func() {
-			if span.IsRecording() {
-				span.SetAttributes(
-					headerAttributes(
-						protocol,
-						requestKey,
-						conn.RequestHeader(),
-						i.config.requestHeaderKeys,
-					)...,
-				)
-			}
-		}
-		closeSpan := func() {
-			requestOnce.Do(setRequestAttributes)
-			state.mu.Lock()
-			defer state.mu.Unlock()
-			// state.attributes is updated with the final error that was recorded.
-			// If error is nil a "success" is recorded on the span and on the final duration
-			// metric. The "rpc.<protocol>.status_code" is not defined for any other metrics for
-			// streams because the error only exists when finishing the stream.
-			if statusCode, ok := statusCodeAttribute(protocol, state.error); ok {
-				state.addAttributes(statusCode)
-			}
-			if span.IsRecording() {
-				span.SetAttributes(state.attributes...)
-				span.SetAttributes(headerAttributes(protocol, responseKey, conn.ResponseHeader(), i.config.responseHeaderKeys)...)
-			}
-			span.SetStatus(clientSpanStatus(protocol, state.error))
-			span.End()
-			attributeSet := attribute.NewSet(state.attributes...)
-			instrumentation.requestsPerRPC.Record(ctx, state.sentCounter, metric.WithAttributeSet(attributeSet))
-			instrumentation.responsesPerRPC.Record(ctx, state.receivedCounter, metric.WithAttributeSet(attributeSet))
-			duration := i.config.now().Sub(requestStartTime).Milliseconds()
-			instrumentation.duration.Record(ctx, duration, metric.WithAttributeSet(attributeSet))
-		}
-		stopCtxClose := context.AfterFunc(ctx, closeSpan)
-		return &streamingClientInterceptor{ //nolint:spancheck
-			StreamingClientConn: conn,
-			onClose: func() {
-				if stopCtxClose() {
-					closeSpan()
-				}
-			},
-			receive: func(msg any, conn connect.StreamingClientConn) error {
-				return state.receive(ctx, msg, conn)
-			},
-			send: func(msg any, conn connect.StreamingClientConn) error {
-				requestOnce.Do(setRequestAttributes)
-				return state.send(ctx, msg, conn)
-			},
+// serveServer implements otel tracing and metrics for connect handlers.
+// Unary and streaming RPCs both flow through this method. The handler's
+// error is the outcome of the RPC, so the stream is not wrapped.
+func (i *interceptor) serveServer(ctx context.Context, spec connect.Spec, stream connect.ServerStream, next connect.ServerFunc) error {
+	requestStartTime := i.config.now()
+	if i.config.filter != nil {
+		if !i.config.filter(ctx, spec) {
+			return next(ctx, spec, stream)
 		}
 	}
-}
-
-// WrapStreamingHandler implements otel tracing and metrics for streaming connect handlers.
-func (i *Interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		requestStartTime := i.config.now()
-		isClient := conn.Spec().IsClient
-		instrumentation := i.getInstruments(isClient)
-		if i.config.filter != nil {
-			if !i.config.filter(ctx, conn.Spec()) {
-				return next(ctx, conn)
-			}
-		}
-		name := strings.TrimLeft(conn.Spec().Procedure, "/")
-		protocol := protocolToSemConv(conn.Peer().Protocol, i.config.rpcSystem)
-		state := newStreamingState(
-			protocol,
-			conn.Spec(),
-			conn.Peer(),
-			i.config.filterAttribute,
-			i.config.omitTraceEvents,
-			instrumentation.requestSize,
-			instrumentation.responseSize,
+	callInfo, ok := connect.CallInfoForServerContext(ctx)
+	if !ok {
+		callInfo = &connect.CallInfo{}
+	}
+	call := &serverCall{rpcCall: rpcCall{
+		config:   &i.config,
+		duration: i.instruments.duration,
+		spec:     spec,
+		callInfo: callInfo,
+		start:    requestStartTime,
+	}}
+	ctx = call.withLabeler(ctx)
+	name := strings.TrimLeft(spec.Procedure, "/")
+	protocol := protocolToSemConv(callInfo.Protocol, i.config.rpcSystem)
+	attributes := i.config.filterAttribute.filter(spec, addRequestAttributes(protocol, call.attributes[:0], spec)...)
+	spanAttributes := append(call.spanAttributes[:0], attributes...)
+	if i.config.serverPeerAttributes {
+		spanAttributes = i.config.filterAttribute.filterFrom(spec,
+			addAddressAttributes(spanAttributes, callInfo.PeerAddr, semconv.NetworkPeerAddressKey, semconv.NetworkPeerPortKey),
+			len(spanAttributes),
 		)
-		// extract any request headers into the context
-		carrier := propagation.HeaderCarrier(conn.RequestHeader())
-		traceOpts := make([]trace.SpanStartOption, 0, 5)
+	}
+	// extract any request headers into the context
+	carrier := metadataCarrier{m: callInfo.RequestHeader()}
+	traceOpts := append(call.traceOpts[:0],
+		serverSpanKind,
+		trace.WithAttributes(spanAttributes...),
+	)
+	if len(i.config.requestHeaderKeys) > 0 {
 		traceOpts = append(traceOpts,
-			trace.WithSpanKind(trace.SpanKindServer),
-			trace.WithAttributes(state.attributes...),
-			trace.WithAttributes(headerAttributes(protocol, requestKey, conn.RequestHeader(), i.config.requestHeaderKeys)...),
+			trace.WithAttributes(headerAttributes(requestKey, callInfo.RequestHeader(), i.config.requestHeaderKeys)...),
 		)
-		if !trace.SpanContextFromContext(ctx).IsValid() {
-			ctx = i.config.propagator.Extract(ctx, carrier)
-			if !i.config.trustRemote {
-				traceOpts = append(traceOpts,
-					trace.WithNewRoot(),
-					trace.WithLinks(trace.LinkFromContext(ctx)),
-				)
-			}
-		}
-		// start a new span with any trace that is in the context
-		ctx, span := i.config.tracer.Start(
-			ctx,
-			name,
-			traceOpts...,
-		)
-		defer span.End()
-
-		// Inject traceparent into response headers if enabled
-		if i.config.propagateResponseHeader {
-			responseCarrier := propagation.HeaderCarrier(conn.ResponseHeader())
-			i.config.propagator.Inject(ctx, responseCarrier)
-		}
-
-		streamingHandler := &streamingHandlerInterceptor{
-			StreamingHandlerConn: conn,
-			receive: func(msg any, conn connect.StreamingHandlerConn) error {
-				return state.receive(ctx, msg, conn)
-			},
-			send: func(msg any, conn connect.StreamingHandlerConn) error {
-				return state.send(ctx, msg, conn)
-			},
-		}
-		err := next(ctx, streamingHandler)
-		if statusCode, ok := statusCodeAttribute(protocol, err); ok {
-			state.addAttributes(statusCode)
-		}
-		if span.IsRecording() {
-			span.SetAttributes(state.attributes...)
-			span.SetAttributes(headerAttributes(protocol, responseKey, conn.ResponseHeader(), i.config.responseHeaderKeys)...)
-		}
-		span.SetStatus(serverSpanStatus(protocol, err))
-		attributeSet := attribute.NewSet(state.attributes...)
-		instrumentation.requestsPerRPC.Record(ctx, state.receivedCounter, metric.WithAttributeSet(attributeSet))
-		instrumentation.responsesPerRPC.Record(ctx, state.sentCounter, metric.WithAttributeSet(attributeSet))
-		duration := i.config.now().Sub(requestStartTime).Milliseconds()
-		instrumentation.duration.Record(ctx, duration, metric.WithAttributeSet(attributeSet))
-		return err
 	}
+	if !trace.SpanContextFromContext(ctx).IsValid() {
+		ctx = i.config.propagator.Extract(ctx, carrier)
+		// Without a remote parent the span is already a new root.
+		if link := trace.LinkFromContext(ctx); !i.config.trustRemote && link.SpanContext.IsValid() {
+			traceOpts = append(traceOpts,
+				newRootSpan,
+				trace.WithLinks(link),
+			)
+		}
+	}
+	// start a new span with any trace that is in the context
+	ctx, call.span = i.config.tracer.Start( //nolint:spancheck // ended by defer
+		ctx,
+		name,
+		traceOpts...,
+	)
+	defer call.span.End()
+
+	// Inject traceparent into response headers if enabled
+	if i.config.propagateResponseHeader {
+		responseCarrier := metadataCarrier{m: callInfo.ResponseHeader()}
+		i.config.propagator.Inject(ctx, responseCarrier)
+	}
+
+	err := next(ctx, spec, stream)
+	call.span.SetStatus(serverSpanStatus(err))
+	// The span already has the RPC attributes.
+	call.record(ctx, attributes, len(attributes), err)
+	return err
 }
 
-// getInstruments returns the correct instrumentation for the interceptor.
-func (i *Interceptor) getInstruments(isClient bool) *instruments {
-	if isClient {
-		return &i.clientInstruments
+// serveClient implements otel tracing and metrics for connect clients.
+// Unary and streaming RPCs both flow through this method. The returned
+// stream ends the span when the RPC completes.
+func (i *interceptor) serveClient(ctx context.Context, spec connect.Spec, next connect.ClientFunc) (connect.ClientStream, error) {
+	if i.config.filter != nil {
+		if !i.config.filter(ctx, spec) {
+			return next(ctx, spec)
+		}
 	}
-	return &i.serverInstruments
+	call := &clientCall{rpcCall: rpcCall{
+		config:   &i.config,
+		duration: i.instruments.duration,
+		spec:     spec,
+		start:    i.config.now(),
+	}}
+	ctx = call.withLabeler(ctx)
+	name := strings.TrimLeft(spec.Procedure, "/")
+	callInfo, ok := connect.CallInfoForClientContext(ctx)
+	if !ok {
+		ctx, callInfo = connect.NewClientContext(ctx)
+	}
+	call.callInfo = callInfo
+	// Span is closed on context cancelation or when the stream is closed.
+	ctx, call.span = i.config.tracer.Start( //nolint:spancheck // ended by call.end
+		ctx,
+		name,
+		clientSpanOptions...,
+	)
+	call.ctx = ctx
+	// inject the newly created span into the carrier
+	carrier := metadataCarrier{m: callInfo.RequestHeader()}
+	i.config.propagator.Inject(ctx, carrier)
+	conn, err := next(ctx, spec)
+	if err != nil {
+		// The transport failed to open the stream. Record and finalize now.
+		call.setError(err)
+		call.end()
+		return nil, err
+	}
+	call.ClientStream = conn
+	// Watch the context only if it can abandon the stream. Client.CallUnary
+	// always closes unary streams.
+	if spec.StreamType != connect.StreamTypeUnary && ctx.Done() != nil {
+		call.stop = context.AfterFunc(ctx, call.cancel)
+	}
+	return call, nil
+}
+
+// clientCall holds the state of one client call. It wraps the stream and
+// ends the RPC on the first Receive error, Close, or context cancellation.
+type clientCall struct {
+	connect.ClientStream
+	rpcCall
+
+	ctx  context.Context //nolint:containedctx // used by end
+	stop func() bool     // stops watching ctx, or nil
+	once sync.Once
+	mu   sync.Mutex
+	err  error // last Send or Receive error, excluding io.EOF
+}
+
+func (c *clientCall) Send(msg any) error {
+	err := c.ClientStream.Send(msg)
+	c.setError(err)
+	return err
+}
+
+func (c *clientCall) Receive(msg any) error {
+	err := c.ClientStream.Receive(msg)
+	if err != nil {
+		c.setError(err)
+		c.finish()
+	}
+	return err
+}
+
+func (c *clientCall) Close() error {
+	err := c.ClientStream.Close()
+	c.finish()
+	return err
+}
+
+func (c *clientCall) setError(err error) {
+	if err == nil || errors.Is(err, io.EOF) {
+		return
+	}
+	c.mu.Lock()
+	c.err = err
+	c.mu.Unlock()
+}
+
+func (c *clientCall) finish() {
+	if c.stop != nil {
+		c.stop()
+	}
+	c.once.Do(c.end)
+}
+
+// cancel ends the RPC when its context is done.
+func (c *clientCall) cancel() {
+	c.once.Do(c.end)
+}
+
+// end records the outcome of the RPC and ends its span. It runs once.
+func (c *clientCall) end() {
+	c.mu.Lock()
+	err := c.err
+	c.mu.Unlock()
+	// The protocol and peer are known once the stream is open.
+	protocol := protocolToSemConv(c.callInfo.Protocol, c.config.rpcSystem)
+	attributes := addRequestAttributes(protocol, c.attributes[:0], c.spec)
+	attributes = addAddressAttributes(attributes, c.callInfo.PeerAddr, semconv.ServerAddressKey, semconv.ServerPortKey)
+	attributes = c.config.filterAttribute.filter(c.spec, attributes...)
+	if c.span.IsRecording() {
+		c.span.SetAttributes(headerAttributes(requestKey, c.callInfo.RequestHeader(), c.config.requestHeaderKeys)...)
+	}
+	c.span.SetStatus(clientSpanStatus(err))
+	c.record(c.ctx, attributes, 0, err)
+	c.span.End()
+}
+
+// rpcCall holds the per-RPC state shared by both sides. Each side embeds it,
+// so an RPC allocates its state once.
+type rpcCall struct {
+	config   *config
+	duration metric.Float64Histogram
+	spec     connect.Spec
+	callInfo *connect.CallInfo
+	span     trace.Span
+	start    time.Time
+	labeler  *Labeler // the context's Labeler, or ownLabeler
+	// Storage, to avoid separate allocations.
+	ownLabeler    Labeler
+	attributes    [6]attribute.KeyValue // up to 4 RPC and 2 status attributes
+	recordOptions [1]metric.RecordOption
+}
+
+// withLabeler returns ctx with the RPC's [Labeler].
+func (c *rpcCall) withLabeler(ctx context.Context) context.Context {
+	if labeler, ok := ctx.Value(labelerContextKey{}).(*Labeler); ok {
+		c.labeler = labeler
+		return ctx
+	}
+	c.labeler = &c.ownLabeler
+	return ContextWithLabeler(ctx, c.labeler)
+}
+
+// record records the outcome of the RPC on its span and duration metric.
+// The span already has the first spanFrom attributes. The attributes need
+// spare capacity for the status attributes. It does not end the span.
+func (c *rpcCall) record(ctx context.Context, attributes []attribute.KeyValue, spanFrom int, err error) {
+	attributes = c.config.filterAttribute.filterFrom(c.spec, addStatusAttributes(attributes, err), len(attributes))
+	if c.span.IsRecording() {
+		// Set once, as the SDK grows the span's attributes on every call.
+		c.span.SetAttributes(attributes[spanFrom:]...)
+		c.span.SetAttributes(headerAttributes(responseKey, c.callInfo.ResponseHeader(), c.config.responseHeaderKeys)...)
+	}
+	// NewSet sorts attributes in place, so call it after SetAttributes.
+	attributes = c.labeler.appendAttributes(attributes)
+	c.recordOptions[0] = metric.WithAttributeSet(attribute.NewSet(attributes...))
+	duration := c.config.now().Sub(c.start).Seconds()
+	c.duration.Record(ctx, duration, c.recordOptions[:]...)
 }
 
 // protocolToSemConv converts the protocol string to the OpenTelemetry format.
@@ -366,20 +360,20 @@ func protocolToSemConv(protocol string, system RPCSystem) string {
 		return system.protocol()
 	}
 	switch protocol {
-	case grpcwebString, grpcString:
+	case connect.ProtocolNameGRPCWeb, connect.ProtocolNameGRPC:
 		return grpcProtocol
-	case connectString:
+	case connect.ProtocolNameConnect:
 		return connectProtocol
 	default:
 		return protocol
 	}
 }
 
-func clientSpanStatus(protocol string, err error) (codes.Code, string) {
+func clientSpanStatus(err error) (codes.Code, string) {
 	if err == nil {
 		return codes.Unset, ""
 	}
-	if protocol == connectProtocol && connect.IsNotModifiedError(err) {
+	if connecthttp.IsNotModifiedError(err) {
 		return codes.Unset, ""
 	}
 	if connectErr := new(connect.Error); errors.As(err, &connectErr) {
@@ -388,11 +382,11 @@ func clientSpanStatus(protocol string, err error) (codes.Code, string) {
 	return codes.Error, err.Error()
 }
 
-func serverSpanStatus(protocol string, err error) (codes.Code, string) {
+func serverSpanStatus(err error) (codes.Code, string) {
 	if err == nil {
 		return codes.Unset, ""
 	}
-	if protocol == connectProtocol && connect.IsNotModifiedError(err) {
+	if connecthttp.IsNotModifiedError(err) {
 		return codes.Unset, ""
 	}
 
@@ -422,4 +416,24 @@ func serverSpanStatus(protocol string, err error) (codes.Code, string) {
 	}
 
 	return codes.Error, err.Error()
+}
+
+// metadataCarrier adapts a [*connect.Header] to OpenTelemetry's
+// [propagation.TextMapCarrier] for trace-context propagation.
+type metadataCarrier struct {
+	m *connect.Header
+}
+
+func (c metadataCarrier) Get(key string) string {
+	return c.m.Get(key)
+}
+
+func (c metadataCarrier) Set(key, value string) { c.m.Set(key, value) }
+
+func (c metadataCarrier) Keys() []string {
+	keys := make([]string, 0, c.m.Len())
+	for key := range c.m.All() {
+		keys = append(keys, key)
+	}
+	return keys
 }

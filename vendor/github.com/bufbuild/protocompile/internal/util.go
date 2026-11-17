@@ -26,6 +26,16 @@ import (
 	"github.com/bufbuild/protocompile/internal/tags"
 )
 
+// MaxMessageNestingDepth is the limit on message nesting depth. It matches
+// protoc's internal::cpp::MaxMessageDeclarationNestingDepth. A top-level
+// message has depth 1. Groups and map entries count toward the depth.
+const MaxMessageNestingDepth = 32
+
+// MaxExpressionNestingDepth is the maximum nesting depth of an expression,
+// such as a message value in an option. It matches protoc's recursion limit.
+// Message values, arrays and prefix operators each count as one level.
+const MaxExpressionNestingDepth = 100
+
 // JSONName returns the default JSON name for a field with the given name.
 // This mirrors the algorithm in protoc:
 //

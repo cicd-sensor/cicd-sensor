@@ -18,12 +18,10 @@ import (
 	"context"
 	"net/http"
 
-	"connectrpc.com/connect"
-	"go.opentelemetry.io/otel/attribute"
+	"connectrpc.com/connect/v2"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
@@ -84,24 +82,10 @@ func WithAttributeFilter(filter AttributeFilter) Option {
 	return &attributeFilterOption{filterAttribute: filter}
 }
 
-// WithoutServerPeerAttributes removes net.peer.port and net.peer.name
-// attributes from server trace and span attributes. The default behavior
-// follows the OpenTelemetry semantic conventions for RPC, but produces very
-// high-cardinality data; this option significantly reduces cardinality in most
-// environments.
-func WithoutServerPeerAttributes() Option {
-	return WithAttributeFilter(func(spec connect.Spec, value attribute.KeyValue) bool {
-		if spec.IsClient {
-			return true
-		}
-		if value.Key == semconv.NetPeerPortKey {
-			return false
-		}
-		if value.Key == semconv.NetPeerNameKey {
-			return false
-		}
-		return true
-	})
+// WithServerPeerAttributes adds the network.peer.address and network.peer.port
+// attributes to server spans. Omitted by default: they are high-cardinality.
+func WithServerPeerAttributes() Option {
+	return &serverPeerAttributesOption{}
 }
 
 // WithTrustRemote sets the Interceptor to trust remote spans.
@@ -128,11 +112,11 @@ func WithTraceResponseHeader(keys ...string) Option {
 	}
 }
 
-// WithoutTraceEvents disables trace events for both unary and streaming
-// interceptors. This reduces the quantity of data sent to your tracing system
-// by omitting per-message information like message size.
-func WithoutTraceEvents() Option {
-	return &omitTraceEventsOption{}
+// WithDurationHistogramOptions passes options to the call duration
+// histogram, for example [metric.WithExplicitBucketBoundaries] to replace the
+// buckets recommended by the OpenTelemetry semantic conventions.
+func WithDurationHistogramOptions(options ...metric.Float64HistogramOption) Option {
+	return &durationHistogramOptionsOption{options: options}
 }
 
 // WithPropagateResponseHeader enables injecting the traceparent header
@@ -142,12 +126,11 @@ func WithPropagateResponseHeader() Option {
 	return &propagateResponseHeaderOption{}
 }
 
-// WithRPCSystem forces the use of the semantic conventions for the given
-// RPC system. By default, the conventions used vary based on the actual
+// WithRPCSystem forces the rpc.system.name attribute for the given
+// RPC system. By default, the value varies based on the actual
 // protocol of a request: so requests that a client sends or a server
-// receives that use the gRPC or gRPC-Web protocols use the gRPC semantic
-// conventions; requests that use ConnectRPC use the ConnectRPC semantic
-// conventions.
+// receives that use the gRPC or gRPC-Web protocols report "grpc";
+// requests that use ConnectRPC report "connectrpc".
 //
 // In a system where a server handles requests for the same service but
 // from clients that use multiple protocols, this causes the telemetry
@@ -161,9 +144,8 @@ func WithRPCSystem(system RPCSystem) Option {
 	return &rpcSystemOption{system: system}
 }
 
-// RPCSystem represents an RPC system, like ConnectRPC or gRPC. Different
-// systems have different semantic conventions for how metrics and spans are
-// defined.
+// RPCSystem represents an RPC system, like ConnectRPC or gRPC, and selects
+// the value of the rpc.system.name attribute.
 //
 //	https://opentelemetry.io/docs/specs/semconv/rpc/
 //
@@ -252,16 +234,24 @@ func (o *traceResponseHeaderOption) apply(c *config) {
 	}
 }
 
-type omitTraceEventsOption struct{}
+type durationHistogramOptionsOption struct {
+	options []metric.Float64HistogramOption
+}
 
-func (o *omitTraceEventsOption) apply(c *config) {
-	c.omitTraceEvents = true
+func (o *durationHistogramOptionsOption) apply(c *config) {
+	c.durationHistogramOptions = append(c.durationHistogramOptions, o.options...)
 }
 
 type propagateResponseHeaderOption struct{}
 
 func (o *propagateResponseHeaderOption) apply(c *config) {
 	c.propagateResponseHeader = true
+}
+
+type serverPeerAttributesOption struct{}
+
+func (o *serverPeerAttributesOption) apply(c *config) {
+	c.serverPeerAttributes = true
 }
 
 type rpcSystemOption struct {

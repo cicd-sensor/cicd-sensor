@@ -22,4 +22,4 @@
 // limitations under the License.
 
 // Package option provides the Options type for plugins.
-package option // import "buf.build/go/bufplugin/option"
+package option

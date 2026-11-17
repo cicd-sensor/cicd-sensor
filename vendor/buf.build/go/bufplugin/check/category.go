@@ -111,12 +111,12 @@ func (r *category) toProto() *checkv1.Category {
 	if r == nil {
 		return nil
 	}
-	return &checkv1.Category{
+	return checkv1.Category_builder{
 		Id:             r.id,
 		Purpose:        r.purpose,
 		Deprecated:     r.deprecated,
 		ReplacementIds: r.replacementIDs,
-	}
+	}.Build()
 }
 
 func (*category) isCategory() {}

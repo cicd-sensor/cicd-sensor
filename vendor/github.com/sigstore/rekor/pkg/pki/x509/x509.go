@@ -48,6 +48,9 @@ func NewSignature(r io.Reader) (*Signature, error) {
 }
 
 func NewSignatureWithOpts(r io.Reader, opts ...sigsig.LoadOption) (*Signature, error) {
+	if r == nil {
+		return nil, errors.New("reader cannot be nil")
+	}
 	b, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -64,14 +67,14 @@ func (s Signature) CanonicalValue() ([]byte, error) {
 }
 
 // Verify implements the pki.Signature interface
-func (s Signature) Verify(r io.Reader, k interface{}, opts ...sigsig.VerifyOption) error {
+func (s Signature) Verify(r io.Reader, k any, opts ...sigsig.VerifyOption) error {
 	if len(s.signature) == 0 {
 		//lint:ignore ST1005 X509 is proper use of term
 		return errors.New("X509 signature has not been initialized")
 	}
 
 	key, ok := k.(*PublicKey)
-	if !ok {
+	if !ok || key == nil {
 		return fmt.Errorf("invalid public key type for: %v", k)
 	}
 
@@ -99,7 +102,7 @@ func (s Signature) Verify(r io.Reader, k interface{}, opts ...sigsig.VerifyOptio
 
 // PublicKey Public Key that follows the x509 standard
 type PublicKey struct {
-	key   interface{}
+	key   any
 	cert  *cert
 	certs []*x509.Certificate
 }
@@ -111,6 +114,9 @@ type cert struct {
 
 // NewPublicKey implements the pki.PublicKey interface
 func NewPublicKey(r io.Reader) (*PublicKey, error) {
+	if r == nil {
+		return nil, errors.New("reader cannot be nil")
+	}
 	rawPub, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -218,7 +224,7 @@ func (k PublicKey) Subjects() []string {
 func (k PublicKey) Identities() ([]identity.Identity, error) {
 	// k contains either a key, a cert, or a list of certs
 	if k.key != nil {
-		pkixKey, err := cryptoutils.MarshalPublicKeyToDER(k.key)
+		pkixKey, err := x509.MarshalPKIXPublicKey(k.key)
 		if err != nil {
 			return nil, err
 		}

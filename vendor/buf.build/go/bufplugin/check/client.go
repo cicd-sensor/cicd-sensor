@@ -208,10 +208,10 @@ func (c *client) listRulesUncached(ctx context.Context) ([]Rule, error) {
 	for {
 		response, err := checkServiceClient.ListRules(
 			ctx,
-			&checkv1.ListRulesRequest{
+			checkv1.ListRulesRequest_builder{
 				PageSize:  listRulesPageSize,
 				PageToken: pageToken,
-			},
+			}.Build(),
 		)
 		if err != nil {
 			return nil, err
@@ -259,10 +259,10 @@ func (c *client) listCategoriesUncached(ctx context.Context) ([]Category, error)
 	for {
 		response, err := checkServiceClient.ListCategories(
 			ctx,
-			&checkv1.ListCategoriesRequest{
+			checkv1.ListCategoriesRequest_builder{
 				PageSize:  listCategoriesPageSize,
 				PageToken: pageToken,
-			},
+			}.Build(),
 		)
 		if err != nil {
 			return nil, err

@@ -22,23 +22,20 @@ import (
 
 // CompareAnnotations returns -1 if one < two, 1 if one > two, 0 otherwise.
 func CompareAnnotations(one Annotation, two Annotation) int {
-	if one == nil && two == nil {
+	switch {
+	case one == nil && two == nil:
 		return 0
-	}
-	if one == nil && two != nil {
+	case one == nil:
 		return -1
-	}
-	if one != nil && two == nil {
+	case two == nil:
 		return 1
 	}
 	if compare := strings.Compare(one.RuleID(), two.RuleID()); compare != 0 {
 		return compare
 	}
-
 	if compare := descriptor.CompareFileLocations(one.FileLocation(), two.FileLocation()); compare != 0 {
 		return compare
 	}
-
 	if compare := descriptor.CompareFileLocations(one.AgainstFileLocation(), two.AgainstFileLocation()); compare != 0 {
 		return compare
 	}
@@ -47,13 +44,12 @@ func CompareAnnotations(one Annotation, two Annotation) int {
 
 // CompareRules returns -1 if one < two, 1 if one > two, 0 otherwise.
 func CompareRules(one Rule, two Rule) int {
-	if one == nil && two == nil {
+	switch {
+	case one == nil && two == nil:
 		return 0
-	}
-	if one == nil && two != nil {
+	case one == nil:
 		return -1
-	}
-	if one != nil && two == nil {
+	case two == nil:
 		return 1
 	}
 	return strings.Compare(one.ID(), two.ID())
@@ -61,13 +57,12 @@ func CompareRules(one Rule, two Rule) int {
 
 // CompareCategories returns -1 if one < two, 1 if one > two, 0 otherwise.
 func CompareCategories(one Category, two Category) int {
-	if one == nil && two == nil {
+	switch {
+	case one == nil && two == nil:
 		return 0
-	}
-	if one == nil && two != nil {
+	case one == nil:
 		return -1
-	}
-	if one != nil && two == nil {
+	case two == nil:
 		return 1
 	}
 	return strings.Compare(one.ID(), two.ID())
@@ -77,13 +72,12 @@ func CompareCategories(one Category, two Category) int {
 
 // compareRuleSpecs returns -1 if one < two, 1 if one > two, 0 otherwise.
 func compareRuleSpecs(one *RuleSpec, two *RuleSpec) int {
-	if one == nil && two == nil {
+	switch {
+	case one == nil && two == nil:
 		return 0
-	}
-	if one == nil && two != nil {
+	case one == nil:
 		return -1
-	}
-	if one != nil && two == nil {
+	case two == nil:
 		return 1
 	}
 	return strings.Compare(one.ID, two.ID)
@@ -91,13 +85,12 @@ func compareRuleSpecs(one *RuleSpec, two *RuleSpec) int {
 
 // compareCategorySpecs returns -1 if one < two, 1 if one > two, 0 otherwise.
 func compareCategorySpecs(one *CategorySpec, two *CategorySpec) int {
-	if one == nil && two == nil {
+	switch {
+	case one == nil && two == nil:
 		return 0
-	}
-	if one == nil && two != nil {
+	case one == nil:
 		return -1
-	}
-	if one != nil && two == nil {
+	case two == nil:
 		return 1
 	}
 	return strings.Compare(one.ID, two.ID)

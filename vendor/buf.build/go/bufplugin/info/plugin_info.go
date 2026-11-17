@@ -95,10 +95,10 @@ func (p *pluginInfo) License() License {
 }
 
 func (p *pluginInfo) toProto() *infov1.PluginInfo {
-	return &infov1.PluginInfo{
+	return infov1.PluginInfo_builder{
 		Documentation: p.documentation,
 		License:       p.license.toProto(),
-	}
+	}.Build()
 }
 
 func (*pluginInfo) isPluginInfo() {}

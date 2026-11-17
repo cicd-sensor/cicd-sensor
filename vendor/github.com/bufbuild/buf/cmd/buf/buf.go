@@ -25,7 +25,7 @@ import (
 	"buf.build/go/app"
 	"buf.build/go/app/appcmd"
 	"buf.build/go/app/appext"
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/bufbuild/buf/cmd/buf/internal/command/alpha/protoc"
 	"github.com/bufbuild/buf/cmd/buf/internal/command/alpha/registry/token/tokendelete"
 	"github.com/bufbuild/buf/cmd/buf/internal/command/alpha/registry/token/tokenget"
@@ -478,7 +478,7 @@ func newRootCommand(name string) *appcmd.Command {
 func newErrorInterceptor() appext.Interceptor {
 	return func(next func(context.Context, appext.Container) error) func(context.Context, appext.Container) error {
 		return func(ctx context.Context, container appext.Container) error {
-			return wrapError(next(ctx, container))
+			return wrapError(ctx, next(ctx, container))
 		}
 	}
 }
@@ -486,9 +486,15 @@ func newErrorInterceptor() appext.Interceptor {
 // wrapError is used when a CLI command fails, regardless of its error code.
 // Note that this function will wrap the error so that the underlying error
 // can be recovered via 'errors.Is'.
-func wrapError(err error) error {
+func wrapError(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
+	}
+	// ctx is the root context that [app.Run] wrapped with interrupt.Handle. Nothing else cancels it,
+	// so a canceled ctx suggests SIGINT/SIGTERM.
+	if errors.Is(ctx.Err(), context.Canceled) &&
+		(errors.Is(err, context.Canceled) || connect.CodeOf(err) == connect.CodeCanceled) {
+		return appFailureError(errors.New("interrupted"))
 	}
 
 	var connectErr *connect.Error
@@ -582,8 +588,7 @@ func wrapError(err error) error {
 		)
 	}
 
-	var importNotExistError *bufmodule.ImportNotExistError
-	if errors.As(err, &importNotExistError) {
+	if importNotExistError, ok := errors.AsType[*bufmodule.ImportNotExistError](err); ok {
 		// There must be a better place to do this, perhaps in the Controller, but this works for now.
 		err = app.WrapError(bufctl.ExitCodeFileAnnotation, importNotExistError)
 	}

@@ -62,6 +62,11 @@ type FileDescriptor interface {
 	// This matches the shape of the PublicDependency and WeakDependency fields.
 	UnusedDependencyIndexes() []int32
 
+	// ModuleName returns the name of the module that the File belongs to.
+	//
+	// Returns nil if the File does not belong to a module, or if the module name is not known.
+	ModuleName() ModuleName
+
 	// ToProto converts the FileDescriptor to its Protobuf representation.
 	ToProto() *descriptorv1.FileDescriptor
 
@@ -113,6 +118,7 @@ func FileDescriptorsForProtoFileDescriptors(protoFileDescriptors []*descriptorv1
 					protoFileDescriptor.GetIsImport(),
 					protoFileDescriptor.GetIsSyntaxUnspecified(),
 					protoFileDescriptor.GetUnusedDependency(),
+					ModuleNameForProtoModuleName(protoFileDescriptor.GetModuleName()),
 				),
 			)
 			return true
@@ -137,6 +143,7 @@ type fileDescriptor struct {
 	isImport                   bool
 	isSyntaxUnspecified        bool
 	unusedDependencyIndexes    []int32
+	moduleName                 ModuleName
 }
 
 func newFileDescriptor(
@@ -145,6 +152,7 @@ func newFileDescriptor(
 	isImport bool,
 	isSyntaxUnspecified bool,
 	unusedDependencyIndexes []int32,
+	moduleName ModuleName,
 ) *fileDescriptor {
 	return &fileDescriptor{
 		protoreflectFileDescriptor: protoreflectFileDescriptor,
@@ -152,6 +160,7 @@ func newFileDescriptor(
 		isImport:                   isImport,
 		isSyntaxUnspecified:        isSyntaxUnspecified,
 		unusedDependencyIndexes:    unusedDependencyIndexes,
+		moduleName:                 moduleName,
 	}
 }
 
@@ -175,16 +184,25 @@ func (f *fileDescriptor) UnusedDependencyIndexes() []int32 {
 	return slices.Clone(f.unusedDependencyIndexes)
 }
 
+func (f *fileDescriptor) ModuleName() ModuleName {
+	return f.moduleName
+}
+
 func (f *fileDescriptor) ToProto() *descriptorv1.FileDescriptor {
 	if f == nil {
 		return nil
 	}
-	return &descriptorv1.FileDescriptor{
+	var protoModuleName *descriptorv1.ModuleName
+	if f.moduleName != nil {
+		protoModuleName = f.moduleName.ToProto()
+	}
+	return descriptorv1.FileDescriptor_builder{
 		FileDescriptorProto: f.fileDescriptorProto,
 		IsImport:            f.isImport,
 		IsSyntaxUnspecified: f.isSyntaxUnspecified,
 		UnusedDependency:    f.unusedDependencyIndexes,
-	}
+		ModuleName:          protoModuleName,
+	}.Build()
 }
 
 func (*fileDescriptor) isFileDescriptor() {}

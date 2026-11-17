@@ -22,21 +22,22 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/armor"
+	pgperrors "github.com/ProtonMail/go-crypto/openpgp/errors"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/asaskevich/govalidator"
 
-	//TODO: https://github.com/sigstore/rekor/issues/286
-	"golang.org/x/crypto/openpgp"        //nolint:staticcheck
-	"golang.org/x/crypto/openpgp/armor"  //nolint:staticcheck
-	"golang.org/x/crypto/openpgp/packet" //nolint:staticcheck
-
+	"github.com/sigstore/rekor/internal/pgpv3"
 	"github.com/sigstore/rekor/pkg/pki/identity"
-	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	sigsig "github.com/sigstore/sigstore/pkg/signature"
 )
 
@@ -46,8 +47,58 @@ type Signature struct {
 	signature []byte
 }
 
+type parsedSignature struct {
+	v3 *pgpv3.Signature
+	v4 *packet.Signature
+}
+
+func isSkippablePacketError(err error) bool {
+	// Detached-signature streams cannot meaningfully contain data packets, so
+	// all unknown and unsupported packets are ignored while looking for a
+	// signature, including types packet.Reader treats more conservatively.
+	switch err.(type) {
+	case pgperrors.UnknownPacketTypeError, pgperrors.UnsupportedError:
+		return true
+	default:
+		return false
+	}
+}
+
+func parseSignaturePacket(op *packet.OpaquePacket) (*parsedSignature, bool, error) {
+	if pgpv3.IsV3Packet(op.Tag, op.Contents) {
+		sig, err := pgpv3.Parse(op.Contents)
+		if isSkippablePacketError(err) {
+			return nil, true, nil
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		return &parsedSignature{v3: sig}, false, nil
+	}
+
+	p, err := op.Parse()
+	if isSkippablePacketError(err) {
+		return nil, true, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	switch p := p.(type) {
+	case *packet.Marker:
+		return nil, true, nil
+	case *packet.Signature:
+		return &parsedSignature{v4: p}, false, nil
+	default:
+		return nil, false, pgperrors.StructuralError("non signature packet found")
+	}
+}
+
 // NewSignature creates and validates a PGP signature object
 func NewSignature(r io.Reader) (*Signature, error) {
+	if r == nil {
+		return nil, errors.New("nil reader")
+	}
+
 	var s Signature
 	var inputBuffer bytes.Buffer
 
@@ -73,20 +124,77 @@ func NewSignature(r io.Reader) (*Signature, error) {
 		sigReader = sigByteReader
 	}
 
-	sigPktReader := packet.NewReader(sigReader)
-	sigPkt, err := sigPktReader.Next()
+	sigBody, err := io.ReadAll(sigReader)
 	if err != nil {
-		return nil, fmt.Errorf("invalid PGP signature: %w", err)
+		return nil, fmt.Errorf("unable to read PGP signature: %w", err)
 	}
 
-	if _, ok := sigPkt.(*packet.Signature); !ok {
-		if _, ok := sigPkt.(*packet.SignatureV3); !ok {
-			return nil, errors.New("valid PGP signature was not detected")
+	packets := packet.NewOpaqueReader(bytes.NewReader(sigBody))
+	for {
+		op, err := packets.Next()
+		if err != nil {
+			return nil, fmt.Errorf("invalid PGP signature: %w", err)
+		}
+		_, skip, err := parseSignaturePacket(op)
+		if err != nil {
+			return nil, fmt.Errorf("invalid PGP signature: %w", err)
+		}
+		if !skip {
+			break
 		}
 	}
 
 	s.signature = inputBuffer.Bytes()
 	return &s, nil
+}
+
+// verifyDetached verifies the first signature whose issuer is present in
+// keyring, including legacy v3 signatures unsupported by packet.Read.
+func verifyDetached(keyring openpgp.EntityList, signed io.Reader, body []byte) error {
+	r := bytes.NewReader(body)
+	packets := packet.NewOpaqueReader(r)
+
+	for {
+		packetStart := len(body) - r.Len()
+		op, err := packets.Next()
+		if err == io.EOF {
+			return pgperrors.ErrUnknownIssuer
+		}
+		if err != nil {
+			return err
+		}
+		packetEnd := len(body) - r.Len()
+
+		sig, skip, err := parseSignaturePacket(op)
+		if err != nil {
+			return err
+		}
+		if skip {
+			continue
+		}
+
+		if sig.v3 != nil {
+			keys := keyring.KeysByIdUsage(sig.v3.IssuerKeyID, packet.KeyFlagSign)
+			if len(keys) == 0 {
+				continue
+			}
+			_, err = sig.v3.VerifyDetached(keys, signed)
+			return err
+		}
+
+		if sig.v4.IssuerKeyId == nil {
+			return pgperrors.StructuralError("signature doesn't have an issuer")
+		}
+		if len(keyring.KeysByIdUsage(*sig.v4.IssuerKeyId, packet.KeyFlagSign)) == 0 {
+			continue
+		}
+
+		// Check key validity when this signature was created, allowing
+		// historical entries to verify after their signing key expires.
+		cfg := &packet.Config{Time: func() time.Time { return sig.v4.CreationTime }}
+		_, err = openpgp.CheckDetachedSignature(keyring, signed, bytes.NewReader(body[packetStart:packetEnd]), cfg)
+		return err
+	}
 }
 
 // FetchSignature implements pki.Signature interface
@@ -140,7 +248,7 @@ func (s Signature) CanonicalValue() ([]byte, error) {
 }
 
 // Verify implements the pki.Signature interface
-func (s Signature) Verify(r io.Reader, k interface{}, _ ...sigsig.VerifyOption) error {
+func (s Signature) Verify(r io.Reader, k any, _ ...sigsig.VerifyOption) error {
 	if len(s.signature) == 0 {
 		return errors.New("PGP signature has not been initialized")
 	}
@@ -149,20 +257,23 @@ func (s Signature) Verify(r io.Reader, k interface{}, _ ...sigsig.VerifyOption) 
 	if !ok {
 		return errors.New("cannot use Verify with a non-PGP signature")
 	}
-	if len(key.key) == 0 {
+	if key == nil || len(key.key) == 0 {
 		return errors.New("PGP public key has not been initialized")
 	}
 
-	verifyFn := openpgp.CheckDetachedSignature
+	sigBody := s.signature
 	if s.isArmored {
-		verifyFn = openpgp.CheckArmoredDetachedSignature
+		block, decodeErr := armor.Decode(bytes.NewReader(s.signature))
+		if decodeErr != nil {
+			return fmt.Errorf("error decoding armored PGP signature: %w", decodeErr)
+		}
+		var err error
+		if sigBody, err = io.ReadAll(block.Body); err != nil {
+			return fmt.Errorf("error reading armored PGP signature: %w", err)
+		}
 	}
 
-	if _, err := verifyFn(key.key, r, bytes.NewReader(s.signature)); err != nil {
-		return err
-	}
-
-	return nil
+	return verifyDetached(key.key, r, sigBody)
 }
 
 // PublicKey Public Key that follows the PGP standard; supports both armored & binary detached signatures
@@ -172,6 +283,10 @@ type PublicKey struct {
 
 // NewPublicKey implements the pki.PublicKey interface
 func NewPublicKey(r io.Reader) (*PublicKey, error) {
+	if r == nil {
+		return nil, errors.New("nil reader")
+	}
+
 	var k PublicKey
 	var inputBuffer bytes.Buffer
 
@@ -214,6 +329,9 @@ func NewPublicKey(r io.Reader) (*PublicKey, error) {
 					return nil, fmt.Errorf("invalid PGP public key provided: %w", err)
 				}
 			}
+		}
+		if err := scan.Err(); err != nil {
+			return nil, fmt.Errorf("error reading PGP public key: %w", err)
 		}
 	} else {
 		// process as binary
@@ -269,6 +387,9 @@ func (k PublicKey) CanonicalValue() ([]byte, error) {
 		defer armoredWriter.Close()
 
 		for _, entity := range k.key {
+			if entity == nil {
+				return fmt.Errorf("pgp key ring contains a nil entity")
+			}
 			if err := entity.Serialize(armoredWriter); err != nil {
 				return fmt.Errorf("error generating canonical value of PGP public key: %w", err)
 			}
@@ -281,7 +402,8 @@ func (k PublicKey) CanonicalValue() ([]byte, error) {
 	return canonicalBuffer.Bytes(), nil
 }
 
-func (k PublicKey) KeyRing() (openpgp.KeyRing, error) {
+// Entities returns the underlying OpenPGP entity list.
+func (k PublicKey) Entities() (openpgp.EntityList, error) {
 	if k.key == nil {
 		return nil, errors.New("PGP public key has not been initialized")
 	}
@@ -289,13 +411,21 @@ func (k PublicKey) KeyRing() (openpgp.KeyRing, error) {
 	return k.key, nil
 }
 
+// KeyRing returns the underlying OpenPGP key ring.
+func (k PublicKey) KeyRing() (openpgp.KeyRing, error) {
+	return k.Entities()
+}
+
 // EmailAddresses implements the pki.PublicKey interface
 func (k PublicKey) EmailAddresses() []string {
 	var names []string
 	// Extract from cert
 	for _, entity := range k.key {
+		if entity == nil {
+			continue
+		}
 		for _, identity := range entity.Identities {
-			if govalidator.IsEmail(identity.UserId.Email) {
+			if identity != nil && identity.UserId != nil && govalidator.IsEmail(identity.UserId.Email) {
 				names = append(names, identity.UserId.Email)
 			}
 		}
@@ -312,12 +442,22 @@ func (k PublicKey) Subjects() []string {
 func (k PublicKey) Identities() ([]identity.Identity, error) {
 	var ids []identity.Identity
 	for _, entity := range k.key {
+		if entity == nil {
+			continue
+		}
 		var keys []*packet.PublicKey
-		keys = append(keys, entity.PrimaryKey)
+		if entity.PrimaryKey != nil {
+			keys = append(keys, entity.PrimaryKey)
+		}
 		for _, subKey := range entity.Subkeys {
-			keys = append(keys, subKey.PublicKey)
+			if subKey.PublicKey != nil {
+				keys = append(keys, subKey.PublicKey)
+			}
 		}
 		for _, pk := range keys {
+			if pk == nil {
+				continue
+			}
 			pubKey := pk.PublicKey
 			// Only process supported types. Will ignore DSA
 			// and ElGamal keys.
@@ -327,14 +467,14 @@ func (k PublicKey) Identities() ([]identity.Identity, error) {
 			default:
 				continue
 			}
-			pkixKey, err := cryptoutils.MarshalPublicKeyToDER(pubKey)
+			pkixKey, err := x509.MarshalPKIXPublicKey(pubKey)
 			if err != nil {
 				return nil, err
 			}
 			ids = append(ids, identity.Identity{
 				Crypto:      pubKey,
 				Raw:         pkixKey,
-				Fingerprint: hex.EncodeToString(pk.Fingerprint[:]),
+				Fingerprint: hex.EncodeToString(pk.Fingerprint),
 			})
 		}
 	}

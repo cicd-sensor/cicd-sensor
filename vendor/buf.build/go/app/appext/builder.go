@@ -19,10 +19,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"buf.build/go/app"
 	"github.com/spf13/pflag"
+)
+
+const (
+	debugFlagName     = "debug"
+	logFormatFlagName = "log-format"
+	timeoutFlagName   = "timeout"
 )
 
 type builder struct {
@@ -33,6 +41,7 @@ type builder struct {
 	logFormat string
 
 	timeout time.Duration
+	flagSet *pflag.FlagSet
 
 	defaultTimeout time.Duration
 	timeoutFlag    bool
@@ -53,10 +62,11 @@ func newBuilder(appName string, options ...BuilderOption) *builder {
 }
 
 func (b *builder) BindRoot(flagSet *pflag.FlagSet) {
-	flagSet.BoolVar(&b.debug, "debug", false, "Turn on debug logging")
-	flagSet.StringVar(&b.logFormat, "log-format", "color", "The log format [text,color,json]")
+	b.flagSet = flagSet
+	flagSet.BoolVar(&b.debug, debugFlagName, false, b.withEnvUsage("Turn on debug logging", debugFlagName))
+	flagSet.StringVar(&b.logFormat, logFormatFlagName, "color", b.withEnvUsage("The log format [text,color,json]", logFormatFlagName))
 	if b.timeoutFlag {
-		flagSet.DurationVar(&b.timeout, "timeout", b.defaultTimeout, `The duration until timing out, setting it to 0 means no timeout`)
+		flagSet.DurationVar(&b.timeout, timeoutFlagName, b.defaultTimeout, b.withEnvUsage("The duration until timing out, setting it to 0 means no timeout", timeoutFlagName))
 	}
 
 	// We do not officially support this flag, this is for testing, where we need warnings turned off.
@@ -86,11 +96,20 @@ func (b *builder) run(
 	appContainer app.Container,
 	f func(context.Context, Container) error,
 ) error {
-	logLevel, err := getLogLevel(b.debug, b.noWarn)
+	debug, err := b.boolFlagOrEnv(appContainer, debugFlagName, b.debug)
 	if err != nil {
 		return err
 	}
-	logFormat, err := ParseLogFormat(b.logFormat)
+	logLevel, err := getLogLevel(debug, b.noWarn)
+	if err != nil {
+		return err
+	}
+	logFormatString := b.stringFlagOrEnv(appContainer, logFormatFlagName, b.logFormat)
+	logFormat, err := ParseLogFormat(logFormatString)
+	if err != nil {
+		return err
+	}
+	timeout, err := b.durationFlagOrEnv(appContainer, timeoutFlagName, b.timeout)
 	if err != nil {
 		return err
 	}
@@ -105,12 +124,69 @@ func (b *builder) run(
 	container := newContainer(nameContainer, logger, logLevel, logFormat)
 
 	var cancel context.CancelFunc
-	if b.timeout != 0 {
-		ctx, cancel = context.WithTimeout(ctx, b.timeout)
+	if timeout != 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 
 	return f(ctx, container)
+}
+
+// withEnvUsage appends the environment variable for the flag to its usage.
+func (b *builder) withEnvUsage(usage string, flagName string) string {
+	return usage + " (env " + b.envKey(flagName) + ")"
+}
+
+// envKey returns the environment variable key for the flag. The key is the app
+// name and flag name joined by an underscore, uppercased, with dashes replaced
+// by underscores. For example, BUF_LOG_FORMAT for the flag --log-format of the
+// app buf.
+func (b *builder) envKey(flagName string) string {
+	return getAppNameEnvPrefix(b.appName) + strings.ToUpper(strings.ReplaceAll(flagName, "-", "_"))
+}
+
+// envValue returns the environment variable value for the flag if the flag
+// was bound and not explicitly set, otherwise the empty string.
+func (b *builder) envValue(envContainer app.EnvContainer, flagName string) string {
+	if b.flagSet == nil {
+		return ""
+	}
+	flag := b.flagSet.Lookup(flagName)
+	if flag == nil || flag.Changed {
+		return ""
+	}
+	return envContainer.Env(b.envKey(flagName))
+}
+
+func (b *builder) boolFlagOrEnv(envContainer app.EnvContainer, flagName string, flagValue bool) (bool, error) {
+	envValue := b.envValue(envContainer, flagName)
+	if envValue == "" {
+		return flagValue, nil
+	}
+	value, err := strconv.ParseBool(envValue)
+	if err != nil {
+		return false, fmt.Errorf("invalid value %q for %s: %w", envValue, b.envKey(flagName), err)
+	}
+	return value, nil
+}
+
+func (b *builder) stringFlagOrEnv(envContainer app.EnvContainer, flagName string, flagValue string) string {
+	if envValue := b.envValue(envContainer, flagName); envValue != "" {
+		return envValue
+	}
+	return flagValue
+}
+
+func (b *builder) durationFlagOrEnv(envContainer app.EnvContainer, flagName string, flagValue time.Duration) (time.Duration, error) {
+	envValue := b.envValue(envContainer, flagName)
+	if envValue == "" {
+		return flagValue, nil
+	}
+	value, err := time.ParseDuration(envValue)
+	if err != nil {
+		return 0, fmt.Errorf("invalid value %q for %s: %w", envValue, b.envKey(flagName), err)
+	}
+	return value, nil
 }
 
 func getLogLevel(debugFlag bool, noWarnFlag bool) (LogLevel, error) {

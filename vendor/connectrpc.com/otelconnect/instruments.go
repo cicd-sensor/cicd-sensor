@@ -18,89 +18,46 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/semconv/v1.43.0/rpcconv"
 )
 
 const (
-	metricKeyFormat     = "rpc.%s.%s"
-	durationKey         = "duration"
-	durationDesc        = "Measures the duration of inbound RPC."
-	requestSizeKey      = "request.size"
-	requestSizeDesc     = "Measures size of RPC request messages (uncompressed)."
-	responseSizeKey     = "response.size"
-	responseSizeDesc    = "Measures size of RPC response messages (uncompressed)."
-	requestsPerRPCKey   = "requests_per_rpc"
-	requestsPerRPCDesc  = "Measures the number of messages received per RPC. Should be 1 for all non-streaming RPCs."
-	responsesPerRPCKey  = "responses_per_rpc"
-	responsesPerRPCDesc = "Measures the number of messages received per RPC. Should be 1 for all non-streaming RPCs."
-	messageKey          = "message"
-	serverKey           = "server"
-	clientKey           = "client"
-	requestKey          = "request"
-	responseKey         = "response"
-	unitDimensionless   = "1"
-	unitBytes           = "By"
-	unitMilliseconds    = "ms"
+	serverKey   = "server"
+	clientKey   = "client"
+	requestKey  = "request"
+	responseKey = "response"
 )
 
 type instruments struct {
-	duration        metric.Int64Histogram
-	requestSize     metric.Int64Histogram
-	responseSize    metric.Int64Histogram
-	requestsPerRPC  metric.Int64Histogram
-	responsesPerRPC metric.Int64Histogram
+	duration metric.Float64Histogram
 }
 
-// createInstruments creates the metrics for the interceptor.
-func createInstruments(meter metric.Meter, interceptorType string) (instruments, error) {
-	duration, err := meter.Int64Histogram(
-		formatkeys(interceptorType, durationKey),
-		metric.WithUnit(unitMilliseconds),
-		metric.WithDescription(durationDesc),
+// createInstruments creates the metrics for the interceptor. The histogram
+// is not built with rpcconv's constructors: they append their own bucket
+// boundaries after the caller's options, so callers could never override them.
+func createInstruments(meter metric.Meter, side string, options []metric.Float64HistogramOption) (instruments, error) {
+	var name, unit, description string
+	switch side {
+	case serverKey:
+		inst := rpcconv.ServerCallDuration{}
+		name, unit, description = inst.Name(), inst.Unit(), inst.Description()
+	case clientKey:
+		inst := rpcconv.ClientCallDuration{}
+		name, unit, description = inst.Name(), inst.Unit(), inst.Description()
+	default:
+		return instruments{}, fmt.Errorf("unknown interceptor side %q", side)
+	}
+	histogramOptions := make([]metric.Float64HistogramOption, 0, 3+len(options))
+	histogramOptions = append(histogramOptions,
+		metric.WithUnit(unit),
+		metric.WithDescription(description),
+		// Spec-recommended buckets; caller options follow and win.
+		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10),
 	)
+	histogramOptions = append(histogramOptions, options...)
+	duration, err := meter.Float64Histogram(name, histogramOptions...)
 	if err != nil {
 		return instruments{}, err
 	}
-	requestSize, err := meter.Int64Histogram(
-		formatkeys(interceptorType, requestSizeKey),
-		metric.WithUnit(unitBytes),
-		metric.WithDescription(requestSizeDesc),
-	)
-	if err != nil {
-		return instruments{}, err
-	}
-	responseSize, err := meter.Int64Histogram(
-		formatkeys(interceptorType, responseSizeKey),
-		metric.WithUnit(unitBytes),
-		metric.WithDescription(responseSizeDesc),
-	)
-	if err != nil {
-		return instruments{}, err
-	}
-	requestsPerRPC, err := meter.Int64Histogram(
-		formatkeys(interceptorType, requestsPerRPCKey),
-		metric.WithUnit(unitDimensionless),
-		metric.WithDescription(requestsPerRPCDesc),
-	)
-	if err != nil {
-		return instruments{}, err
-	}
-	responsesPerRPC, err := meter.Int64Histogram(
-		formatkeys(interceptorType, responsesPerRPCKey),
-		metric.WithUnit(unitDimensionless),
-		metric.WithDescription(responsesPerRPCDesc),
-	)
-	if err != nil {
-		return instruments{}, err
-	}
-	return instruments{
-		duration:        duration,
-		requestSize:     requestSize,
-		responseSize:    responseSize,
-		requestsPerRPC:  requestsPerRPC,
-		responsesPerRPC: responsesPerRPC,
-	}, nil
-}
-
-func formatkeys(interceptorType string, metricName string) string {
-	return fmt.Sprintf(metricKeyFormat, interceptorType, metricName)
+	return instruments{duration: duration}, nil
 }

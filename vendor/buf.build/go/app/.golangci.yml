@@ -6,9 +6,12 @@ linters:
     - depguard          # unnecessary for small libraries
     - err113            # way too noisy
     - exhaustruct       # many exceptions
+    - exhaustruct_v5    # many exceptions
     - funlen            # rely on code review to limit function length
     - gochecknoglobals  # many exceptions
     - gocognit          # dubious "cognitive overhead" quantification
+    - goconst           # too noisy, especially in tests
+    - gomodguard        # deprecated for gomodguard_v2
     - inamedparam       # not standard style
     - interfacebloat    # many exceptions
     - ireturn           # "accept interfaces, return structs" isn't ironclad

@@ -24,7 +24,7 @@ import (
 
 	"buf.build/go/app/appcmd"
 	"buf.build/go/app/appext"
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/bufbuild/buf/private/buf/bufapp"
 	"github.com/bufbuild/buf/private/buf/bufcli"
 	"github.com/bufbuild/buf/private/bufpkg/bufconnect"
@@ -201,7 +201,7 @@ func inner(
 		return err
 	}
 	authnService := connectclient.Make(clientConfig, remote, registryv1alpha1connect.NewAuthnServiceClient)
-	resp, err := authnService.GetCurrentUser(ctx, connect.NewRequest(&registryv1alpha1.GetCurrentUserRequest{}))
+	resp, err := authnService.GetCurrentUser(ctx, &registryv1alpha1.GetCurrentUserRequest{})
 	if err != nil {
 		if connectErr := new(connect.Error); errors.As(err, &connectErr) && connectErr.Code() == connect.CodeUnavailable {
 			return connectErr
@@ -210,7 +210,7 @@ func inner(
 		// an unauthenticated error.
 		return fmt.Errorf("invalid token provided for %s", remote)
 	}
-	user := resp.Msg.GetUser()
+	user := resp.GetUser()
 	if user == nil {
 		return syserror.New("no user found for registry login token")
 	}
@@ -295,8 +295,7 @@ func doBrowserLogin(
 		ClientName: clientName,
 	})
 	if err != nil {
-		var oauth2Err *oauth2.Error
-		if errors.As(err, &oauth2Err) {
+		if oauth2Err, ok := errors.AsType[*oauth2.Error](err); ok {
 			return "", fmt.Errorf("authorization failed: %s", oauth2Err.ErrorDescription)
 		}
 		return "", err
@@ -307,8 +306,7 @@ func doBrowserLogin(
 		ClientSecret: deviceRegistration.ClientSecret,
 	})
 	if err != nil {
-		var oauth2Err *oauth2.Error
-		if errors.As(err, &oauth2Err) {
+		if oauth2Err, ok := errors.AsType[*oauth2.Error](err); ok {
 			return "", fmt.Errorf("authorization failed: %s", oauth2Err.ErrorDescription)
 		}
 		return "", err
@@ -337,8 +335,7 @@ If your browser doesn't open automatically, please open this URL in a browser to
 		GrantType:    oauth2.DeviceAuthorizationGrantType,
 	}, oauth2.AccessDeviceTokenWithPollingInterval(time.Duration(deviceAuthorization.Interval)*time.Second))
 	if err != nil {
-		var oauth2Err *oauth2.Error
-		if errors.As(err, &oauth2Err) {
+		if oauth2Err, ok := errors.AsType[*oauth2.Error](err); ok {
 			return "", fmt.Errorf("authorization failed: %s", oauth2Err.ErrorDescription)
 		}
 		return "", err

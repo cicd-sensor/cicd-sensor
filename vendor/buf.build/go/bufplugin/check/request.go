@@ -52,7 +52,7 @@ type Request interface {
 	// If empty, all default Rules will be used.
 	// The returned RuleIDs will be sorted.
 	//
-	// This may return more than 250 IDs; the underlying Client implemention is required to do
+	// This may return more than 250 IDs; the underlying Client implementation is required to do
 	// any necessary chunking.
 	//
 	// RuleHandlers can safely ignore this - the handling of RuleIDs will have already
@@ -194,11 +194,11 @@ func (r *request) toProtos() ([]*checkv1.CheckRequest, error) {
 	}
 	if len(r.ruleIDs) == 0 {
 		return []*checkv1.CheckRequest{
-			{
+			checkv1.CheckRequest_builder{
 				FileDescriptors:        protoFileDescriptors,
 				AgainstFileDescriptors: protoAgainstFileDescriptors,
 				Options:                protoOptions,
-			},
+			}.Build(),
 		}, nil
 	}
 	var checkRequests []*checkv1.CheckRequest
@@ -207,12 +207,12 @@ func (r *request) toProtos() ([]*checkv1.CheckRequest, error) {
 		end := min(start+checkRuleIDPageSize, len(r.ruleIDs))
 		checkRequests = append(
 			checkRequests,
-			&checkv1.CheckRequest{
+			checkv1.CheckRequest_builder{
 				FileDescriptors:        protoFileDescriptors,
 				AgainstFileDescriptors: protoAgainstFileDescriptors,
 				Options:                protoOptions,
 				RuleIds:                r.ruleIDs[start:end],
-			},
+			}.Build(),
 		)
 	}
 	return checkRequests, nil

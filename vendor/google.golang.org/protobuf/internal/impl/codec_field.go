@@ -6,6 +6,7 @@ package impl
 
 import (
 	"reflect"
+	"unsafe"
 
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/internal/errors"
@@ -30,7 +31,7 @@ func (errInvalidUTF8) Unwrap() error     { return errors.Error }
 func (mi *MessageInfo) initOneofFieldCoders(od protoreflect.OneofDescriptor, si structInfo) {
 	fs := si.oneofsByName[od.Name()]
 	ft := fs.Type
-	oneofFields := make(map[reflect.Type]*coderFieldInfo)
+	oneofFieldsByItab := make(map[unsafe.Pointer]*coderFieldInfo)
 	needIsInit := false
 	fields := od.Fields()
 	for i, lim := 0, fields.Len(); i < lim; i++ {
@@ -38,47 +39,60 @@ func (mi *MessageInfo) initOneofFieldCoders(od protoreflect.OneofDescriptor, si 
 		num := fd.Number()
 		// Make a copy of the original coderFieldInfo for use in unmarshaling.
 		//
-		// oneofFields[oneofType].funcs.marshal is the field-specific marshal function.
+		// oneofFieldsByItab[itab].funcs.marshal is the field-specific marshal function.
 		//
 		// mi.coderFields[num].marshal is set on only the first field in the oneof,
-		// and dispatches to the field-specific marshaler in oneofFields.
+		// and dispatches to the field-specific marshaler in oneofFieldsByItab.
 		cf := *mi.coderFields[num]
 		ot := si.oneofWrappersByNumber[num]
 		cf.ft = ot.Field(0).Type
 		cf.mi, cf.funcs = fieldCoder(fd, cf.ft)
-		oneofFields[ot] = &cf
 		if cf.funcs.isInit != nil {
 			needIsInit = true
 		}
+
+		// Precompute interface itab for direct assignment without reflection overhead.
+		sampleIfacePtr := reflect.New(ft)
+		sampleIfacePtr.Elem().Set(reflect.New(ot))
+		itab := pointerOfValue(sampleIfacePtr).asIfaceHeader().Type
+		oneofFieldsByItab[itab] = &cf
+
 		mi.coderFields[num].funcs.unmarshal = func(b []byte, p pointer, wtyp protowire.Type, f *coderFieldInfo, opts unmarshalOptions) (unmarshalOutput, error) {
-			var vw reflect.Value         // pointer to wrapper type
-			vi := p.AsValueOf(ft).Elem() // oneof field value of interface kind
-			if !vi.IsNil() && !vi.Elem().IsNil() && vi.Elem().Elem().Type() == ot {
-				vw = vi.Elem()
+			hdr := p.asIfaceHeader()
+			var ptr pointer
+
+			// If the interface already holds an instance of this oneof variant, reuse it.
+			// This is for correctness to get merge-semantics when seeing the same message twice
+			// in a row, but also slightly helps with efficiency otherwise.
+			// Otherwise, allocate a new wrapper and store both itab and data pointer
+			// directly into the interface without reflection overhead.
+			if hdr.Type == itab && hdr.Data != nil {
+				ptr = pointer{p: hdr.Data}
 			} else {
-				vw = reflect.New(ot)
+				ptr = pointerOfValue(reflect.New(ot))
 			}
-			out, err := cf.funcs.unmarshal(b, pointerOfValue(vw).Apply(zeroOffset), wtyp, &cf, opts)
+
+			out, err := cf.funcs.unmarshal(b, ptr, wtyp, &cf, opts)
 			if err != nil {
 				return out, err
 			}
 			if cf.funcs.isInit == nil {
 				out.initialized = true
 			}
-			vi.Set(vw)
+
+			if hdr.Type != itab || hdr.Data == nil {
+				*hdr = ifaceHeader{Type: itab, Data: ptr.p}
+			}
 			return out, nil
 		}
 	}
 	getInfo := func(p pointer) (pointer, *coderFieldInfo) {
-		v := p.AsValueOf(ft).Elem()
-		if v.IsNil() {
+		// Fast non-reflective extraction of oneof wrapper pointer and coderFieldInfo via itab.
+		hdr := p.asIfaceHeader()
+		if hdr.Type == nil || hdr.Data == nil {
 			return pointer{}, nil
 		}
-		v = v.Elem() // interface -> *struct
-		if v.IsNil() {
-			return pointer{}, nil
-		}
-		return pointerOfValue(v).Apply(zeroOffset), oneofFields[v.Elem().Type()]
+		return pointer{p: hdr.Data}, oneofFieldsByItab[hdr.Type]
 	}
 	first := mi.coderFields[od.Fields().Get(0).Number()]
 	first.funcs.size = func(p pointer, _ *coderFieldInfo, opts marshalOptions) int {

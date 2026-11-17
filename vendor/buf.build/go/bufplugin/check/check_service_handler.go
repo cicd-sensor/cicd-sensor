@@ -221,10 +221,10 @@ func (c *checkServiceHandler) ListRules(_ context.Context, listRulesRequest *che
 	if err != nil {
 		return nil, err
 	}
-	listRulesResponse := &checkv1.ListRulesResponse{
+	listRulesResponse := checkv1.ListRulesResponse_builder{
 		NextPageToken: nextPageToken,
 		Rules:         xslices.Map(rules, Rule.toProto),
-	}
+	}.Build()
 	if err := c.validator.Validate(listRulesResponse); err != nil {
 		return nil, err
 	}
@@ -242,10 +242,10 @@ func (c *checkServiceHandler) ListCategories(_ context.Context, listCategoriesRe
 	if err != nil {
 		return nil, err
 	}
-	listCategoriesResponse := &checkv1.ListCategoriesResponse{
+	listCategoriesResponse := checkv1.ListCategoriesResponse_builder{
 		NextPageToken: nextPageToken,
 		Categories:    xslices.Map(categories, Category.toProto),
-	}
+	}.Build()
 	if err := c.validator.Validate(listCategoriesResponse); err != nil {
 		return nil, err
 	}

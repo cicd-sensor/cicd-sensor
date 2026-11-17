@@ -101,17 +101,13 @@ func (l *license) toProto() *infov1.License {
 	if l == nil {
 		return nil
 	}
-	protoLicense := &infov1.License{
+	protoLicense := infov1.License_builder{
 		SpdxLicenseId: l.SPDXLicenseID(),
-	}
+	}.Build()
 	if l.text != "" {
-		protoLicense.Source = &infov1.License_Text{
-			Text: l.text,
-		}
+		protoLicense.SetText(l.text)
 	} else if l.url != nil {
-		protoLicense.Source = &infov1.License_Url{
-			Url: l.url.String(),
-		}
+		protoLicense.SetUrl(l.url.String())
 	}
 	return protoLicense
 }

@@ -13,4 +13,4 @@
 // limitations under the License.
 
 // Package info provides plugin information.
-package info // import "buf.build/go/bufplugin/info"
+package info

@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Deprecated: Use https://pkg.go.dev/github.com/sigstore/sigstore-go@main/pkg/tuf
 package tuf
 
 import (
@@ -375,7 +376,8 @@ func Initialize(_ context.Context, mirror string, root []byte) error {
 func isValidTarget(testTarget []byte, validMeta data.TargetFileMeta) (bool, error) {
 	localMeta, err := util.GenerateTargetFileMeta(
 		bytes.NewReader(testTarget),
-		"sha256", "sha512")
+		"sha256", "sha512",
+	)
 	if err != nil {
 		return false, err
 	}

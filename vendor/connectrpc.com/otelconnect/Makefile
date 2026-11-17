@@ -7,9 +7,9 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-print-directory
 BIN := $(abspath .tmp/bin)
-BUF_VERSION := 1.56.0
+BUF_VERSION := 1.66.0
 COPYRIGHT_YEARS := 2022-2025
-GOLANGCI_VERSION := 2.4.0
+GOLANGCI_VERSION := 2.13.2
 LICENSE_IGNORE := -e /gen/
 # Set to use a different compiler. For example, `GO=go1.18rc1 make test`.
 GO ?= go
@@ -80,7 +80,7 @@ checkgenerate:
 $(BIN)/protoc-gen-connect-go: go.mod
 	@mkdir -p $(@D)
 	@# The version of protoc-gen-connect-go is determined by the version in go.mod
-	GOBIN=$(abspath $(@D)) $(GO) install connectrpc.com/connect/cmd/protoc-gen-connect-go
+	GOBIN=$(abspath $(@D)) $(GO) install connectrpc.com/connect/v2/cmd/protoc-gen-connect-go
 
 $(BIN)/buf: Makefile
 	@mkdir -p $(@D)

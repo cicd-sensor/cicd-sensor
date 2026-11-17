@@ -15,6 +15,7 @@
 package pluginrpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -46,7 +47,7 @@ func NewError(code Code, underlying error) *Error {
 }
 
 // NewErrorf returns a new Error.
-
+//
 // Code and a non-empty message are required.
 //
 // An Error will never have an invalid Code or nil underlying error
@@ -79,6 +80,8 @@ func NewErrorForProto(protoError *pluginrpcv1.Error) *Error {
 //
 // If the given error is nil, this returns nil.
 // If the given error is already a Error, this is returned.
+// If the given error satisfies errors.Is(err, context.Canceled), a CodeCanceled error is returned.
+// If the given error satisfies errors.Is(err, context.DeadlineExceeded), a CodeDeadlineExceeded error is returned.
 // Otherwise, an error with code CodeUnknown is returned.
 //
 // An Error will never have an invalid Code when returned from this function.
@@ -89,6 +92,12 @@ func WrapError(err error) *Error {
 	pluginrpcError := &Error{}
 	if errors.As(err, &pluginrpcError) {
 		return validateError(pluginrpcError)
+	}
+	if errors.Is(err, context.Canceled) {
+		return NewError(CodeCanceled, err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return NewError(CodeDeadlineExceeded, err)
 	}
 	return NewError(CodeUnknown, err)
 }
@@ -113,15 +122,15 @@ func (e *Error) ToProto() *pluginrpcv1.Error {
 	pluginrpcError := validateError(e)
 	protoCode, err := pluginrpcError.Code().ToProto()
 	if err != nil {
-		return &pluginrpcv1.Error{
+		return pluginrpcv1.Error_builder{
 			Code:    pluginrpcv1.Code_CODE_INTERNAL,
 			Message: fmt.Sprintf("Error created with invalid code: %s: %s", e.underlying.Error(), err.Error()),
-		}
+		}.Build()
 	}
-	return &pluginrpcv1.Error{
+	return pluginrpcv1.Error_builder{
 		Code:    protoCode,
 		Message: pluginrpcError.Unwrap().Error(),
-	}
+	}.Build()
 }
 
 // Error implements error.
@@ -149,6 +158,23 @@ func (e *Error) Unwrap() error {
 		return nil
 	}
 	return e.underlying
+}
+
+// Is implements errors.Is for context sentinel errors.
+//
+// A *Error with CodeCanceled satisfies errors.Is(err, context.Canceled).
+// A *Error with CodeDeadlineExceeded satisfies errors.Is(err, context.DeadlineExceeded).
+func (e *Error) Is(target error) bool {
+	if e == nil {
+		return false
+	}
+	switch e.code {
+	case CodeCanceled:
+		return target == context.Canceled
+	case CodeDeadlineExceeded:
+		return target == context.DeadlineExceeded
+	}
+	return false
 }
 
 // *** PRIVATE ***

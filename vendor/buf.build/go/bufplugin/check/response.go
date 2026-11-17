@@ -51,9 +51,9 @@ func (r *response) Annotations() []Annotation {
 }
 
 func (r *response) toProto() *checkv1.CheckResponse {
-	return &checkv1.CheckResponse{
+	return checkv1.CheckResponse_builder{
 		Annotations: xslices.Map(r.annotations, Annotation.toProto),
-	}
+	}.Build()
 }
 
 func (*response) isResponse() {}

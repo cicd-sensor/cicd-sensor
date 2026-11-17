@@ -20,6 +20,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -28,7 +29,6 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/sigstore/rekor/pkg/pki/identity"
-	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	sigsig "github.com/sigstore/sigstore/pkg/signature"
 	"golang.org/x/crypto/ssh"
 )
@@ -54,17 +54,23 @@ func NewSignature(r io.Reader) (*Signature, error) {
 
 // CanonicalValue implements the pki.Signature interface
 func (s Signature) CanonicalValue() ([]byte, error) {
+	if s.signature == nil {
+		return nil, errors.New("ssh signature has not been initialized")
+	}
+	if s.pk == nil {
+		return nil, errors.New("ssh signature public key has not been initialized")
+	}
 	return []byte(Armor(s.signature, s.pk)), nil
 }
 
 // Verify implements the pki.Signature interface
-func (s Signature) Verify(r io.Reader, k interface{}, _ ...sigsig.VerifyOption) error {
+func (s Signature) Verify(r io.Reader, k any, _ ...sigsig.VerifyOption) error {
 	if s.signature == nil {
 		return errors.New("ssh signature has not been initialized")
 	}
 
 	key, ok := k.(*PublicKey)
-	if !ok {
+	if !ok || key == nil {
 		return fmt.Errorf("invalid public key type for: %v", k)
 	}
 
@@ -128,13 +134,24 @@ func (k PublicKey) Subjects() []string {
 
 // Identities implements the pki.PublicKey interface
 func (k PublicKey) Identities() ([]identity.Identity, error) {
+	if k.key == nil {
+		return nil, errors.New("ssh public key has not been initialized")
+	}
+
 	// extract key from SSH certificate if present
 	var sshKey ssh.PublicKey
 	switch v := k.key.(type) {
 	case *ssh.Certificate:
+		if v == nil {
+			return nil, errors.New("ssh certificate is nil")
+		}
 		sshKey = v.Key
 	default:
 		sshKey = k.key
+	}
+
+	if sshKey == nil {
+		return nil, errors.New("ssh public key is nil")
 	}
 
 	// Extract crypto.PublicKey from SSH key
@@ -163,11 +180,8 @@ func (k PublicKey) Identities() ([]identity.Identity, error) {
 			if w.Curve != "nistp256" {
 				return nil, errors.New("ssh: unsupported curve")
 			}
-			ecdsaPubKey := new(ecdsa.PublicKey)
-			ecdsaPubKey.Curve = elliptic.P256()
-			//nolint:staticcheck // ignore SA1019 for old code
-			ecdsaPubKey.X, ecdsaPubKey.Y = elliptic.Unmarshal(ecdsaPubKey.Curve, w.KeyBytes)
-			if ecdsaPubKey.X == nil || ecdsaPubKey.Y == nil {
+			ecdsaPubKey, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), w.KeyBytes)
+			if err != nil {
 				return nil, errors.New("ssh: invalid curve point")
 			}
 			cryptoPubKey = ecdsaPubKey
@@ -194,7 +208,7 @@ func (k PublicKey) Identities() ([]identity.Identity, error) {
 		}
 	}
 
-	pkixKey, err := cryptoutils.MarshalPublicKeyToDER(cryptoPubKey)
+	pkixKey, err := x509.MarshalPKIXPublicKey(cryptoPubKey)
 	if err != nil {
 		return nil, err
 	}

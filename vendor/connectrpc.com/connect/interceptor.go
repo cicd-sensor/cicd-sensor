@@ -17,6 +17,7 @@ package connect
 import (
 	"context"
 	"errors"
+	"slices"
 )
 
 var (
@@ -83,8 +84,8 @@ func newChain(interceptors []Interceptor) *chain {
 	// the slice act first. Rather than doing this dance repeatedly, reverse the
 	// interceptor order now.
 	var chain chain
-	for i := len(interceptors) - 1; i >= 0; i-- {
-		if interceptor := interceptors[i]; interceptor != nil {
+	for _, interceptor := range slices.Backward(interceptors) {
+		if interceptor != nil {
 			chain.interceptors = append(chain.interceptors, interceptor)
 		}
 	}
@@ -126,7 +127,7 @@ func unaryThunk(next UnaryFunc) UnaryFunc {
 func streamingClientThunk(next StreamingClientFunc) StreamingClientFunc {
 	return func(ctx context.Context, spec Spec) StreamingClientConn {
 		if err := checkSentinel(ctx); err != nil {
-			return &errStreamingClientConn{err: err}
+			return newErrStreamingClientConn(err)
 		}
 		return next(ctx, spec)
 	}

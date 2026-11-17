@@ -560,26 +560,11 @@ const (
 	// Number of times the Hotspot unwind instructions requested LR unwinding mid-trace
 	IDUnwindHotspotErrLrUnwindingMidTrace = 256
 
-	// Number of failures to get TSD base for APM correlation
-	IDUnwindApmIntErrReadTsdBase = 257
-
-	// Number of failures read the APM correlation pointer
-	IDUnwindApmIntErrReadCorrBufPtr = 258
-
-	// Number of failures read the APM correlation buffer
-	IDUnwindApmIntErrReadCorrBuf = 259
-
-	// Number of successful reads of APM correlation info
-	IDUnwindApmIntReadSuccesses = 260
-
 	// Number of attempted dotnet unwinds
 	IDUnwindDotnetAttempts = 261
 
 	// Number of unwound dotnet frames
 	IDUnwindDotnetFrames = 262
-
-	// Number of times we didn't find an entry for this process in the dotnet process info array
-	IDUnwindDotnetErrNoProcInfo = 263
 
 	// Number of failures to read dotnet frame pointer data
 	IDUnwindDotnetErrBadFP = 264
@@ -704,6 +689,27 @@ const (
 	// Number of Go asmcgocall unwind failures
 	IDUnwindGoAsmcgocallUnwindFailure = 305
 
+	// Number of failures to read the thread context buffer pointer out of TLS
+	IDUnwindThreadContextErrReadTlsPtr = 306
+
+	// Number of failures to read the thread context buffer, header or payload
+	IDUnwindThreadContextErrReadThreadCtxBuf = 307
+
+	// Number of successful reads of thread context info
+	IDUnwindThreadContextReadSuccesses = 308
+
+	// Number of thread context attribute payloads truncated to fit the buffer
+	IDUnwindThreadContextAttrsTruncated = 309
+
+	// Number of samples whose thread-context labels were discarded because no decoder was available for the process
+	IDThreadContextLabelsNoDecoder = 310
+
+	// Number of thread-context label entries dropped as undecodable
+	IDThreadContextDroppedEntriesUndecodable = 311
+
+	// Number of processes whose published thread-context label schema was rejected
+	IDThreadContextSchemaRejected = 312
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 306
+	IDMax = 313
 )

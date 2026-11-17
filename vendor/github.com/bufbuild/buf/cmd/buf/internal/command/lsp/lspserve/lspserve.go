@@ -28,7 +28,6 @@ import (
 	"buf.build/go/app/appcmd"
 	"buf.build/go/app/appext"
 	"buf.build/go/standard/xio"
-	"connectrpc.com/connect"
 	"github.com/bufbuild/buf/private/buf/bufcli"
 	"github.com/bufbuild/buf/private/buf/buflsp"
 	"github.com/bufbuild/buf/private/gen/proto/connect/buf/alpha/registry/v1alpha1/registryv1alpha1connect"
@@ -43,6 +42,7 @@ const (
 	// pipe is chosen because that's what the vscode LSP client expects.
 	pipeFlagName         = "pipe"
 	debugAddressFlagName = "debug-address"
+	configFlagName       = "config"
 )
 
 // NewCommand constructs the CLI command for executing the LSP.
@@ -77,6 +77,8 @@ type flags struct {
 	PipePath string
 	// An address (host:port) to serve the debug server on. If empty, no debug server is started.
 	DebugAddress string
+	// The buf.yaml file or data to use for configuration. If empty, buf.yaml files are discovered.
+	Config string
 }
 
 // Bind sets up the CLI flags that the LSP needs.
@@ -92,6 +94,12 @@ func (f *flags) Bind(flagSet *pflag.FlagSet) {
 		debugAddressFlagName,
 		"",
 		"address to serve debug endpoints on (e.g. localhost:6060); disabled if not specified",
+	)
+	flagSet.StringVar(
+		&f.Config,
+		configFlagName,
+		"",
+		"The buf.yaml file or data to use for configuration",
 	)
 }
 
@@ -173,6 +181,7 @@ func run(
 		moduleKeyProvider,
 		graphProvider,
 		&lspCuratedPluginProvider{clientConfig: clientConfig},
+		buflsp.WithConfigOverride(flags.Config),
 	)
 	if err != nil {
 		return err
@@ -187,19 +196,19 @@ type lspCuratedPluginProvider struct {
 
 func (p *lspCuratedPluginProvider) GetLatestVersion(ctx context.Context, registry, owner, plugin string) (string, error) {
 	client := connectclient.Make(p.clientConfig, registry, registryv1alpha1connect.NewPluginCurationServiceClient)
-	resp, err := client.GetLatestCuratedPlugin(ctx, connect.NewRequest(
+	resp, err := client.GetLatestCuratedPlugin(ctx,
 		registryv1alpha1.GetLatestCuratedPluginRequest_builder{
 			Owner: owner,
 			Name:  plugin,
 		}.Build(),
-	))
+	)
 	if err != nil {
 		return "", err
 	}
-	if !resp.Msg.HasPlugin() {
+	if !resp.HasPlugin() {
 		return "", nil
 	}
-	return resp.Msg.GetPlugin().GetVersion(), nil
+	return resp.GetPlugin().GetVersion(), nil
 }
 
 // dial opens a connection to the LSP client.

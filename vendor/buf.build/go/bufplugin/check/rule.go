@@ -152,7 +152,7 @@ func (r *rule) toProto() *checkv1.Rule {
 		return nil
 	}
 	protoRuleType := ruleTypeToProtoRuleType[r.ruleType]
-	return &checkv1.Rule{
+	return checkv1.Rule_builder{
 		Id:             r.id,
 		CategoryIds:    xslices.Map(r.categories, Category.ID),
 		Default:        r.isDefault,
@@ -160,7 +160,7 @@ func (r *rule) toProto() *checkv1.Rule {
 		Type:           protoRuleType,
 		Deprecated:     r.deprecated,
 		ReplacementIds: r.replacementIDs,
-	}
+	}.Build()
 }
 
 func (*rule) isRule() {}

@@ -18,10 +18,11 @@ import (
 	"fmt"
 
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	"cel.dev/cel-go/cel"
 	"github.com/bufbuild/buf/private/pkg/protoencoding"
-	"github.com/google/cel-go/cel"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // This function is copied directly from protovalidate-go, except refactored to use protoencoding
@@ -104,6 +105,8 @@ func celTypeForStandardRuleMessageDescriptor(
 		return cel.DurationType
 	case (&validate.TimestampRules{}).ProtoReflect().Descriptor().FullName():
 		return cel.TimestampType
+	case (&validate.FieldMaskRules{}).ProtoReflect().Descriptor().FullName():
+		return cel.ObjectType(string((&fieldmaskpb.FieldMask{}).ProtoReflect().Descriptor().FullName()))
 	}
 	// We default to returning nil if this does not match with one of the *Rule declarations.
 	return nil

@@ -57,10 +57,10 @@ func NewProcedureForProto(protoProcedure *pluginrpcv1.Procedure) (Procedure, err
 
 // NewProtoProcedure returns a new pluginrpcv1.Procedure for the given Procedure.
 func NewProtoProcedure(procedure Procedure) *pluginrpcv1.Procedure {
-	return &pluginrpcv1.Procedure{
+	return pluginrpcv1.Procedure_builder{
 		Path: procedure.Path(),
 		Args: procedure.Args(),
-	}
+	}.Build()
 }
 
 // ProcedureOption is an option for a new Procedure.
