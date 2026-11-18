@@ -380,6 +380,9 @@ const (
 	// Field number for google.protobuf.FieldOptions.FeatureSupport.edition_removed.
 	FieldOptions_FeatureSupport_EditionRemoved = 4
 
+	// Field number for google.protobuf.FieldOptions.FeatureSupport.removal_error.
+	FieldOptions_FeatureSupport_RemovalError = 5
+
 	// Field number for google.protobuf.OneofOptions.features.
 	OneofOptions_Features = 1
 
@@ -488,6 +491,9 @@ const (
 	// Field number for google.protobuf.FeatureSet.default_symbol_visibility.
 	FeatureSet_DefaultSymbolVisibility = 8
 
+	// Field number for google.protobuf.FeatureSet.enforce_proto_limits.
+	FeatureSet_EnforceProtoLimits = 9
+
 	// Field number for google.protobuf.FeatureSetDefaults.defaults.
 	FeatureSetDefaults_Defaults = 1
 
@@ -567,6 +573,9 @@ const (
 
 	// Enum value for google.protobuf.EDITION_2024.
 	Edition_2024 = 1001
+
+	// Enum value for google.protobuf.EDITION_2026.
+	Edition_2026 = 1002
 
 	// Enum value for google.protobuf.EDITION_UNSTABLE.
 	Edition_Unstable = 9999
@@ -808,6 +817,9 @@ const (
 	// Enum value for google.protobuf.FeatureSet.STYLE_LEGACY.
 	FeatureSet_EnforceNamingStyle_Legacy = 2
 
+	// Enum value for google.protobuf.FeatureSet.STYLE2026.
+	FeatureSet_EnforceNamingStyle_2026 = 3
+
 	// Enum value for google.protobuf.FeatureSet.VisibilityFeature.DEFAULT_SYMBOL_VISIBILITY_UNKNOWN.
 	FeatureSet_DefaultSymbolVisibility_Unknown = 0
 
@@ -822,6 +834,15 @@ const (
 
 	// Enum value for google.protobuf.FeatureSet.VisibilityFeature.STRICT.
 	FeatureSet_DefaultSymbolVisibility_Strict = 4
+
+	// Enum value for google.protobuf.FeatureSet.ProtoLimitsFeature.PROTO_LIMITS_UNKNOWN.
+	FeatureSet_ProtoLimitsFeature_EnforceProtoLimits_Unknown = 0
+
+	// Enum value for google.protobuf.FeatureSet.ProtoLimitsFeature.LEGACY_NO_EXPLICIT_LIMITS.
+	FeatureSet_ProtoLimitsFeature_EnforceProtoLimits_LegacyNoExplicitLimits = 1
+
+	// Enum value for google.protobuf.FeatureSet.ProtoLimitsFeature.PROTO_LIMITS2026.
+	FeatureSet_ProtoLimitsFeature_EnforceProtoLimits_2026 = 2
 
 	// Enum value for google.protobuf.GeneratedCodeInfo.Annotation.NONE.
 	GeneratedCodeInfo_Annotation_Semantic_None = 0

@@ -10,11 +10,11 @@ BIN := .tmp/bin
 export PATH := $(abspath $(BIN)):$(PATH)
 export GOBIN := $(abspath $(BIN))
 COPYRIGHT_YEARS := 2025-2026
-LICENSE_IGNORE := --ignore testdata/
+LICENSE_IGNORE := --ignore testdata/ --ignore .github/ --ignore .golangci.yml
 
 # https://github.com/bufbuild/buf/releases
-BUF_VERSION := v1.66.1
-GOLANGCI_LINT_VERSION := v2.9.0
+BUF_VERSION := v1.73.0
+GOLANGCI_LINT_VERSION := v2.14.0
 # This version is the go toolchain version (which may be more specific than the module
 # version) to ensure the build handles specific language features in newer toolchains.
 GOLANGCILINT_GOTOOLCHAIN_VERSION := $(shell go env GOVERSION | sed 's/^go//')

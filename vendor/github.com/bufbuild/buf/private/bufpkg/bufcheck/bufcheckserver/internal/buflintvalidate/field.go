@@ -104,7 +104,8 @@ const (
 	// https://buf.build/bufbuild/protovalidate/docs/v1.1.0:buf.validate#buf.validate.FieldMaskRules
 	inFieldMaskRules = 2
 
-	exampleName = "example"
+	exampleName      = "example"
+	wrapperValueName = "value"
 )
 
 var (
@@ -159,10 +160,9 @@ var (
 
 // checkField validates that protovalidate rules defined for this field are
 // valid, not including CEL expressions.
-func checkField(
+func (c *Checker) checkField(
 	add func(bufprotosource.Descriptor, bufprotosource.Location, []bufprotosource.Location, string, ...any),
 	field bufprotosource.Field,
-	extensionTypeResolver protoencoding.Resolver,
 ) error {
 	fieldDescriptor, err := field.AsDescriptor()
 	if err != nil {
@@ -172,7 +172,7 @@ func checkField(
 	if err != nil {
 		return err
 	}
-	return checkRulesForField(
+	return c.checkRulesForField(
 		&adder{
 			field:               field,
 			fieldPrettyTypeName: getFieldTypePrettyNameName(fieldDescriptor),
@@ -183,11 +183,10 @@ func checkField(
 		nil,
 		fieldDescriptor,
 		fieldDescriptor.Cardinality() == protoreflect.Repeated,
-		extensionTypeResolver,
 	)
 }
 
-func checkRulesForField(
+func (c *Checker) checkRulesForField(
 	adder *adder,
 	fieldRules *validate.FieldRules,
 	// This is needed because recursive calls of this function still need the same
@@ -201,7 +200,6 @@ func checkRulesForField(
 	parentMapFieldDescriptor protoreflect.FieldDescriptor,
 	fieldDescriptor protoreflect.FieldDescriptor,
 	expectRepeatedRule bool,
-	extensionTypeResolver protoencoding.Resolver,
 ) error {
 	if fieldRules == nil {
 		return nil
@@ -222,7 +220,7 @@ func checkRulesForField(
 		)
 	}
 	checkFieldFlags(adder, fieldDescriptor, fieldRules)
-	if err := checkCELForField(
+	if err := c.checkCELForField(
 		adder,
 		fieldRules,
 		fieldDescriptor,
@@ -238,10 +236,10 @@ func checkRulesForField(
 	typeRulesFieldNumber := int32(typeRulesFieldDescriptor.Number())
 	// Map and repeated special cases that contain fieldRules.
 	if typeRulesFieldNumber == mapRulesFieldNumber {
-		return checkMapRules(adder, fieldRules.GetMap(), fieldDescriptor, containingMessageDescriptor, extensionTypeResolver)
+		return c.checkMapRules(adder, fieldRules.GetMap(), fieldDescriptor, containingMessageDescriptor)
 	}
 	if typeRulesFieldNumber == repeatedRulesFieldNumber {
-		return checkRepeatedRules(adder, fieldRules.GetRepeated(), fieldDescriptor, containingMessageDescriptor, extensionTypeResolver)
+		return c.checkRepeatedRules(adder, fieldRules.GetRepeated(), fieldDescriptor, containingMessageDescriptor)
 	}
 	typesMatch := checkRulesTypeMatchFieldType(adder, fieldDescriptor, typeRulesFieldNumber, expectRepeatedRule)
 	if !typesMatch {
@@ -263,7 +261,7 @@ func checkRulesForField(
 		return true
 	})
 	if len(exampleValues) > 0 {
-		if err := checkExampleValues(
+		if err := c.checkExampleValues(
 			adder,
 			[]int32{typeRulesFieldNumber, exampleFieldNumber},
 			fieldRules,
@@ -272,7 +270,6 @@ func checkRulesForField(
 			parentMapFieldDescriptor,
 			fieldDescriptor,
 			exampleValues,
-			extensionTypeResolver,
 		); err != nil {
 			return err
 		}
@@ -338,7 +335,7 @@ func checkFieldFlags(
 	if fieldRules.GetIgnore() == validate.Ignore_IGNORE_IF_ZERO_VALUE && fieldDescriptor.HasPresence() && !fieldDescriptor.IsExtension() {
 		adder.addForPathf(
 			[]int32{ignoreFieldNumber},
-			"Field %q has %s=%v and tracks presence. This is the same the default and the ignore option can be removed.",
+			"Field %q has %s=%v and tracks presence. This is the same as the default and the ignore option can be removed.",
 			adder.fieldName(),
 			adder.getFieldRuleName(ignoreFieldNumber),
 			validate.Ignore_IGNORE_IF_ZERO_VALUE,
@@ -405,12 +402,11 @@ func checkRulesForExtension(
 	}
 }
 
-func checkRepeatedRules(
+func (c *Checker) checkRepeatedRules(
 	baseAdder *adder,
 	repeatedRules *validate.RepeatedRules,
 	fieldDescriptor protoreflect.FieldDescriptor,
 	containingMessageDescriptor protoreflect.MessageDescriptor,
-	extensionTypeResolver protoencoding.Resolver,
 ) error {
 	if !fieldDescriptor.IsList() {
 		baseAdder.addForPathf(
@@ -435,7 +431,7 @@ func checkRepeatedRules(
 	if repeatedRules.MinItems != nil && repeatedRules.MaxItems != nil && *repeatedRules.MinItems > *repeatedRules.MaxItems {
 		baseAdder.addForPathf(
 			[]int32{repeatedRulesFieldNumber, minItemsFieldNumberInRepeatedFieldRules},
-			"Field %q has value %d for %s, which must be higher than value %d for %s.",
+			"Field %q has value %d for %s, which must be lower than value %d for %s.",
 			baseAdder.fieldName(),
 			*repeatedRules.MinItems,
 			baseAdder.getFieldRuleName(repeatedRulesFieldNumber, minItemsFieldNumberInRepeatedFieldRules),
@@ -444,7 +440,7 @@ func checkRepeatedRules(
 		)
 		baseAdder.addForPathf(
 			[]int32{repeatedRulesFieldNumber, maxItemsFieldNumberInRepeatedFieldRules},
-			"Field %q has value %d for %s, which must be lower than value %d for %s.",
+			"Field %q has value %d for %s, which must be higher than value %d for %s.",
 			baseAdder.fieldName(),
 			*repeatedRules.MaxItems,
 			baseAdder.getFieldRuleName(repeatedRulesFieldNumber, maxItemsFieldNumberInRepeatedFieldRules),
@@ -462,15 +458,14 @@ func checkRepeatedRules(
 			itemAdder.getFieldRuleName(requiredFieldNumber),
 		)
 	}
-	return checkRulesForField(itemAdder, repeatedRules.Items, containingMessageDescriptor, nil, fieldDescriptor, false, extensionTypeResolver)
+	return c.checkRulesForField(itemAdder, repeatedRules.Items, containingMessageDescriptor, nil, fieldDescriptor, false)
 }
 
-func checkMapRules(
+func (c *Checker) checkMapRules(
 	baseAdder *adder,
 	mapRules *validate.MapRules,
 	fieldDescriptor protoreflect.FieldDescriptor,
 	containingMessageDescriptor protoreflect.MessageDescriptor,
-	extensionTypeResolver protoencoding.Resolver,
 ) error {
 	if !fieldDescriptor.IsMap() {
 		baseAdder.addForPathf(
@@ -493,7 +488,7 @@ func checkMapRules(
 		)
 		baseAdder.addForPathf(
 			[]int32{mapRulesFieldNumber, maxPairsFieldNumberInMapRules},
-			"Field %q has value %d for %s, which is lower than value %d for %s.",
+			"Field %q has value %d for %s, which must be higher than value %d for %s.",
 			baseAdder.fieldName(),
 			*mapRules.MaxPairs,
 			baseAdder.getFieldRuleName(mapRulesFieldNumber, maxPairsFieldNumberInMapRules),
@@ -511,7 +506,7 @@ func checkMapRules(
 			keyAdder.getFieldRuleName(requiredFieldNumber),
 		)
 	}
-	err := checkRulesForField(keyAdder, mapRules.Keys, containingMessageDescriptor, fieldDescriptor, fieldDescriptor.MapKey(), false, extensionTypeResolver)
+	err := c.checkRulesForField(keyAdder, mapRules.Keys, containingMessageDescriptor, fieldDescriptor, fieldDescriptor.MapKey(), false)
 	if err != nil {
 		return err
 	}
@@ -525,7 +520,7 @@ func checkMapRules(
 			valueAdder.getFieldRuleName(requiredFieldNumber),
 		)
 	}
-	return checkRulesForField(valueAdder, mapRules.Values, containingMessageDescriptor, fieldDescriptor, fieldDescriptor.MapValue(), false, extensionTypeResolver)
+	return c.checkRulesForField(valueAdder, mapRules.Values, containingMessageDescriptor, fieldDescriptor, fieldDescriptor.MapValue(), false)
 }
 
 func checkStringRules(adder *adder, stringRules *validate.StringRules) error {
@@ -789,7 +784,7 @@ func checkFieldMaskRules(adder *adder, fieldMaskRules *validate.FieldMaskRules) 
 	}
 }
 
-func checkExampleValues(
+func (c *Checker) checkExampleValues(
 	adder *adder,
 	pathToExampleValues []int32,
 	fieldRules *validate.FieldRules,
@@ -799,13 +794,12 @@ func checkExampleValues(
 	parentMapFieldDescriptor protoreflect.FieldDescriptor,
 	fieldDescriptor protoreflect.FieldDescriptor,
 	exampleValues []protoreflect.Value,
-	extensionTypeResolver protoencoding.Resolver,
 ) error {
 	// A rule on this field may be from a predefined rule from an imported file. In order to
 	// set example values on the message for validation and check against all rules on the field,
-	// we pass in an extensionTypeResolver that includes imported files and reparse all extensions
+	// we use an extension type resolver that includes imported files and reparse all extensions
 	// for the message to ensure that we are able to resolve predefined rules.
-	if err := protoencoding.ReparseExtensions(extensionTypeResolver, typeRulesMessage); err != nil {
+	if err := protoencoding.ReparseExtensions(c.extensionTypeResolver, typeRulesMessage); err != nil {
 		return err
 	}
 	hasRules := len(fieldRules.GetCel()) > 0
@@ -833,10 +827,7 @@ func checkExampleValues(
 	// and validate this message instance with protovalidate and filter the structured
 	// errors by field name to determine whether this example value fails rules defined
 	// on the same field.
-	validator, err := protovalidate.New()
-	if err != nil {
-		return err
-	}
+	//
 	// The shape of field path in a protovalidate.Violation depends on the type of the field descriptor.
 	violationFilterFunc := func(violation *validate.Violation) bool {
 		return len(violation.GetField().GetElements()) == 1 &&
@@ -935,116 +926,27 @@ func checkExampleValues(
 			}
 			messageToValidate.Set(fieldDescriptor, protoreflect.ValueOf(protoreflect.EnumNumber(exampleInt32)))
 		case fieldDescriptor.Message() != nil:
-			// We need to handle the case where the field is a wrapper type. We set the value directly base on the wrapper type.
-			switch string(fieldDescriptor.Message().FullName()) {
-			case string((&wrapperspb.FloatValue{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueFloat, ok := exampleValue.Interface().(float32)
-				if !ok {
-					return syserror.Newf("unexpected type found for float wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.FloatValue{Value: exampleValueFloat}).ProtoReflect(),
-					),
-				)
-			case string((&wrapperspb.DoubleValue{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueDouble, ok := exampleValue.Interface().(float64)
-				if !ok {
-					return syserror.Newf("unexpected type found for double wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.DoubleValue{Value: exampleValueDouble}).ProtoReflect(),
-					),
-				)
-			case string((&wrapperspb.Int32Value{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueInt32, ok := exampleValue.Interface().(int32)
-				if !ok {
-					return syserror.Newf("unexpected type found for int32 wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.Int32Value{Value: exampleValueInt32}).ProtoReflect(),
-					),
-				)
-			case string((&wrapperspb.Int64Value{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueInt64, ok := exampleValue.Interface().(int64)
-				if !ok {
-					return syserror.Newf("unexpected type found for int64 wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.Int64Value{Value: exampleValueInt64}).ProtoReflect(),
-					),
-				)
-			case string((&wrapperspb.UInt32Value{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueUInt32, ok := exampleValue.Interface().(uint32)
-				if !ok {
-					return syserror.Newf("unexpected type found for uint32 wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.UInt32Value{Value: exampleValueUInt32}).ProtoReflect(),
-					),
-				)
-			case string((&wrapperspb.UInt64Value{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueUInt64, ok := exampleValue.Interface().(uint64)
-				if !ok {
-					return syserror.Newf("unexpected type found for uint32 wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.UInt64Value{Value: exampleValueUInt64}).ProtoReflect(),
-					),
-				)
-			case string((&wrapperspb.BoolValue{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueBool, ok := exampleValue.Interface().(bool)
-				if !ok {
-					return syserror.Newf("unexpected type found for bool wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.BoolValue{Value: exampleValueBool}).ProtoReflect(),
-					),
-				)
-			case string((&wrapperspb.StringValue{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueString, ok := exampleValue.Interface().(string)
-				if !ok {
-					return syserror.Newf("unexpected type found for string wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.StringValue{Value: exampleValueString}).ProtoReflect(),
-					),
-				)
-			case string((&wrapperspb.BytesValue{}).ProtoReflect().Descriptor().FullName()):
-				exampleValueBytes, ok := exampleValue.Interface().([]byte)
-				if !ok {
-					return syserror.Newf("unexpected type found for bytes wrapper type %T", exampleValue.Interface())
-				}
-				messageToValidate.Set(
-					fieldDescriptor,
-					protoreflect.ValueOf(
-						(&wrapperspb.BytesValue{Value: exampleValueBytes}).ProtoReflect(),
-					),
-				)
-			default:
-				// In the case where it is not a wrapper type (e.g. google.protobuf.Timestamp), we just set the example
-				// value directly.
+			if _, isWrapperType := wrapperTypeNames[string(fieldDescriptor.Message().FullName())]; !isWrapperType {
+				// For a non-wrapper type (e.g. google.protobuf.Timestamp), the example value is the message itself.
 				messageToValidate.Set(fieldDescriptor, exampleValue)
+				break
 			}
+			// For a wrapper type, the example value is the wrapped scalar, which we set on the wrapper's "value" field.
+			wrapperMessage := messageToValidate.NewField(fieldDescriptor).Message()
+			wrapperValueFieldDescriptor := wrapperMessage.Descriptor().Fields().ByName(wrapperValueName)
+			if wrapperValueFieldDescriptor == nil {
+				return syserror.Newf(
+					"wrapper type %q does not have a field named %q",
+					fieldDescriptor.Message().FullName(),
+					wrapperValueName,
+				)
+			}
+			wrapperMessage.Set(wrapperValueFieldDescriptor, exampleValue)
+			messageToValidate.Set(fieldDescriptor, protoreflect.ValueOfMessage(wrapperMessage))
 		default:
 			messageToValidate.Set(fieldDescriptor, exampleValue)
 		}
-		err := validator.Validate(messageToValidate,
+		err := c.exampleValidator.Validate(messageToValidate,
 			protovalidate.WithFilter(
 				protovalidate.FilterFunc(func(
 					_ protoreflect.Message,
@@ -1057,8 +959,7 @@ func checkExampleValues(
 		if err == nil {
 			continue
 		}
-		var compilationErr *protovalidate.CompilationError
-		if errors.As(err, &compilationErr) {
+		if _, ok := errors.AsType[*protovalidate.CompilationError](err); ok {
 			// Expression failing to compile meaning some CEL expressions are invalid,
 			// which is checked in this rule (PROTOVALIDATE), but not by this function.
 			break

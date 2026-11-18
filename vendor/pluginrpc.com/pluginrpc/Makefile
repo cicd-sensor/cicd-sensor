@@ -13,8 +13,8 @@ COPYRIGHT_YEARS := 2024
 LICENSE_IGNORE := --ignore /testdata/
 
 BUF_VERSION := v1.42.0
-GO_MOD_GOTOOLCHAIN := go1.23.1
-GOLANGCI_LINT_VERSION := v1.60.1
+GO_MOD_GOTOOLCHAIN := go1.27.1
+GOLANGCI_LINT_VERSION := v2.14.0
 # https://github.com/golangci/golangci-lint/issues/4837
 GOLANGCI_LINT_GOTOOLCHAIN := $(GO_MOD_GOTOOLCHAIN)
 
@@ -35,6 +35,9 @@ clean: ## Delete intermediate build artifacts
 .PHONY: test
 test: build $(BIN)/echo-plugin ## Run unit tests
 	go test -vet=off -race -cover ./...
+	@# Also run against the Go Opaque API, which the protoopaque build tag selects
+	@# for the hybrid-generated Protobuf packages we depend on.
+	go test -vet=off -race -cover -tags protoopaque ./...
 
 .PHONY: build
 build: generate ## Build all packages
@@ -82,7 +85,7 @@ $(BIN)/license-header: Makefile
 
 $(BIN)/golangci-lint: Makefile
 	@mkdir -p $(@D)
-	GOTOOLCHAIN=$(GOLANGCI_LINT_GOTOOLCHAIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOTOOLCHAIN=$(GOLANGCI_LINT_GOTOOLCHAIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 $(BIN)/protoc-gen-go: Makefile go.mod
 	@mkdir -p $(@D)

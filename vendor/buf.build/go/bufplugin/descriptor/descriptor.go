@@ -13,4 +13,4 @@
 // limitations under the License.
 
 // Package descriptor provides descriptor types.
-package descriptor // import "buf.build/go/bufplugin/descriptor"
+package descriptor

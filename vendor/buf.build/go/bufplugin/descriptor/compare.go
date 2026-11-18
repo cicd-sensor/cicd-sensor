@@ -15,36 +15,34 @@
 package descriptor
 
 import (
+	"cmp"
 	"slices"
 	"strings"
-
-	"buf.build/go/bufplugin/internal/pkg/compare"
 )
 
 // CompareFileLocations returns -1 if one < two, 1 if one > two, 0 otherwise.
 func CompareFileLocations(one FileLocation, two FileLocation) int {
-	if one == nil && two == nil {
+	switch {
+	case one == nil && two == nil:
 		return 0
-	}
-	if one == nil && two != nil {
+	case one == nil:
 		return -1
-	}
-	if one != nil && two == nil {
+	case two == nil:
 		return 1
 	}
 	if compare := strings.Compare(one.FileDescriptor().ProtoreflectFileDescriptor().Path(), two.FileDescriptor().ProtoreflectFileDescriptor().Path()); compare != 0 {
 		return compare
 	}
-	if compare := compare.CompareInts(one.StartLine(), two.StartLine()); compare != 0 {
+	if compare := cmp.Compare(one.StartLine(), two.StartLine()); compare != 0 {
 		return compare
 	}
-	if compare := compare.CompareInts(one.StartColumn(), two.StartColumn()); compare != 0 {
+	if compare := cmp.Compare(one.StartColumn(), two.StartColumn()); compare != 0 {
 		return compare
 	}
-	if compare := compare.CompareInts(one.EndLine(), two.EndLine()); compare != 0 {
+	if compare := cmp.Compare(one.EndLine(), two.EndLine()); compare != 0 {
 		return compare
 	}
-	if compare := compare.CompareInts(one.EndColumn(), two.EndColumn()); compare != 0 {
+	if compare := cmp.Compare(one.EndColumn(), two.EndColumn()); compare != 0 {
 		return compare
 	}
 	if compare := slices.Compare(one.unclonedSourcePath(), two.unclonedSourcePath()); compare != 0 {

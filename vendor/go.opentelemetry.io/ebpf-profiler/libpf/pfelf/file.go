@@ -28,10 +28,13 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -62,6 +65,8 @@ const (
 var (
 	// ErrNotELF is returned when the file is not an ELF file.
 	ErrNotELF = errors.New("not an ELF file")
+	// ErrSectionNotPresent is returned when a section is not present
+	ErrSectionNotPresent = errors.New("section not present")
 
 	// ErrNoDebugLink is returned when debug link does not exist.
 	ErrNoDebugLink = errors.New("no debug link")
@@ -239,6 +244,53 @@ func NewFileOwned(rc ReadAtCloser) (*File, error) {
 	return newFile(rc, rc, 0, false)
 }
 
+// LoadHinter is an optional capability of an fs.File returned by an fs.FS:
+// implementations whose content is only meaningful at a specific load
+// address (e.g. ELF segments extracted from a coredump, which may also need
+// musl-specific dynamic table handling) report it here so OpenFS parses the
+// file correctly.
+type LoadHinter interface {
+	ELFLoadHints() (loadAddress uint64, hasMusl bool)
+}
+
+// FSPath converts an absolute file path to an fs.FS path name. fs.FS names
+// are unrooted, so "/usr/lib/libc.so.6" becomes "usr/lib/libc.so.6".
+func FSPath(absPath string) string {
+	return strings.TrimPrefix(path.Clean(absPath), "/")
+}
+
+// OpenFS opens the fs.FS path name via fsys and parses it as an ELF file,
+// see NewFileFromFS.
+func OpenFS(fsys fs.FS, name string) (*File, error) {
+	f, err := fsys.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	ef, err := NewFileFromFS(f)
+	if err != nil {
+		return nil, fmt.Errorf("pfelf: %s: %w", name, err)
+	}
+	return ef, nil
+}
+
+// NewFileFromFS takes ownership of f and parses it as an ELF file. f must
+// additionally implement ReadAtCloser. If it implements LoadHinter, its load
+// address and musl hint are honored. f is closed by the returned File's
+// Close, or before returning on error.
+func NewFileFromFS(f fs.File) (*File, error) {
+	rac, ok := f.(ReadAtCloser)
+	if !ok {
+		_ = f.Close()
+		return nil, errors.New("opened file does not support ReadAtCloser")
+	}
+	var loadAddress uint64
+	var hasMusl bool
+	if lh, ok := f.(LoadHinter); ok {
+		loadAddress, hasMusl = lh.ELFLoadHints()
+	}
+	return newFile(rac, rac, loadAddress, hasMusl)
+}
+
 // newFile builds a File from r. A non-nil closer is owned and closed by the
 // returned File's Close, or before returning on error.
 func newFile(r io.ReaderAt, closer io.Closer,
@@ -392,7 +444,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 					f.gnuHash.addr = adjustedVal
 				}
 			}
-			pfbufio.PutReader(rdr)
+			rdr.Release()
 		case elf.PT_INTERP:
 			f.isExecutable = true
 		}
@@ -579,25 +631,34 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 
 // SymbolData reads and returns the data associated with given dynamic symbol.
 // The maximum data read is capped to maxSize.
-func (f *File) SymbolData(name libpf.SymbolName, maxSize int) (*libpf.Symbol, []byte, error) {
+func (f *File) SymbolData(name libpf.SymbolName, maxSize uint) (*libpf.Symbol, []byte, error) {
 	sym, err := f.LookupSymbol(name)
 	if err != nil {
 		return nil, nil, err
 	}
-	data := make([]byte, min(int(sym.Size), maxSize))
-	_, err = f.ReadAt(data, int64(sym.Address))
+	data, err := f.ReadSymbolData(sym, maxSize)
 	if err != nil {
 		return nil, nil, err
 	}
 	return sym, data, nil
 }
 
+// ReadSymbolData reads and returns the data associated with given symbol.
+// The maximum data read is capped to maxSize.
+func (f *File) ReadSymbolData(sym *libpf.Symbol, maxSize uint) ([]byte, error) {
+	data := make([]byte, min(sym.Size, uint64(maxSize)))
+	if _, err := f.ReadAt(data, int64(sym.Address)); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 // VisitNotes iterates the ELF notes.
 // The visitor must make copies of the 'data' it keeps after return.
 // It returns ErrNoteNotFound if all notes are visited without the visitor stopping iteration.
 func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	for i := range f.Progs {
 		notes := &f.Progs[i]
@@ -606,7 +667,7 @@ func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
 		}
 
 		rdr.Init(f.elfReader, int64(notes.Off), int64(notes.Filesz))
-		err := visitNotes(rdr, visitor)
+		err := visitNotes(&rdr, visitor)
 		if errors.Is(err, ErrNoteNotFound) {
 			continue
 		}
@@ -622,26 +683,33 @@ func (f *File) visitBuildIDNoteSections(visitor func(uint64, []byte) bool) error
 	if f.InsideCore {
 		return ErrNoteNotFound
 	}
+	return f.VisitNoteSections([]string{".note.gnu.build-id", ".note.go.buildid", ".notes"},
+		visitor)
+}
 
+// VisitNoteSections iterates the notes in the SHT_NOTE sections with the given names.
+// The visitor must make copies of the 'data' it keeps after return.
+// It returns ErrNoteNotFound if no named section exists, and nil once all notes
+// have been visited or the visitor stopped iteration.
+func (f *File) VisitNoteSections(names []string, visitor func(uint64, []byte) bool) error {
 	if err := f.LoadSections(); err != nil {
-		return ErrNoteNotFound
+		return err
 	}
 
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	visited := false
-	buildIDSections := []string{".note.gnu.build-id", ".note.go.buildid", ".notes"}
 	for i := range f.Sections {
 		section := &f.Sections[i]
 		if section.Type != elf.SHT_NOTE || section.Size == 0 ||
-			!slices.Contains(buildIDSections, section.Name) {
+			!slices.Contains(names, section.Name) {
 			continue
 		}
 		visited = true
 
 		rdr.Init(f.elfReader, int64(section.Offset), int64(section.Size))
-		err := visitNotes(rdr, visitor)
+		err := visitNotes(&rdr, visitor)
 		if errors.Is(err, ErrNoteNotFound) {
 			continue
 		}
@@ -702,11 +770,11 @@ func (f *File) GetBuildID() (string, error) {
 }
 
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
-func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string {
+func (f *File) DebuglinkFileName(elfFilePath string, fsys fs.FS) string {
 	if f.debuglinkPath != notYetProcessed {
 		return f.debuglinkPath
 	}
-	file, path := f.OpenDebugLink(elfFilePath, elfOpener)
+	file, path := f.OpenDebugLink(elfFilePath, fsys)
 	if file != nil {
 		_ = file.Close()
 	}
@@ -724,6 +792,8 @@ const (
 	RelTLSDESC RelocType = 1 << iota
 	// RelDTPMOD64 matches DTPMOD64 relocations (R_AARCH64_TLS_DTPMOD64, R_X86_64_DTPMOD64).
 	RelDTPMOD64
+	// RelTPOFF64 matches TP-relative relocations (R_AARCH64_TLS_TPREL64, R_X86_64_TPOFF64).
+	RelTPOFF64
 )
 
 // classifyRelocAarch64 returns the RelocType for an AARCH64 relocation.
@@ -733,6 +803,8 @@ func classifyRelocAarch64(rela ElfReloc) RelocType {
 		return RelTLSDESC
 	case elf.R_AARCH64_TLS_DTPMOD64:
 		return RelDTPMOD64
+	case elf.R_AARCH64_TLS_TPREL64:
+		return RelTPOFF64
 	default:
 		return 0
 	}
@@ -745,6 +817,8 @@ func classifyRelocX86_64(rela ElfReloc) RelocType {
 		return RelTLSDESC
 	case elf.R_X86_64_DTPMOD64:
 		return RelDTPMOD64
+	case elf.R_X86_64_TPOFF64:
+		return RelTPOFF64
 	default:
 		return 0
 	}
@@ -754,13 +828,15 @@ func classifyRelocX86_64(rela ElfReloc) RelocType {
 // for the TLS symbol, as well as a best-effort string for the symbol's name.
 // It continues until the visitor returns false.
 func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
-	return f.VisitRelocations(visitor, RelTLSDESC)
+	return f.VisitRelocations(func(r ElfReloc, name string, _ RelocType) bool {
+		return visitor(r, name)
+	}, RelTLSDESC)
 }
 
 // VisitRelocations visits all relocations whose type matches the relTypes
-// bitmask and provides the relocation and symbol name to the visitor. The
-// visitor can return false to stop iteration.
-func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
+// bitmask and provides the relocation, symbol name and matched RelocType to the
+// visitor. The visitor can return false to stop iteration.
+func (f *File) VisitRelocations(visitor func(ElfReloc, string, RelocType) bool,
 	relTypes RelocType) error {
 	var classify func(ElfReloc) RelocType
 	switch f.Machine {
@@ -771,9 +847,6 @@ func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
 	default:
 		return nil
 	}
-	filterFunc := func(rela ElfReloc) bool {
-		return classify(rela)&relTypes != 0
-	}
 	var err error
 	if err = f.LoadSections(); err != nil {
 		return err
@@ -783,7 +856,7 @@ func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
 		section := &f.Sections[i]
 		// NOTE: SHT_REL is not relevant for the archs that we care about
 		if section.Type == elf.SHT_RELA {
-			cont, err := f.visitRelocationsForSection(visitor, filterFunc, section)
+			cont, err := f.visitRelocationsForSection(visitor, classify, relTypes, section)
 			if err != nil {
 				return err
 			}
@@ -796,8 +869,8 @@ func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
 	return nil
 }
 
-func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
-	checkRelocation func(ElfReloc) bool,
+func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string, RelocType) bool,
+	classify func(ElfReloc) RelocType, relTypes RelocType,
 	relaSection *Section,
 ) (bool, error) {
 	if relaSection.Link >= uint32(len(f.Sections)) {
@@ -828,7 +901,7 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(relaSection.Offset), int64(relaSection.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	rela := &elf.Rela64{}
 	sym := &elf.Sym64{}
@@ -840,7 +913,8 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 			}
 			break
 		}
-		if !checkRelocation(*rela) {
+		relType := classify(*rela)
+		if relType&relTypes == 0 {
 			continue
 		}
 		symNo := int64(rela.Info >> 32)
@@ -854,7 +928,7 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 			return false, errors.New("failed to get relocation name string")
 		}
 
-		if !visitor(*rela, symStr) {
+		if !visitor(*rela, symStr, relType) {
 			return false, nil
 		}
 	}
@@ -872,7 +946,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(s.Offset), int64(s.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	d, err := rdr.ReadN(int(s.Size))
 	if err != nil {
@@ -882,7 +956,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 }
 
 // OpenDebugLink tries to locate and open the corresponding debug ELF for this DSO.
-func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
+func (f *File) OpenDebugLink(elfFilePath string, fsys fs.FS) (
 	debugELF *File, debugFile string,
 ) {
 	f.debuglinkPath = ""
@@ -897,7 +971,7 @@ func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 	executablePath := filepath.Dir(elfFilePath)
 	for _, debugPath := range []string{"/usr/lib/debug/"} {
 		debugFile = filepath.Join(debugPath, executablePath, linkName)
-		debugELF, err = elfOpener.OpenELF(debugFile)
+		debugELF, err = OpenFS(fsys, FSPath(debugFile))
 		if err != nil {
 			continue
 		}
@@ -1070,6 +1144,8 @@ func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol
 		Name:    name,
 		Address: libpf.SymbolValue(sym.Value),
 		Size:    sym.Size,
+		Info:    sym.Info,
+		Shndx:   sym.Shndx,
 	}, true
 }
 
@@ -1202,7 +1278,7 @@ func (f *File) LookupSymbolAddress(symbol libpf.SymbolName) (libpf.SymbolValue, 
 func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) error {
 	symTab := f.Section(name)
 	if symTab == nil {
-		return fmt.Errorf("failed to read %v: section not present", name)
+		return ErrSectionNotPresent
 	}
 	if symTab.Link >= uint32(len(f.Sections)) {
 		return fmt.Errorf("failed to read %v strtab: link %v out of range",
@@ -1215,7 +1291,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(symTab.Offset), int64(symTab.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	sym := &elf.Sym64{}
 	for {
@@ -1230,6 +1306,8 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 				Name:    libpf.SymbolName(name),
 				Address: libpf.SymbolValue(sym.Value),
 				Size:    sym.Size,
+				Info:    sym.Info,
+				Shndx:   sym.Shndx,
 			}) {
 				break
 			}
@@ -1241,12 +1319,18 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 
 // VisitSymbols iterates through the symbol table until visitor returns false.
 func (f *File) VisitSymbols(visitor func(libpf.Symbol) bool) error {
-	return f.visitSymbolTable(".symtab", visitor)
+	if err := f.visitSymbolTable(".symtab", visitor); err != nil {
+		return fmt.Errorf("failed to visit .symtab: %w", err)
+	}
+	return nil
 }
 
 // VisitDynamicSymbols iterates through the dynamic symbol table until visitor returns false.
 func (f *File) VisitDynamicSymbols(visitor func(libpf.Symbol) bool) error {
-	return f.visitSymbolTable(".dynsym", visitor)
+	if err := f.visitSymbolTable(".dynsym", visitor); err != nil {
+		return fmt.Errorf("failed to visit .dynsym: %w", err)
+	}
+	return nil
 }
 
 // DynString returns the strings listed for the given tag in the file's dynamic
@@ -1338,7 +1422,7 @@ func (f *File) parseGoBuildinfo() error {
 	}
 
 	rdr := pfbufio.NewReader(f.Underlying(), off, sz)
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	for {
 		offset, err := rdr.SearchSlice(goBuildInfoMagic)
@@ -1371,7 +1455,7 @@ func (f *File) parseGoBuildinfo() error {
 		if err != nil {
 			return errNoGoBuildinfo
 		}
-		ver, err := decodeString(rdr)
+		ver, err := decodeString(&rdr)
 		if err != nil {
 			return err
 		}

@@ -29,7 +29,7 @@ const (
 	// MinSupportedEdition is the earliest edition supported by this repo.
 	MinSupportedEdition = descriptorpb.Edition_EDITION_2023
 	// MaxSupportedEdition is the latest edition supported by this repo.
-	MaxSupportedEdition = descriptorpb.Edition_EDITION_2024
+	MaxSupportedEdition = descriptorpb.Edition_EDITION_2026
 )
 
 // FileDescriptor is an interface that matches the methods on a *descriptorpb.FileDescriptorProto.
@@ -42,6 +42,7 @@ type FileDescriptor interface {
 	GetDependency() []string
 	GetPublicDependency() []int32
 	GetWeakDependency() []int32
+	GetOptionDependency() []string
 	GetMessageType() []*descriptorpb.DescriptorProto
 	GetEnumType() []*descriptorpb.EnumDescriptorProto
 	GetService() []*descriptorpb.ServiceDescriptorProto
@@ -68,6 +69,7 @@ func FileDescriptorProtoForFileDescriptor(fileDescriptor FileDescriptor) *descri
 		Dependency:       fileDescriptor.GetDependency(),
 		PublicDependency: fileDescriptor.GetPublicDependency(),
 		WeakDependency:   fileDescriptor.GetWeakDependency(),
+		OptionDependency: fileDescriptor.GetOptionDependency(),
 		MessageType:      fileDescriptor.GetMessageType(),
 		EnumType:         fileDescriptor.GetEnumType(),
 		Service:          fileDescriptor.GetService(),
@@ -78,13 +80,13 @@ func FileDescriptorProtoForFileDescriptor(fileDescriptor FileDescriptor) *descri
 	// Note that if a *descriptorpb.FileDescriptorProto has a set but empty name, package,
 	// or syntax, this won't be an exact round trip. But for our use, we say this is fine.
 	if name := fileDescriptor.GetName(); name != "" {
-		fileDescriptorProto.Name = proto.String(name)
+		fileDescriptorProto.Name = new(name)
 	}
 	if pkg := fileDescriptor.GetPackage(); pkg != "" {
-		fileDescriptorProto.Package = proto.String(pkg)
+		fileDescriptorProto.Package = new(pkg)
 	}
 	if syntax := fileDescriptor.GetSyntax(); syntax != "" {
-		fileDescriptorProto.Syntax = proto.String(syntax)
+		fileDescriptorProto.Syntax = new(syntax)
 	}
 	if edition := fileDescriptor.GetEdition(); edition != descriptorpb.Edition_EDITION_UNKNOWN {
 		fileDescriptorProto.Edition = &edition
@@ -135,6 +137,9 @@ func ValidateFileDescriptor(fileDescriptor FileDescriptor) error {
 		return err
 	}
 	if err := ValidateProtoPaths("FileDescriptor.Dependency", fileDescriptor.GetDependency()); err != nil {
+		return err
+	}
+	if err := ValidateProtoPaths("FileDescriptor.OptionDependency", fileDescriptor.GetOptionDependency()); err != nil {
 		return err
 	}
 	if fileDescriptor.GetSyntax() == "editions" {

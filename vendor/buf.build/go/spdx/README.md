@@ -10,17 +10,27 @@ A simple Golang library that contains license information from [SPDX](https://sp
 See [spdx.org/licenses](https://spdx.org/licenses) for more details.
 
 ```go
+import (
+	"buf.build/go/spdx"
+)
+
 if license, ok := spdx.LicenseForID("apache-2.0"); ok {
-    fmt.Println(license.ID())         // Apache-2.0
-    fmt.Println(license.Name())       // Apache License 2.0
-    fmt.Println(license.Reference())  // https://spdx.org/licenses/Apache-2.0.html
-    fmt.Println(license.DetailsURL()) // https://spdx.org/licenses/Apache-2.0.json
+	fmt.Println(license.ID)              // Apache-2.0
+	fmt.Println(license.Name)            // Apache License 2.0
+	fmt.Println(license.Reference)       // https://spdx.org/licenses/Apache-2.0.html
+	fmt.Println(license.ReferenceNumber) // 501
+	fmt.Println(license.DetailsURL)      // https://spdx.org/licenses/Apache-2.0.json
+	fmt.Println(license.Deprecated)      // false
+	fmt.Println(license.SeeAlso)         // [https://www.apache.org/licenses/LICENSE-2.0 https://opensource.org/licenses/Apache-2.0]
+	fmt.Println(license.OSIApproved)     // true
 }
 
 for _, license := range spdx.AllLicenses() {
     fmt.Println(license)
 }
 ```
+
+All IDs are guaranteed to match the regular expression `^[a-zA-Z0-9-.+]+$`.
 
 ## Status: Beta
 

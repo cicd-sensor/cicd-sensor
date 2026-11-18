@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package otelconnect provides OpenTelemetry tracing and metrics for
-// [connectrpc.com/connect] servers and clients.
+// [connectrpc.com/connect/v2] servers and clients.
 // The specification followed was the [OpenTelemetry specification]
 // with both the [rpc metrics specification]
 // and [rpc spans specification] implemented.

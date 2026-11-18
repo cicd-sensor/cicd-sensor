@@ -17,6 +17,7 @@ package bufimage
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"buf.build/go/standard/xslices"
 	"github.com/bufbuild/buf/private/bufpkg/bufparse"
@@ -27,7 +28,6 @@ import (
 	"github.com/bufbuild/protoplugin/protopluginutil"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protowire"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
@@ -254,7 +254,8 @@ func addFileWithImports(
 	seenPaths[path] = struct{}{}
 
 	// then, add imports first, for proper ordering
-	for _, importPath := range imageFile.FileDescriptorProto().GetDependency() {
+	fileDescriptorProto := imageFile.FileDescriptorProto()
+	for _, importPath := range slices.Concat(fileDescriptorProto.GetDependency(), fileDescriptorProto.GetOptionDependency()) {
 		if importFile := image.GetFile(importPath); importFile != nil {
 			accumulator = addFileWithImports(
 				accumulator,
@@ -329,9 +330,9 @@ func fileDescriptorProtoToProtoImageFile(
 	if moduleFullName != nil {
 		protoModuleInfo = imagev1.ModuleInfo_builder{
 			Name: imagev1.ModuleName_builder{
-				Remote:     proto.String(moduleFullName.Registry()),
-				Owner:      proto.String(moduleFullName.Owner()),
-				Repository: proto.String(moduleFullName.Name()),
+				Remote:     new(moduleFullName.Registry()),
+				Owner:      new(moduleFullName.Owner()),
+				Repository: new(moduleFullName.Name()),
 			}.Build(),
 		}.Build()
 		if moduleProtoCommitID != "" {
@@ -348,6 +349,7 @@ func fileDescriptorProtoToProtoImageFile(
 		Dependency:       fileDescriptorProto.GetDependency(),
 		PublicDependency: fileDescriptorProto.GetPublicDependency(),
 		WeakDependency:   fileDescriptorProto.GetWeakDependency(),
+		OptionDependency: fileDescriptorProto.GetOptionDependency(),
 		MessageType:      fileDescriptorProto.GetMessageType(),
 		EnumType:         fileDescriptorProto.GetEnumType(),
 		Service:          fileDescriptorProto.GetService(),
@@ -357,9 +359,9 @@ func fileDescriptorProtoToProtoImageFile(
 		Edition:          fileDescriptorProto.Edition,
 		BufExtension: imagev1.ImageFileExtension_builder{
 			// we might actually want to differentiate between unset and false
-			IsImport: proto.Bool(isImport),
+			IsImport: new(isImport),
 			// we might actually want to differentiate between unset and false
-			IsSyntaxUnspecified: proto.Bool(isSyntaxUnspecified),
+			IsSyntaxUnspecified: new(isSyntaxUnspecified),
 			UnusedDependency:    unusedDependencyIndexes,
 			ModuleInfo:          protoModuleInfo,
 		}.Build(),
@@ -428,7 +430,7 @@ func imageToCodeGeneratorRequest(
 		CompilerVersion: compilerVersion,
 	}
 	if parameter != "" {
-		request.Parameter = proto.String(parameter)
+		request.Parameter = new(parameter)
 	}
 	for i, imageFile := range imageFiles {
 		fileDescriptorProto := imageFile.FileDescriptorProto()

@@ -217,6 +217,7 @@ type controller struct {
 	fileAnnotationErrorFormat string
 	fileAnnotationsToStdout   bool
 	copyToInMemory            bool
+	readerFetchCacheEnabled   bool
 
 	storageosProvider           storageos.Provider
 	buffetchRefParser           buffetch.RefParser
@@ -263,6 +264,10 @@ func newController(
 	}
 	controller.storageosProvider = newStorageosProvider(controller.disableSymlinks)
 	controller.buffetchRefParser = buffetch.NewRefParser(logger)
+	var buffetchReaderOptions []buffetch.ReaderOption
+	if controller.readerFetchCacheEnabled {
+		buffetchReaderOptions = append(buffetchReaderOptions, buffetch.WithReaderFetchCache())
+	}
 	controller.buffetchReader = buffetch.NewReader(
 		logger,
 		controller.storageosProvider,
@@ -274,6 +279,7 @@ func newController(
 			gitClonerOptions,
 		),
 		moduleKeyProvider,
+		buffetchReaderOptions...,
 	)
 	controller.buffetchWriter = buffetch.NewWriter(logger)
 	controller.workspaceProvider = bufworkspace.NewWorkspaceProvider(
@@ -1335,7 +1341,8 @@ func (c *controller) warnUnconfiguredTransitiveImports(
 		if imageFile.IsImport() {
 			continue
 		}
-		for _, importPath := range imageFile.FileDescriptorProto().GetDependency() {
+		fileDescriptorProto := imageFile.FileDescriptorProto()
+		for _, importPath := range slices.Concat(fileDescriptorProto.GetDependency(), fileDescriptorProto.GetOptionDependency()) {
 			moduleFullNameString, ok := pathToFullNameString[importPath]
 			if !ok {
 				// The import was from a local unnamed Module in the Workspace.
@@ -1364,8 +1371,7 @@ func (c *controller) handleFileAnnotationSetRetError(retErrAddr *error) {
 	if *retErrAddr == nil {
 		return
 	}
-	var fileAnnotationSet bufanalysis.FileAnnotationSet
-	if errors.As(*retErrAddr, &fileAnnotationSet) {
+	if fileAnnotationSet, ok := errors.AsType[bufanalysis.FileAnnotationSet](*retErrAddr); ok {
 		writer := c.container.Stderr()
 		if c.fileAnnotationsToStdout {
 			writer = c.container.Stdout()

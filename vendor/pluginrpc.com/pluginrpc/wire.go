@@ -32,9 +32,9 @@ func marshalRequest(format Format, requestValue any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	protoRequest := &pluginrpcv1.Request{
+	protoRequest := pluginrpcv1.Request_builder{
 		Value: anyRequestValue,
-	}
+	}.Build()
 	codec, err := codecForFormat(format)
 	if err != nil {
 		return nil, err
@@ -77,10 +77,10 @@ func marshalResponse(format Format, responseValue any, err error) ([]byte, error
 			return nil, err
 		}
 	}
-	protoResponse := &pluginrpcv1.Response{
+	protoResponse := pluginrpcv1.Response_builder{
 		Value: anyResponseValue,
 		Error: WrapError(err).ToProto(),
-	}
+	}.Build()
 	codec, err := codecForFormat(format)
 	if err != nil {
 		return nil, err

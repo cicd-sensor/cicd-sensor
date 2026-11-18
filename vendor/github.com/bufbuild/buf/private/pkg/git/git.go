@@ -63,6 +63,19 @@ type Name interface {
 	checkout() string
 }
 
+// FetchIdentity returns the values that determine what a clone of name fetches:
+// the branch to clone, if any, and the ref to check out afterwards, if any. A
+// nil name has an empty identity.
+//
+// Names with equal identities produce equal clones. String is not sufficient
+// for this: a branch, a tag, and a ref with the same value all share a String.
+func FetchIdentity(name Name) (cloneBranch string, checkout string) {
+	if name == nil {
+		return "", ""
+	}
+	return name.cloneBranch(), name.checkout()
+}
+
 // NewBranchName returns a new Name for the branch.
 func NewBranchName(branch string) Name {
 	return newBranch(branch)
@@ -235,8 +248,7 @@ func CheckDirectoryIsValidGitCheckout(
 		xexec.WithDir(dir),
 		xexec.WithEnv(app.Environ(envContainer)),
 	); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			if exitErr.ExitCode() == 128 {
 				return fmt.Errorf("dir %s: %w", dir, ErrInvalidGitCheckout)
 			}
@@ -373,8 +385,7 @@ func IsValidRef(
 		xexec.WithDir(dir),
 		xexec.WithEnv(app.Environ(envContainer)),
 	); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			if exitErr.ExitCode() == 128 {
 				return fmt.Errorf("could not find ref %s in %s: %w", ref, dir, ErrInvalidRef)
 			}

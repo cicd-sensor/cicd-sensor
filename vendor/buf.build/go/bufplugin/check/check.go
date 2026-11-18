@@ -13,4 +13,4 @@
 // limitations under the License.
 
 // Package check implements the SDK for custom lint and breaking change plugins.
-package check // import "buf.build/go/bufplugin/check"
+package check

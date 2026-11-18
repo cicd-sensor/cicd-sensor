@@ -6,6 +6,7 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 import (
 	"debug/elf"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -15,8 +16,9 @@ import (
 const (
 	// Some DSOs have few limited .eh_frame FDEs (e.g. PLT), and additional
 	// FDEs are in .debug_frame or external debug file. This controls how many
-	// basic blocks are needed to not follow .gnu_debuglink.
-	numBlocksToOmitDebugLink = 8
+	// basic blocks are needed to not follow .gnu_debuglink. E.g. musl on arm64
+	// has 19 basic blocks from .eh_frame, and the rest are in the debug file.
+	numBlocksToOmitDebugLink = 32
 )
 
 // extractionFilter is used to filter in .eh_frame data when a better source
@@ -109,10 +111,11 @@ func isLibGenericRegsAllowed(elfFile *pfelf.File) bool {
 	return false
 }
 
-// Extract takes a filename for a modern ELF file that is accessible
-// and provides the stack delta intervals in the interval parameter
-func Extract(filename string) (*sdtypes.IntervalData, error) {
-	elfRef := pfelf.NewReference(filename, pfelf.SystemOpener)
+// Extract takes the fs.FS path name of a modern ELF file in fsys and provides
+// the stack delta intervals in the interval parameter. Auxiliary files (e.g.
+// .gnu_debuglink targets) are also looked up in fsys.
+func Extract(fsys fs.FS, name string) (*sdtypes.IntervalData, error) {
+	elfRef := pfelf.NewReference("/"+name, fsys)
 	defer elfRef.Close()
 	return ExtractELF(elfRef)
 }

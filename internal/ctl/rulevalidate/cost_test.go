@@ -138,7 +138,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 			set: ruleSetWithRule(rule.Rule{
 				RuleID:    "ancestor_argv_ors",
 				EventType: jobevent.ProcessExec,
-				Condition: `process.ancestors.exists(p, p.argv.exists(a, a.contains("aaa") || a.contains("bbb") || a.contains("ccc") || a.contains("ddd") || a.contains("eee") || a.contains("fff") || a.contains("ggg") || a.contains("hhh") || a.contains("iii") || a.contains("jjj")))`,
+				Condition: `process.ancestors.exists(p, p.argv.exists(a, a.contains("aaa") || a.contains("bbb") || a.contains("ccc") || a.contains("ddd") || a.contains("eee") || a.contains("fff") || a.contains("ggg") || a.contains("hhh") || a.contains("iii") || a.contains("jjj") || a.contains("kkk") || a.contains("lll") || a.contains("mmm") || a.contains("nnn") || a.contains("ooo") || a.contains("ppp")))`,
 			}),
 			wantWarnings: map[string]bool{"condition": true},
 		},
@@ -150,7 +150,7 @@ func TestRuleSetCostsWarningPolicy(t *testing.T) {
 				RuleID:     "heavy_exception",
 				EventType:  jobevent.ProcessExec,
 				Condition:  `process.exec_path.endsWith("/bash")`,
-				Exceptions: `process.ancestors.exists(p, p.argv.exists(a, a.contains("aaa") || a.contains("bbb") || a.contains("ccc") || a.contains("ddd") || a.contains("eee") || a.contains("fff") || a.contains("ggg") || a.contains("hhh") || a.contains("iii") || a.contains("jjj")))`,
+				Exceptions: `process.ancestors.exists(p, p.argv.exists(a, a.contains("aaa") || a.contains("bbb") || a.contains("ccc") || a.contains("ddd") || a.contains("eee") || a.contains("fff") || a.contains("ggg") || a.contains("hhh") || a.contains("iii") || a.contains("jjj") || a.contains("kkk") || a.contains("lll") || a.contains("mmm") || a.contains("nnn") || a.contains("ooo") || a.contains("ppp")))`,
 			}),
 			wantWarnings: map[string]bool{
 				"condition": false,

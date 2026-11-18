@@ -26,9 +26,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/sigstore/rekor/pkg/pki/identity"
-	"github.com/sigstore/sigstore/pkg/cryptoutils"
+	"github.com/sigstore/rekor/pkg/util/jcs"
 	sigsig "github.com/sigstore/sigstore/pkg/signature"
 	"github.com/theupdateframework/go-tuf/data"
 	"github.com/theupdateframework/go-tuf/pkg/keys"
@@ -82,13 +81,13 @@ func (s Signature) CanonicalValue() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshalling signature: %w", err)
 	}
-	return jsoncanonicalizer.Transform(marshalledBytes)
+	return jcs.Canonicalize(marshalledBytes)
 }
 
 // Verify implements the pki.Signature interface
-func (s Signature) Verify(_ io.Reader, k interface{}, _ ...sigsig.VerifyOption) error {
+func (s Signature) Verify(_ io.Reader, k any, _ ...sigsig.VerifyOption) error {
 	key, ok := k.(*PublicKey)
-	if !ok {
+	if !ok || key == nil {
 		return fmt.Errorf("invalid public key type for: %v", k)
 	}
 
@@ -126,11 +125,17 @@ func NewPublicKey(r io.Reader) (*PublicKey, error) {
 	// Now create a verification db that trusts all the keys
 	db := verify.NewDB()
 	for id, k := range root.Keys {
+		if k == nil {
+			return nil, errors.New("tuf root contains nil key")
+		}
 		if err := db.AddKey(id, k); err != nil {
 			return nil, err
 		}
 	}
 	for name, role := range root.Roles {
+		if role == nil {
+			return nil, errors.New("tuf root contains nil role")
+		}
 		if err := db.AddRole(name, role); err != nil {
 			return nil, err
 		}
@@ -153,10 +158,13 @@ func (k PublicKey) CanonicalValue() (encoded []byte, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshalling tuf root: %w", err)
 	}
-	return jsoncanonicalizer.Transform(marshalledBytes)
+	return jcs.Canonicalize(marshalledBytes)
 }
 
 func (k PublicKey) SpecVersion() (string, error) {
+	if k.root == nil {
+		return "", errors.New("tuf root has not been initialized")
+	}
 	// extract role
 	sm := &signedMeta{}
 	if err := json.Unmarshal(k.root.Signed, sm); err != nil {
@@ -177,6 +185,9 @@ func (k PublicKey) Subjects() []string {
 
 // Identities implements the pki.PublicKey interface
 func (k PublicKey) Identities() ([]identity.Identity, error) {
+	if k.root == nil {
+		return nil, errors.New("tuf root has not been initialized")
+	}
 	root := &data.Root{}
 	if err := json.Unmarshal(k.root.Signed, root); err != nil {
 		return nil, err
@@ -200,7 +211,7 @@ func (k PublicKey) Identities() ([]identity.Identity, error) {
 			if err != nil {
 				return nil, err
 			}
-			pkixKey, err := cryptoutils.MarshalPublicKeyToDER(pub)
+			pkixKey, err := x509.MarshalPKIXPublicKey(pub)
 			if err != nil {
 				return nil, err
 			}
@@ -213,7 +224,7 @@ func (k PublicKey) Identities() ([]identity.Identity, error) {
 		case data.KeyTypeEd25519:
 			// key is stored as a 32-byte string
 			pub := ed25519.PublicKey(verifier.Public())
-			pkixKey, err := cryptoutils.MarshalPublicKeyToDER(pub)
+			pkixKey, err := x509.MarshalPKIXPublicKey(pub)
 			if err != nil {
 				return nil, err
 			}

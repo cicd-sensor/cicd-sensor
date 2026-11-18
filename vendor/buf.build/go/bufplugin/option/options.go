@@ -254,10 +254,10 @@ func (o *options) ToProto() ([]*optionv1.Option, error) {
 		// Assuming that we've validated that no values are empty.
 		protoOptions = append(
 			protoOptions,
-			&optionv1.Option{
+			optionv1.Option_builder{
 				Key:   key,
 				Value: protoValue,
-			},
+			}.Build(),
 		)
 	}
 	return protoOptions, nil
@@ -269,36 +269,26 @@ func (*options) isOption() {}
 func valueToProtoValue(value any) (*optionv1.Value, error) {
 	switch reflectValue := reflect.ValueOf(value); reflectValue.Kind() {
 	case reflect.Bool:
-		return &optionv1.Value{
-			Type: &optionv1.Value_BoolValue{
-				BoolValue: reflectValue.Bool(),
-			},
-		}, nil
+		return optionv1.Value_builder{
+			BoolValue: new(reflectValue.Bool()),
+		}.Build(), nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return &optionv1.Value{
-			Type: &optionv1.Value_Int64Value{
-				Int64Value: reflectValue.Int(),
-			},
-		}, nil
+		return optionv1.Value_builder{
+			Int64Value: new(reflectValue.Int()),
+		}.Build(), nil
 	case reflect.Float32, reflect.Float64:
-		return &optionv1.Value{
-			Type: &optionv1.Value_DoubleValue{
-				DoubleValue: reflectValue.Float(),
-			},
-		}, nil
+		return optionv1.Value_builder{
+			DoubleValue: new(reflectValue.Float()),
+		}.Build(), nil
 	case reflect.String:
-		return &optionv1.Value{
-			Type: &optionv1.Value_StringValue{
-				StringValue: reflectValue.String(),
-			},
-		}, nil
+		return optionv1.Value_builder{
+			StringValue: new(reflectValue.String()),
+		}.Build(), nil
 	case reflect.Slice:
 		if t, ok := value.([]byte); ok {
-			return &optionv1.Value{
-				Type: &optionv1.Value_BytesValue{
-					BytesValue: t,
-				},
-			}, nil
+			return optionv1.Value_builder{
+				BytesValue: t,
+			}.Build(), nil
 		}
 		values := make([]*optionv1.Value, reflectValue.Len())
 		for i := range reflectValue.Len() {
@@ -308,14 +298,12 @@ func valueToProtoValue(value any) (*optionv1.Value, error) {
 			}
 			values[i] = subValue
 		}
-		return &optionv1.Value{
-			Type: &optionv1.Value_ListValue{
-				ListValue: &optionv1.ListValue{
-					Values: values,
-				},
-			},
-		}, nil
-	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128, reflect.Array, reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer | reflect.Ptr, reflect.Struct, reflect.UnsafePointer:
+		return optionv1.Value_builder{
+			ListValue: optionv1.ListValue_builder{
+				Values: values,
+			}.Build(),
+		}.Build(), nil
+	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128, reflect.Array, reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Struct, reflect.UnsafePointer:
 		return nil, fmt.Errorf("invalid type for Options value %T", value)
 	default:
 		return nil, fmt.Errorf("invalid type for Options value %T", value)
@@ -428,7 +416,7 @@ func validateValue(value any) error {
 			}
 		}
 		return nil
-	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128, reflect.Array, reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer | reflect.Ptr, reflect.Struct, reflect.UnsafePointer:
+	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128, reflect.Array, reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Struct, reflect.UnsafePointer:
 		return fmt.Errorf("invalid option value: unhandled type %T", value)
 	default:
 		return fmt.Errorf("invalid option value: unhandled type %T", value)

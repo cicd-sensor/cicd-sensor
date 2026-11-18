@@ -48,13 +48,22 @@ func pointerOfValue(v reflect.Value) pointer {
 	return pointer{p: unsafe.Pointer(v.Pointer())}
 }
 
+// ifaceHeader is the memory layout of an interface (both iface and eface).
+// For a non-empty interface (iface), Type is *runtime.itab.
+// For an empty interface (eface / any), Type is *runtime._type.
+type ifaceHeader struct {
+	Type unsafe.Pointer
+	Data unsafe.Pointer
+}
+
 // pointerOfIface returns the pointer portion of an interface.
 func pointerOfIface(v any) pointer {
-	type ifaceHeader struct {
-		Type unsafe.Pointer
-		Data unsafe.Pointer
-	}
 	return pointer{p: (*ifaceHeader)(unsafe.Pointer(&v)).Data}
+}
+
+// asIfaceHeader returns p as a pointer to an interface header.
+func (p pointer) asIfaceHeader() *ifaceHeader {
+	return (*ifaceHeader)(p.p)
 }
 
 // IsNil reports whether the pointer is nil.

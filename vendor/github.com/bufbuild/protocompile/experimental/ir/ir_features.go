@@ -41,9 +41,8 @@ type FeatureInfo struct {
 }
 
 type rawFeatureSet struct {
-	features map[uint64]rawFeature
-	parent   id.ID[FeatureSet]
-	options  id.ID[Value]
+	parent  id.ID[FeatureSet]
+	options id.ID[Value]
 }
 
 type rawFeature struct {
@@ -55,7 +54,7 @@ type rawFeature struct {
 type rawFeatureInfo struct {
 	defaults                        []featureDefault // Sorted by edition.
 	introduced, deprecated, removed syntax.Syntax
-	deprecationWarning              string
+	deprecationWarning, removalErr  string
 }
 
 type featureDefault struct {
@@ -93,15 +92,6 @@ func (fs FeatureSet) LookupCustom(extension, field Member) Feature {
 		return Feature{}
 	}
 
-	// This key is guaranteed to be unique, because FQNs are unique. This
-	// allows us to use Go's fast path for 64-bit integer keys.
-	key := uint64(extension.InternedFullName())<<32 | uint64(field.InternedFullName())
-
-	// First, check if this value is cached.
-	if f, ok := fs.Raw().features[key]; ok {
-		return Feature{id.WrapContext(fs.Context()), f}
-	}
-
 	raw := rawFeature{isCustom: !extension.IsZero()}
 
 	// Check to see if it's set in the options message.
@@ -133,10 +123,6 @@ func (fs FeatureSet) LookupCustom(extension, field Member) Feature {
 		return Feature{}
 	}
 
-	if fs.Raw().features == nil {
-		fs.Raw().features = make(map[uint64]rawFeature)
-	}
-	fs.Raw().features[key] = raw
 	return Feature{id.WrapContext(fs.Context()), raw}
 }
 
@@ -232,6 +218,15 @@ func (f FeatureInfo) Removed() syntax.Syntax {
 // IsRemoved returns whether this feature has been removed yet.
 func (f FeatureInfo) IsRemoved(in syntax.Syntax) bool {
 	return f.Removed() != syntax.Unknown && f.Removed() <= in
+}
+
+// RemovalError returns the literal text of the removal error for this
+// feature, if it has been removed.
+func (f FeatureInfo) RemovalError() string {
+	if f.IsZero() {
+		return ""
+	}
+	return f.raw.removalErr
 }
 
 // DeprecationWarning returns the literal text of the deprecation warning for

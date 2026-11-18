@@ -39,13 +39,13 @@ func init() {
 }
 
 func New() types.TypeImpl {
-	bit := BaseIntotoType{}
-	bit.Kind = KIND
-	bit.VersionMap = VersionMap
+	bit := BaseIntotoType{
+		Kind:       KIND,
+		VersionMap: VersionMap}
 	return &bit
 }
 
-var VersionMap = types.NewSemVerEntryFactoryMap()
+var VersionMap = types.NewEntryFactoryMap()
 
 func (it BaseIntotoType) UnmarshalEntry(pe models.ProposedEntry) (types.EntryImpl, error) {
 	if pe == nil {
@@ -54,7 +54,7 @@ func (it BaseIntotoType) UnmarshalEntry(pe models.ProposedEntry) (types.EntryImp
 
 	in, ok := pe.(*models.Intoto)
 	if !ok {
-		return nil, errors.New("cannot unmarshal non-Rekord types")
+		return nil, errors.New("cannot unmarshal non-Intoto types")
 	}
 
 	if in.APIVersion == nil {

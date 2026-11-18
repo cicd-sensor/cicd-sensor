@@ -42,11 +42,14 @@ func TestDefinedSymbolTargets(t *testing.T) {
 		}
 	})
 
-	t.Run("reader failure remains retryable", func(t *testing.T) {
+	t.Run("reader failure is a definitive non-target", func(t *testing.T) {
 		t.Parallel()
+		// Since Go 1.27, elf.NewFile wraps a failure to read the ELF identifier
+		// in *elf.FormatError, so a reader error is indistinguishable from a
+		// non-ELF file and is cached as a definitive non-target.
 		got, definitive, err := definedSymbolTargets(failingReaderAt{}, []symbolUprobeTarget{{symbol: "SSL_write"}})
-		if err == nil || definitive || len(got) != 0 {
-			t.Fatalf("definedSymbolTargets = %+v, %v, %v; want empty, false, error", got, definitive, err)
+		if err != nil || !definitive || len(got) != 0 {
+			t.Fatalf("definedSymbolTargets = %+v, %v, %v; want empty, true, nil", got, definitive, err)
 		}
 	})
 

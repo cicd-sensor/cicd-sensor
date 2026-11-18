@@ -23,6 +23,7 @@ import (
 	"log/slog"
 
 	"buf.build/go/standard/xlog/xslog"
+	"github.com/bufbuild/buf/private/buf/bufctl"
 	"github.com/bufbuild/buf/private/buf/bufworkspace"
 	"github.com/bufbuild/buf/private/bufpkg/bufcheck"
 	"github.com/bufbuild/buf/private/bufpkg/bufmodule"
@@ -71,10 +72,10 @@ func (w *workspaceManager) Cleanup(ctx context.Context) {
 	// Delete in-place.
 	index := 0
 	for _, workspace := range w.workspaces {
-		if workspace.refCount > 0 {
+		if workspace.refCount > 0 || workspace.hasOpenFile() {
 			w.workspaces[index] = workspace
 			index++
-			continue // workspace leased
+			continue // workspace in use
 		}
 		w.lsp.logger.Debug("workspace: cleanup removing workspace", slog.String("parent", workspace.workspaceURI.Filename()))
 		for _, file := range workspace.pathToFile {
@@ -144,10 +145,23 @@ func (w *workspace) Lease() {
 }
 
 // Release decrements the reference count.
-func (w *workspace) Release() int {
+func (w *workspace) Release() {
 	w.lsp.logger.Debug("workspace: release", slog.String("path", w.workspaceURI.Filename()))
+	if w.refCount <= 0 {
+		w.lsp.logger.Error("workspace: refcount released below zero", slog.String("path", w.workspaceURI.Filename()))
+		return
+	}
 	w.refCount--
-	return w.refCount
+}
+
+// hasOpenFile reports whether any file in this workspace is open in the editor.
+func (w *workspace) hasOpenFile() bool {
+	for _, file := range w.pathToFile {
+		if file.IsOpenInEditor() {
+			return true
+		}
+	}
+	return false
 }
 
 // Refresh rebuilds the workspace and required context.
@@ -156,7 +170,7 @@ func (w *workspace) Refresh(ctx context.Context) error {
 		return nil
 	}
 	fileName := w.workspaceURI.Filename()
-	bufWorkspace, err := w.lsp.controller.GetWorkspace(ctx, fileName)
+	bufWorkspace, err := w.getBufWorkspace(ctx, fileName)
 	if err != nil {
 		w.lsp.logger.Error("workspace: get workspace", slog.String("file", fileName), xslog.ErrorAttr(err))
 		return err
@@ -185,6 +199,27 @@ func (w *workspace) Refresh(ctx context.Context) error {
 	w.checkClient = checkClient
 	w.indexFiles(ctx)
 	return nil
+}
+
+// getBufWorkspace resolves the buf Workspace for the file.
+//
+// Without a config override, the workspace is discovered by walking up from
+// the file to the controlling buf.yaml or buf.work.yaml. With a config
+// override, the workspace is resolved from the client's root folder containing
+// the file, so module paths in the override are relative to that folder.
+func (w *workspace) getBufWorkspace(ctx context.Context, fileName string) (bufworkspace.Workspace, error) {
+	if w.lsp.configOverride == "" {
+		return w.lsp.controller.GetWorkspace(ctx, fileName)
+	}
+	rootDirPath, err := w.lsp.rootDirPathForFile(fileName)
+	if err != nil {
+		return nil, err
+	}
+	return w.lsp.controller.GetWorkspace(
+		ctx,
+		rootDirPath,
+		bufctl.WithConfigOverride(w.lsp.configOverride),
+	)
 }
 
 // FileInfo returns an iterator over the files in the workspace.

@@ -15,6 +15,7 @@
 package connect
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -228,7 +229,7 @@ func (d *duplexHTTPCall) SetMethod(method string) {
 func (d *duplexHTTPCall) Read(data []byte) (int, error) {
 	// First, we wait until we've gotten the response headers and established the
 	// server-to-client side of the stream.
-	if err := d.BlockUntilResponseReady(); err != nil {
+	if _, err := d.blockUntilResponseReady(); err != nil {
 		// The stream is already closed or corrupted.
 		return 0, err
 	}
@@ -245,37 +246,39 @@ func (d *duplexHTTPCall) Read(data []byte) (int, error) {
 }
 
 func (d *duplexHTTPCall) CloseRead() error {
-	_ = d.BlockUntilResponseReady()
-	if d.response == nil {
-		return nil
+	// Ignore the error: an error response still has a body that must be closed.
+	response, _ := d.blockUntilResponseReady()
+	if response == nil {
+		return nil // No response, so nothing to close.
 	}
-	err := d.response.Body.Close()
+	err := response.Body.Close()
 	err = wrapIfContextDone(d.ctx, err)
 	return wrapIfRSTError(d.ctx, err)
 }
 
 // ResponseStatusCode is the response's HTTP status code.
 func (d *duplexHTTPCall) ResponseStatusCode() (int, error) {
-	if err := d.BlockUntilResponseReady(); err != nil {
+	response, err := d.blockUntilResponseReady()
+	if err != nil {
 		return 0, err
 	}
-	return d.response.StatusCode, nil
+	return response.StatusCode, nil
 }
 
 // ResponseHeader returns the response HTTP headers.
 func (d *duplexHTTPCall) ResponseHeader() http.Header {
-	_ = d.BlockUntilResponseReady()
-	if d.response != nil {
-		return d.response.Header
+	// Ignore the error: an error response still carries headers to forward.
+	if response, _ := d.blockUntilResponseReady(); response != nil {
+		return response.Header
 	}
 	return make(http.Header)
 }
 
 // ResponseTrailer returns the response HTTP trailers.
 func (d *duplexHTTPCall) ResponseTrailer() http.Header {
-	_ = d.BlockUntilResponseReady()
-	if d.response != nil {
-		return d.response.Trailer
+	// Ignore the error: an error response still carries trailers to forward.
+	if response, _ := d.blockUntilResponseReady(); response != nil {
+		return response.Trailer
 	}
 	return make(http.Header)
 }
@@ -286,11 +289,25 @@ func (d *duplexHTTPCall) SetValidateResponse(validate func(*http.Response) *Erro
 	d.validateResponse = validate
 }
 
-// BlockUntilResponseReady returns when the response is ready or reports an
-// error from initializing the request.
-func (d *duplexHTTPCall) BlockUntilResponseReady() error {
-	<-d.responseReady
-	return d.responseErr
+// blockUntilResponseReady blocks until the response is ready or the context is
+// cancelled. It returns a nil response when none was received, either because
+// the request failed or the context was cancelled before the response arrived.
+//
+// The response and the error may both be non-nil. An error response (one with a
+// non-success status or that fails validation) still carries a body to close
+// and headers to forward, so it is returned alongside its error.
+func (d *duplexHTTPCall) blockUntilResponseReady() (*http.Response, error) {
+	select {
+	case <-d.responseReady:
+		return d.response, d.responseErr
+	default:
+	}
+	select {
+	case <-d.responseReady:
+		return d.response, d.responseErr
+	case <-d.ctx.Done():
+		return nil, wrapIfContextError(d.ctx.Err())
+	}
 }
 
 func (d *duplexHTTPCall) makeRequest() {
@@ -424,7 +441,7 @@ func cloneURL(oldURL *url.URL) *url.URL {
 // reuse.
 type payloadCloser struct {
 	mu      sync.Mutex
-	payload messagePayload // nil after Release
+	payload messagePayload
 }
 
 func newPayloadCloser(payload messagePayload) *payloadCloser {
@@ -437,9 +454,6 @@ func newPayloadCloser(payload messagePayload) *payloadCloser {
 func (p *payloadCloser) Read(dst []byte) (readN int, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.payload == nil {
-		return 0, io.EOF
-	}
 	return p.payload.Read(dst)
 }
 
@@ -447,9 +461,6 @@ func (p *payloadCloser) Read(dst []byte) (readN int, err error) {
 func (p *payloadCloser) WriteTo(dst io.Writer) (int64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.payload == nil {
-		return 0, nil
-	}
 	return p.payload.WriteTo(dst)
 }
 
@@ -458,24 +469,26 @@ func (p *payloadCloser) Close() error {
 	return nil
 }
 
-// Rewind rewinds the payload to the beginning. It returns false if the
-// payload has been discarded from a previous call to Release.
+// Rewind rewinds the payload to the beginning. It must not be called after
+// Release, which is only called once the request is no longer retried.
 func (p *payloadCloser) Rewind() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.payload == nil {
-		return false
-	}
-	if _, err := p.payload.Seek(0, io.SeekStart); err != nil {
-		return false
-	}
-	return true
+	_, err := p.payload.Seek(0, io.SeekStart)
+	return err == nil
 }
 
-// Release discards the payload. After Release is called, the payload cannot be
-// rewound and the payload is safe to reuse.
+// Release detaches the payload so the caller's buffer is safe to reuse. The
+// transport may still be sending it if the server responded early, so unread
+// bytes are copied rather than dropped.
 func (p *payloadCloser) Release() {
 	p.mu.Lock()
-	p.payload = nil
-	p.mu.Unlock()
+	defer p.mu.Unlock()
+	if p.payload.Len() == 0 {
+		p.payload = nopPayload{}
+		return
+	}
+	unread := make([]byte, p.payload.Len())
+	n, _ := io.ReadFull(p.payload, unread)
+	p.payload = bytes.NewReader(unread[:n])
 }

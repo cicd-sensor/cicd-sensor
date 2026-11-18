@@ -113,10 +113,10 @@ func (l *fileLocation) ToProto() *descriptorv1.FileLocation {
 	if l == nil {
 		return nil
 	}
-	return &descriptorv1.FileLocation{
+	return descriptorv1.FileLocation_builder{
 		FileName:   l.fileDescriptor.ProtoreflectFileDescriptor().Path(),
 		SourcePath: l.sourceLocation.Path,
-	}
+	}.Build()
 }
 
 func (l *fileLocation) unclonedSourcePath() protoreflect.SourcePath {

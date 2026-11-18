@@ -49,3 +49,6 @@ issues:
     - linters:
       - gocritic
       path: spdx.go
+    - linters:
+      - gocritic
+      path: spdx_test.go

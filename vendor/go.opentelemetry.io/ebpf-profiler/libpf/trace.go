@@ -4,9 +4,11 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
-	"hash/fnv"
-	"strconv"
+	"encoding/binary"
+	"hash/maphash"
 	"unique"
+
+	"github.com/zeebo/xxh3"
 
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
@@ -134,16 +136,16 @@ type Trace struct {
 	cachedHash TraceHash
 }
 
-// Hash returns the trace's hash, computing and caching it on the first call.
-// The result is memoized: mutating Frames after the first call is not
-// reflected in subsequent calls. This method is not thread-safe.
+var customLabelHashSeed = maphash.MakeSeed()
+
+// Hash returns a cached hash of the frames and custom labels for internal use.
+// Mutations after the first call are not reflected.
 func (t *Trace) Hash() TraceHash {
-	if t.cachedHash != invalidTraceHash {
+	if t.cachedHash != InvalidTraceHash {
 		return t.cachedHash
 	}
 	var buf [24]byte
-	// Review and maybe update invalidTraceHash if hash function changes from FNV128A
-	h := fnv.New128a()
+	h := xxh3.New128()
 	for _, uniqueFrame := range t.Frames {
 		frame := uniqueFrame.Value()
 		fileID := FileID{}
@@ -151,32 +153,57 @@ func (t *Trace) Hash() TraceHash {
 			fileID = frame.Mapping.Value().File.Value().FileID
 		}
 		_, _ = h.Write(fileID.Bytes())
-		// Using FormatUint() or putting AppendUint() into a function leads
-		// to escaping to heap (allocation).
-		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))
+		n := putUint64(buf[:], uint64(frame.AddressOrLineno))
+		_, _ = h.Write(buf[:n])
 	}
-	// make instead of nil avoids a heap allocation
-	traceHash, _ := TraceHashFromBytes(h.Sum(make([]byte, 0, 16)))
+	if len(t.CustomLabels) > 0 {
+		var labelsHash uint64
+		// XOR makes label order irrelevant; map keys are unique.
+		for key, value := range t.CustomLabels {
+			labelsHash ^= maphash.Comparable(customLabelHashSeed, [2]String{key, value})
+		}
+		binary.LittleEndian.PutUint64(buf[:8], labelsHash)
+		_, _ = h.Write(buf[:8])
+	}
+	// Avoid a heap allocation by reusing the stack-allocated buffer.
+	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
 	t.cachedHash = traceHash
 	return traceHash
 }
 
+func putUint64(b []byte, v uint64) int {
+	for i := range 8 {
+		b[i] = byte(v)
+		v >>= 8
+		if v == 0 {
+			return i + 1
+		}
+	}
+	return 8
+}
+
 // EbpfTrace holds data sourced from eBPF.
 type EbpfTrace struct {
-	CustomLabels     map[String]String
-	Comm             Comm
-	FrameData        []uint64
-	FrameDataBuf     [3072]uint64
-	Value            int64
-	KTime            int64
-	CpuID            uint32
-	TID              PID
-	PID              PID
-	NumFrames        uint16
-	NumKernelFrames  uint16
-	Origin           uint16
-	APMTraceID       APMTraceID
-	APMTransactionID APMTransactionID
+	CustomLabels map[String]String
+	Comm         Comm
+	// ContextValues contains the raw origin-specific values carried with the
+	// stack. It may be empty. The first entry, if any, is the primary profile
+	// value; later entries may hold data such as pointers or allocation sizes.
+	// It aliases the leading portion of FrameDataBuf and is valid for the
+	// lifetime of this pooled trace.
+	ContextValues []uint64
+	KernelFrames  []uint64
+	FrameData     []uint64
+	FrameDataBuf  [3072]uint64
+	// KTime is the capture time in CLOCK_BOOTTIME nanoseconds, see times.KTime.
+	KTime     int64
+	CpuID     uint32
+	TID       PID
+	PID       PID
+	NumFrames uint16
+	Origin    uint16
+	TraceID   TraceID
+	SpanID    SpanID
 }
 
 type EbpfFrame []uint64
@@ -218,4 +245,16 @@ func (f EbpfFrame) Data() uint64 {
 
 func (f EbpfFrame) Variable(ndx int) uint64 {
 	return f[ndx+1]
+}
+
+// ThreadLabels contains per-thread custom labels with interned keys and values.
+type ThreadLabels map[String]String
+
+// ThreadLabelDecoder decodes a per-thread custom-label payload into labels plus a
+// count of entries it could not decode. Implementations must be
+// concurrency-safe, and DecodeLabels must not retain or alias data, which
+// points into a reused ring buffer. The returned map belongs to the caller,
+// which may mutate it.
+type ThreadLabelDecoder interface {
+	DecodeLabels(data []byte) (labels ThreadLabels, dropped int)
 }

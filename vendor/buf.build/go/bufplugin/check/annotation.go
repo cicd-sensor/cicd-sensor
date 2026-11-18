@@ -104,12 +104,12 @@ func (a *annotation) toProto() *checkv1.Annotation {
 	if a.againstFileLocation != nil {
 		protoAgainstFileLocation = a.againstFileLocation.ToProto()
 	}
-	return &checkv1.Annotation{
+	return checkv1.Annotation_builder{
 		RuleId:              a.RuleID(),
 		Message:             a.Message(),
 		FileLocation:        protoFileLocation,
 		AgainstFileLocation: protoAgainstFileLocation,
-	}
+	}.Build()
 }
 
 func (*annotation) isAnnotation() {}

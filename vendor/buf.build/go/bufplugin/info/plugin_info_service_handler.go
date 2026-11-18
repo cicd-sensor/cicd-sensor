@@ -57,9 +57,9 @@ func newPluginInfoServiceHandler(spec *Spec, options ...PluginInfoServiceHandler
 		return nil, err
 	}
 	protoPluginInfo := pluginInfo.toProto()
-	getPluginInfoResponse := &infov1.GetPluginInfoResponse{
+	getPluginInfoResponse := infov1.GetPluginInfoResponse_builder{
 		PluginInfo: protoPluginInfo,
-	}
+	}.Build()
 	validator := opts.validator
 	if validator == nil {
 		validator = protovalidate.GlobalValidator

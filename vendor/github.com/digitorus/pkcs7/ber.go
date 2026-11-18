@@ -15,7 +15,7 @@ type asn1Structured struct {
 }
 
 func (s asn1Structured) EncodeTo(out *bytes.Buffer) error {
-	//fmt.Printf("%s--> tag: % X\n", strings.Repeat("| ", encodeIndent), s.tagBytes)
+	// fmt.Printf("%s--> tag: % X\n", strings.Repeat("| ", encodeIndent), s.tagBytes)
 	inner := new(bytes.Buffer)
 	for _, obj := range s.content {
 		err := obj.EncodeTo(inner)
@@ -24,7 +24,7 @@ func (s asn1Structured) EncodeTo(out *bytes.Buffer) error {
 		}
 	}
 	out.Write(s.tagBytes)
-	encodeLength(out, inner.Len())
+	_ = encodeLength(out, inner.Len())
 	out.Write(inner.Bytes())
 	return nil
 }
@@ -43,8 +43,8 @@ func (p asn1Primitive) EncodeTo(out *bytes.Buffer) error {
 	if err = encodeLength(out, p.length); err != nil {
 		return err
 	}
-	//fmt.Printf("%s--> tag: % X length: %d\n", strings.Repeat("| ", encodeIndent), p.tagBytes, p.length)
-	//fmt.Printf("%s--> content length: %d\n", strings.Repeat("| ", encodeIndent), len(p.content))
+	// fmt.Printf("%s--> tag: % X length: %d\n", strings.Repeat("| ", encodeIndent), p.tagBytes, p.length)
+	// fmt.Printf("%s--> content length: %d\n", strings.Repeat("| ", encodeIndent), len(p.content))
 	out.Write(p.content)
 
 	return nil
@@ -54,14 +54,14 @@ func ber2der(ber []byte) ([]byte, error) {
 	if len(ber) == 0 {
 		return nil, errors.New("ber2der: input ber is empty")
 	}
-	//fmt.Printf("--> ber2der: Transcoding %d bytes\n", len(ber))
+	// fmt.Printf("--> ber2der: Transcoding %d bytes\n", len(ber))
 	out := new(bytes.Buffer)
 
 	obj, _, err := readObject(ber, 0)
 	if err != nil {
 		return nil, err
 	}
-	obj.EncodeTo(out)
+	_ = obj.EncodeTo(out)
 
 	return out.Bytes(), nil
 }
@@ -98,12 +98,12 @@ func lengthLength(i int) (numBytes int) {
 // added to 0x80. The length is encoded in big endian encoding follow after
 //
 // Examples:
-//  length | byte 1 | bytes n
-//  0      | 0x00   | -
-//  120    | 0x78   | -
-//  200    | 0x81   | 0xC8
-//  500    | 0x82   | 0x01 0xF4
 //
+//	length | byte 1 | bytes n
+//	0      | 0x00   | -
+//	120    | 0x78   | -
+//	200    | 0x81   | 0xC8
+//	500    | 0x82   | 0x01 0xF4
 func encodeLength(out *bytes.Buffer, length int) (err error) {
 	if length >= 128 {
 		l := lengthLength(length)
@@ -146,7 +146,7 @@ func readObject(ber []byte, offset int) (asn1Object, int, error) {
 			}
 		}
 		// jvehent 20170227: this doesn't appear to be used anywhere...
-		//tag = tag*128 + ber[offset] - 0x80
+		// tag = tag*128 + ber[offset] - 0x80
 		offset++
 		if offset >= berLen {
 			return nil, 0, errors.New("ber2der: cannot move offset forward, end of ber data reached")
@@ -172,44 +172,44 @@ func readObject(ber []byte, offset int) (asn1Object, int, error) {
 	}
 	indefinite := false
 	if l > 0x80 {
-		numberOfBytes := (int)(l & 0x7F)
+		numberOfBytes := int(l & 0x7F)
 		if numberOfBytes > 4 { // int is only guaranteed to be 32bit
 			return nil, 0, errors.New("ber2der: BER tag length too long")
 		}
-		if numberOfBytes == 4 && (int)(ber[offset]) > 0x7F {
+		if numberOfBytes == 4 && int(ber[offset]) > 0x7F {
 			return nil, 0, errors.New("ber2der: BER tag length is negative")
 		}
-		if offset + numberOfBytes > berLen {
+		if offset+numberOfBytes > berLen {
 			// == condition is not checked here, this allows for a more descreptive error when the parsed length is
 			// compared with the remaining available bytes (`contentEnd > berLen`)
 			return nil, 0, errors.New("ber2der: cannot move offset forward, end of ber data reached")
 		}
-		if (int)(ber[offset]) == 0x0 && (numberOfBytes == 1 || ber[offset+1] <= 0x7F)  {
+		if int(ber[offset]) == 0x0 && (numberOfBytes == 1 || ber[offset+1] <= 0x7F) {
 			// `numberOfBytes == 1` is an important conditional to avoid a potential out of bounds panic with `ber[offset+1]`
 			return nil, 0, errors.New("ber2der: BER tag length has leading zero")
 		}
 		debugprint("--> (compute length) indicator byte: %x\n", l)
-		//debugprint("--> (compute length) length bytes: %x\n", ber[offset:offset+numberOfBytes])
+		// debugprint("--> (compute length) length bytes: %x\n", ber[offset:offset+numberOfBytes])
 		for i := 0; i < numberOfBytes; i++ {
-			length = length*256 + (int)(ber[offset])
+			length = length*256 + int(ber[offset])
 			offset++
 		}
 	} else if l == 0x80 {
 		indefinite = true
 	} else {
-		length = (int)(l)
+		length = int(l)
 	}
 	if length < 0 {
 		return nil, 0, errors.New("ber2der: invalid negative value found in BER tag length")
 	}
-	//fmt.Printf("--> length        : %d\n", length)
+	// fmt.Printf("--> length        : %d\n", length)
 	contentEnd := offset + length
 	if contentEnd > berLen {
 		return nil, 0, errors.New("ber2der: BER tag length is more than available data")
 	}
 	debugprint("--> content start : %d\n", offset)
 	debugprint("--> content end   : %d\n", contentEnd)
-	//debugprint("--> content       : %x\n", ber[offset:contentEnd])
+	// debugprint("--> content       : %x\n", ber[offset:contentEnd])
 	var obj asn1Object
 	if indefinite && kind == 0 {
 		return nil, 0, errors.New("ber2der: Indefinite form tag must have constructed encoding")
@@ -257,13 +257,15 @@ func readObject(ber []byte, offset int) (asn1Object, int, error) {
 }
 
 func isIndefiniteTermination(ber []byte, offset int) (bool, error) {
-	if len(ber) - offset < 2 {
+	if len(ber)-offset < 2 {
 		return false, errors.New("ber2der: Invalid BER format")
 	}
 
-	return bytes.Index(ber[offset:], []byte{0x0, 0x0}) == 0, nil
+	// An end-of-contents marker terminates the current indefinite-length object
+	// only when it begins at the current offset.
+	return ber[offset] == 0 && ber[offset+1] == 0, nil
 }
 
 func debugprint(format string, a ...interface{}) {
-	//fmt.Printf(format, a)
+	// fmt.Printf(format, a)
 }

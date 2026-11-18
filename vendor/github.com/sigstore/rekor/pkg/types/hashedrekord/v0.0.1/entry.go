@@ -67,6 +67,13 @@ func NewEntry() types.EntryImpl {
 func (v V001Entry) IndexKeys() ([]string, error) {
 	var result []string
 
+	if v.HashedRekordObj.Signature == nil {
+		return nil, errors.New("hashedrekord v0.0.1 entry not initialized")
+	}
+	if v.HashedRekordObj.Signature.PublicKey == nil {
+		return nil, errors.New("hashedrekord v0.0.1 entry not initialized")
+	}
+
 	key := v.HashedRekordObj.Signature.PublicKey.Content
 	keyHash := sha256.Sum256(key)
 	result = append(result, strings.ToLower(hex.EncodeToString(keyHash[:])))
@@ -77,7 +84,8 @@ func (v V001Entry) IndexKeys() ([]string, error) {
 	}
 	result = append(result, pub.Subjects()...)
 
-	if v.HashedRekordObj.Data.Hash != nil {
+	if v.HashedRekordObj.Data != nil && v.HashedRekordObj.Data.Hash != nil &&
+		v.HashedRekordObj.Data.Hash.Algorithm != nil && v.HashedRekordObj.Data.Hash.Value != nil {
 		hashKey := strings.ToLower(fmt.Sprintf("%s:%s", *v.HashedRekordObj.Data.Hash.Algorithm, *v.HashedRekordObj.Data.Hash.Value))
 		result = append(result, hashKey)
 	}
@@ -150,6 +158,9 @@ func (v *V001Entry) Unmarshal(pe models.ProposedEntry) error {
 	if !ok {
 		return errors.New("cannot unmarshal non Rekord v0.0.1 type")
 	}
+	if rekord == nil {
+		return errors.New("proposed entry cannot be nil")
+	}
 
 	if err := DecodeEntry(rekord.Spec, &v.HashedRekordObj); err != nil {
 		return err
@@ -171,10 +182,10 @@ func (v *V001Entry) Canonicalize(_ context.Context) ([]byte, error) {
 		return nil, &types.InputValidationError{Err: err}
 	}
 
-	canonicalEntry := models.HashedrekordV001Schema{}
+	canonicalEntry := models.HashedrekordV001Schema{
 
-	// need to canonicalize signature & key content
-	canonicalEntry.Signature = &models.HashedrekordV001SchemaSignature{}
+		// need to canonicalize signature & key content
+		Signature: &models.HashedrekordV001SchemaSignature{}}
 	canonicalEntry.Signature.Content, err = sigObj.CanonicalValue()
 	if err != nil {
 		return nil, err
@@ -193,9 +204,9 @@ func (v *V001Entry) Canonicalize(_ context.Context) ([]byte, error) {
 
 	v.HashedRekordObj = canonicalEntry
 	// wrap in valid object with kind and apiVersion set
-	rekordObj := models.Hashedrekord{}
-	rekordObj.APIVersion = conv.Pointer(APIVERSION)
-	rekordObj.Spec = &canonicalEntry
+	rekordObj := models.Hashedrekord{
+		APIVersion: new(APIVERSION),
+		Spec:       &canonicalEntry}
 
 	return json.Marshal(&rekordObj)
 }
@@ -229,6 +240,10 @@ func (v *V001Entry) validate() (pkitypes.Signature, pkitypes.PublicKey, error) {
 	hash := data.Hash
 	if hash == nil {
 		return nil, nil, &types.InputValidationError{Err: errors.New("missing hash")}
+	}
+
+	if hash.Value == nil {
+		return nil, nil, &types.InputValidationError{Err: errors.New("missing hash value")}
 	}
 
 	var alg crypto.Hash
@@ -301,7 +316,7 @@ func (v V001Entry) CreateFromArtifactProperties(_ context.Context, props types.A
 	re.HashedRekordObj.Signature.PublicKey = &models.HashedrekordV001SchemaSignaturePublicKey{}
 	publicKeyBytes := props.PublicKeyBytes
 	if len(publicKeyBytes) == 0 {
-		if len(props.PublicKeyPaths) != 1 {
+		if len(props.PublicKeyPaths) != 1 || props.PublicKeyPaths[0] == nil {
 			return nil, errors.New("only one public key must be provided to verify detached signature")
 		}
 		keyBytes, err := os.ReadFile(filepath.Clean(props.PublicKeyPaths[0].Path))
@@ -316,15 +331,15 @@ func (v V001Entry) CreateFromArtifactProperties(_ context.Context, props types.A
 	hashAlgorithm, hashValue := util.UnprefixSHA(props.ArtifactHash)
 	re.HashedRekordObj.Signature.PublicKey.Content = strfmt.Base64(publicKeyBytes[0])
 	re.HashedRekordObj.Data.Hash = &models.HashedrekordV001SchemaDataHash{
-		Algorithm: conv.Pointer(getDataHashAlgorithm(hashAlgorithm)),
-		Value:     conv.Pointer(hashValue),
+		Algorithm: new(getDataHashAlgorithm(hashAlgorithm)),
+		Value:     new(hashValue),
 	}
 
 	if _, _, err := re.validate(); err != nil {
 		return nil, err
 	}
 
-	returnVal.APIVersion = conv.Pointer(re.APIVersion())
+	returnVal.APIVersion = new(re.APIVersion())
 	returnVal.Spec = re.HashedRekordObj
 
 	return &returnVal, nil

@@ -35,6 +35,8 @@ type parser struct {
 	importOptionNode ast.DeclImport
 	syntax           syntax.Syntax
 	parseComplete    bool
+	messageDepth     int
+	exprDepth        int
 }
 
 // classified is a spanner that has been classified by taxa.

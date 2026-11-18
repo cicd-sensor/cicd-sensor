@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	descriptorv1 "buf.build/gen/go/bufbuild/protodescriptor/protocolbuffers/go/buf/descriptor/v1"
 	"buf.build/go/standard/xlog/xslog"
@@ -281,8 +282,9 @@ func BuildImageFromOpener(
 }
 
 // resolverForFDS normalizes the given [*descriptorpb.FileDescriptorSet] by
-// marshaling and re-parsing it, then builds a [protoencoding.Resolver] with
-// Buf's custom descriptor extensions recognised, ready for [fileDescriptorSetToImage].
+// marshaling and re-parsing it with Buf's custom descriptor extensions
+// recognised, then returns it with a [protoencoding.Resolver] for its files,
+// ready for [fileDescriptorSetToImage].
 //
 // The marshal/unmarshal round-trip is necessary because [fdp.DescriptorProto]
 // stores option values as unknown bytes via SetUnknown. Re-parsing converts those
@@ -301,15 +303,20 @@ func resolverForFDS(fds *descriptorpb.FileDescriptorSet) (*descriptorpb.FileDesc
 	// input exactly (including any vendored google/protobuf/descriptor.proto).
 	// Buf's descriptor extensions are supplied by a fallback resolver consulted
 	// only when the file graph cannot resolve a descriptor, so ReparseExtensions
-	// can recognise them without altering the graph.
-	fileResolver := protoencoding.NewLazyResolver(normalizedFDS.File...)
-	resolver := protoencoding.CombineResolvers(fileResolver, bufDescriptorResolver)
+	// can recognise them without altering the graph. The fallback is only used
+	// for reparsing: the returned resolver must resolve only the image's files.
+	reparseResolver := protoencoding.CombineResolvers(
+		protoencoding.NewLazyResolver(normalizedFDS.File...),
+		bufDescriptorResolver,
+	)
 	for _, fileDescriptor := range normalizedFDS.File {
-		if err := protoencoding.ReparseExtensions(resolver, fileDescriptor.ProtoReflect()); err != nil {
+		if err := protoencoding.ReparseExtensions(reparseResolver, fileDescriptor.ProtoReflect()); err != nil {
 			return nil, nil, err
 		}
 	}
-	return normalizedFDS, resolver, nil
+	// Descriptors copy their options when built, so build the returned
+	// resolver after reparsing to keep the reparsed extensions.
+	return normalizedFDS, protoencoding.NewLazyResolver(normalizedFDS.File...), nil
 }
 
 // fileDescriptorSetToImage is a helper function that converts a [descriptorpb.FileDescriptorSet]
@@ -376,7 +383,8 @@ func getImageFilesForPath(
 	seen[path] = struct{}{}
 
 	var err error
-	for _, dependency := range fileDescriptor.Dependency {
+	// Option dependencies follow regular dependencies, matching protoc.
+	for _, dependency := range slices.Concat(fileDescriptor.Dependency, fileDescriptor.OptionDependency) {
 		imageFiles, err = getImageFilesForPath(
 			dependency,
 			pathToDescriptor,

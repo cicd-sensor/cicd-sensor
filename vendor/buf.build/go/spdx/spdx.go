@@ -18,9 +18,12 @@
 package spdx
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 )
+
+const referenceURLPrefix = "https://spdx.org/licenses/"
 
 // License is a SPDX license.
 type License struct {
@@ -48,23 +51,63 @@ type License struct {
 // The input ID is case-insensitive, that is any casing of the ID will
 // result in the correct License.
 func LicenseForID(id string) (License, bool) {
-	license, ok := lowercaseIDToLicense[strings.ToLower(id)]
-	return license, ok
+	index, found := slices.BinarySearchFunc(
+		licenseEntriesByLowercaseID[:],
+		id,
+		func(licenseEntry licenseEntry, target string) int {
+			return compareASCIIFold(licenseEntry.id, target)
+		},
+	)
+	if !found {
+		return License{}, false
+	}
+	return licenseEntriesByLowercaseID[index].toLicense(), true
 }
 
 // AllLicenses returns a slice of all Licenses.
 //
 // This slice will be sorted by License ID.
 func AllLicenses() []License {
-	licenses := make([]License, 0, len(lowercaseIDToLicense))
-	for _, license := range lowercaseIDToLicense {
-		licenses = append(licenses, license)
+	licenses := make([]License, len(licenseEntriesByLowercaseID))
+	for i := range licenseEntriesByLowercaseID {
+		licenses[i] = licenseEntriesByLowercaseID[i].toLicense()
 	}
-	sort.Slice(
+	slices.SortFunc(
 		licenses,
-		func(i int, j int) bool {
-			return licenses[i].ID < licenses[j].ID
+		func(a License, b License) int {
+			return strings.Compare(a.ID, b.ID)
 		},
 	)
 	return licenses
+}
+
+func (l *licenseEntry) toLicense() License {
+	return License{
+		ID:              l.id,
+		Name:            l.name,
+		Reference:       referenceURLPrefix + l.id + ".html",
+		ReferenceNumber: l.referenceNumber,
+		DetailsURL:      referenceURLPrefix + l.id + ".json",
+		Deprecated:      l.deprecated,
+		SeeAlso:         l.seeAlso,
+		OSIApproved:     l.osiApproved,
+	}
+}
+
+// compareASCIIFold compares two strings as if both were lowercased, without allocating.
+func compareASCIIFold(left string, right string) int {
+	for i := 0; i < len(left) && i < len(right); i++ {
+		leftByte, rightByte := toLowerASCII(left[i]), toLowerASCII(right[i])
+		if leftByte != rightByte {
+			return cmp.Compare(leftByte, rightByte)
+		}
+	}
+	return cmp.Compare(len(left), len(right))
+}
+
+func toLowerASCII(value byte) byte {
+	if 'A' <= value && value <= 'Z' {
+		return value + ('a' - 'A')
+	}
+	return value
 }
