@@ -51,7 +51,7 @@ jobs:
           expires-in-minutes: 60
 
       - name: Start cicd-sensor (third-party Takumi manager)
-        uses: cicd-sensor/cicd-sensor-action@49560b716a9abba9190a48c0b6bca18ba98918e8 # v0.0.40
+        uses: cicd-sensor/cicd-sensor-action@2bc31a18949a77cd5f5bd452f24f00fbb507cdf6 # v0.0.41
         with:
           manager-url: https://manager.cicdsensor.cloud.shisho.dev
           manager-token: ${{ steps.auth.outputs.token }}
