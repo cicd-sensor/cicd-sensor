@@ -4,7 +4,7 @@
 #
 # Runtime requires CAP_BPF + CAP_PERFMON + cgroup v2 access.
 
-FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:b42c64f7559093cf20910fc6fe750884dd55c74057a16cbeedbba42c4f9b31f8 AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} cgr.dev/chainguard/go:latest@sha256:97b081e091e2c7df54b30f468969ea2e62d7d1a64fff89346facb564da979300 AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
