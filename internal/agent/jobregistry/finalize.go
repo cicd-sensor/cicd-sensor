@@ -231,23 +231,41 @@ func (jr *JobRegistry) finalizeTakenJobSync(ctx context.Context, job *job.Job, r
 const drainProgressInterval = 5 * time.Second
 
 // waitForDrain blocks until the Job's event worker has consumed every
-// delivered event. The wait is unbounded on purpose (queued events are
-// evidence); the logs make a long drain visible instead of looking like
-// a hang (#200). Completion is Done(), not an empty queue: the worker may
-// still be inside the last event.
+// delivered event, or until ctx is done (the shutdown grace). On ctx
+// expiry the drain is truncated so Summary / streaming finalize can still
+// run (#205); the worker keeps processing until the process exits.
+// Completion is Done(), not an empty queue: the worker may still be
+// inside the last event.
 func (jr *JobRegistry) waitForDrain(ctx context.Context, job *job.Job) {
 	queuedAtStart := job.QueuedEvents()
 	started := time.Now()
 	ticker := time.NewTicker(drainProgressInterval)
 	defer ticker.Stop()
+	logCompleted := func() {
+		jr.logger.InfoContext(ctx, "job_drain_completed",
+			"job_identity", job.Identity(),
+			"queued_at_start", queuedAtStart,
+			"duration_ms", time.Since(started).Milliseconds(),
+		)
+	}
 	for {
 		select {
 		case <-job.Done():
-			jr.logger.InfoContext(ctx, "job_drain_completed",
-				"job_identity", job.Identity(),
-				"queued_at_start", queuedAtStart,
-				"duration_ms", time.Since(started).Milliseconds(),
-			)
+			logCompleted()
+			return
+		case <-ctx.Done():
+			// Prefer Done when both are ready so a finished drain is not
+			// reported as truncated (Go select picks at random otherwise).
+			select {
+			case <-job.Done():
+				logCompleted()
+			default:
+				jr.logger.WarnContext(ctx, "job_drain_truncated",
+					"job_identity", job.Identity(),
+					"queued", job.QueuedEvents(),
+					"elapsed_ms", time.Since(started).Milliseconds(),
+				)
+			}
 			return
 		case <-ticker.C:
 			jr.logger.InfoContext(ctx, "job_drain_in_progress",
